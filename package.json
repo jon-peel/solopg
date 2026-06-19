@@ -1,0 +1,11 @@
+{
+  "name": "solopg",
+  "version": "0.0.0",
+  "description": "World Oracle — a browser-based OSR hex-crawl generator and record-keeper",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "serve": "python3 -m http.server 8000"
+  }
+}

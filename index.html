@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World Oracle</title>
+    <link rel="stylesheet" href="./css/app.css" />
+  </head>
+  <body>
+    <header id="command-bar">
+      <strong class="brand">World Oracle</strong>
+      <label class="world-picker">
+        World:
+        <select id="world-select"></select>
+      </label>
+      <span class="spacer"></span>
+      <button id="btn-new">New World</button>
+      <button id="btn-save">Save</button>
+      <button id="btn-delete">Delete</button>
+      <button id="btn-export">Export</button>
+      <button id="btn-import">Import</button>
+      <button id="btn-roll">Roll test table</button>
+      <input id="import-file" type="file" accept="application/json,.json" hidden />
+    </header>
+
+    <main id="workspace">
+      <!-- Hex grid is drawn here in Phase 2; reserved/blank for now. -->
+      <canvas id="map"></canvas>
+      <aside id="panel"></aside>
+    </main>
+
+    <script type="module" src="./js/ui/app.js"></script>
+  </body>
+</html>
