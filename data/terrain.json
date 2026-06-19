@@ -3,9 +3,11 @@
   "title": "Terrain type",
   "entries": [
     { "weight": 4, "value": "Forest" },
-    { "weight": 3, "value": "Plains" },
+    { "weight": 4, "value": "Plains" },
     { "weight": 3, "value": "Hills" },
     { "weight": 2, "value": "Mountains" },
-    { "weight": 1, "value": "Swamp", "roll": { "table": "swamp-feature" } }
+    { "weight": 1, "value": "Swamp", "roll": { "table": "swamp-feature" } },
+    { "weight": 1, "value": "Desert" },
+    { "weight": 1, "value": "Water" }
   ]
 }

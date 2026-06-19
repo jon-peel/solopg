@@ -24,7 +24,13 @@ import {
   getLastWorldId,
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel } from "./panel.js";
-import { attachMap, setWorld, setSelected, recenterOn } from "./map.js";
+import {
+  attachMap,
+  setWorld,
+  setSelected,
+  recenterOn,
+  setIconsEnabled,
+} from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 
 // Tables the test command needs. terrain references swamp-feature via a nested roll.
@@ -318,7 +324,15 @@ function wire() {
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
   $("btn-roll").addEventListener("click", onRollTest);
+  $("btn-icons").addEventListener("click", onToggleIcons);
   $("world-select").addEventListener("change", onSelectWorld);
+}
+
+let iconsOn = true;
+function onToggleIcons() {
+  iconsOn = !iconsOn;
+  setIconsEnabled(iconsOn);
+  $("btn-icons").textContent = `Icons: ${iconsOn ? "on" : "off"}`;
 }
 
 async function init() {

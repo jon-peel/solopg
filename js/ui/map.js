@@ -11,14 +11,20 @@ import {
   hexCorners,
   axialKey,
 } from "../core/hexgeo.js";
+import { hashString } from "../core/rng.js";
 import { placedHexes } from "../world/world.js";
-import { colorForTerrain, SELECTED_STROKE } from "./terrain-style.js";
+import {
+  colorForTerrain,
+  iconForTerrain,
+  SELECTED_STROKE,
+} from "./terrain-style.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
 const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
+const MIN_ICON_PX = 14; // hide terrain icons when on-screen hex is smaller
 
 let canvas = null;
 let ctx = null;
@@ -27,6 +33,7 @@ let world = null;
 let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
+let iconsEnabled = true;
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -112,6 +119,7 @@ export function render() {
   drawEmptyGrid(minX, minY, maxX, maxY);
 
   // 2. Placed hexes (filled), culled to the viewport.
+  const showIcons = iconsEnabled && HEX_SIZE * camera.scale >= MIN_ICON_PX;
   for (const hex of placedHexes(world)) {
     const { q, r } = hex.coords;
     const c = axialToPixel(q, r, HEX_SIZE);
@@ -124,6 +132,7 @@ export function render() {
       continue;
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
+    if (showIcons) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
   }
 
   // 3. Selection highlight on top (works for empty or filled cells).
@@ -131,6 +140,23 @@ export function render() {
     const c = axialToPixel(selected.q, selected.r, HEX_SIZE);
     strokeHex(c.x, c.y, SELECTED_STROKE, 3);
   }
+}
+
+/** Toggle terrain icons; re-renders. */
+export function setIconsEnabled(on) {
+  iconsEnabled = !!on;
+  render();
+}
+
+function drawTerrainIcon(cx, cy, terrain, q, r) {
+  // Deterministic variant per cell so it's stable without storing it.
+  const variant = hashString(`${q},${r}`) % 2;
+  const glyph = iconForTerrain(terrain, variant);
+  if (!glyph) return;
+  ctx.font = `${HEX_SIZE * 0.9}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(glyph, cx, cy);
 }
 
 function drawEmptyGrid(minX, minY, maxX, maxY) {

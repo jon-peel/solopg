@@ -8,31 +8,28 @@
 import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { rollDice } from "../core/dice.js";
-
-// Default extra weight added to a terrain entry per matching neighbor.
-const DEFAULT_TERRAIN_BIAS = 2;
+import { TERRAIN_AFFINITY } from "./terrain-affinity.js";
 
 /**
- * Build a terrain table biased toward neighbor terrains. Returns a NEW table
- * (never mutates the base); each entry is spread so its `roll` (e.g. Swamp's
- * nested swamp-feature roll) is preserved. Each neighbor matching an entry's
- * value adds `bias` to that entry's weight.
+ * Build a terrain table biased toward neighbor terrains using an affinity
+ * matrix (compatible terrains get a bonus, not just identical ones). Returns a
+ * NEW table (never mutates the base); each entry is spread so its `roll` (e.g.
+ * Swamp's nested swamp-feature roll) is preserved.
  * @param {object} baseTable canonical terrain table
  * @param {string[]} neighborTerrains terrain strings of existing neighbors
- * @param {number} [bias]
+ * @param {{ affinity?: object, multiplier?: number }} [opts]
  * @returns {object} new table
  */
-export function weightedTerrainTable(
-  baseTable,
-  neighborTerrains = [],
-  bias = DEFAULT_TERRAIN_BIAS,
-) {
-  const counts = new Map();
-  for (const t of neighborTerrains) counts.set(t, (counts.get(t) || 0) + 1);
+export function weightedTerrainTable(baseTable, neighborTerrains = [], opts = {}) {
+  const affinity = opts.affinity || TERRAIN_AFFINITY;
+  const multiplier = opts.multiplier ?? 1;
   const entries = baseTable.entries.map((e) => {
     const base = "weight" in e ? e.weight : 1;
-    const bump = (counts.get(e.value) || 0) * bias;
-    return { ...e, weight: base + bump };
+    let bonus = 0;
+    for (const nbr of neighborTerrains) {
+      bonus += (affinity[nbr] && affinity[nbr][e.value]) || 0;
+    }
+    return { ...e, weight: base + bonus * multiplier };
   });
   return { id: baseTable.id, entries };
 }
@@ -54,7 +51,9 @@ export function generateHex(tables, rng, opts = {}) {
   const baseTerrain = tables.get("terrain");
   const terrainTable =
     opts.neighborTerrains && opts.neighborTerrains.length
-      ? weightedTerrainTable(baseTerrain, opts.neighborTerrains, opts.terrainBias)
+      ? weightedTerrainTable(baseTerrain, opts.neighborTerrains, {
+          multiplier: opts.terrainBias,
+        })
       : baseTerrain;
   const terrainRoll = rollTable(terrainTable, rng, { resolve });
   const terrain = terrainRoll.value;
