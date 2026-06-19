@@ -7,7 +7,9 @@
 import {
   axialToPixel,
   pixelToAxial,
+  pixelToAxialFractional,
   hexCorners,
+  axialKey,
 } from "../core/hexgeo.js";
 import { placedHexes } from "../world/world.js";
 import { colorForTerrain, SELECTED_STROKE } from "./terrain-style.js";
@@ -16,6 +18,7 @@ const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
 const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
+const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
 
 let canvas = null;
 let ctx = null;
@@ -104,6 +107,11 @@ export function render() {
   const maxY = (rect.height - camera.offsetY) / camera.scale;
   const margin = 2 * HEX_SIZE;
 
+  // 1. Empty-cell outlines across the visible axial range (skip when too zoomed
+  //    out, to avoid drawing thousands of cells).
+  drawEmptyGrid(minX, minY, maxX, maxY);
+
+  // 2. Placed hexes (filled), culled to the viewport.
   for (const hex of placedHexes(world)) {
     const { q, r } = hex.coords;
     const c = axialToPixel(q, r, HEX_SIZE);
@@ -115,21 +123,64 @@ export function render() {
     ) {
       continue;
     }
-    const isSel = selected && selected.q === q && selected.r === r;
-    drawHex(c.x, c.y, colorForTerrain(hex.terrain), isSel);
+    drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
+  }
+
+  // 3. Selection highlight on top (works for empty or filled cells).
+  if (selected) {
+    const c = axialToPixel(selected.q, selected.r, HEX_SIZE);
+    strokeHex(c.x, c.y, SELECTED_STROKE, 3);
   }
 }
 
-function drawHex(cx, cy, fill, isSelected) {
+function drawEmptyGrid(minX, minY, maxX, maxY) {
+  // Axial bbox covering the visible rect corners, padded by 1.
+  const corners = [
+    pixelToAxialFractional(minX, minY, HEX_SIZE),
+    pixelToAxialFractional(maxX, minY, HEX_SIZE),
+    pixelToAxialFractional(minX, maxY, HEX_SIZE),
+    pixelToAxialFractional(maxX, maxY, HEX_SIZE),
+  ];
+  const qs = corners.map((c) => c.q);
+  const rs = corners.map((c) => c.r);
+  const qMin = Math.floor(Math.min(...qs)) - 1;
+  const qMax = Math.ceil(Math.max(...qs)) + 1;
+  const rMin = Math.floor(Math.min(...rs)) - 1;
+  const rMax = Math.ceil(Math.max(...rs)) + 1;
+
+  if ((qMax - qMin + 1) * (rMax - rMin + 1) > MAX_GRID_CELLS) return;
+
+  for (let r = rMin; r <= rMax; r++) {
+    for (let q = qMin; q <= qMax; q++) {
+      const hex = world.hexes[axialKey(q, r)];
+      if (hex && hex.placed) continue; // filled cells drawn separately
+      const c = axialToPixel(q, r, HEX_SIZE);
+      strokeHex(c.x, c.y, "rgba(255,255,255,0.10)", 1);
+    }
+  }
+}
+
+function hexPath(cx, cy) {
   const pts = hexCorners(cx, cy, HEX_SIZE);
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.closePath();
+}
+
+function drawHexFill(cx, cy, fill) {
+  hexPath(cx, cy);
   ctx.fillStyle = fill;
   ctx.fill();
-  ctx.lineWidth = (isSelected ? 3 : 1) / camera.scale; // visually constant
-  ctx.strokeStyle = isSelected ? SELECTED_STROKE : "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 1 / camera.scale;
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.stroke();
+}
+
+function strokeHex(cx, cy, color, widthPx) {
+  hexPath(cx, cy);
+  ctx.lineWidth = widthPx / camera.scale; // visually constant
+  ctx.strokeStyle = color;
   ctx.stroke();
 }
 

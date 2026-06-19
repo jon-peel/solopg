@@ -11,6 +11,7 @@ import {
   getHex,
   hasHexAt,
   placedHexes,
+  removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { exportWorld, importWorld } from "../data/portability.js";
@@ -22,7 +23,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, logHex, showWorld, showHexDetails } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel } from "./panel.js";
 import { attachMap, setWorld, setSelected, recenterOn } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 
@@ -86,17 +87,6 @@ async function refreshWorldList() {
   }
 }
 
-function populateTerrainSelect() {
-  const sel = $("terrain-select");
-  sel.innerHTML = "";
-  for (const t of Object.keys(TERRAIN_COLORS)) {
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    sel.appendChild(o);
-  }
-}
-
 async function setCurrent(world) {
   current = world;
   currentRng = world ? makeRng(world.seed) : null;
@@ -106,11 +96,10 @@ async function setCurrent(world) {
   selected = world ? loadSelected(world) : null;
   setSelected(selected);
   if (world) {
-    const hex = selected && getHex(world, selected.q, selected.r);
-    if (hex) showHexDetails(hex);
     const focus = selected || firstPlacedCoord(world);
     if (focus) recenterOn(focus.q, focus.r);
   }
+  renderSelection();
   await refreshWorldList();
 }
 
@@ -196,95 +185,129 @@ function neighborTerrains(q, r) {
     .map((h) => h.terrain);
 }
 
+// --- selection + its right-panel actions ---------------------------------
+
 function selectCell(q, r) {
   selected = { q, r };
   saveSelected(current, selected);
   setSelected(selected);
+  renderSelection();
 }
 
-// Randomize and place a hex at (q,r), neighbor-weighted, seeded by its coords.
-async function generateRandomHexAt(q, r) {
-  const tables = await loadTables(HEX_TABLE_IDS);
-  const rng = subRng(current.seed, "hex", q, r);
+function renderSelection() {
+  if (!current || !selected) return renderSelectionPanel(null);
+  const { q, r } = selected;
+  const hex = getHex(current, q, r);
+  renderSelectionPanel({
+    coord: { q, r },
+    hex: hex && hex.placed ? hex : null,
+    terrains: Object.keys(TERRAIN_COLORS),
+    onGenerateRandom,
+    onPlaceTerrain,
+    onGenerateNeighbors,
+    onRegenerate,
+    onDelete: onDeleteHex,
+  });
+}
+
+async function persistAndRefresh() {
+  current = await saveWorld(current);
+  setWorld(current);
+  renderSelection();
+}
+
+// Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.
+function buildRandomHex(tables, q, r, gen) {
+  const rng = subRng(current.seed, "hex", q, r, gen);
   const hex = generateHex(tables, rng, {
     key: axialKey(q, r),
     coords: { q, r },
     placed: true,
     neighborTerrains: neighborTerrains(q, r),
   });
-  addHex(current, hex);
+  hex.gen = gen;
   return hex;
-}
-
-// Place a hex of the chosen terrain at (q,r); settlement/POI still rolled
-// (seeded by coords) so the hex is complete and reproducible.
-async function placeManualHex(q, r) {
-  const terrain = $("terrain-select").value;
-  const tables = await loadTables(HEX_TABLE_IDS);
-  const rng = subRng(current.seed, "hex", q, r);
-  const hex = generateHex(tables, rng, {
-    key: axialKey(q, r),
-    coords: { q, r },
-    placed: true,
-  });
-  hex.terrain = terrain;
-  if (terrain !== "Swamp") hex.terrainFeature = null;
-  addHex(current, hex);
-  current = await saveWorld(current);
-  setWorld(current);
-  selectCell(q, r);
-  showHexDetails(hex);
-  logLine(`Placed ${terrain} at (${q}, ${r}).`);
 }
 
 function onHexClick({ q, r }) {
   selectCell(q, r);
-  showHexDetails(getHex(current, q, r));
 }
 
 function onEmptyCellClick({ q, r }) {
-  if (!current) return;
-  placeManualHex(q, r);
+  selectCell(q, r);
 }
 
-async function onGenerateHex() {
-  if (!current) return logLine("Create a world first.");
+async function onGenerateRandom() {
+  if (!current || !selected) return;
   try {
-    let target;
-    if (selected && !hasHexAt(current, selected.q, selected.r)) {
-      target = selected;
-    } else if (!hasHexAt(current, 0, 0)) {
-      target = { q: 0, r: 0 };
-    } else {
-      return logLine("Select an empty cell to generate into.");
-    }
-    const hex = await generateRandomHexAt(target.q, target.r);
-    current = await saveWorld(current);
-    setWorld(current);
-    selectCell(target.q, target.r);
-    logHex(hex);
-    showHexDetails(hex);
+    const tables = await loadTables(HEX_TABLE_IDS);
+    addHex(current, buildRandomHex(tables, selected.q, selected.r, 0));
+    await persistAndRefresh();
   } catch (err) {
     logLine(`Generate error: ${err.message}`);
+  }
+}
+
+async function onPlaceTerrain(terrain) {
+  if (!current || !selected) return;
+  try {
+    const { q, r } = selected;
+    const tables = await loadTables(HEX_TABLE_IDS);
+    // Settlement/POI still rolled (seeded by coords) so the hex is complete;
+    // terrain is the user's explicit choice.
+    const rng = subRng(current.seed, "hex", q, r, 0);
+    const hex = generateHex(tables, rng, {
+      key: axialKey(q, r),
+      coords: { q, r },
+      placed: true,
+    });
+    hex.terrain = terrain;
+    if (terrain !== "Swamp") hex.terrainFeature = null;
+    hex.gen = 0;
+    addHex(current, hex);
+    await persistAndRefresh();
+  } catch (err) {
+    logLine(`Place error: ${err.message}`);
   }
 }
 
 async function onGenerateNeighbors() {
-  if (!current || !selected) return logLine("Select a hex first.");
+  if (!current || !selected) return;
   try {
+    const tables = await loadTables(HEX_TABLE_IDS);
     let added = 0;
     for (const { q, r } of neighbors(selected.q, selected.r)) {
       if (hasHexAt(current, q, r)) continue;
-      await generateRandomHexAt(q, r);
+      addHex(current, buildRandomHex(tables, q, r, 0));
       added++;
     }
     if (!added) return logLine("All neighbors already filled.");
-    current = await saveWorld(current);
-    setWorld(current);
+    await persistAndRefresh();
     logLine(`Generated ${added} neighbor hex(es).`);
   } catch (err) {
     logLine(`Generate error: ${err.message}`);
   }
+}
+
+// "Give me another": bump the per-hex gen counter to escape coord-determinism.
+async function onRegenerate() {
+  if (!current || !selected) return;
+  try {
+    const { q, r } = selected;
+    const existing = getHex(current, q, r);
+    const gen = ((existing && existing.gen) || 0) + 1;
+    const tables = await loadTables(HEX_TABLE_IDS);
+    addHex(current, buildRandomHex(tables, q, r, gen));
+    await persistAndRefresh();
+  } catch (err) {
+    logLine(`Regenerate error: ${err.message}`);
+  }
+}
+
+async function onDeleteHex() {
+  if (!current || !selected) return;
+  removeHex(current, selected.q, selected.r);
+  await persistAndRefresh();
 }
 
 function wire() {
@@ -295,10 +318,7 @@ function wire() {
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
   $("btn-roll").addEventListener("click", onRollTest);
-  $("btn-gen-hex").addEventListener("click", onGenerateHex);
-  $("btn-gen-neighbors").addEventListener("click", onGenerateNeighbors);
   $("world-select").addEventListener("change", onSelectWorld);
-  populateTerrainSelect();
 }
 
 async function init() {

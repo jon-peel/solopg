@@ -7,6 +7,7 @@ import {
   getHex,
   hasHexAt,
   placedHexes,
+  removeHex,
   nextUnplacedKey,
 } from "../js/world/world.js";
 import { axialKey } from "../js/core/hexgeo.js";
@@ -93,6 +94,18 @@ test("placedHexes returns only placed hexes with coords", () => {
   const placed = placedHexes(w);
   assert.equal(placed.length, 2);
   assert.ok(placed.every((h) => h.placed && h.coords));
+});
+
+test("removeHex deletes the keyed hex and leaves others; no-op when missing", () => {
+  const w = createWorld({ name: "Map", seed: 1 });
+  addHex(w, placedHex(0, 0));
+  addHex(w, placedHex(1, 0));
+  removeHex(w, 0, 0);
+  assert.equal(getHex(w, 0, 0), undefined);
+  assert.ok(getHex(w, 1, 0)); // sibling untouched
+  // removing a non-existent cell is a no-op
+  removeHex(w, 9, 9);
+  assert.equal(placedHexes(w).length, 1);
 });
 
 test("nextUnplacedKey ignores axial keys", () => {

@@ -81,6 +81,12 @@ export function placedHexes(world) {
   return Object.values(world.hexes).filter((h) => h.placed && h.coords);
 }
 
+/** Remove the hex at axial (q,r), if any. Mutates and returns the world. */
+export function removeHex(world, q, r) {
+  delete world.hexes[axialKey(q, r)];
+  return world;
+}
+
 function newId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();

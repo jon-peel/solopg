@@ -42,21 +42,53 @@ export function logHex(hex) {
   for (const line of describeHex(hex)) logLine(line);
 }
 
-/** Show the selected hex's details in the fixed #selection block (replaces it). */
-export function showHexDetails(hex) {
+function actionButton(label, onClick) {
+  const b = document.createElement("button");
+  b.className = "tile-action";
+  b.textContent = label;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+/**
+ * Render the selected tile's details + context actions into #selection.
+ * @param {object} model
+ *   { coord:{q,r}, hex|null, terrains:string[],
+ *     onGenerateRandom, onPlaceTerrain(t), onGenerateNeighbors, onRegenerate, onDelete }
+ */
+export function renderSelectionPanel(model) {
   const sel = document.getElementById("selection");
   if (!sel) return;
   sel.innerHTML = "";
-  if (!hex) return;
+  if (!model || !model.coord) return;
+
+  const { coord, hex } = model;
   const h = document.createElement("h3");
-  h.textContent = "Selected";
+  h.textContent = hex ? "Selected hex" : `Empty (${coord.q}, ${coord.r})`;
   sel.appendChild(h);
-  for (const line of describeHex(hex)) {
-    const div = document.createElement("div");
-    div.className = "log-line";
-    div.textContent = line;
-    sel.appendChild(div);
+
+  if (hex) {
+    for (const line of describeHex(hex)) {
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.textContent = line;
+      sel.appendChild(div);
+    }
   }
+
+  const actions = document.createElement("div");
+  actions.className = "tile-actions";
+  if (hex) {
+    actions.appendChild(actionButton("Generate neighbors", model.onGenerateNeighbors));
+    actions.appendChild(actionButton("Regenerate", model.onRegenerate));
+    actions.appendChild(actionButton("Delete", model.onDelete));
+  } else {
+    actions.appendChild(actionButton("Generate random", model.onGenerateRandom));
+    for (const t of model.terrains) {
+      actions.appendChild(actionButton(t, () => model.onPlaceTerrain(t)));
+    }
+  }
+  sel.appendChild(actions);
 }
 
 /** Replace the panel contents with a heading describing the current world. */

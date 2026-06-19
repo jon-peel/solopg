@@ -93,8 +93,16 @@ button:hover {
   color: var(--accent);
 }
 
-.terrain-picker {
-  color: var(--muted);
+.tile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.tile-action {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
 }
 
 #panel {
