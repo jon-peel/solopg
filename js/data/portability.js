@@ -41,6 +41,8 @@ export function importWorld(json) {
     );
   }
   // Future: migrate older schemaVersions up to SCHEMA_VERSION here.
+  // v1 -> v2: v1 worlds only ever had an empty `hexes` map, so they load
+  // unchanged under v2 (no transform needed).
   if (typeof data.id !== "string" || typeof data.name !== "string") {
     throw new Error("Import failed: world is missing id/name");
   }

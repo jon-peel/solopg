@@ -2,10 +2,11 @@
 // engine and persistence layers. This is the only entry module loaded by
 // index.html.
 
-import { makeRng } from "../core/rng.js";
+import { makeRng, subRng } from "../core/rng.js";
 import { rollTable } from "../core/table.js";
 import { loadTables, makeResolver } from "../core/loader.js";
-import { createWorld } from "../world/world.js";
+import { createWorld, nextUnplacedKey, addHex } from "../world/world.js";
+import { generateHex } from "../gen/hex.js";
 import { exportWorld, importWorld } from "../data/portability.js";
 import {
   listWorlds,
@@ -15,10 +16,19 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld } from "./panel.js";
+import { logLine, logHex, showWorld } from "./panel.js";
 
 // Tables the test command needs. terrain references swamp-feature via a nested roll.
 const TEST_TABLE_IDS = ["terrain", "swamp-feature"];
+
+// Tables the single-hex generator rolls on.
+const HEX_TABLE_IDS = [
+  "terrain",
+  "swamp-feature",
+  "settlement-presence",
+  "settlement-size",
+  "poi-presence",
+];
 
 let current = null; // the in-memory current world
 let currentRng = null; // one RNG stream per loaded world, advanced across rolls
@@ -128,6 +138,23 @@ async function onRollTest() {
   }
 }
 
+async function onGenerateHex() {
+  if (!current) return logLine("Create a world first.");
+  try {
+    const tables = await loadTables(HEX_TABLE_IDS);
+    const key = nextUnplacedKey(current);
+    // Per-hex deterministic stream: same world seed + key => same hex.
+    const rng = subRng(current.seed, "hex", key);
+    const hex = generateHex(tables, rng, { key, coords: null });
+    addHex(current, hex);
+    current = await saveWorld(current);
+    logHex(hex);
+    logLine(`hexes: ${Object.keys(current.hexes).length}`);
+  } catch (err) {
+    logLine(`Generate error: ${err.message}`);
+  }
+}
+
 function wire() {
   $("btn-new").addEventListener("click", onNewWorld);
   $("btn-save").addEventListener("click", onSave);
@@ -136,6 +163,7 @@ function wire() {
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
   $("btn-roll").addEventListener("click", onRollTest);
+  $("btn-gen-hex").addEventListener("click", onGenerateHex);
   $("world-select").addEventListener("change", onSelectWorld);
 }
 

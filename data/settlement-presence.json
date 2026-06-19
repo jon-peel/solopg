@@ -1,0 +1,8 @@
+{
+  "id": "settlement-presence",
+  "title": "Settlement present?",
+  "entries": [
+    { "weight": 3, "value": { "present": false } },
+    { "weight": 1, "value": { "present": true } }
+  ]
+}

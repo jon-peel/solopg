@@ -1,10 +1,11 @@
 // Core domain model.
 //
-// Phase 0 only needs a valid, empty, named world. Hex / Settlement / POI /
-// Dungeon / Faction structures arrive in later phases; `hexes` is the keyed
-// collection they will populate.
+// `hexes` is the keyed collection generators populate. Phase 1 stores generated
+// hexes under throwaway "unplaced" keys ("u:<n>") with coords:null; Phase 2 will
+// introduce axial coordinate keys ("q,r") and place these on a map.
 
-export const SCHEMA_VERSION = 1;
+// v2: hexes gained structured contents (Phase 1). v1 worlds had empty hexes only.
+export const SCHEMA_VERSION = 2;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
@@ -28,6 +29,33 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * Next key for an unplaced (no-coordinates) hex: "u:<n>", monotonic so deleting
+ * a hex never reuses its key. The "u:" namespace is intentionally disjoint from
+ * Phase 2's axial "q,r" keys.
+ * @param {object} world
+ * @returns {string}
+ */
+export function nextUnplacedKey(world) {
+  let max = -1;
+  for (const key of Object.keys(world.hexes)) {
+    const m = /^u:(\d+)$/.exec(key);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `u:${max + 1}`;
+}
+
+/**
+ * Store a hex in the world under its own key. Mutates and returns the world.
+ * @param {object} world
+ * @param {object} hex must have a string `key`
+ * @returns {object} world
+ */
+export function addHex(world, hex) {
+  world.hexes[hex.key] = hex;
+  return world;
 }
 
 function newId() {
