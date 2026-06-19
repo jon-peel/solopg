@@ -4,7 +4,11 @@
 // hexes under throwaway "unplaced" keys ("u:<n>") with coords:null; Phase 2 will
 // introduce axial coordinate keys ("q,r") and place these on a map.
 
+import { axialKey } from "../core/hexgeo.js";
+
 // v2: hexes gained structured contents (Phase 1). v1 worlds had empty hexes only.
+// Phase 2 (the map) reuses v2: hexes already carry `coords`/`placed`, so placing
+// them on a grid changes no field shape — no bump needed.
 export const SCHEMA_VERSION = 2;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
@@ -56,6 +60,25 @@ export function nextUnplacedKey(world) {
 export function addHex(world, hex) {
   world.hexes[hex.key] = hex;
   return world;
+}
+
+/**
+ * Hex at axial (q,r), or undefined. (Returns any hex stored under that key,
+ * placed or not.)
+ */
+export function getHex(world, q, r) {
+  return world.hexes[axialKey(q, r)];
+}
+
+/** True if a placed hex occupies axial (q,r). */
+export function hasHexAt(world, q, r) {
+  const h = world.hexes[axialKey(q, r)];
+  return !!(h && h.placed);
+}
+
+/** All hexes placed on the map (those with coords and placed === true). */
+export function placedHexes(world) {
+  return Object.values(world.hexes).filter((h) => h.placed && h.coords);
 }
 
 function newId() {

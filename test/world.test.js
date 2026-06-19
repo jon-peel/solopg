@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createWorld, SCHEMA_VERSION } from "../js/world/world.js";
+import {
+  createWorld,
+  SCHEMA_VERSION,
+  addHex,
+  getHex,
+  hasHexAt,
+  placedHexes,
+  nextUnplacedKey,
+} from "../js/world/world.js";
+import { axialKey } from "../js/core/hexgeo.js";
 import { exportWorld, importWorld } from "../js/data/portability.js";
 
 test("createWorld produces a valid empty world", () => {
@@ -44,4 +53,52 @@ test("import rejects a newer schemaVersion", () => {
     schemaVersion: SCHEMA_VERSION + 1,
   });
   assert.throws(() => importWorld(future), /newer/);
+});
+
+function placedHex(q, r, terrain = "Forest") {
+  return {
+    key: axialKey(q, r),
+    coords: { q, r },
+    placed: true,
+    terrain,
+    terrainFeature: null,
+    settlement: { present: false },
+    pois: { present: false, count: 0 },
+    explored: true,
+  };
+}
+
+test("getHex retrieves by axial coords; undefined when empty", () => {
+  const w = createWorld({ name: "Map", seed: 1 });
+  addHex(w, placedHex(2, -1));
+  assert.equal(getHex(w, 2, -1).terrain, "Forest");
+  assert.equal(getHex(w, 9, 9), undefined);
+});
+
+test("hasHexAt is true only for placed hexes", () => {
+  const w = createWorld({ name: "Map", seed: 1 });
+  addHex(w, placedHex(0, 0));
+  // an unplaced hex parked under some coincidental key
+  addHex(w, { key: axialKey(1, 1), coords: null, placed: false });
+  assert.equal(hasHexAt(w, 0, 0), true);
+  assert.equal(hasHexAt(w, 1, 1), false);
+  assert.equal(hasHexAt(w, 5, 5), false);
+});
+
+test("placedHexes returns only placed hexes with coords", () => {
+  const w = createWorld({ name: "Map", seed: 1 });
+  addHex(w, placedHex(0, 0));
+  addHex(w, placedHex(1, 0));
+  addHex(w, { key: "u:0", coords: null, placed: false }); // Phase-1 style
+  const placed = placedHexes(w);
+  assert.equal(placed.length, 2);
+  assert.ok(placed.every((h) => h.placed && h.coords));
+});
+
+test("nextUnplacedKey ignores axial keys", () => {
+  const w = createWorld({ name: "Mixed", seed: 1 });
+  addHex(w, placedHex(3, 4));
+  assert.equal(nextUnplacedKey(w), "u:0");
+  addHex(w, { key: "u:0", coords: null, placed: false });
+  assert.equal(nextUnplacedKey(w), "u:1");
 });

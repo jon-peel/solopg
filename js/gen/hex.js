@@ -9,19 +9,54 @@ import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { rollDice } from "../core/dice.js";
 
+// Default extra weight added to a terrain entry per matching neighbor.
+const DEFAULT_TERRAIN_BIAS = 2;
+
+/**
+ * Build a terrain table biased toward neighbor terrains. Returns a NEW table
+ * (never mutates the base); each entry is spread so its `roll` (e.g. Swamp's
+ * nested swamp-feature roll) is preserved. Each neighbor matching an entry's
+ * value adds `bias` to that entry's weight.
+ * @param {object} baseTable canonical terrain table
+ * @param {string[]} neighborTerrains terrain strings of existing neighbors
+ * @param {number} [bias]
+ * @returns {object} new table
+ */
+export function weightedTerrainTable(
+  baseTable,
+  neighborTerrains = [],
+  bias = DEFAULT_TERRAIN_BIAS,
+) {
+  const counts = new Map();
+  for (const t of neighborTerrains) counts.set(t, (counts.get(t) || 0) + 1);
+  const entries = baseTable.entries.map((e) => {
+    const base = "weight" in e ? e.weight : 1;
+    const bump = (counts.get(e.value) || 0) * bias;
+    return { ...e, weight: base + bump };
+  });
+  return { id: baseTable.id, entries };
+}
+
 /**
  * Generate one hex from the given tables and random stream.
  * @param {Map<string, object>} tables must include terrain, settlement-presence,
  *   settlement-size, poi-presence (and any sub-tables terrain references).
  * @param {() => number} rng a single stream consumed in a fixed order
- * @param {{ key?: string, coords?: object|null }} [opts] caller-supplied metadata
+ * @param {{ key?: string, coords?: object|null, placed?: boolean,
+ *   neighborTerrains?: string[], terrainBias?: number }} [opts]
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
   const resolve = makeResolver(tables);
 
   // 1. Terrain (with any nested feature roll, e.g. Swamp -> swamp-feature).
-  const terrainRoll = rollTable(tables.get("terrain"), rng, { resolve });
+  // Bias toward neighbor terrains when the caller supplies them.
+  const baseTerrain = tables.get("terrain");
+  const terrainTable =
+    opts.neighborTerrains && opts.neighborTerrains.length
+      ? weightedTerrainTable(baseTerrain, opts.neighborTerrains, opts.terrainBias)
+      : baseTerrain;
+  const terrainRoll = rollTable(terrainTable, rng, { resolve });
   const terrain = terrainRoll.value;
   const terrainFeature = terrainRoll.sub ? terrainRoll.sub.value : null;
 
@@ -49,7 +84,7 @@ export function generateHex(tables, rng, opts = {}) {
   return {
     key: opts.key ?? null,
     coords: opts.coords ?? null,
-    placed: false,
+    placed: opts.placed ?? false,
     terrain,
     terrainFeature,
     settlement,
