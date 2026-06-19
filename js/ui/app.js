@@ -21,6 +21,7 @@ import { logLine, showWorld } from "./panel.js";
 const TEST_TABLE_IDS = ["terrain", "swamp-feature"];
 
 let current = null; // the in-memory current world
+let currentRng = null; // one RNG stream per loaded world, advanced across rolls
 
 const $ = (id) => document.getElementById(id);
 
@@ -45,6 +46,9 @@ async function refreshWorldList() {
 
 async function setCurrent(world) {
   current = world;
+  // Fresh stream seeded from this world's seed: rolls vary per click but the
+  // sequence is reproducible from the start of a session.
+  currentRng = world ? makeRng(world.seed) : null;
   if (world) setLastWorldId(world.id);
   showWorld(world);
   await refreshWorldList();
@@ -111,11 +115,10 @@ function onImportFile(e) {
 }
 
 async function onRollTest() {
-  if (!current) return logLine("Create a world first.");
+  if (!current || !currentRng) return logLine("Create a world first.");
   try {
     const tables = await loadTables(TEST_TABLE_IDS);
-    const rng = makeRng(current.seed);
-    const result = rollTable(tables.get("terrain"), rng, {
+    const result = rollTable(tables.get("terrain"), currentRng, {
       resolve: makeResolver(tables),
     });
     const detail = result.sub ? ` (${result.sub.value})` : "";
