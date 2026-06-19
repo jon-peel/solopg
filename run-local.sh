@@ -21,6 +21,15 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
 git reset --hard "origin/$BRANCH"
 
+echo
+echo "Running unit tests ..."
+if ! node --test; then
+  echo
+  echo "Unit tests FAILED — not starting the server. Fix the failures above." >&2
+  exit 1
+fi
+echo "Unit tests passed."
+
 URL="http://localhost:$PORT"
 
 # Best-effort: open the page in the default browser shortly after the server starts.
