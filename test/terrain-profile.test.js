@@ -46,6 +46,13 @@ test("Water POI weights exclude dungeon/mine/tower/camp", () => {
   }
 });
 
+test("cave appears in at least one terrain's POI weights", () => {
+  const anyCave = Object.values(TERRAIN_PROFILE).some(
+    (p) => p.poi.weights.cave > 0,
+  );
+  assert.ok(anyCave, "expected cave to be allowed somewhere");
+});
+
 test("poiTypeTable builds weighted entries from the profile", () => {
   const t = poiTypeTable("Mountains");
   const values = t.entries.map((e) => e.value);

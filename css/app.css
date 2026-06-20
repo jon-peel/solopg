@@ -97,12 +97,106 @@ button:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
 }
 
 .tile-action {
   font-size: 0.85rem;
   padding: 0.25rem 0.5rem;
+}
+
+/* Thin separator between command-bar groups. */
+.bar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+
+/* Small uppercase section label in the selection panel. */
+.section-label {
+  margin-top: 0.6rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Selected-POI list rows. */
+.poi-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.poi-row {
+  text-align: left;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.poi-detail {
+  margin-top: 0.25rem;
+}
+
+.poi-detail-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+/* "Add POI" disclosure dropdown. */
+.menu {
+  position: relative;
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
+.menu > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  background: #2b3140;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu > summary:hover {
+  border-color: var(--accent);
+}
+
+.menu-list {
+  position: absolute;
+  z-index: 10;
+  margin-top: 0.25rem;
+  min-width: 9rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  background: var(--bar-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.menu-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+}
+
+.menu-list button:hover {
+  background: #2b3140;
 }
 
 #panel {

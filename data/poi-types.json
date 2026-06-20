@@ -9,6 +9,7 @@
     { "value": { "type": "camp", "label": "Camp", "occupantLean": "occupied" } },
     { "value": { "type": "landmark", "label": "Landmark", "occupantLean": "none" } },
     { "value": { "type": "tower", "label": "Tower", "occupantLean": "occupied" } },
-    { "value": { "type": "mine", "label": "Mine", "occupantLean": "either" } }
+    { "value": { "type": "mine", "label": "Mine", "occupantLean": "either" } },
+    { "value": { "type": "cave", "label": "Cave", "occupantLean": "either" } }
   ]
 }

@@ -1,9 +1,8 @@
 // App bootstrap: wires the command bar, world list, side panel, and hex map to
 // the engine and persistence layers. Only entry module loaded by index.html.
 
-import { makeRng, subRng } from "../core/rng.js";
-import { rollTable } from "../core/table.js";
-import { loadTables, makeResolver } from "../core/loader.js";
+import { subRng } from "../core/rng.js";
+import { loadTables } from "../core/loader.js";
 import { axialKey, neighbors } from "../core/hexgeo.js";
 import {
   createWorld,
@@ -35,9 +34,6 @@ import {
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
 
-// Tables the test command needs. terrain references swamp-feature via a nested roll.
-const TEST_TABLE_IDS = ["terrain", "swamp-feature"];
-
 // Tables the hex generator rolls on. Settlement/POI presence are now driven by
 // the terrain profile (not tables); settlement-size is still rolled (capped).
 const HEX_TABLE_IDS = [
@@ -51,7 +47,6 @@ const HEX_TABLE_IDS = [
 ];
 
 let current = null; // the in-memory current world
-let currentRng = null; // one RNG stream per loaded world, advanced across rolls
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
 
@@ -102,7 +97,6 @@ async function refreshWorldList() {
 async function setCurrent(world) {
   if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
-  currentRng = world ? makeRng(world.seed) : null;
   selectedPoiId = null;
   if (world) setLastWorldId(world.id);
   showWorld(world);
@@ -177,20 +171,6 @@ function onImportFile(e) {
   e.target.value = ""; // allow re-importing the same file
 }
 
-async function onRollTest() {
-  if (!current || !currentRng) return logLine("Create a world first.");
-  try {
-    const tables = await loadTables(TEST_TABLE_IDS);
-    const result = rollTable(tables.get("terrain"), currentRng, {
-      resolve: makeResolver(tables),
-    });
-    const detail = result.sub ? ` (${result.sub.value})` : "";
-    logLine(`Rolled terrain: ${result.value}${detail}`);
-  } catch (err) {
-    logLine(`Roll error: ${err.message}`);
-  }
-}
-
 // Terrain strings of a cell's existing placed neighbors (for weighting).
 function neighborTerrains(q, r) {
   return neighbors(q, r)
@@ -260,8 +240,9 @@ async function addPoiToSelected(forceType) {
     const poi = generatePoi(tables, rng, { terrain: hex.terrain, index: n, forceType });
     poi.id = `poi:${n}`;
     hex.pois.push(poi);
-    selectedPoiId = poi.id; // jump to the new POI's detail
+    selectedPoiId = null; // stay on the list so the Add menu remains for more
     await persistAndRefresh();
+    logLine(`Added ${poi.name}.`);
   } catch (err) {
     logLine(`Add POI error: ${err.message}`);
   }
@@ -389,7 +370,6 @@ function wire() {
   $("btn-export").addEventListener("click", onExport);
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
-  $("btn-roll").addEventListener("click", onRollTest);
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("world-select").addEventListener("change", onSelectWorld);
 }

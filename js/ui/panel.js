@@ -105,6 +105,8 @@ function renderPoiSection(sel, hex, model) {
     return;
   }
 
+  sel.appendChild(sectionLabel("POIs"));
+
   // List of POIs (name already embeds the occupant, e.g. "Ruin — Troll lair").
   if (pois.length > 0) {
     const list = document.createElement("div");
@@ -117,16 +119,48 @@ function renderPoiSection(sel, hex, model) {
       list.appendChild(row);
     }
     sel.appendChild(list);
+  } else {
+    const none = document.createElement("div");
+    none.className = "log-line";
+    none.textContent = "none";
+    sel.appendChild(none);
   }
 
-  // Manual add controls: a random POI, or a specific type.
-  const add = document.createElement("div");
-  add.className = "tile-actions";
-  add.appendChild(actionButton("Add random POI", model.onAddRandomPoi));
-  for (const type of model.poiTypes || []) {
-    add.appendChild(actionButton(`+${type}`, () => model.onAddPoi(type)));
-  }
-  sel.appendChild(add);
+  // Single "Add POI" dropdown: Random + each specific type.
+  sel.appendChild(addPoiMenu(model));
+}
+
+function sectionLabel(text) {
+  const el = document.createElement("div");
+  el.className = "section-label";
+  el.textContent = text;
+  return el;
+}
+
+// A native disclosure dropdown of POI-creation options.
+function addPoiMenu(model) {
+  const menu = document.createElement("details");
+  menu.className = "menu";
+  const summary = document.createElement("summary");
+  summary.textContent = "Add POI ▾";
+  menu.appendChild(summary);
+
+  const list = document.createElement("div");
+  list.className = "menu-list";
+  const item = (label, fn) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      menu.open = false;
+      fn();
+    });
+    list.appendChild(b);
+  };
+  item("Random", model.onAddRandomPoi);
+  for (const type of model.poiTypes || []) item(type, () => model.onAddPoi(type));
+  menu.appendChild(list);
+  return menu;
 }
 
 export function renderSelectionPanel(model) {
@@ -153,6 +187,7 @@ export function renderSelectionPanel(model) {
   const actions = document.createElement("div");
   actions.className = "tile-actions";
   if (hex) {
+    sel.appendChild(sectionLabel("Hex"));
     actions.appendChild(actionButton("Generate neighbors", model.onGenerateNeighbors));
     actions.appendChild(actionButton("Regenerate", model.onRegenerate));
     actions.appendChild(actionButton("Delete", model.onDelete));

@@ -9,6 +9,7 @@ export const POI_GLYPHS = {
   landmark: "🗿",
   tower: "🗼",
   mine: "⛏️",
+  cave: "🕳️",
 };
 
 export const SETTLEMENT_GLYPH = "🏠";

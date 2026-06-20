@@ -85,6 +85,15 @@ test("forceType overrides the terrain-weighted type roll", () => {
   assert.equal(poi.detail.stub.phase, 4); // still a dungeon stub
 });
 
+test("forceType supports the cave type", () => {
+  const poi = generatePoi(tables(), mulberry32(2), {
+    terrain: "Plains",
+    index: 0,
+    forceType: "cave",
+  });
+  assert.equal(poi.type, "cave");
+});
+
 test("name embeds the occupant for lair/occupied", () => {
   const t = tables();
   for (let s = 0; s < 100; s++) {
