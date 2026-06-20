@@ -27,8 +27,8 @@ const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
 const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
-const MIN_ICON_PX = 14; // hide terrain icons when on-screen hex is smaller
-const SKETCH_MIN_PX = 22; // below this, settlement shows a marker not a sketch
+const DETAIL_PX = 22; // at/above: pencil sketches + corner markers
+const MARK_MIN_PX = 7; // below: nothing; between: simplified dots
 
 let canvas = null;
 let ctx = null;
@@ -122,8 +122,12 @@ export function render() {
   //    out, to avoid drawing thousands of cells).
   drawEmptyGrid(minX, minY, maxX, maxY);
 
-  // 2. Placed hexes (filled), culled to the viewport.
-  const showIcons = iconsEnabled && HEX_SIZE * camera.scale >= MIN_ICON_PX;
+  // 2. Placed hexes (filled), culled to the viewport. Two overlay tiers:
+  //    detail (terrain sketch + corner markers) and simplified (centered
+  //    settlement dot + red POI dot), both gated by the icons toggle.
+  const onScreen = HEX_SIZE * camera.scale;
+  const detail = iconsEnabled && onScreen >= DETAIL_PX;
+  const simplified = iconsEnabled && onScreen >= MARK_MIN_PX && onScreen < DETAIL_PX;
   for (const hex of placedHexes(world)) {
     const { q, r } = hex.coords;
     const c = axialToPixel(q, r, HEX_SIZE);
@@ -136,9 +140,11 @@ export function render() {
       continue;
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
-    if (showIcons) {
+    if (detail) {
       drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
-      drawHexMarkers(c.x, c.y, hex);
+      drawDetailMarkers(c.x, c.y, hex);
+    } else if (simplified) {
+      drawSimplifiedMarkers(c.x, c.y, hex);
     }
   }
 
@@ -189,20 +195,18 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
   ctx.fillText(glyph, cx, cy);
 }
 
-// Settlement (top-right) + POIs (bottom-right).
-// Settlement uses level-of-detail: a pencil sketch when zoomed in, a simple
-// star/dot/circle marker when smaller. POIs are emoji on a dark disc.
-function drawHexMarkers(cx, cy, hex) {
+// Detail tier: settlement sketch top-right (corner-marker fallback until the SVG
+// loads) + POI emoji badge bottom-right (glyph for 1, count for >1).
+function drawDetailMarkers(cx, cy, hex) {
   const off = HEX_SIZE * 0.5;
   const size = HEX_SIZE * 0.44;
-  const onScreen = HEX_SIZE * camera.scale; // hex radius in CSS px
 
   if (hex.settlement && hex.settlement.present) {
     const sx = cx + off;
     const sy = cy - off;
     const url = settlementArt(hex.settlement.size);
     const img = url ? tileImage(url) : null;
-    if (onScreen >= SKETCH_MIN_PX && img && img.complete && img.naturalWidth > 0) {
+    if (img && img.complete && img.naturalWidth > 0) {
       const side = HEX_SIZE * 1.0;
       ctx.drawImage(img, sx - side / 2, sy - side / 2, side, side);
     } else {
@@ -218,11 +222,31 @@ function drawHexMarkers(cx, cy, hex) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
-    if (pois.length === 1) {
-      drawMarker(cx + off, cy + off, glyphForPoiType(pois[0].type), size);
-    } else {
-      drawMarker(cx + off, cy + off, String(pois.length), size, "#fff");
-    }
+    const label = pois.length === 1 ? glyphForPoiType(pois[0].type) : String(pois.length);
+    drawMarker(cx + off, cy + off, label, size, pois.length === 1 ? undefined : "#fff");
+  }
+}
+
+// Simplified tier (zoomed out): settlement size-marker centered on the tile +
+// a red dot at the bottom when the hex has any POIs.
+function drawSimplifiedMarkers(cx, cy, hex) {
+  if (hex.settlement && hex.settlement.present) {
+    const size = HEX_SIZE * 0.8;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx, cy, settlementMark(hex.settlement.size), size, "#fff");
+  }
+  const pois = Array.isArray(hex.pois) ? hex.pois : [];
+  if (pois.length) {
+    const r = HEX_SIZE * 0.18;
+    ctx.beginPath();
+    ctx.arc(cx, cy + HEX_SIZE * 0.58, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#d23b3b";
+    ctx.fill();
+    ctx.lineWidth = HEX_SIZE * 0.05;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.stroke();
   }
 }
 
