@@ -18,8 +18,9 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
-import { glyphForPoiType, SETTLEMENT_GLYPH } from "./poi-style.js";
+import { glyphForPoiType } from "./poi-style.js";
 import { artFor } from "./terrain-art.js";
+import { settlementArt, settlementMark } from "./settlement-art.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -27,6 +28,7 @@ const MAX_SCALE = 4;
 const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
 const MIN_ICON_PX = 14; // hide terrain icons when on-screen hex is smaller
+const SKETCH_MIN_PX = 22; // below this, settlement shows a marker not a sketch
 
 let canvas = null;
 let ctx = null;
@@ -187,23 +189,40 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
   ctx.fillText(glyph, cx, cy);
 }
 
-// Small corner markers: settlement (top-right) + POIs (bottom-right).
-// Each sits on a dark disc with an explicit fill so it's always legible.
+// Settlement (top-right) + POIs (bottom-right).
+// Settlement uses level-of-detail: a pencil sketch when zoomed in, a simple
+// star/dot/circle marker when smaller. POIs are emoji on a dark disc.
 function drawHexMarkers(cx, cy, hex) {
   const off = HEX_SIZE * 0.5;
   const size = HEX_SIZE * 0.44;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `${size}px sans-serif`;
+  const onScreen = HEX_SIZE * camera.scale; // hex radius in CSS px
 
   if (hex.settlement && hex.settlement.present) {
-    drawMarker(cx + off, cy - off, SETTLEMENT_GLYPH, size);
+    const sx = cx + off;
+    const sy = cy - off;
+    const url = settlementArt(hex.settlement.size);
+    const img = url ? tileImage(url) : null;
+    if (onScreen >= SKETCH_MIN_PX && img && img.complete && img.naturalWidth > 0) {
+      const side = HEX_SIZE * 1.0;
+      ctx.drawImage(img, sx - side / 2, sy - side / 2, side, side);
+    } else {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `${size}px sans-serif`;
+      drawMarker(sx, sy, settlementMark(hex.settlement.size), size, "#fff");
+    }
   }
+
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
-  if (pois.length === 1) {
-    drawMarker(cx + off, cy + off, glyphForPoiType(pois[0].type), size);
-  } else if (pois.length > 1) {
-    drawMarker(cx + off, cy + off, String(pois.length), size, "#fff");
+  if (pois.length) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    if (pois.length === 1) {
+      drawMarker(cx + off, cy + off, glyphForPoiType(pois[0].type), size);
+    } else {
+      drawMarker(cx + off, cy + off, String(pois.length), size, "#fff");
+    }
   }
 }
 
