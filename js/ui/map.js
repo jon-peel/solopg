@@ -19,6 +19,7 @@ import {
   SELECTED_STROKE,
 } from "./terrain-style.js";
 import { glyphForPoiType, SETTLEMENT_GLYPH } from "./poi-style.js";
+import { artFor } from "./terrain-art.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -152,10 +153,33 @@ export function setIconsEnabled(on) {
   render();
 }
 
+// Cache of tile <img>s keyed by url; re-render once each finishes loading.
+const tileCache = new Map();
+function tileImage(url) {
+  let img = tileCache.get(url);
+  if (img) return img;
+  img = new Image();
+  img.onload = () => render();
+  img.onerror = () => {};
+  img.src = url;
+  tileCache.set(url, img);
+  return img;
+}
+
 function drawTerrainIcon(cx, cy, terrain, q, r) {
   // Deterministic variant per cell so it's stable without storing it.
-  const variant = hashString(`${q},${r}`) % 2;
-  const glyph = iconForTerrain(terrain, variant);
+  const variants = artFor(terrain);
+  if (variants.length) {
+    const url = variants[hashString(`${q},${r}`) % variants.length];
+    const img = tileImage(url);
+    if (img.complete && img.naturalWidth > 0) {
+      const side = HEX_SIZE * 1.9;
+      ctx.drawImage(img, cx - side / 2, cy - side / 2, side, side);
+      return;
+    }
+    // else fall through to the emoji until the SVG has loaded
+  }
+  const glyph = iconForTerrain(terrain, hashString(`${q},${r}`) % 2);
   if (!glyph) return;
   ctx.font = `${HEX_SIZE * 0.9}px sans-serif`;
   ctx.textAlign = "center";
