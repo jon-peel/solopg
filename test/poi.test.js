@@ -57,7 +57,7 @@ test("a camp is occupier-leaning; a lair yields a creature", () => {
   }
 });
 
-test("dungeon POI carries a Phase-4 stub", () => {
+test("a dungeon POI is typed but carries no interior (generated lazily)", () => {
   const t = tables();
   // Mountains weights include dungeon; search seeds for one.
   let found = null;
@@ -66,7 +66,9 @@ test("dungeon POI carries a Phase-4 stub", () => {
     if (poi.type === "dungeon") found = poi;
   }
   assert.ok(found, "expected to roll a dungeon in Mountains");
-  assert.equal(found.detail.stub.phase, 4);
+  // The interior (detail.dungeon) is built on first open, not at POI roll time.
+  assert.equal(found.detail.stub, undefined);
+  assert.equal(found.detail.dungeon, undefined);
 });
 
 test("POI id reflects its index", () => {
@@ -82,7 +84,7 @@ test("forceType overrides the terrain-weighted type roll", () => {
     forceType: "dungeon",
   });
   assert.equal(poi.type, "dungeon");
-  assert.equal(poi.detail.stub.phase, 4); // still a dungeon stub
+  assert.equal(poi.detail.stub, undefined); // interior is generated lazily on open
 });
 
 test("forceType supports the cave type", () => {

@@ -1,0 +1,16 @@
+{
+  "id": "dungeon-theme",
+  "title": "Dungeon level theme",
+  "entries": [
+    { "weight": 2, "value": "Forgotten tomb" },
+    { "weight": 2, "value": "Cult shrine" },
+    { "weight": 1, "value": "Flooded cistern" },
+    { "weight": 2, "value": "Goblin warren" },
+    { "weight": 2, "value": "Collapsed mine" },
+    { "weight": 2, "value": "Ruined fort" },
+    { "weight": 1, "value": "Wizard's sanctum" },
+    { "weight": 2, "value": "Beast den" },
+    { "weight": 1, "value": "Prison vaults" },
+    { "weight": 1, "value": "Smugglers' tunnels" }
+  ]
+}

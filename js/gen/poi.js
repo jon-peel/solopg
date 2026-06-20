@@ -62,7 +62,9 @@ export function generatePoi(tables, rng, ctx) {
   }
 
   const detail = { flavor: flavorFor(type, occupant) };
-  if (type === "dungeon") detail.stub = { phase: 4 }; // deep internals come in Phase 4
+  // Dungeon interiors are generated lazily on first open (see app.js +
+  // js/gen/dungeon.js) so generatePoi stays cheap and the POI-roll stream is
+  // untouched; the POI just records its type here.
 
   return {
     id: `poi:${ctx.index}`,

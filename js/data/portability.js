@@ -57,6 +57,10 @@ export function importWorld(json) {
  *   count carried no type/occupant (never rolled), so we reset each hex's
  *   `pois` to `[]`; terrain/settlement are preserved. POIs reappear (typed)
  *   when the user regenerates the hex.
+ * - v3 -> v4: dungeon POIs replaced the `detail.stub` placeholder with a
+ *   generated interior at `detail.dungeon`. Migration can't roll (no tables/rng
+ *   here), so it just drops the stale stub; the dungeon detail view generates
+ *   and persists `detail.dungeon` the first time the POI is opened.
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -66,6 +70,14 @@ export function migrateWorld(data) {
       hex.pois = [];
     }
     data.schemaVersion = 3;
+  }
+  if (data.schemaVersion < 4) {
+    for (const hex of Object.values(data.hexes || {})) {
+      for (const poi of hex.pois || []) {
+        if (poi.detail && poi.detail.stub) delete poi.detail.stub;
+      }
+    }
+    data.schemaVersion = 4;
   }
   return data;
 }

@@ -135,7 +135,7 @@ graph TD
 | 1 — Single hex generator | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | 2 — Hex map (+2.1 interaction, +2.2 terrain look) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | 3 — POIs + terrain-aware gen (+3.1–3.5 POIs/art/LOD) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
-| **4 — Dungeons** | ▶ **next** | new `docs/plans/phase-4-dungeons.md` when planned |
+| **4 — Dungeons** | ▶ **in progress** | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md) |
 | 5 — Other POI types detailed | ◻ later | — |
 | 6 — Rumors | ◻ later | — |
 | 7 — Additional small oracles | ◻ later | see catalog below |

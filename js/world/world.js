@@ -10,7 +10,9 @@ import { axialKey } from "../core/hexgeo.js";
 // Phase 2 (the map) reused v2 (hexes already carried coords/placed).
 // v3: POIs became a typed array (Phase 3) — `hex.pois` is now `POI[]`, not
 // `{present,count}`. See migrateWorld in portability.js.
-export const SCHEMA_VERSION = 3;
+// v4: dungeon POIs gained a generated interior (Phase 4) at `detail.dungeon`,
+// replacing the Phase-3 `detail.stub` placeholder.
+export const SCHEMA_VERSION = 4;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

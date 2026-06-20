@@ -45,6 +45,9 @@ const HEX_TABLE_IDS = [
   "poi-occupant",
   "creatures",
   "occupiers",
+  "dungeon-size",
+  "dungeon-theme",
+  "dungeon-room",
 ];
 
 let current = null; // the in-memory current world
