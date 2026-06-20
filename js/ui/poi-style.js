@@ -11,9 +11,8 @@ export const POI_GLYPHS = {
   mine: "⛏️",
 };
 
-export const POI_BADGE = "❖"; // generic marker when a hex has multiple POIs
 export const SETTLEMENT_GLYPH = "🏠";
 
 export function glyphForPoiType(type) {
-  return POI_GLYPHS[type] || POI_BADGE;
+  return POI_GLYPHS[type] || "❖";
 }

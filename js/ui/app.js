@@ -14,6 +14,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
+import { generatePoi } from "../gen/poi.js";
 import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
 import {
   listWorlds,
@@ -32,6 +33,7 @@ import {
   setIconsEnabled,
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
+import { POI_GLYPHS } from "./poi-style.js";
 
 // Tables the test command needs. terrain references swamp-feature via a nested roll.
 const TEST_TABLE_IDS = ["terrain", "swamp-feature"];
@@ -216,6 +218,7 @@ function renderSelection() {
     hex: hex && hex.placed ? hex : null,
     terrains: Object.keys(TERRAIN_COLORS),
     selectedPoiId,
+    poiTypes: Object.keys(POI_GLYPHS),
     onSelectPoi: (id) => {
       selectedPoiId = id;
       renderSelection();
@@ -224,12 +227,56 @@ function renderSelection() {
       selectedPoiId = null;
       renderSelection();
     },
+    onAddRandomPoi,
+    onAddPoi,
+    onRemovePoi,
     onGenerateRandom,
     onPlaceTerrain,
     onGenerateNeighbors,
     onRegenerate,
     onDelete: onDeleteHex,
   });
+}
+
+// Next free "poi:<n>" id within a hex (max existing + 1).
+function nextPoiId(hex) {
+  let max = -1;
+  for (const p of hex.pois || []) {
+    const m = /^poi:(\d+)$/.exec(p.id || "");
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+
+async function addPoiToSelected(forceType) {
+  if (!current || !selected) return;
+  const { q, r } = selected;
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.placed) return;
+  try {
+    const tables = await loadTables(HEX_TABLE_IDS);
+    const n = nextPoiId(hex);
+    const rng = subRng(current.seed, "hex", q, r, "poi", n);
+    const poi = generatePoi(tables, rng, { terrain: hex.terrain, index: n, forceType });
+    poi.id = `poi:${n}`;
+    hex.pois.push(poi);
+    selectedPoiId = poi.id; // jump to the new POI's detail
+    await persistAndRefresh();
+  } catch (err) {
+    logLine(`Add POI error: ${err.message}`);
+  }
+}
+
+const onAddRandomPoi = () => addPoiToSelected();
+const onAddPoi = (type) => addPoiToSelected(type);
+
+async function onRemovePoi(id) {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex) return;
+  hex.pois = (hex.pois || []).filter((p) => p.id !== id);
+  if (selectedPoiId === id) selectedPoiId = null;
+  await persistAndRefresh();
 }
 
 async function persistAndRefresh() {

@@ -69,14 +69,13 @@ function actionButton(label, onClick) {
  *   { coord:{q,r}, hex|null, terrains:string[],
  *     onGenerateRandom, onPlaceTerrain(t), onGenerateNeighbors, onRegenerate, onDelete }
  */
-// POI list, or the drill-in detail of the selected POI.
+// POI list + add controls, or the drill-in detail of the selected POI.
 function renderPoiSection(sel, hex, model) {
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
-  if (pois.length === 0) return;
-
   const selectedPoi =
     model.selectedPoiId && pois.find((p) => p.id === model.selectedPoiId);
 
+  // Drill-in detail of one POI (type, occupant, flavor) + Back / Remove.
   if (selectedPoi) {
     const box = document.createElement("div");
     box.className = "poi-detail";
@@ -97,21 +96,37 @@ function renderPoiSection(sel, hex, model) {
       div.textContent = line;
       box.appendChild(div);
     }
-    box.appendChild(actionButton("← Back", model.onClearPoi));
+    const row = document.createElement("div");
+    row.className = "tile-actions";
+    row.appendChild(actionButton("← Back", model.onClearPoi));
+    row.appendChild(actionButton("Remove", () => model.onRemovePoi(selectedPoi.id)));
+    box.appendChild(row);
     sel.appendChild(box);
     return;
   }
 
-  const list = document.createElement("div");
-  list.className = "poi-list";
-  for (const poi of pois) {
-    const row = document.createElement("button");
-    row.className = "poi-row";
-    row.textContent = `${glyphForPoiType(poi.type)} ${poi.name} — ${occupantSummary(poi.occupant)}`;
-    row.addEventListener("click", () => model.onSelectPoi(poi.id));
-    list.appendChild(row);
+  // List of POIs (name already embeds the occupant, e.g. "Ruin — Troll lair").
+  if (pois.length > 0) {
+    const list = document.createElement("div");
+    list.className = "poi-list";
+    for (const poi of pois) {
+      const row = document.createElement("button");
+      row.className = "poi-row";
+      row.textContent = `${glyphForPoiType(poi.type)} ${poi.name}`;
+      row.addEventListener("click", () => model.onSelectPoi(poi.id));
+      list.appendChild(row);
+    }
+    sel.appendChild(list);
   }
-  sel.appendChild(list);
+
+  // Manual add controls: a random POI, or a specific type.
+  const add = document.createElement("div");
+  add.className = "tile-actions";
+  add.appendChild(actionButton("Add random POI", model.onAddRandomPoi));
+  for (const type of model.poiTypes || []) {
+    add.appendChild(actionButton(`+${type}`, () => model.onAddPoi(type)));
+  }
+  sel.appendChild(add);
 }
 
 export function renderSelectionPanel(model) {

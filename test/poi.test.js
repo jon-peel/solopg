@@ -73,3 +73,25 @@ test("POI id reflects its index", () => {
   const poi = generatePoi(tables(), mulberry32(1), { terrain: "Plains", index: 3 });
   assert.equal(poi.id, "poi:3");
 });
+
+test("forceType overrides the terrain-weighted type roll", () => {
+  // Water can't roll a dungeon, but a manual add with forceType can place one.
+  const poi = generatePoi(tables(), mulberry32(1), {
+    terrain: "Water",
+    index: 0,
+    forceType: "dungeon",
+  });
+  assert.equal(poi.type, "dungeon");
+  assert.equal(poi.detail.stub.phase, 4); // still a dungeon stub
+});
+
+test("name embeds the occupant for lair/occupied", () => {
+  const t = tables();
+  for (let s = 0; s < 100; s++) {
+    const poi = generatePoi(t, mulberry32(s), { terrain: "Forest", index: 0, forceType: "ruin" });
+    if (poi.occupant.kind === "lair") {
+      assert.ok(poi.name.includes(poi.occupant.creature));
+      break;
+    }
+  }
+});

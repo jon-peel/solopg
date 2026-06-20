@@ -7,7 +7,6 @@
 
 import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
-import { rollDice } from "../core/dice.js";
 import { subRng } from "../core/rng.js";
 import { TERRAIN_AFFINITY } from "./terrain-affinity.js";
 import { profileFor, cappedSizeTable } from "./terrain-profile.js";
@@ -90,18 +89,16 @@ export function generateHex(tables, rng, opts = {}) {
     }
   }
 
-  // 3. POIs: presence/count from the profile; each POI is a typed object built
-  //    from its own deterministic sub-stream (order-stable).
+  // 3. POIs: auto-generation places at most ONE POI (typed), seeded by its own
+  //    deterministic sub-stream. Users can add more by hand (see app.js); the
+  //    field stays an array.
   const pois = [];
   if (rng() < profile.poi.chance) {
-    const n = rollDice(profile.poi.count, rng).total;
     const base = opts.coords
       ? ["hex", opts.coords.q, opts.coords.r, opts.gen ?? 0]
       : ["hex", opts.key ?? "?", opts.gen ?? 0];
-    for (let i = 0; i < n; i++) {
-      const poiRng = subRng(opts.seed ?? 0, ...base, "poi", i);
-      pois.push(generatePoi(tables, poiRng, { terrain, index: i }));
-    }
+    const poiRng = subRng(opts.seed ?? 0, ...base, "poi", 0);
+    pois.push(generatePoi(tables, poiRng, { terrain, index: 0 }));
   }
 
   return {

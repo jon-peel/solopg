@@ -18,7 +18,7 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
-import { glyphForPoiType, POI_BADGE, SETTLEMENT_GLYPH } from "./poi-style.js";
+import { glyphForPoiType, SETTLEMENT_GLYPH } from "./poi-style.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -164,20 +164,32 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
 }
 
 // Small corner markers: settlement (top-right) + POIs (bottom-right).
+// Each sits on a dark disc with an explicit fill so it's always legible.
 function drawHexMarkers(cx, cy, hex) {
   const off = HEX_SIZE * 0.5;
-  const size = HEX_SIZE * 0.42;
+  const size = HEX_SIZE * 0.44;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `${size}px sans-serif`;
+
   if (hex.settlement && hex.settlement.present) {
-    ctx.fillText(SETTLEMENT_GLYPH, cx + off, cy - off);
+    drawMarker(cx + off, cy - off, SETTLEMENT_GLYPH, size);
   }
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
-  if (pois.length > 0) {
-    const glyph = pois.length === 1 ? glyphForPoiType(pois[0].type) : POI_BADGE;
-    ctx.fillText(glyph, cx + off, cy + off);
+  if (pois.length === 1) {
+    drawMarker(cx + off, cy + off, glyphForPoiType(pois[0].type), size);
+  } else if (pois.length > 1) {
+    drawMarker(cx + off, cy + off, String(pois.length), size, "#fff");
   }
+}
+
+function drawMarker(x, y, text, size, textColor) {
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.62, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fill();
+  ctx.fillStyle = textColor || "#fff"; // emoji ignore this; counts/text use it
+  ctx.fillText(text, x, y);
 }
 
 function drawEmptyGrid(minX, minY, maxX, maxY) {

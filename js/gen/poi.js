@@ -27,8 +27,8 @@ function kindsForLean(tables, lean) {
 }
 
 function nameFor(type, label, occupant) {
-  if (occupant.kind === "lair") return `${occupant.creature} ${label}`;
-  if (occupant.kind === "occupied") return `${label} (${occupant.by})`;
+  if (occupant.kind === "lair") return `${label} — ${occupant.creature} lair`;
+  if (occupant.kind === "occupied") return `${label} — ${occupant.by}`;
   return label;
 }
 
@@ -42,11 +42,12 @@ function flavorFor(type, occupant) {
  * Generate one POI.
  * @param {Map<string,object>} tables incl. poi-types, poi-occupant, creatures, occupiers
  * @param {() => number} rng a dedicated sub-stream for this POI
- * @param {{ terrain: string, index: number }} ctx
+ * @param {{ terrain: string, index: number, forceType?: string }} ctx
+ *   forceType skips the terrain-weighted type roll (manual "add specific POI").
  * @returns {object} POI
  */
 export function generatePoi(tables, rng, ctx) {
-  const type = rollTable(poiTypeTable(ctx.terrain), rng).value;
+  const type = ctx.forceType || rollTable(poiTypeTable(ctx.terrain), rng).value;
   const meta = poiTypeMeta(tables).get(type) || { label: type, occupantLean: "none" };
 
   // Decide occupant kind from the type's lean.
