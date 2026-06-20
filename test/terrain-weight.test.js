@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { generateHex, weightedTerrainTable } from "../js/gen/hex.js";
 import { TERRAIN_AFFINITY } from "../js/gen/terrain-affinity.js";
 
@@ -17,22 +18,19 @@ function baseTerrain() {
 }
 
 function makeTables(terrain = baseTerrain()) {
-  return new Map([
+  const t = new Map([
     ["terrain", terrain],
     ["swamp-feature", { id: "swamp-feature", entries: [{ value: "Bog" }] }],
-    [
-      "settlement-presence",
-      { id: "settlement-presence", entries: [{ value: { present: false } }] },
-    ],
     [
       "settlement-size",
       { id: "settlement-size", entries: [{ value: { size: "Thorp" } }] },
     ],
-    [
-      "poi-presence",
-      { id: "poi-presence", entries: [{ value: { present: false } }] },
-    ],
   ]);
+  // POI generation tables (real data) so generateHex can build POIs.
+  for (const id of ["poi-types", "poi-occupant", "creatures", "occupiers"]) {
+    t.set(id, JSON.parse(readFileSync(`./data/${id}.json`, "utf8")));
+  }
+  return t;
 }
 
 const weightOf = (t) => Object.fromEntries(t.entries.map((e) => [e.value, e.weight]));

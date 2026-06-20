@@ -1,9 +1,0 @@
-{
-  "id": "poi-presence",
-  "title": "Points of interest present?",
-  "entries": [
-    { "weight": 2, "value": { "present": false } },
-    { "weight": 2, "value": { "present": true, "count": "1d2" } },
-    { "weight": 1, "value": { "present": true, "count": "1d3" } }
-  ]
-}

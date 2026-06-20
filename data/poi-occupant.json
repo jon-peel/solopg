@@ -1,0 +1,10 @@
+{
+  "id": "poi-occupant",
+  "title": "POI occupant kind by lean",
+  "entries": [
+    { "value": { "lean": "creature", "kinds": [ { "weight": 5, "value": "lair" }, { "weight": 1, "value": "none" } ] } },
+    { "value": { "lean": "occupied", "kinds": [ { "weight": 4, "value": "occupied" }, { "weight": 1, "value": "none" } ] } },
+    { "value": { "lean": "either", "kinds": [ { "weight": 3, "value": "lair" }, { "weight": 3, "value": "occupied" }, { "weight": 2, "value": "none" } ] } },
+    { "value": { "lean": "none", "kinds": [ { "weight": 1, "value": "none" } ] } }
+  ]
+}

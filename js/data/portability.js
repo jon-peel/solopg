@@ -40,12 +40,32 @@ export function importWorld(json) {
         `this app supports (${SCHEMA_VERSION}). Update the app.`,
     );
   }
-  // Future: migrate older schemaVersions up to SCHEMA_VERSION here.
-  // v1 -> v2: v1 worlds only ever had an empty `hexes` map, so they load
-  // unchanged under v2 (no transform needed).
   if (typeof data.id !== "string" || typeof data.name !== "string") {
     throw new Error("Import failed: world is missing id/name");
   }
 
+  return migrateWorld(data);
+}
+
+/**
+ * Migrate an older world up to the current SCHEMA_VERSION. Pure; mutates and
+ * returns the given object. Called by importWorld AND on load from IndexedDB so
+ * persisted older worlds upgrade too.
+ *
+ * - v1 -> v2: v1 worlds only had an empty `hexes` map — no transform needed.
+ * - v2 -> v3: POIs changed from `{present,count}` to a typed `POI[]`. The old
+ *   count carried no type/occupant (never rolled), so we reset each hex's
+ *   `pois` to `[]`; terrain/settlement are preserved. POIs reappear (typed)
+ *   when the user regenerates the hex.
+ * @param {object} data
+ * @returns {object} data (migrated)
+ */
+export function migrateWorld(data) {
+  if (data.schemaVersion < 3) {
+    for (const hex of Object.values(data.hexes || {})) {
+      hex.pois = [];
+    }
+    data.schemaVersion = 3;
+  }
   return data;
 }

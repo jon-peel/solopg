@@ -7,9 +7,10 @@
 import { axialKey } from "../core/hexgeo.js";
 
 // v2: hexes gained structured contents (Phase 1). v1 worlds had empty hexes only.
-// Phase 2 (the map) reuses v2: hexes already carry `coords`/`placed`, so placing
-// them on a grid changes no field shape — no bump needed.
-export const SCHEMA_VERSION = 2;
+// Phase 2 (the map) reused v2 (hexes already carried coords/placed).
+// v3: POIs became a typed array (Phase 3) — `hex.pois` is now `POI[]`, not
+// `{present,count}`. See migrateWorld in portability.js.
+export const SCHEMA_VERSION = 3;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

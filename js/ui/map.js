@@ -18,6 +18,7 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
+import { glyphForPoiType, POI_BADGE, SETTLEMENT_GLYPH } from "./poi-style.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -132,7 +133,10 @@ export function render() {
       continue;
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
-    if (showIcons) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
+    if (showIcons) {
+      drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
+      drawHexMarkers(c.x, c.y, hex);
+    }
   }
 
   // 3. Selection highlight on top (works for empty or filled cells).
@@ -157,6 +161,23 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(glyph, cx, cy);
+}
+
+// Small corner markers: settlement (top-right) + POIs (bottom-right).
+function drawHexMarkers(cx, cy, hex) {
+  const off = HEX_SIZE * 0.5;
+  const size = HEX_SIZE * 0.42;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${size}px sans-serif`;
+  if (hex.settlement && hex.settlement.present) {
+    ctx.fillText(SETTLEMENT_GLYPH, cx + off, cy - off);
+  }
+  const pois = Array.isArray(hex.pois) ? hex.pois : [];
+  if (pois.length > 0) {
+    const glyph = pois.length === 1 ? glyphForPoiType(pois[0].type) : POI_BADGE;
+    ctx.fillText(glyph, cx + off, cy + off);
+  }
 }
 
 function drawEmptyGrid(minX, minY, maxX, maxY) {

@@ -1,0 +1,14 @@
+{
+  "id": "occupiers",
+  "title": "POI occupiers (flavor only)",
+  "entries": [
+    { "weight": 3, "value": "Bandits" },
+    { "weight": 2, "value": "Cultists" },
+    { "weight": 2, "value": "Smugglers" },
+    { "weight": 2, "value": "Refugees" },
+    { "weight": 1, "value": "A hermit" },
+    { "weight": 1, "value": "Cutthroats" },
+    { "weight": 1, "value": "Pilgrims" },
+    { "weight": 1, "value": "Deserters" }
+  ]
+}

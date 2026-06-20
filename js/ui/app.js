@@ -14,7 +14,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
-import { exportWorld, importWorld } from "../data/portability.js";
+import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
 import {
   listWorlds,
   saveWorld,
@@ -36,18 +36,22 @@ import { TERRAIN_COLORS } from "./terrain-style.js";
 // Tables the test command needs. terrain references swamp-feature via a nested roll.
 const TEST_TABLE_IDS = ["terrain", "swamp-feature"];
 
-// Tables the single-hex generator rolls on.
+// Tables the hex generator rolls on. Settlement/POI presence are now driven by
+// the terrain profile (not tables); settlement-size is still rolled (capped).
 const HEX_TABLE_IDS = [
   "terrain",
   "swamp-feature",
-  "settlement-presence",
   "settlement-size",
-  "poi-presence",
+  "poi-types",
+  "poi-occupant",
+  "creatures",
+  "occupiers",
 ];
 
 let current = null; // the in-memory current world
 let currentRng = null; // one RNG stream per loaded world, advanced across rolls
 let selected = null; // { q, r } | null — selected map cell
+let selectedPoiId = null; // drill-in POI within the selected hex
 
 const $ = (id) => document.getElementById(id);
 
@@ -94,8 +98,10 @@ async function refreshWorldList() {
 }
 
 async function setCurrent(world) {
+  if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
   currentRng = world ? makeRng(world.seed) : null;
+  selectedPoiId = null;
   if (world) setLastWorldId(world.id);
   showWorld(world);
   setWorld(world);
@@ -195,6 +201,7 @@ function neighborTerrains(q, r) {
 
 function selectCell(q, r) {
   selected = { q, r };
+  selectedPoiId = null; // reset drill-in when changing cell
   saveSelected(current, selected);
   setSelected(selected);
   renderSelection();
@@ -208,6 +215,15 @@ function renderSelection() {
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
     terrains: Object.keys(TERRAIN_COLORS),
+    selectedPoiId,
+    onSelectPoi: (id) => {
+      selectedPoiId = id;
+      renderSelection();
+    },
+    onClearPoi: () => {
+      selectedPoiId = null;
+      renderSelection();
+    },
     onGenerateRandom,
     onPlaceTerrain,
     onGenerateNeighbors,
@@ -230,6 +246,8 @@ function buildRandomHex(tables, q, r, gen) {
     coords: { q, r },
     placed: true,
     neighborTerrains: neighborTerrains(q, r),
+    seed: current.seed,
+    gen,
   });
   hex.gen = gen;
   return hex;
@@ -259,16 +277,17 @@ async function onPlaceTerrain(terrain) {
   try {
     const { q, r } = selected;
     const tables = await loadTables(HEX_TABLE_IDS);
-    // Settlement/POI still rolled (seeded by coords) so the hex is complete;
-    // terrain is the user's explicit choice.
+    // Terrain is the user's explicit choice; settlement/POIs are rolled (seeded
+    // by coords) under THAT terrain's profile so the hex stays consistent.
     const rng = subRng(current.seed, "hex", q, r, 0);
     const hex = generateHex(tables, rng, {
       key: axialKey(q, r),
       coords: { q, r },
       placed: true,
+      terrain,
+      seed: current.seed,
+      gen: 0,
     });
-    hex.terrain = terrain;
-    if (terrain !== "Swamp") hex.terrainFeature = null;
     hex.gen = 0;
     addHex(current, hex);
     await persistAndRefresh();

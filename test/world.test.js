@@ -64,7 +64,7 @@ function placedHex(q, r, terrain = "Forest") {
     terrain,
     terrainFeature: null,
     settlement: { present: false },
-    pois: { present: false, count: 0 },
+    pois: [],
     explored: true,
   };
 }

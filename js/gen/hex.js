@@ -8,7 +8,10 @@
 import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { rollDice } from "../core/dice.js";
+import { subRng } from "../core/rng.js";
 import { TERRAIN_AFFINITY } from "./terrain-affinity.js";
+import { profileFor, cappedSizeTable } from "./terrain-profile.js";
+import { generatePoi } from "./poi.js";
 
 /**
  * Build a terrain table biased toward neighbor terrains using an affinity
@@ -36,48 +39,69 @@ export function weightedTerrainTable(baseTable, neighborTerrains = [], opts = {}
 
 /**
  * Generate one hex from the given tables and random stream.
- * @param {Map<string, object>} tables must include terrain, settlement-presence,
- *   settlement-size, poi-presence (and any sub-tables terrain references).
+ * @param {Map<string, object>} tables must include terrain, settlement-size,
+ *   poi-types, poi-occupant, creatures, occupiers (and terrain sub-tables).
  * @param {() => number} rng a single stream consumed in a fixed order
  * @param {{ key?: string, coords?: object|null, placed?: boolean,
- *   neighborTerrains?: string[], terrainBias?: number }} [opts]
+ *   neighborTerrains?: string[], terrainBias?: number,
+ *   seed?: number|string, gen?: number }} [opts]
+ *   seed+gen+coords seed per-POI sub-streams (order-stable).
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
   const resolve = makeResolver(tables);
 
-  // 1. Terrain (with any nested feature roll, e.g. Swamp -> swamp-feature).
-  // Bias toward neighbor terrains when the caller supplies them.
-  const baseTerrain = tables.get("terrain");
-  const terrainTable =
-    opts.neighborTerrains && opts.neighborTerrains.length
-      ? weightedTerrainTable(baseTerrain, opts.neighborTerrains, {
-          multiplier: opts.terrainBias,
-        })
-      : baseTerrain;
-  const terrainRoll = rollTable(terrainTable, rng, { resolve });
-  const terrain = terrainRoll.value;
-  const terrainFeature = terrainRoll.sub ? terrainRoll.sub.value : null;
-
-  // 2. Settlement present? -> 3. size (only if present).
-  const settlementPresent = rollTable(tables.get("settlement-presence"), rng)
-    .value.present;
-  let settlement;
-  if (settlementPresent) {
-    const size = rollTable(tables.get("settlement-size"), rng).value.size;
-    settlement = { present: true, size };
+  // 1. Terrain. Either forced (manual placement) or rolled — when rolled, bias
+  //    toward neighbor terrains and resolve any nested feature (Swamp).
+  let terrain;
+  let terrainFeature = null;
+  if (opts.terrain) {
+    terrain = opts.terrain;
   } else {
-    settlement = { present: false };
+    const baseTerrain = tables.get("terrain");
+    const terrainTable =
+      opts.neighborTerrains && opts.neighborTerrains.length
+        ? weightedTerrainTable(baseTerrain, opts.neighborTerrains, {
+            multiplier: opts.terrainBias,
+          })
+        : baseTerrain;
+    const terrainRoll = rollTable(terrainTable, rng, { resolve });
+    terrain = terrainRoll.value;
+    terrainFeature = terrainRoll.sub ? terrainRoll.sub.value : null;
   }
 
-  // 4. POIs present? -> count (only if present). `count` is dice notation.
-  const poiEntry = rollTable(tables.get("poi-presence"), rng).value;
-  let pois;
-  if (poiEntry.present) {
-    const count = rollDice(poiEntry.count, rng).total;
-    pois = { present: true, count };
-  } else {
-    pois = { present: false, count: 0 };
+  // Subsequent rolls (settlement, POIs) are gated by the chosen terrain's
+  // profile — so a manually-placed Water hex still gets no settlement, etc.
+  const profile = profileFor(terrain);
+
+  // 2. Settlement: presence + size are gated by the terrain profile (e.g. no
+  //    settlement on Water; size capped — no City in Desert).
+  let settlement = { present: false };
+  if (profile.settlement) {
+    const present = rng() < profile.settlement.chance;
+    if (present) {
+      const sizeTable = cappedSizeTable(
+        tables.get("settlement-size"),
+        profile.settlement.maxSize,
+      );
+      if (sizeTable) {
+        settlement = { present: true, size: rollTable(sizeTable, rng).value.size };
+      }
+    }
+  }
+
+  // 3. POIs: presence/count from the profile; each POI is a typed object built
+  //    from its own deterministic sub-stream (order-stable).
+  const pois = [];
+  if (rng() < profile.poi.chance) {
+    const n = rollDice(profile.poi.count, rng).total;
+    const base = opts.coords
+      ? ["hex", opts.coords.q, opts.coords.r, opts.gen ?? 0]
+      : ["hex", opts.key ?? "?", opts.gen ?? 0];
+    for (let i = 0; i < n; i++) {
+      const poiRng = subRng(opts.seed ?? 0, ...base, "poi", i);
+      pois.push(generatePoi(tables, poiRng, { terrain, index: i }));
+    }
   }
 
   return {
@@ -87,9 +111,7 @@ export function generateHex(tables, rng, opts = {}) {
     terrain,
     terrainFeature,
     settlement,
-    // Phase 1 stores a POI count only; Phase 3 expands each POI into a detailed
-    // object (type, occupant, etc.).
-    pois,
+    pois, // typed POI[] (Phase 3); empty array when none
     explored: true,
     createdAt: new Date().toISOString(),
   };

@@ -1,6 +1,16 @@
 // Side-panel rendering helpers.
 
+import { glyphForPoiType } from "./poi-style.js";
+
 const panel = () => document.getElementById("panel");
+
+/** One-line summary of a POI's occupant. */
+export function occupantSummary(occupant) {
+  if (!occupant) return "empty";
+  if (occupant.kind === "lair") return `Lair: ${occupant.creature}`;
+  if (occupant.kind === "occupied") return `Held: ${occupant.by}`;
+  return "empty";
+}
 
 /** Append a timestamped-ish log line to the panel. */
 export function logLine(text) {
@@ -23,7 +33,10 @@ export function describeHex(hex) {
     ? `${hex.terrain} (${hex.terrainFeature})`
     : hex.terrain;
   const settlement = hex.settlement.present ? hex.settlement.size : "none";
-  const pois = hex.pois.present ? String(hex.pois.count) : "none";
+  const poiList = Array.isArray(hex.pois) ? hex.pois : [];
+  const pois = poiList.length
+    ? `${poiList.length} (${poiList.map((p) => p.type).join(", ")})`
+    : "none";
   const coords = hex.coords
     ? `  Coords: (${hex.coords.q}, ${hex.coords.r})`
     : null;
@@ -56,6 +69,51 @@ function actionButton(label, onClick) {
  *   { coord:{q,r}, hex|null, terrains:string[],
  *     onGenerateRandom, onPlaceTerrain(t), onGenerateNeighbors, onRegenerate, onDelete }
  */
+// POI list, or the drill-in detail of the selected POI.
+function renderPoiSection(sel, hex, model) {
+  const pois = Array.isArray(hex.pois) ? hex.pois : [];
+  if (pois.length === 0) return;
+
+  const selectedPoi =
+    model.selectedPoiId && pois.find((p) => p.id === model.selectedPoiId);
+
+  if (selectedPoi) {
+    const box = document.createElement("div");
+    box.className = "poi-detail";
+    const title = document.createElement("div");
+    title.className = "poi-detail-title";
+    title.textContent = `${glyphForPoiType(selectedPoi.type)} ${selectedPoi.name}`;
+    box.appendChild(title);
+    for (const line of [
+      `Type: ${selectedPoi.type}`,
+      `Occupant: ${occupantSummary(selectedPoi.occupant)}`,
+      selectedPoi.detail && selectedPoi.detail.flavor,
+      selectedPoi.detail && selectedPoi.detail.stub
+        ? "Dungeon interior — detail in Phase 4."
+        : null,
+    ].filter(Boolean)) {
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.textContent = line;
+      box.appendChild(div);
+    }
+    box.appendChild(actionButton("← Back", model.onClearPoi));
+    sel.appendChild(box);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "poi-list";
+  for (const poi of pois) {
+    const row = document.createElement("button");
+    row.className = "poi-row";
+    row.textContent = `${glyphForPoiType(poi.type)} ${poi.name} — ${occupantSummary(poi.occupant)}`;
+    row.addEventListener("click", () => model.onSelectPoi(poi.id));
+    list.appendChild(row);
+  }
+  sel.appendChild(list);
+}
+
 export function renderSelectionPanel(model) {
   const sel = document.getElementById("selection");
   if (!sel) return;
@@ -74,6 +132,7 @@ export function renderSelectionPanel(model) {
       div.textContent = line;
       sel.appendChild(div);
     }
+    renderPoiSection(sel, hex, model);
   }
 
   const actions = document.createElement("div");
