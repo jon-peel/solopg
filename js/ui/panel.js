@@ -32,27 +32,11 @@ export function describeHex(hex) {
   const terrain = hex.terrainFeature
     ? `${hex.terrain} (${hex.terrainFeature})`
     : hex.terrain;
-  const settlement = hex.settlement.present ? hex.settlement.size : "none";
-  const poiList = Array.isArray(hex.pois) ? hex.pois : [];
-  const pois = poiList.length
-    ? `${poiList.length} (${poiList.map((p) => p.type).join(", ")})`
-    : "none";
   const coords = hex.coords
     ? `  Coords: (${hex.coords.q}, ${hex.coords.r})`
     : null;
-  return [
-    `Hex ${hex.key}`,
-    coords,
-    `  Terrain: ${terrain}`,
-    `  Settlement: ${settlement}`,
-    `  POIs: ${pois}`,
-  ].filter(Boolean);
-}
-
-/** Log a generated hex to the panel as a readable block. */
-export function logHex(hex) {
-  logLine("—".repeat(3));
-  for (const line of describeHex(hex)) logLine(line);
+  // Settlement and POIs have their own panel sections (with controls).
+  return [`Hex ${hex.key}`, coords, `  Terrain: ${terrain}`].filter(Boolean);
 }
 
 function actionButton(label, onClick) {
@@ -171,6 +155,37 @@ function addPoiMenu(model) {
   ]);
 }
 
+// Settlement section: current settlement + Remove, or an "Add settlement"
+// dropdown offering only the sizes the terrain allows (none on open water).
+function renderSettlementSection(sel, hex, model) {
+  sel.appendChild(sectionLabel("Settlement"));
+  if (hex.settlement && hex.settlement.present) {
+    const line = document.createElement("div");
+    line.className = "log-line";
+    line.textContent = hex.settlement.size;
+    sel.appendChild(line);
+    const actions = document.createElement("div");
+    actions.className = "tile-actions";
+    actions.appendChild(actionButton("Remove settlement", model.onRemoveSettlement));
+    sel.appendChild(actions);
+  } else if (model.settlementSizes && model.settlementSizes.length) {
+    sel.appendChild(
+      buildMenu("Add settlement ▾", [
+        { label: "Random", onClick: model.onAddRandomSettlement },
+        ...model.settlementSizes.map((s) => ({
+          label: s,
+          onClick: () => model.onAddSettlement(s),
+        })),
+      ]),
+    );
+  } else {
+    const none = document.createElement("div");
+    none.className = "log-line";
+    none.textContent = "none (terrain allows none)";
+    sel.appendChild(none);
+  }
+}
+
 // "Place terrain" dropdown for an empty cell: Random, then terrains alphabetically.
 function placeTerrainMenu(model) {
   const terrains = [...(model.terrains || [])].sort();
@@ -198,6 +213,7 @@ export function renderSelectionPanel(model) {
       div.textContent = line;
       sel.appendChild(div);
     }
+    renderSettlementSection(sel, hex, model);
     renderPoiSection(sel, hex, model);
   }
 

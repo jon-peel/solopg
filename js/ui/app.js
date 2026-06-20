@@ -14,6 +14,7 @@ import {
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { generatePoi } from "../gen/poi.js";
+import { profileFor, SIZE_ORDER } from "../gen/terrain-profile.js";
 import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
 import {
   listWorlds,
@@ -197,8 +198,12 @@ function renderSelection() {
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
     terrains: Object.keys(TERRAIN_COLORS),
+    settlementSizes: hex && hex.placed ? allowedSizes(hex.terrain) : [],
     selectedPoiId,
     poiTypes: Object.keys(POI_GLYPHS),
+    onAddSettlement,
+    onAddRandomSettlement,
+    onRemoveSettlement,
     onSelectPoi: (id) => {
       selectedPoiId = id;
       renderSelection();
@@ -216,6 +221,34 @@ function renderSelection() {
     onRegenerate,
     onDelete: onDeleteHex,
   });
+}
+
+// Settlement sizes the terrain permits (capped; empty for open water).
+function allowedSizes(terrain) {
+  const p = profileFor(terrain);
+  if (!p.settlement) return [];
+  return SIZE_ORDER.slice(0, SIZE_ORDER.indexOf(p.settlement.maxSize) + 1);
+}
+
+async function setSettlement(settlement) {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  hex.settlement = settlement;
+  await persistAndRefresh();
+}
+
+const onAddSettlement = (size) => setSettlement({ present: true, size });
+const onRemoveSettlement = () => setSettlement({ present: false });
+
+function onAddRandomSettlement() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const sizes = allowedSizes(hex.terrain);
+  if (!sizes.length) return;
+  const size = sizes[Math.floor(Math.random() * sizes.length)];
+  setSettlement({ present: true, size });
 }
 
 // Next free "poi:<n>" id within a hex (max existing + 1).
