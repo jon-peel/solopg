@@ -27,7 +27,7 @@ const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
 const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
-const DETAIL_PX = 22; // at/above: pencil sketches + corner markers
+const DETAIL_PX = 26; // at/above: pencil sketches + corner markers (drop to small view sooner)
 const MARK_MIN_PX = 7; // below: nothing; between: simplified dots
 
 let canvas = null;
