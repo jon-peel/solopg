@@ -56,8 +56,10 @@ YAGNI; everything persists.
   `assets/`; the renderer falls back to emoji until an image loads / if one is missing. POIs are
   emoji.
 - **Design / approval loop:** brainstorm → plan → **approve** → build → `node --test` → commit +
-  push to the branch (updates PR #1). **Visual changes are reviewed as files first** (a preview is
-  sent for sign-off before art is wired in). One coherent step per commit.
+  push to the branch (updates PR #1) → **present a manual test checklist for the user to run via
+  `./run-local.sh`** (see [How to run & test](#how-to-run--test)). **Visual changes are reviewed
+  as files first** (a preview is sent for sign-off before art is wired in). One coherent step per
+  commit.
 
 ---
 
@@ -179,10 +181,36 @@ dungeon stub. Will get its own sub-plan file.
 
 ## How to run & test
 
+### Run it
 - **Run locally:** `./run-local.sh` (fetches the branch, runs `node --test`, then serves on
-  `http://localhost:8000`). Needs `git`, `node`, `python3`.
+  `http://localhost:8000` — aborts if tests fail). Needs `git`, `node`, `python3`. The script
+  self-updates to the latest branch tip each run (hard reset — it's a tester's script, not for
+  local edits). Override the port: `./run-local.sh 9000`.
 - **Tests only:** `node --test` (or `npm test`).
-- **Never** open `index.html` via `file://`.
+- **Never** open `index.html` via `file://` (modules/`fetch`/IndexedDB need an HTTP origin).
+
+### How a step is verified (the loop, every step)
+The container here can't expose a browser, so verification is split:
+1. **Automated:** `node --test` covers all pure logic; it must stay green and is the gate in
+   `run-local.sh`.
+2. **Manual browser:** because UI/canvas/IndexedDB aren't node-tested, **each step ends by
+   presenting the user a short numbered/checkbox test checklist** to run via `./run-local.sh`.
+   The user ticks items (or reports issues) before we move on. Keep checklists concrete and
+   tied to the change.
+
+**Standard manual-verification recipe** (adapt per step):
+- Serve via `./run-local.sh`; drive the new feature's UI and confirm the on-screen result.
+- **Reload** → state persists (IndexedDB). **Export → re-import** JSON → round-trips
+  (`schemaVersion` current). Same seed → reproducible generation.
+- Map changes: check pan/zoom, click-select, and the zoom **LOD tiers** (sketches → simplified
+  markers → nothing), plus the **Icons** toggle.
+
+**Example checklist shape** (what to hand the user):
+```
+[ ] <do X in the UI> → <expected on-screen result>
+[ ] Reload → <state> persists
+[ ] Export → re-import → identical
+```
 
 ## Out of scope (for now)
 
