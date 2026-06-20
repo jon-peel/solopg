@@ -137,30 +137,47 @@ function sectionLabel(text) {
   return el;
 }
 
-// A native disclosure dropdown of POI-creation options.
-function addPoiMenu(model) {
+// A native disclosure dropdown. `items` = [{ label, onClick }]; first item
+// (e.g. "Random") is kept at the top, the rest are shown in given order.
+function buildMenu(summaryText, items) {
   const menu = document.createElement("details");
   menu.className = "menu";
   const summary = document.createElement("summary");
-  summary.textContent = "Add POI ▾";
+  summary.textContent = summaryText;
   menu.appendChild(summary);
 
   const list = document.createElement("div");
   list.className = "menu-list";
-  const item = (label, fn) => {
+  for (const { label, onClick } of items) {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
     b.addEventListener("click", () => {
       menu.open = false;
-      fn();
+      onClick();
     });
     list.appendChild(b);
-  };
-  item("Random", model.onAddRandomPoi);
-  for (const type of model.poiTypes || []) item(type, () => model.onAddPoi(type));
+  }
   menu.appendChild(list);
   return menu;
+}
+
+// "Add POI" dropdown: Random, then types alphabetically.
+function addPoiMenu(model) {
+  const types = [...(model.poiTypes || [])].sort();
+  return buildMenu("Add POI ▾", [
+    { label: "Random", onClick: model.onAddRandomPoi },
+    ...types.map((t) => ({ label: t, onClick: () => model.onAddPoi(t) })),
+  ]);
+}
+
+// "Place terrain" dropdown for an empty cell: Random, then terrains alphabetically.
+function placeTerrainMenu(model) {
+  const terrains = [...(model.terrains || [])].sort();
+  return buildMenu("Place terrain ▾", [
+    { label: "Random", onClick: model.onGenerateRandom },
+    ...terrains.map((t) => ({ label: t, onClick: () => model.onPlaceTerrain(t) })),
+  ]);
 }
 
 export function renderSelectionPanel(model) {
@@ -184,20 +201,17 @@ export function renderSelectionPanel(model) {
     renderPoiSection(sel, hex, model);
   }
 
-  const actions = document.createElement("div");
-  actions.className = "tile-actions";
   if (hex) {
     sel.appendChild(sectionLabel("Hex"));
+    const actions = document.createElement("div");
+    actions.className = "tile-actions";
     actions.appendChild(actionButton("Generate neighbors", model.onGenerateNeighbors));
     actions.appendChild(actionButton("Regenerate", model.onRegenerate));
     actions.appendChild(actionButton("Delete", model.onDelete));
+    sel.appendChild(actions);
   } else {
-    actions.appendChild(actionButton("Generate random", model.onGenerateRandom));
-    for (const t of model.terrains) {
-      actions.appendChild(actionButton(t, () => model.onPlaceTerrain(t)));
-    }
+    sel.appendChild(placeTerrainMenu(model));
   }
-  sel.appendChild(actions);
 }
 
 /** Replace the panel contents with a heading describing the current world. */
