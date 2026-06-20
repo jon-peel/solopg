@@ -71,14 +71,23 @@ function renderPoiSection(sel, hex, model) {
       `Type: ${selectedPoi.type}`,
       `Occupant: ${occupantSummary(selectedPoi.occupant)}`,
       selectedPoi.detail && selectedPoi.detail.flavor,
-      selectedPoi.detail && selectedPoi.detail.stub
-        ? "Dungeon interior — detail in Phase 4."
-        : null,
     ].filter(Boolean)) {
       const div = document.createElement("div");
       div.className = "log-line";
       div.textContent = line;
       box.appendChild(div);
+    }
+    // Dungeon interior (Phase 4): generated lazily by app.js on first open, so
+    // it's normally present by the time we render; show a placeholder otherwise.
+    if (selectedPoi.type === "dungeon") {
+      const dungeon = selectedPoi.detail && selectedPoi.detail.dungeon;
+      if (dungeon) appendDungeon(box, dungeon);
+      else {
+        const div = document.createElement("div");
+        div.className = "log-line";
+        div.textContent = "Generating dungeon…";
+        box.appendChild(div);
+      }
     }
     const row = document.createElement("div");
     row.className = "tile-actions";
@@ -112,6 +121,43 @@ function renderPoiSection(sel, hex, model) {
 
   // Single "Add POI" dropdown: Random + each specific type.
   sel.appendChild(addPoiMenu(model));
+}
+
+// Render a dungeon's interior into the POI drill-in box: a size/levels header,
+// then each level as a <details> disclosure (theme, stocked rooms, and the
+// level's generated random-monster table).
+function appendDungeon(box, dungeon) {
+  const levels = Array.isArray(dungeon.levels) ? dungeon.levels : [];
+  box.appendChild(
+    sectionLabel(`Dungeon — ${dungeon.size}, ${levels.length} level(s)`),
+  );
+  for (const level of levels) {
+    const det = document.createElement("details");
+    det.className = "dungeon-level";
+    const summary = document.createElement("summary");
+    summary.textContent = `Level ${level.depth}: ${level.theme}`;
+    det.appendChild(summary);
+
+    const body = document.createElement("div");
+    body.className = "dungeon-body";
+    for (const room of level.rooms || []) {
+      const r = document.createElement("div");
+      r.className = "room-row";
+      const bits = [`${room.n}.`, room.content];
+      if (room.monster) bits.push(`— ${room.monster}`);
+      if (room.treasure) bits.push("💰");
+      r.textContent = bits.join(" ");
+      body.appendChild(r);
+    }
+    const wandering = document.createElement("div");
+    wandering.className = "room-row encounters";
+    wandering.textContent =
+      "Wandering: " + (level.encounters || []).map((e) => e.value).join(", ");
+    body.appendChild(wandering);
+
+    det.appendChild(body);
+    box.appendChild(det);
+  }
 }
 
 function sectionLabel(text) {

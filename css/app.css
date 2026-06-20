@@ -145,6 +145,42 @@ button:hover {
   margin-bottom: 0.25rem;
 }
 
+/* Dungeon interior: stacked, expandable per-level disclosures. */
+.dungeon-level {
+  margin-top: 0.3rem;
+  border: 1px solid var(--border, #2b3140);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+
+.dungeon-level > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.15rem 0;
+}
+
+.dungeon-level > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dungeon-body {
+  padding: 0.2rem 0 0.1rem 0.5rem;
+}
+
+.room-row {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text, inherit);
+}
+
+.room-row.encounters {
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* "Add POI" disclosure dropdown. */
 .menu {
   position: relative;

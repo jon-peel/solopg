@@ -14,6 +14,7 @@ import {
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { generatePoi } from "../gen/poi.js";
+import { generateDungeon } from "../gen/dungeon.js";
 import { profileFor, SIZE_ORDER } from "../gen/terrain-profile.js";
 import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
 import {
@@ -207,10 +208,7 @@ function renderSelection() {
     onAddSettlement,
     onAddRandomSettlement,
     onRemoveSettlement,
-    onSelectPoi: (id) => {
-      selectedPoiId = id;
-      renderSelection();
-    },
+    onSelectPoi,
     onClearPoi: () => {
       selectedPoiId = null;
       renderSelection();
@@ -286,6 +284,30 @@ async function addPoiToSelected(forceType) {
 
 const onAddRandomPoi = () => addPoiToSelected();
 const onAddPoi = (type) => addPoiToSelected(type);
+
+// Drill into a POI. Dungeon POIs generate their interior lazily on first open —
+// deterministic from the world seed + coords + the POI's index — then persist.
+async function onSelectPoi(id) {
+  selectedPoiId = id;
+  const hex = current && selected && getHex(current, selected.q, selected.r);
+  const poi = hex && (hex.pois || []).find((p) => p.id === id);
+  const needsDungeon =
+    poi && poi.type === "dungeon" && !(poi.detail && poi.detail.dungeon);
+  if (!needsDungeon) return renderSelection();
+
+  renderSelection(); // show the "Generating dungeon…" placeholder immediately
+  try {
+    const tables = await loadTables(HEX_TABLE_IDS);
+    const m = /^poi:(\d+)$/.exec(poi.id || "");
+    const n = m ? Number(m[1]) : 0;
+    const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon", n);
+    poi.detail = poi.detail || {};
+    poi.detail.dungeon = generateDungeon(tables, rng, { terrain: hex.terrain });
+    await persistAndRefresh();
+  } catch (err) {
+    logLine(`Dungeon error: ${err.message}`);
+  }
+}
 
 async function onRemovePoi(id) {
   if (!current || !selected) return;

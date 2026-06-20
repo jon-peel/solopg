@@ -76,8 +76,8 @@ Added to `HEX_TABLE_IDS` in `js/ui/app.js`.
   the current version.
 
 ## Status
-- **4.0** — engine + data + schema/migration + tests. ◻ in progress
-- **4.1** — detail view + lazy generation wiring (browser-verified). ◻
+- **4.0** — engine + data + schema/migration + tests. ✅ built (87 `node --test` passing)
+- **4.1** — detail view + lazy generation wiring. ✅ built; ◻ pending manual browser verification
 - **4.2** — optional polish (only if agreed). ◻
 
 ## Deferred / backlog

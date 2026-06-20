@@ -10,9 +10,10 @@ remembers the evolving map.
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
 **Status (current):** Phases 0–3 complete (engine, persistence, visual hex map, terrain with
-pencil-art tiles, POIs with terrain-aware rules, settlements with sketch/zoom LOD). **Schema
-v3. 81 `node --test` passing.** Work is on branch `claude/refine-local-plan-lg3hiu` (PR #1).
-**Next: Phase 4 — Dungeons.**
+pencil-art tiles, POIs with terrain-aware rules, settlements with sketch/zoom LOD). **Phase 4
+(Dungeons) built — generated interiors + panel detail view — pending manual browser verification.**
+**Schema v4. 87 `node --test` passing.** Work is on branch `claude/refine-local-plan-lg3hiu`
+(PR #1). **Next: Phase 5 — other POI types detailed.**
 
 ---
 
@@ -45,7 +46,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **3**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **4**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
@@ -103,7 +104,7 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v3)
+## Current data model (as built, schema v4)
 
 - **World:** `{ schemaVersion:3, id, name, seed, hexScale, hexes:{}, createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
@@ -112,8 +113,9 @@ graph TD
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
   `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Water).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
-  `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`; dungeon POIs carry
-  `detail.stub.phase=4` until Phase 4. Auto-gen places ≤1 POI; users add/remove more by hand.
+  `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`; dungeon POIs gain a
+  generated interior at `detail.dungeon` (Phase 4), built lazily on first open. Auto-gen places
+  ≤1 POI; users add/remove more by hand.
 - **Terrains:** Forest, Plains, Hills, Mountains, Swamp, Desert, Water. **POI types:** dungeon,
   lair, ruin, shrine, camp, landmark, tower, mine, cave.
 
@@ -144,9 +146,9 @@ graph TD
 Phases 0→1→2→3→4→5 are a hard chain; 6/7 need only the map + POIs; 8 is polish. **Factions were
 deliberately deferred** out of Phase 3 (see backlog).
 
-**Phase 4 (next) — Dungeons:** dungeon size → number of levels; per level a theme, stocked
+**Phase 4 (built) — Dungeons:** dungeon size → number of levels; per level a theme, stocked
 contents, and a generated random-monster table; a dungeon detail view. Expands the Phase-3
-dungeon stub. Will get its own sub-plan file.
+dungeon stub. See [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md).
 
 ---
 
