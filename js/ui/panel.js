@@ -150,7 +150,7 @@ function appendDungeon(box, dungeon) {
       const r = document.createElement("div");
       r.className = "room-row";
       const bits = [`${room.n}.`, room.content];
-      if (room.monster) bits.push(`— ${room.monster}`);
+      if (room.monster) bits.push(`— ${room.monster.name}`);
       if (room.treasure) bits.push("💰");
       r.textContent = bits.join(" ");
       body.appendChild(r);
@@ -323,9 +323,13 @@ export function renderDungeonPanel({ dungeon, level, room, connections = [], sur
   if (room) {
     sel.appendChild(sectionLabel(`Room ${room.n}`));
     for (const line of [
-      `Content: ${room.content}`,
-      room.monster ? `Monster: ${room.monster}` : null,
-      room.treasure ? "Treasure: yes" : null,
+      room.monster
+        ? `Monster: ${room.monster.number}× ${room.monster.name} (${room.monster.status})`
+        : `Content: ${room.content}`,
+      room.trap ? `Trap: ${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}` : null,
+      room.special ? `Special: ${room.special}` : null,
+      room.dressing || null,
+      room.treasure ? `Treasure: ${room.treasure.kind} (${room.treasure.guard})` : null,
       ...surface, // "Dungeon entrance (surface)", "Exit to surface"
     ].filter(Boolean)) {
       const div = document.createElement("div");

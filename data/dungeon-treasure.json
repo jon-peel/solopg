@@ -1,0 +1,13 @@
+{
+  "id": "dungeon-treasure",
+  "title": "Treasure kind",
+  "entries": [
+    { "weight": 4, "value": "A handful of coins" },
+    { "weight": 3, "value": "A purse of silver and gold" },
+    { "weight": 2, "value": "Gems and small valuables" },
+    { "weight": 2, "value": "Useful supplies and gear" },
+    { "weight": 1, "value": "A hoard of coin and plate" },
+    { "weight": 1, "value": "A magic item" },
+    { "weight": 1, "value": "A map or cryptic clue" }
+  ]
+}

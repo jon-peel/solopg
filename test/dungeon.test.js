@@ -6,7 +6,17 @@ import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
 function tables() {
-  const ids = ["dungeon-size", "dungeon-theme", "dungeon-room"];
+  const ids = [
+    "dungeon-size",
+    "dungeon-theme",
+    "dungeon-room",
+    "dungeon-trap",
+    "dungeon-special",
+    "dungeon-dressing",
+    "dungeon-treasure",
+    "dungeon-treasure-guard",
+    "dungeon-monster-status",
+  ];
   const t = new Map(
     ids.map((id) => [
       id,
@@ -81,9 +91,42 @@ test("every Monster room's monster is drawn from that level's encounter table", 
       const pool = new Set(lvl.encounters.map((e) => e.value));
       for (const room of lvl.rooms) {
         if (room.content === "Monster") {
-          assert.ok(pool.has(room.monster), `${room.monster} in level pool`);
+          assert.ok(pool.has(room.monster.name), `${room.monster.name} in level pool`);
         } else {
           assert.equal(room.monster, null);
+        }
+      }
+    }
+  }
+});
+
+test("each room carries content-appropriate detail", () => {
+  const t = tables();
+  const traps = new Set(t.get("dungeon-trap").entries.map((e) => e.value.name));
+  const specials = new Set(t.get("dungeon-special").entries.map((e) => e.value));
+  const dressings = new Set(t.get("dungeon-dressing").entries.map((e) => e.value));
+  const kinds = new Set(t.get("dungeon-treasure").entries.map((e) => e.value));
+  const guards = new Set(t.get("dungeon-treasure-guard").entries.map((e) => e.value));
+  const statuses = new Set(t.get("dungeon-monster-status").entries.map((e) => e.value));
+  for (let s = 0; s < 120; s++) {
+    for (const lvl of generateDungeon(t, mulberry32(s)).levels) {
+      for (const room of lvl.rooms) {
+        if (room.content === "Monster") {
+          assert.ok(room.monster.number >= 1 && room.monster.number <= 6, "1-6 appear");
+          assert.ok(statuses.has(room.monster.status), "valid status");
+        }
+        if (room.content === "Trap") {
+          assert.ok(traps.has(room.trap.name) && room.trap.trigger && room.trap.effect);
+        } else {
+          assert.equal(room.trap, null);
+        }
+        if (room.content === "Special") {
+          assert.ok(specials.has(room.special));
+          assert.equal(room.treasure, null, "no separate treasure in Special rooms");
+        }
+        if (room.content === "Empty") assert.ok(dressings.has(room.dressing));
+        if (room.treasure) {
+          assert.ok(kinds.has(room.treasure.kind) && guards.has(room.treasure.guard));
         }
       }
     }

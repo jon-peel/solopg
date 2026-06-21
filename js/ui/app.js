@@ -50,6 +50,12 @@ const HEX_TABLE_IDS = [
   "dungeon-size",
   "dungeon-theme",
   "dungeon-room",
+  "dungeon-trap",
+  "dungeon-special",
+  "dungeon-dressing",
+  "dungeon-treasure",
+  "dungeon-treasure-guard",
+  "dungeon-monster-status",
   "monster-families",
   "dungeon-family",
 ];

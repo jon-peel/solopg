@@ -32,7 +32,9 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 7: inter-level stairs + surface entrances/exits (4.9.4).
 // 8: stairs vertically aligned + spread; entrances scale (any size) (4.9.4 follow-up).
 // 9: more multi-stairs (scale w/ size), level-skipping shafts, more entrances.
-export const DUNGEON_BUILD = 9;
+// 10: rich room contents — trap/special/dressing detail, monster number+status,
+//     treasure kind+guard (4.9.5).
+export const DUNGEON_BUILD = 10;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -114,6 +116,12 @@ function buildLevelMonsters(families, theme, isDeepest, rng) {
 export function generateDungeon(tables, rng, ctx = {}) {
   const roomTable = tables.get("dungeon-room");
   const sizeTable = tables.get("dungeon-size");
+  const trapTable = tables.get("dungeon-trap");
+  const specialTable = tables.get("dungeon-special");
+  const dressingTable = tables.get("dungeon-dressing");
+  const treasureTable = tables.get("dungeon-treasure");
+  const guardTable = tables.get("dungeon-treasure-guard");
+  const statusTable = tables.get("dungeon-monster-status");
 
   // One theme + size per dungeon (from the POI); every level inherits the theme.
   const theme = ctx.theme || rollTable(tables.get("dungeon-theme"), rng).value;
@@ -131,11 +139,34 @@ export function generateDungeon(tables, rng, ctx = {}) {
     const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
     const rooms = [];
     for (let n = 1; n <= roomCount; n++) {
-      const room = rollTable(roomTable, rng).value;
-      const monster =
-        room.content === "Monster" ? rollTable(encounterTable, rng).value : null;
-      const treasure = rng() < room.treasureChance;
-      rooms.push({ n, content: room.content, monster, treasure });
+      const { content, treasureChance } = rollTable(roomTable, rng).value;
+      // Content-specific detail (a stocked-key entry).
+      let monster = null;
+      let trap = null;
+      let special = null;
+      let dressing = null;
+      if (content === "Monster") {
+        monster = {
+          name: rollTable(encounterTable, rng).value,
+          number: randInt(rng, 1, 6),
+          status: rollTable(statusTable, rng).value,
+        };
+      } else if (content === "Trap") {
+        trap = rollTable(trapTable, rng).value;
+      } else if (content === "Special") {
+        special = rollTable(specialTable, rng).value;
+      } else {
+        dressing = rollTable(dressingTable, rng).value;
+      }
+      // Treasure (not in Special rooms — the feature is the point there).
+      let treasure = null;
+      if (content !== "Special" && rng() < treasureChance) {
+        treasure = {
+          kind: rollTable(treasureTable, rng).value,
+          guard: rollTable(guardTable, rng).value,
+        };
+      }
+      rooms.push({ n, content, monster, trap, special, dressing, treasure });
     }
 
     const layout = layoutLevel(rooms, rng);

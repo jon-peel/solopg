@@ -1,0 +1,14 @@
+{
+  "id": "dungeon-trap",
+  "title": "Dungeon traps",
+  "entries": [
+    { "weight": 3, "value": { "name": "Pit", "trigger": "a pressure plate", "effect": "a 10 ft drop onto spikes" } },
+    { "weight": 3, "value": { "name": "Dart volley", "trigger": "a tripwire", "effect": "darts from the walls" } },
+    { "weight": 2, "value": { "name": "Gas vent", "trigger": "opening the door", "effect": "choking fumes fill the room" } },
+    { "weight": 2, "value": { "name": "Collapsing ceiling", "trigger": "weight on the floor", "effect": "falling rubble blocks the exit" } },
+    { "weight": 2, "value": { "name": "Scything blade", "trigger": "a hidden lever", "effect": "a blade sweeps across the passage" } },
+    { "weight": 1, "value": { "name": "Flooding chamber", "trigger": "a removed object", "effect": "water pours in and the door seals" } },
+    { "weight": 1, "value": { "name": "Alarm glyph", "trigger": "crossing a rune", "effect": "a wail summons nearby denizens" } },
+    { "weight": 1, "value": { "name": "Fire jet", "trigger": "the wrong tile", "effect": "a gout of flame erupts" } }
+  ]
+}
