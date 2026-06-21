@@ -25,7 +25,8 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel } from "./panel.js";
+import { attachDungeon, setLevel, setSelectedRoom } from "./dungeon-map.js";
 import {
   attachMap,
   setWorld,
@@ -56,6 +57,11 @@ const HEX_TABLE_IDS = [
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
+
+// Dungeon View state (the overlay shown when exploring a dungeon POI).
+let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
+let dungeonLevelIndex = 0;
+let dungeonRoomN = null; // selected room number within the current level
 
 const $ = (id) => document.getElementById(id);
 
@@ -102,6 +108,7 @@ async function refreshWorldList() {
 }
 
 async function setCurrent(world) {
+  if (dungeonPoi) closeDungeonView(); // leave any open dungeon when switching worlds
   if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
   selectedPoiId = null;
@@ -287,34 +294,86 @@ async function addPoiToSelected(forceType) {
 const onAddRandomPoi = () => addPoiToSelected();
 const onAddPoi = (type) => addPoiToSelected(type);
 
-// Drill into a POI. Dungeon POIs generate their interior lazily on first open —
-// deterministic from the world seed + coords + the POI's index — then persist.
+// Select a POI. Non-dungeon POIs drill into the side panel; a dungeon POI opens
+// the Dungeon View (generating its interior lazily on first open — deterministic
+// from the world seed + coords + the POI's index — then persisting).
 async function onSelectPoi(id) {
   selectedPoiId = id;
   const hex = current && selected && getHex(current, selected.q, selected.r);
   const poi = hex && (hex.pois || []).find((p) => p.id === id);
-  const needsDungeon =
-    poi && poi.type === "dungeon" && !(poi.detail && poi.detail.dungeon);
-  if (!needsDungeon) return renderSelection();
+  if (!poi || poi.type !== "dungeon") return renderSelection();
 
-  renderSelection(); // show the "Generating dungeon…" placeholder immediately
-  try {
-    const tables = await loadTables(HEX_TABLE_IDS);
-    const m = /^poi:(\d+)$/.exec(poi.id || "");
-    const n = m ? Number(m[1]) : 0;
-    const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon", n);
-    poi.detail = poi.detail || {};
-    poi.detail.dungeon = generateDungeon(tables, rng, {
-      theme: poi.detail.theme,
-      terrain: hex.terrain,
-    });
-    // Legacy dungeons predate themes — backfill from the generated interior so
-    // the map glyph reflects it.
-    poi.detail.theme = poi.detail.theme || poi.detail.dungeon.theme;
-    await persistAndRefresh();
-  } catch (err) {
-    logLine(`Dungeon error: ${err.message}`);
+  if (!(poi.detail && poi.detail.dungeon)) {
+    renderSelection(); // show the "Generating dungeon…" placeholder immediately
+    try {
+      const tables = await loadTables(HEX_TABLE_IDS);
+      const m = /^poi:(\d+)$/.exec(poi.id || "");
+      const n = m ? Number(m[1]) : 0;
+      const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon", n);
+      poi.detail = poi.detail || {};
+      poi.detail.dungeon = generateDungeon(tables, rng, {
+        theme: poi.detail.theme,
+        terrain: hex.terrain,
+      });
+      // Legacy dungeons predate themes — backfill from the generated interior so
+      // the map glyph reflects it.
+      poi.detail.theme = poi.detail.theme || poi.detail.dungeon.theme;
+      await persistAndRefresh();
+    } catch (err) {
+      logLine(`Dungeon error: ${err.message}`);
+      return;
+    }
   }
+  openDungeonView(poi);
+}
+
+// --- Dungeon View (overlay) -----------------------------------------------
+
+function openDungeonView(poi) {
+  dungeonPoi = poi;
+  $("dungeon-title").textContent = `${poi.detail.theme || "Dungeon"} — ${poi.detail.dungeon.size}`;
+  $("dungeon-view").hidden = false;
+  showDungeonLevel(0);
+}
+
+function closeDungeonView() {
+  dungeonPoi = null;
+  dungeonRoomN = null;
+  $("dungeon-view").hidden = true;
+  setLevel(null);
+  selectedPoiId = null; // back to the hex's POI list
+  renderSelection();
+}
+
+function renderLevelSwitcher() {
+  const bar = $("dungeon-levels");
+  bar.innerHTML = "";
+  dungeonPoi.detail.dungeon.levels.forEach((lvl, i) => {
+    const b = document.createElement("button");
+    b.textContent = `L${lvl.depth}`;
+    if (i === dungeonLevelIndex) b.className = "active";
+    b.addEventListener("click", () => showDungeonLevel(i));
+    bar.appendChild(b);
+  });
+}
+
+function showDungeonLevel(i) {
+  if (!dungeonPoi) return;
+  dungeonLevelIndex = i;
+  dungeonRoomN = null;
+  const level = dungeonPoi.detail.dungeon.levels[i];
+  renderLevelSwitcher();
+  setLevel(level);
+  renderDungeonPanel({ dungeon: dungeonPoi.detail.dungeon, level, room: null });
+}
+
+function onRoomClick(n) {
+  if (!dungeonPoi) return;
+  dungeonRoomN = n;
+  setSelectedRoom(n);
+  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  const room = (level.rooms || []).find((r) => r.n === n) || null;
+  renderDungeonPanel({ dungeon: dungeonPoi.detail.dungeon, level, room });
 }
 
 async function onRemovePoi(id) {
@@ -438,6 +497,7 @@ function wire() {
   $("import-file").addEventListener("change", onImportFile);
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("world-select").addEventListener("change", onSelectWorld);
+  $("btn-dungeon-back").addEventListener("click", closeDungeonView);
 }
 
 let iconsOn = true;
@@ -450,6 +510,7 @@ function onToggleIcons() {
 async function init() {
   wire();
   attachMap($("map"), { onHexClick, onEmptyCellClick });
+  attachDungeon($("dungeon-canvas"), { onRoomClick });
   await refreshWorldList();
   const lastId = getLastWorldId();
   if (lastId) {

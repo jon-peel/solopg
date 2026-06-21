@@ -278,6 +278,47 @@ export function renderSelectionPanel(model) {
   }
 }
 
+/**
+ * Render the Dungeon View's side panel: the dungeon header, the current level
+ * (theme/family + wandering monsters), and the selected room's contents.
+ * @param {{ dungeon: object, level: object, room: object|null }} model
+ */
+export function renderDungeonPanel({ dungeon, level, room }) {
+  const sel = document.getElementById("selection");
+  if (!sel) return;
+  sel.innerHTML = "";
+
+  const h = document.createElement("h3");
+  h.textContent = `${dungeon.theme || "Dungeon"} — ${dungeon.size}`;
+  sel.appendChild(h);
+
+  sel.appendChild(sectionLabel(`Level ${level.depth} — ${level.family}`));
+  const wandering = document.createElement("div");
+  wandering.className = "log-line";
+  wandering.textContent =
+    "Wandering: " + (level.encounters || []).map((e) => e.value).join(", ");
+  sel.appendChild(wandering);
+
+  if (room) {
+    sel.appendChild(sectionLabel(`Room ${room.n}`));
+    for (const line of [
+      `Content: ${room.content}`,
+      room.monster ? `Monster: ${room.monster}` : null,
+      room.treasure ? "Treasure: yes" : null,
+    ].filter(Boolean)) {
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.textContent = line;
+      sel.appendChild(div);
+    }
+  } else {
+    const hint = document.createElement("div");
+    hint.className = "log-line";
+    hint.textContent = "Click a room on the map.";
+    sel.appendChild(hint);
+  }
+}
+
 /** Replace the panel contents with a heading describing the current world. */
 export function showWorld(world) {
   const el = panel();

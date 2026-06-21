@@ -25,8 +25,19 @@
     </header>
 
     <main id="workspace">
-      <!-- Hex grid is drawn here in Phase 2; reserved/blank for now. -->
-      <canvas id="map"></canvas>
+      <div id="stage">
+        <!-- Hex grid (Phase 2). The Dungeon View overlays it when open. -->
+        <canvas id="map"></canvas>
+        <section id="dungeon-view" hidden>
+          <div id="dungeon-toolbar">
+            <button id="btn-dungeon-back">← World</button>
+            <strong id="dungeon-title"></strong>
+            <span class="spacer"></span>
+            <div id="dungeon-levels"></div>
+          </div>
+          <canvas id="dungeon-canvas"></canvas>
+        </section>
+      </div>
       <aside id="panel"></aside>
     </main>
 

@@ -12,7 +12,8 @@ remembers the evolving map.
 **Status (current):** Phases 0–3 complete; Phase 4 base (generated dungeon interiors + panel
 detail view) done & verified. **Now in the Phase 4 dungeon arc (4.5–4.8): themed, explorable
 dungeons** — 4.5 (themes + merge, schema v5), 4.6 (themed monster families + within-level
-cohesion) & 4.7 (rooms+corridors layout generator) done; **4.8 (Dungeon View UI) next**.
+cohesion), 4.7 (rooms+corridors layout generator) & 4.8 (Dungeon View UI: per-level map, room
+contents, level switcher) all built — **arc pending manual browser verification**.
 **Schema v5. 101 `node --test` passing.** Work is on branch `claude/refine-local-plan-lg3hiu`
 (PR #1). See [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md).
 

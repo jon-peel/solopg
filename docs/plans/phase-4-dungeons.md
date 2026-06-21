@@ -114,9 +114,14 @@ attached to each level by `generateDungeon`. Tests: deterministic, one rect/room
 overlaps, every room reachable from the entrance (flood fill), single-room/empty edge cases. **101
 passing.** (4.8's renderer crops to the cell bounding box.)
 
-### 4.8 — Dungeon View UI (browser-verified) ◻
-`js/ui/dungeon-map.js` canvas renderer + view-mode toggle in `app.js`/`index.html`; level switcher;
-click a room → contents in the panel; back-to-world. → hand the manual checklist.
+### 4.8 — Dungeon View UI ✅ built; ◻ pending manual browser verification
+`js/ui/dungeon-map.js`: fit-to-view canvas renderer (crops to the cell bounding box; rooms tinted by
+content, corridors, room numbers, entrance/selected highlight, click hit-testing). `index.html`:
+`#stage` wraps the hex `#map` + an overlay `#dungeon-view` (back button, title, level switcher,
+`#dungeon-canvas`). `css/app.css`: stage/overlay/toolbar styles. `js/ui/app.js`: selecting a dungeon
+POI generates the interior (lazy) then `openDungeonView`; level switcher; `onRoomClick` →
+`renderDungeonPanel` (panel.js) shows the room's contents; back-to-world; world-switch closes it.
+Headless smoke-tested (render + click hit-testing); browser checklist handed to the user.
 
 ## Deferred / backlog
 - Choose-theme on manual add; per-level reroll; richer room dressing; dungeon-specific art; tower as

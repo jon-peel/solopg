@@ -69,7 +69,15 @@ button:hover {
   min-height: 0;
 }
 
+#stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
 #map {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
@@ -79,6 +87,56 @@ button:hover {
 
 #map.dragging {
   cursor: grabbing;
+}
+
+/* Dungeon View overlays the hex map within the stage. */
+#dungeon-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0d0f15;
+}
+
+#dungeon-view[hidden] {
+  display: none;
+}
+
+#dungeon-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bar-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+#dungeon-title {
+  color: var(--accent);
+}
+
+#dungeon-levels {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+#dungeon-levels button {
+  padding: 0.2rem 0.55rem;
+}
+
+#dungeon-levels button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#dungeon-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  display: block;
+  background: #0d0f15;
 }
 
 #selection {
