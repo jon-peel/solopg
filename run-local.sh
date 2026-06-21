@@ -38,4 +38,19 @@ URL="http://localhost:$PORT"
 
 echo
 echo "Serving $URL  (Ctrl+C to stop)"
-python3 -m http.server "$PORT"
+# Serve with no-cache headers so the browser never holds onto a stale ES module
+# (plain `python3 -m http.server` sends none, which masks just-pushed JS/CSS).
+python3 - "$PORT" <<'PYEOF'
+import sys, http.server, socketserver
+
+class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
+socketserver.TCPServer.allow_reuse_address = True
+with socketserver.TCPServer(("", int(sys.argv[1])), NoCacheHandler) as httpd:
+    httpd.serve_forever()
+PYEOF
