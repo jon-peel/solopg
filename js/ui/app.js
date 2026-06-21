@@ -434,10 +434,11 @@ function levelMarks(dungeon, i) {
 function roomConnections(dungeon, i, n) {
   const conns = [];
   for (const st of dungeon.stairs || []) {
+    const word = st.kind === "shaft" ? "Shaft" : "Stairs";
     if (st.down.level === i && st.down.room === n)
-      conns.push({ label: `Stairs down to L${st.up.level + 1} →`, toLevel: st.up.level, toRoom: st.up.room });
+      conns.push({ label: `${word} down to L${st.up.level + 1} →`, toLevel: st.up.level, toRoom: st.up.room });
     if (st.up.level === i && st.up.room === n)
-      conns.push({ label: `Stairs up to L${st.down.level + 1} →`, toLevel: st.down.level, toRoom: st.down.room });
+      conns.push({ label: `${word} up to L${st.down.level + 1} →`, toLevel: st.down.level, toRoom: st.down.room });
   }
   return conns;
 }

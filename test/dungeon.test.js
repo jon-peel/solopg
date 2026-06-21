@@ -172,7 +172,8 @@ test("stairs connect adjacent levels and every level is reachable from an entran
   for (let s = 0; s < 200; s++) {
     const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
     for (const st of d.stairs) {
-      assert.equal(st.up.level, st.down.level + 1, "stairs join adjacent levels");
+      assert.ok(st.up.level > st.down.level, "a stair goes down a level");
+      assert.equal(st.up.level - st.down.level, st.kind === "shaft" ? 2 : 1, "stairs adjacent, shafts skip one");
       assert.ok(d.levels[st.down.level].rooms.some((r) => r.n === st.down.room));
       assert.ok(d.levels[st.up.level].rooms.some((r) => r.n === st.up.room));
     }
@@ -207,6 +208,25 @@ test("entrances are on level 0, capped by rooms, and multi-entrance scales with 
   const sprawling = multiRate("Sprawling");
   assert.ok(cramped > 0, "even small dungeons can have multiple entrances");
   assert.ok(sprawling > cramped, "multi-entrance likelihood rises with size");
+});
+
+test("large dungeons commonly have multiple stairs between levels", () => {
+  const t = tables();
+  let multi = 0;
+  let pairs = 0;
+  for (let s = 0; s < 200; s++) {
+    const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
+    const byPair = new Map();
+    for (const st of d.stairs) {
+      if (st.kind !== "stairs") continue;
+      byPair.set(st.down.level, (byPair.get(st.down.level) || 0) + 1);
+    }
+    for (const [, c] of byPair) {
+      pairs++;
+      if (c >= 2) multi++;
+    }
+  }
+  assert.ok(multi / pairs > 0.45, `expected many multi-stair pairs, got ${((multi / pairs) * 100).toFixed(0)}%`);
 });
 
 test("an up-stair sits at the lower-level room nearest below its down-stair", () => {
