@@ -29,7 +29,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 4: doors more common + bolder markers (4.9.3 follow-up).
 // 5: doors carry orientation (dx,dy) for wall-straddling rectangles + symbols.
 // 6: secret doors shown on the GM map (carved + marked), not hidden.
-export const DUNGEON_BUILD = 6;
+// 7: inter-level stairs + surface entrances/exits (4.9.4).
+export const DUNGEON_BUILD = 7;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -105,7 +106,8 @@ function buildLevelMonsters(families, theme, isDeepest, rng) {
  * @param {{ theme?: string, size?: string, terrain?: string }} [ctx] the
  *   dungeon's theme + size (both chosen at POI creation) drive generation;
  *   each falls back to a roll when absent/unknown.
- * @returns {{ build: number, size: string, theme: string, levels: object[] }}
+ * @returns {{ build: number, size: string, theme: string, levels: object[],
+ *   stairs: object[], entrances: object[], exits: object[] }}
  */
 export function generateDungeon(tables, rng, ctx = {}) {
   const roomTable = tables.get("dungeon-room");
@@ -138,5 +140,52 @@ export function generateDungeon(tables, rng, ctx = {}) {
     levels.push({ depth, theme, family, encounters, rooms, layout });
   }
 
-  return { build: DUNGEON_BUILD, size: size.size, theme, levels };
+  const { stairs, entrances, exits } = connectLevels(levels, size.size, ctx.terrain, rng);
+  return { build: DUNGEON_BUILD, size: size.size, theme, levels, stairs, entrances, exits };
+}
+
+// Pick up to `count` distinct rooms from a level (deterministic, no replacement).
+function sampleRooms(rooms, count, rng) {
+  const pool = rooms.slice();
+  const out = [];
+  const k = Math.min(count, pool.length);
+  for (let i = 0; i < k; i++) {
+    out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+  }
+  return out;
+}
+
+// Stairs between adjacent levels (>=1 each so every level is reachable from the
+// surface), size-scaled surface entrances on level 0, and terrain-gated extra
+// exits that can surface on a deeper level (hill/mountain sites).
+function connectLevels(levels, sizeName, terrain, rng) {
+  const stairs = [];
+  for (let i = 0; i < levels.length - 1; i++) {
+    const big = sizeName === "Sizable" || sizeName === "Sprawling";
+    const n = 1 + (big && rng() < 0.4 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      stairs.push({
+        down: { level: i, room: pick(rng, levels[i].rooms).n },
+        up: { level: i + 1, room: pick(rng, levels[i + 1].rooms).n },
+      });
+    }
+  }
+
+  const entranceCount =
+    sizeName === "Sprawling" ? randInt(rng, 2, 3) : sizeName === "Sizable" ? randInt(rng, 1, 2) : 1;
+  const entrances = sampleRooms(levels[0].rooms, entranceCount, rng).map((r) => ({
+    level: 0,
+    room: r.n,
+  }));
+
+  const exits = [];
+  if (/Hills|Mountains/.test(terrain || "") && levels.length >= 2 && rng() < 0.6) {
+    const exitCount = rng() < 0.3 ? 2 : 1;
+    for (let k = 0; k < exitCount; k++) {
+      const level = randInt(rng, 1, levels.length - 1);
+      exits.push({ level, room: pick(rng, levels[level].rooms).n });
+    }
+  }
+
+  return { stairs, entrances, exits };
 }

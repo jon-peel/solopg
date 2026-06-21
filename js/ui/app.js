@@ -418,23 +418,74 @@ function renderLevelSwitcher() {
   });
 }
 
+// Connector marks (entrance/exit/stairs) for one level, as Sets of room numbers.
+function levelMarks(dungeon, i) {
+  const m = { entrance: new Set(), exit: new Set(), down: new Set(), up: new Set() };
+  for (const e of dungeon.entrances || []) if (e.level === i) m.entrance.add(e.room);
+  for (const e of dungeon.exits || []) if (e.level === i) m.exit.add(e.room);
+  for (const st of dungeon.stairs || []) {
+    if (st.down.level === i) m.down.add(st.down.room);
+    if (st.up.level === i) m.up.add(st.up.room);
+  }
+  return m;
+}
+
+// Stair navigation available from a given room: each entry switches level + room.
+function roomConnections(dungeon, i, n) {
+  const conns = [];
+  for (const st of dungeon.stairs || []) {
+    if (st.down.level === i && st.down.room === n)
+      conns.push({ label: `Stairs down to L${st.up.level + 1} →`, toLevel: st.up.level, toRoom: st.up.room });
+    if (st.up.level === i && st.up.room === n)
+      conns.push({ label: `Stairs up to L${st.down.level + 1} →`, toLevel: st.down.level, toRoom: st.down.room });
+  }
+  return conns;
+}
+
+// Surface tags for a room (entrance / exit).
+function roomSurface(dungeon, i, n) {
+  const tags = [];
+  if ((dungeon.entrances || []).some((e) => e.level === i && e.room === n)) tags.push("Dungeon entrance (surface)");
+  if ((dungeon.exits || []).some((e) => e.level === i && e.room === n)) tags.push("Exit to surface");
+  return tags;
+}
+
 function showDungeonLevel(i) {
   if (!dungeonPoi) return;
   dungeonLevelIndex = i;
   dungeonRoomN = null;
-  const level = dungeonPoi.detail.dungeon.levels[i];
+  const dungeon = dungeonPoi.detail.dungeon;
+  const level = dungeon.levels[i];
   renderLevelSwitcher();
-  setLevel(level);
-  renderDungeonPanel({ dungeon: dungeonPoi.detail.dungeon, level, room: null });
+  setLevel(level, levelMarks(dungeon, i));
+  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo });
 }
 
 function onRoomClick(n) {
   if (!dungeonPoi) return;
   dungeonRoomN = n;
   setSelectedRoom(n);
-  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  const dungeon = dungeonPoi.detail.dungeon;
+  const level = dungeon.levels[dungeonLevelIndex];
   const room = (level.rooms || []).find((r) => r.n === n) || null;
-  renderDungeonPanel({ dungeon: dungeonPoi.detail.dungeon, level, room });
+  renderDungeonPanel({
+    dungeon,
+    level,
+    levelIndex: dungeonLevelIndex,
+    room,
+    connections: roomConnections(dungeon, dungeonLevelIndex, n),
+    surface: roomSurface(dungeon, dungeonLevelIndex, n),
+    onGoTo,
+  });
+}
+
+// Take a stair: switch to the connected level and select the connected room.
+function onGoTo(levelIndex, roomN) {
+  if (!dungeonPoi) return;
+  dungeonLevelIndex = levelIndex;
+  renderLevelSwitcher();
+  setLevel(dungeonPoi.detail.dungeon.levels[levelIndex], levelMarks(dungeonPoi.detail.dungeon, levelIndex));
+  onRoomClick(roomN);
 }
 
 async function onRemovePoi(id) {

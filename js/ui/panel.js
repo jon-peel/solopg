@@ -304,7 +304,7 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
-export function renderDungeonPanel({ dungeon, level, room }) {
+export function renderDungeonPanel({ dungeon, level, room, connections = [], surface = [], onGoTo }) {
   const sel = document.getElementById("selection");
   if (!sel) return;
   sel.innerHTML = "";
@@ -326,16 +326,26 @@ export function renderDungeonPanel({ dungeon, level, room }) {
       `Content: ${room.content}`,
       room.monster ? `Monster: ${room.monster}` : null,
       room.treasure ? "Treasure: yes" : null,
+      ...surface, // "Dungeon entrance (surface)", "Exit to surface"
     ].filter(Boolean)) {
       const div = document.createElement("div");
       div.className = "log-line";
       div.textContent = line;
       sel.appendChild(div);
     }
+    // Stair navigation buttons (switch level + select the connected room).
+    if (connections.length && onGoTo) {
+      const row = document.createElement("div");
+      row.className = "tile-actions";
+      for (const c of connections) {
+        row.appendChild(actionButton(c.label, () => onGoTo(c.toLevel, c.toRoom)));
+      }
+      sel.appendChild(row);
+    }
   } else {
     const hint = document.createElement("div");
     hint.className = "log-line";
-    hint.textContent = "Click a room on the map.";
+    hint.textContent = "Click a room on the map. E=entrance, X=exit, ▲/▼=stairs.";
     sel.appendChild(hint);
   }
 }

@@ -167,6 +167,61 @@ test("an unknown ctx.size falls back to a rolled size", () => {
   assert.ok(valid.has(d.size), "fell back to a real size");
 });
 
+test("stairs connect adjacent levels and every level is reachable from an entrance", () => {
+  const t = tables();
+  for (let s = 0; s < 200; s++) {
+    const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
+    for (const st of d.stairs) {
+      assert.equal(st.up.level, st.down.level + 1, "stairs join adjacent levels");
+      assert.ok(d.levels[st.down.level].rooms.some((r) => r.n === st.down.room));
+      assert.ok(d.levels[st.up.level].rooms.some((r) => r.n === st.up.room));
+    }
+    // BFS over levels using stairs, seeded from entrance levels.
+    const reach = new Set(d.entrances.map((e) => e.level));
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const st of d.stairs) {
+        if (reach.has(st.down.level) && !reach.has(st.up.level)) { reach.add(st.up.level); grew = true; }
+        if (reach.has(st.up.level) && !reach.has(st.down.level)) { reach.add(st.down.level); grew = true; }
+      }
+    }
+    for (let i = 0; i < d.levels.length; i++) assert.ok(reach.has(i), `level ${i} unreachable (seed ${s})`);
+  }
+});
+
+test("entrances are on level 0 and scale with size", () => {
+  const t = tables();
+  const maxEntrances = (sz) => {
+    let m = 0;
+    for (let s = 0; s < 80; s++) {
+      const d = generateDungeon(t, mulberry32(s), { size: sz });
+      assert.ok(d.entrances.every((e) => e.level === 0), "entrances on level 0");
+      m = Math.max(m, d.entrances.length);
+    }
+    return m;
+  };
+  assert.equal(maxEntrances("Cramped"), 1, "Cramped has a single entrance");
+  assert.ok(maxEntrances("Sprawling") >= 2, "Sprawling has multiple entrances");
+});
+
+test("exits only surface on deeper levels for hill/mountain terrain", () => {
+  const t = tables();
+  for (let s = 0; s < 120; s++) {
+    const plains = generateDungeon(t, mulberry32(s), { size: "Sprawling", terrain: "Plains" });
+    assert.equal(plains.exits.length, 0, "no exits on Plains");
+  }
+  let sawDeepExit = false;
+  for (let s = 0; s < 200; s++) {
+    const mtn = generateDungeon(t, mulberry32(s), { size: "Sprawling", terrain: "Mountains" });
+    for (const ex of mtn.exits) {
+      assert.ok(ex.level >= 1, "exit surfaces on a deeper level");
+      if (ex.level >= 1) sawDeepExit = true;
+    }
+  }
+  assert.ok(sawDeepExit, "Mountains dungeons sometimes have a deeper exit");
+});
+
 test("ctx.theme is honored for every level", () => {
   const t = tables();
   for (let s = 0; s < 50; s++) {

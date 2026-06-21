@@ -23,6 +23,7 @@ let canvas = null;
 let ctx = null;
 let dpr = 1;
 let level = null; // { layout, rooms, ... }
+let marks = null; // { entrance, exit, down, up } : Sets of room numbers
 let selectedRoom = null;
 let onRoomClick = () => {};
 let hitRects = []; // { n, x, y, w, h } in CSS px, for click testing
@@ -37,9 +38,14 @@ export function attachDungeon(canvasEl, cbs = {}) {
   resize();
 }
 
-/** Show a level (its `.layout` + `.rooms`). Pass null to clear. */
-export function setLevel(lvl) {
+/**
+ * Show a level (its `.layout` + `.rooms`). Pass null to clear.
+ * @param {object|null} lvl
+ * @param {{entrance:Set,exit:Set,down:Set,up:Set}|null} [m] connector marks by room.
+ */
+export function setLevel(lvl, m = null) {
   level = lvl;
+  marks = m;
   selectedRoom = null;
   // The canvas may have been sized while its container was hidden; re-measure
   // now that the view is visible so the backing store matches (resize renders).
@@ -162,6 +168,31 @@ export function render() {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(sym, wx, wy);
+    }
+  }
+
+  // Connector badges (entrance/exit/stairs) in each room's top-left corner.
+  if (marks) {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    const fs = Math.max(8, Math.floor(cell * 0.95));
+    ctx.font = `bold ${fs}px sans-serif`;
+    for (const r of layout.rooms) {
+      const badges = [];
+      if (marks.entrance.has(r.n)) badges.push(["E", "#5fbf77"]);
+      if (marks.exit.has(r.n)) badges.push(["X", "#5fbf77"]);
+      if (marks.down.has(r.n)) badges.push(["▼", "#6ec6d6"]);
+      if (marks.up.has(r.n)) badges.push(["▲", "#6ec6d6"]);
+      if (!badges.length) continue;
+      let bx = sx(r.x) + 2;
+      const by = sy(r.y) + 2;
+      for (const [chr, col] of badges) {
+        ctx.fillStyle = "#0d0f15";
+        ctx.fillText(chr, bx + 1, by + 1);
+        ctx.fillStyle = col;
+        ctx.fillText(chr, bx, by);
+        bx += fs * 0.85;
+      }
     }
   }
 }
