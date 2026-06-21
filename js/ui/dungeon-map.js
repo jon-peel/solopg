@@ -12,6 +12,7 @@ const CONTENT_FILL = {
   Special: "#3b4b7c",
 };
 const CORRIDOR_FILL = "#262b36";
+const DOOR_FILL = { door: "#caa46a", locked: "#c0524a", stuck: "#c98a3a" };
 const ROOM_STROKE = "#11131a";
 const ENTRANCE_STROKE = "#5fbf77";
 const SELECTED_STROKE = "#6ea8fe";
@@ -130,6 +131,18 @@ export function render() {
 
     ctx.fillStyle = "#e6e8ee";
     ctx.fillText(String(r.n), x + w / 2, y + h / 2);
+  }
+
+  // Doors on visible passages (open passages and secret doors draw nothing).
+  for (const d of layout.doors || []) {
+    const s = Math.max(3, Math.round(cell * 0.6));
+    const dx = sx(d.x) + (cell - s) / 2;
+    const dy = sy(d.y) + (cell - s) / 2;
+    ctx.fillStyle = DOOR_FILL[d.type] || DOOR_FILL.door;
+    ctx.fillRect(dx, dy, s, s);
+    ctx.strokeStyle = "#11131a";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(dx + 0.5, dy + 0.5, s - 1, s - 1);
   }
 }
 

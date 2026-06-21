@@ -128,6 +128,52 @@ test("large levels usually contain loops; small levels are sometimes linear", ()
   assert.ok(smallLinear > 0, "some 3-room levels should be linear (no loops)");
 });
 
+const DOOR_TYPES = new Set(["open", "door", "locked", "stuck", "secret"]);
+
+// Connectivity using only NON-secret edges (secret doors must never be a room's
+// sole route in).
+function connectedWithoutSecret(layout) {
+  const parent = new Map(layout.rooms.map((r) => [r.n, r.n]));
+  const find = (x) => {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)));
+      x = parent.get(x);
+    }
+    return x;
+  };
+  for (const e of layout.edges) if (e.type !== "secret") parent.set(find(e.a), find(e.b));
+  return new Set(layout.rooms.map((r) => find(r.n))).size <= 1;
+}
+
+test("every edge has a valid type and the dungeon is solvable without secrets", () => {
+  for (let s = 0; s < 250; s++) {
+    const lay = layoutLevel(makeRooms(3 + (s % 8)), mulberry32(s));
+    for (const e of lay.edges) assert.ok(DOOR_TYPES.has(e.type), `bad type ${e.type}`);
+    assert.ok(connectedWithoutSecret(lay), `secret-only room (seed ${s})`);
+  }
+});
+
+test("secret doors do appear (on loop edges), across seeds", () => {
+  let secrets = 0;
+  for (let s = 0; s < 200; s++) {
+    const lay = layoutLevel(makeRooms(9), mulberry32(s));
+    if (lay.edges.some((e) => e.type === "secret")) secrets++;
+  }
+  assert.ok(secrets > 20, `expected some secret doors, got ${secrets}/200`);
+});
+
+test("doors list only visible types and sit on corridor cells", () => {
+  const corridorKey = (lay) => new Set(lay.corridors.map((c) => `${c.x},${c.y}`));
+  for (let s = 0; s < 150; s++) {
+    const lay = layoutLevel(makeRooms(3 + (s % 8)), mulberry32(s));
+    const cells = corridorKey(lay);
+    for (const d of lay.doors) {
+      assert.ok(["door", "locked", "stuck"].includes(d.type), `door type ${d.type}`);
+      assert.ok(cells.has(`${d.x},${d.y}`), "door sits on a corridor cell");
+    }
+  }
+});
+
 test("a single-room level needs no corridors", () => {
   const lay = layoutLevel(makeRooms(1), mulberry32(1));
   assert.equal(lay.rooms.length, 1);

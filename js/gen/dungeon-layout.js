@@ -8,9 +8,34 @@
 // module is node-tested (no overlap, fully connected, has loops, deterministic).
 
 import { randInt } from "../core/rng.js";
+import { rollTable } from "./../core/table.js";
 
 const ROOM_MIN = 3;
 const ROOM_MAX = 5;
+
+// Edge (passage) types. Weighted JS consts (structural, like the other layout
+// consts). TREE edges connect the dungeon and are NEVER secret, so every room is
+// reachable without finding a secret door; LOOP edges are redundant shortcuts and
+// may be secret/locked/stuck.
+const TREE_DOORS = {
+  id: "door-tree",
+  entries: [
+    { weight: 6, value: "open" },
+    { weight: 4, value: "door" },
+    { weight: 1, value: "stuck" },
+    { weight: 1, value: "locked" },
+  ],
+};
+const LOOP_DOORS = {
+  id: "door-loop",
+  entries: [
+    { weight: 3, value: "open" },
+    { weight: 3, value: "door" },
+    { weight: 3, value: "secret" },
+    { weight: 1, value: "stuck" },
+    { weight: 1, value: "locked" },
+  ],
+};
 
 // True if rectangles a and b overlap when each is grown by `pad` cells.
 function overlaps(a, b, pad) {
@@ -55,22 +80,31 @@ function placeRoom(rng, grid, placed) {
   return null;
 }
 
-// Carve an L-shaped corridor between two cell coordinates, adding every path
-// cell that is NOT inside a room to `corridorSet` (keyed "x,y").
-function carve(a, b, isRoomCell, corridorSet) {
+// All cells along one L-shaped path between two cells (in path order), for the
+// given leg order. Includes cells that fall inside rooms (filtered by callers).
+function pathCells(a, b, horizFirst) {
+  const cells = [];
   let { x, y } = a;
-  const add = () => {
-    if (!isRoomCell(x, y)) corridorSet.add(`${x},${y}`);
+  const horiz = () => {
+    while (x !== b.x) {
+      x += x < b.x ? 1 : -1;
+      cells.push({ x, y });
+    }
   };
-  // Horizontal leg, then vertical leg (meeting at b.x, a.y).
-  while (x !== b.x) {
-    x += x < b.x ? 1 : -1;
-    add();
+  const vert = () => {
+    while (y !== b.y) {
+      y += y < b.y ? 1 : -1;
+      cells.push({ x, y });
+    }
+  };
+  if (horizFirst) {
+    horiz();
+    vert();
+  } else {
+    vert();
+    horiz();
   }
-  while (y !== b.y) {
-    y += y < b.y ? 1 : -1;
-    add();
-  }
+  return cells;
 }
 
 /**
@@ -79,12 +113,13 @@ function carve(a, b, isRoomCell, corridorSet) {
  * @param {() => number} rng deterministic sub-stream.
  * @param {{ side?: number }} [opts]
  * @returns {{ grid:{w:number,h:number}, rooms:{n:number,x:number,y:number,w:number,h:number}[],
- *   corridors:{x:number,y:number}[], edges:{a:number,b:number,type:string}[], entrance:number }}
+ *   corridors:{x:number,y:number}[], edges:{a:number,b:number,type:string}[],
+ *   doors:{x:number,y:number,type:string}[], entrance:number }}
  */
 export function layoutLevel(rooms, rng, opts = {}) {
   const count = rooms.length;
   if (count === 0)
-    return { grid: { w: 8, h: 8 }, rooms: [], corridors: [], edges: [], entrance: null };
+    return { grid: { w: 8, h: 8 }, rooms: [], corridors: [], edges: [], doors: [], entrance: null };
 
   // Grid sized generously for the room count so placement (incl. a 1-cell gap)
   // reliably succeeds; grow and retry on the rare miss.
@@ -125,14 +160,15 @@ export function layoutLevel(rooms, rng, opts = {}) {
   const edgeKey = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
   const edgeSet = new Set();
   const edges = [];
-  // ai, bi are indices into `placed`. Records an undirected edge once.
-  const addEdge = (ai, bi) => {
+  // ai, bi are indices into `placed`; `loop` marks a redundant (non-tree) edge.
+  // Records an undirected edge once. Types are assigned after the graph is built.
+  const addEdge = (ai, bi, loop) => {
     const a = placed[ai].n;
     const b = placed[bi].n;
     const key = edgeKey(a, b);
     if (a === b || edgeSet.has(key)) return false;
     edgeSet.add(key);
-    edges.push({ a, b, type: "open" });
+    edges.push({ a, b, loop });
     return true;
   };
 
@@ -148,7 +184,7 @@ export function layoutLevel(rooms, rng, opts = {}) {
         best = j;
       }
     }
-    addEdge(i, best);
+    addEdge(i, best, false);
   }
 
   // 2) Loop edges: add nearby non-tree connections so the level has multiple
@@ -169,15 +205,43 @@ export function layoutLevel(rooms, rng, opts = {}) {
     cands.sort((p, q) => p.d - q.d || p.i - q.i || p.j - q.j);
     for (const c of cands) {
       if (want <= 0) break;
-      if (addEdge(c.i, c.j)) want--;
+      if (addEdge(c.i, c.j, true)) want--;
     }
   }
 
-  // Carve a corridor for every edge.
-  const corridorSet = new Set();
-  const byN = new Map(placed.map((p) => [p.n, p]));
+  // 3) Type each edge. Tree edges never secret (keeps every room reachable);
+  //    loop edges may be secret/locked/stuck.
   for (const e of edges) {
-    carve(center(byN.get(e.a)), center(byN.get(e.b)), isRoomCell, corridorSet);
+    e.type = rollTable(e.loop ? LOOP_DOORS : TREE_DOORS, rng).value;
+    delete e.loop;
+  }
+
+  // 4) Carve corridors (non-secret edges only — secret connections stay hidden)
+  //    and record a door marker for each visible non-open passage. The cheaper
+  //    L-orientation (fewer foreign-room cells) is chosen to reduce clipping.
+  const byN = new Map(placed.map((p) => [p.n, p]));
+  const foreignCount = (cells, ra, rb) =>
+    cells.filter((c) => isRoomCell(c.x, c.y) && !inRect(c, ra) && !inRect(c, rb)).length;
+  const corridorSet = new Set();
+  const doors = [];
+  for (const e of edges) {
+    if (e.type === "secret") continue; // hidden until revealed (4.9.5)
+    const ra = byN.get(e.a);
+    const rb = byN.get(e.b);
+    const a = center(ra);
+    const b = center(rb);
+    const optionH = pathCells(a, b, true);
+    const optionV = pathCells(a, b, false);
+    const cells = foreignCount(optionV, ra, rb) < foreignCount(optionH, ra, rb) ? optionV : optionH;
+    let doorCell = null;
+    for (const c of cells) {
+      if (isRoomCell(c.x, c.y)) continue;
+      corridorSet.add(`${c.x},${c.y}`);
+      if (!doorCell) doorCell = c; // first corridor cell leaving room a
+    }
+    if (doorCell && e.type !== "open") {
+      doors.push({ x: doorCell.x, y: doorCell.y, type: e.type });
+    }
   }
 
   const corridors = Array.from(corridorSet, (key) => {
@@ -185,5 +249,10 @@ export function layoutLevel(rooms, rng, opts = {}) {
     return { x, y };
   });
 
-  return { grid, rooms: placed, corridors, edges, entrance: placed[0].n };
+  return { grid, rooms: placed, corridors, edges, doors, entrance: placed[0].n };
+}
+
+// True if cell (x,y) is inside rectangle r.
+function inRect(c, r) {
+  return c.x >= r.x && c.x < r.x + r.w && c.y >= r.y && c.y < r.y + r.h;
 }

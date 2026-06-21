@@ -25,7 +25,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // interior shape (e.g. adding per-level layout) self-heals old saves without a
 // world-schema migration. Bump this whenever the dungeon object shape changes.
 // 1: per-level rooms + tree corridors. 2: room graph with loop edges (4.9.2).
-export const DUNGEON_BUILD = 2;
+// 3: typed edges (doors/locked/stuck/secret) + door markers (4.9.3).
+export const DUNGEON_BUILD = 3;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
