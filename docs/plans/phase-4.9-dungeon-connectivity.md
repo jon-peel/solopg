@@ -15,6 +15,12 @@ Conventions still hold: no build/deps; serve over HTTP; **layout/graph logic is 
 the renderer stays dumb; seeded determinism via `subRng`; data-driven tables + JS-const rules; one
 coherent step per commit to PR #1; each UI step ends with a manual checklist.
 
+## Working method (how we run this sub-project)
+- **One sub-plan file per step** (`docs/plans/phase-4.9.N-*.md`), written just before we build that
+  step — keeps each context small for both of us. This file stays the durable overview.
+- **Every step is testable by the user**, not just node tests: each ends with a short manual browser
+  checklist run via `./run-local.sh`. Steps are sized so there's always something visible to poke.
+
 ---
 
 ## The keystone: a room **graph** (replaces tree-carved corridors)
@@ -48,41 +54,53 @@ dungeon = {
 
 ## Sub-steps (each a vertical slice, one commit; build order = dependency order)
 
-### 4.9.1 — Room-graph rewrite + loops  *(foundation)*
+### 4.9.1 — Dungeon creation UI: randomize or choose size
+- When adding a dungeon (Add POI ▾ → Dungeon), let the user **randomize** the size or **pick** one
+  (Cramped → Sprawling). Size is **locked on the POI at creation** (a `sizeHint`), since it drives
+  level count, entrance count, and loop density downstream. `generateDungeon` accepts a forced size.
+- Quick, visible, independently testable win that establishes "size is a creation-time input."
+- **Tested:** node — forced size is honored & in range; manual — picking a size yields a dungeon of
+  that size; "Random" varies.
+
+### 4.9.2 — Room-graph rewrite + loops  *(foundation)*
 - Replace the spanning-tree corridor carver with a **graph generator**: spanning tree for guaranteed
   connectivity, then add extra edges → **loops / multiple pathways** (density by size).
 - Edges carry a `type` field (all `open` for now); corridor cells derived from edges for rendering.
 - Renderer draws rooms + edge corridors from the graph.
-- **Tested:** fully connected; contains cycles when size warrants; deterministic; no overlaps.
+- **Tested:** node — fully connected, contains cycles when size warrants, deterministic, no overlaps;
+  manual — bigger dungeons visibly show loops/branches, not one snaking path.
 
-### 4.9.2 — Doors, passages & secret doors
+### 4.9.3 — Doors, passages & secret doors
 - Edge types: `open / door / locked / stuck / secret` (data-weighted). Render door markers on edges.
 - **Secret doors** are hidden in the view until "revealed" (flagged in the model; renderer hides
   them); ensure no room is reachable **only** via a secret edge unless deliberately a hidden vault.
-- **Tested:** every non-vault room reachable without secret edges; type distribution sane.
+- **Tested:** node — every non-vault room reachable without secret edges, type distribution sane;
+  manual — doors/locked/stuck render, secret doors are invisible until revealed.
 
-### 4.9.3 — Inter-level links, multiple entrances & exits
+### 4.9.4 — Inter-level links, multiple entrances & exits
 - **Stairs/shafts** linking levels at specific rooms; clicking one navigates between levels.
 - **Multiple entrances**, count **size-scaled**; **exits** that may surface on **L2/L3** when the
   hosting terrain is Hills/Mountains (passed in as context from the POI's hex).
-- **Tested:** every level reachable from some entrance; entrance/exit counts scale; stairs connect
-  valid rooms across adjacent levels.
+- **Tested:** node — every level reachable from some entrance, counts scale, stairs connect valid
+  rooms across adjacent levels; manual — click stairs to move between levels; entrances/exits shown.
 
-### 4.9.4 — Richer room contents
+### 4.9.5 — Richer room contents
 - Replace the bare `treasure: boolean` and unspecified `Special` with detail tables: **trap**
   (type/trigger/effect), **treasure** (coins/valuables/item, hidden vs guarded), **special**
   (altar/fountain/puzzle/prisoner…), **empty-room dressing**, and **monster number-appearing +
   status**. Panel shows full room detail.
 - *(Optional fold-ins: theme hazards — flood/gas/dark/collapse; mild depth scaling.)*
-- **Tested:** content/detail come from tables; determinism.
+- **Tested:** node — content/detail come from tables, determinism; manual — clicking a room shows
+  the richer detail.
 
-### 4.9.5 — Exploration state & GM notes  *(the record-keeping payoff)*
+### 4.9.6 — Exploration state & GM notes  *(the record-keeping payoff)*
 - Mark rooms **explored / cleared**, treasure taken, monsters defeated; **reveal secret doors** on
   discovery; **per-room notes** that persist. Optional reveal-as-you-go fog for solo play.
 - Visual state on the map (cleared/looted/unexplored). Persisted in the world.
-- **Tested (logic parts):** state transitions on a room; persistence round-trips.
+- **Tested:** node — state transitions & persistence round-trip; manual — toggle room state + add a
+  note, reload, state persists.
 
-### 4.9.6 — Dungeon View polish
+### 4.9.7 — Dungeon View polish
 - Draw **entrances/exits/stairs** clearly + a **room key/legend**; **reroll** a single level/room;
   **pan-zoom** for large maps; click a **monster** for detail; **enter a dungeon by clicking it on
   the hex map**.
@@ -90,14 +108,14 @@ dungeon = {
 
 ---
 
-## Story / backstory (decide where it lands)
-A dungeon's **why** (history, resident villain/patron, goal) and **hooks** overlap Phase 6 (Rumors).
-Proposal: a light "dungeon backstory" line in **4.9.4**, full hook generation deferred to Phase 6.
+## Story / backstory — DEFERRED to Phase 6 (Rumors)
+A dungeon's **why** (history, resident villain/patron, goal) and **hooks** belong with rumors.
+**Confirmed:** keep all of this for Phase 6; 4.9 does structure + contents + record-keeping only.
 Factions-inside ties to the deferred **Factions** phase — keep occupants as families/labels for now.
 
 ## Out of scope for 4.9 (backlog)
 Dungeon art/tiles; restocking-over-time; full faction machinery inside dungeons; printable PDF export.
 
 ## Status
-- 4.9.1 ◻  · 4.9.2 ◻  · 4.9.3 ◻  · 4.9.4 ◻  · 4.9.5 ◻  · 4.9.6 ◻  *(plan high-level; detail each
-  step at build time)*
+- 4.9.1 ◻  · 4.9.2 ◻  · 4.9.3 ◻  · 4.9.4 ◻  · 4.9.5 ◻  · 4.9.6 ◻  · 4.9.7 ◻
+  *(high-level locked; each step gets its own `phase-4.9.N-*.md` sub-plan at build time)*
