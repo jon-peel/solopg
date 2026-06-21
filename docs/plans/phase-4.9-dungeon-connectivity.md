@@ -20,6 +20,8 @@ coherent step per commit to PR #1; each UI step ends with a manual checklist.
   step — keeps each context small for both of us. This file stays the durable overview.
 - **Every step is testable by the user**, not just node tests: each ends with a short manual browser
   checklist run via `./run-local.sh`. Steps are sized so there's always something visible to poke.
+- **Each manual checklist is headed with the step's title** (e.g. "4.9.2 — Room-graph rewrite +
+  loops") so it's always clear what's under test.
 
 ---
 
@@ -65,6 +67,9 @@ dungeon = {
 ### 4.9.2 — Room-graph rewrite + loops  *(foundation)*
 - Replace the spanning-tree corridor carver with a **graph generator**: spanning tree for guaranteed
   connectivity, then add extra edges → **loops / multiple pathways** (density by size).
+- **Loop tuning (user steer):** default toward *more* loops than a minimal tree; density scales with
+  **room count** so large levels are noticeably loopy (multiple cycles), while small levels
+  **occasionally stay fully linear** for variety.
 - Edges carry a `type` field (all `open` for now); corridor cells derived from edges for rendering.
 - Renderer draws rooms + edge corridors from the graph.
 - **Tested:** node — fully connected, contains cycles when size warrants, deterministic, no overlaps;
