@@ -305,6 +305,35 @@ button:hover {
   font-size: 1.1rem;
 }
 
+/* Editable world name (replaces the old prompt()-based rename). */
+.world-name {
+  width: 100%;
+  margin: 0 0 0.5rem;
+  padding: 0.15rem 0.3rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text, #e6e8ee);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.world-name:hover {
+  border-color: var(--border, #2b3140);
+}
+
+.world-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #11131a;
+}
+
+/* Armed state for the two-step Delete button. */
+#btn-delete.armed {
+  border-color: #c0524a;
+  color: #ffb4ad;
+}
+
 .log-line {
   padding: 0.15rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);

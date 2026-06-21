@@ -113,7 +113,7 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   if (world) setLastWorldId(world.id);
-  showWorld(world);
+  showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
   selected = world ? loadSelected(world) : null;
   setSelected(selected);
@@ -126,11 +126,28 @@ async function setCurrent(world) {
 }
 
 async function onNewWorld() {
-  const name = prompt("World name?", "New World");
-  if (name === null) return;
-  const world = await saveWorld(createWorld({ name: name || "Untitled World" }));
+  // No blocking prompt(): browsers can suppress repeated dialogs (the "prevent
+  // this page from creating more dialogs" box), which silently broke this
+  // button. Create with a default name; rename inline via the panel title.
+  const worlds = await listWorlds();
+  const world = await saveWorld(createWorld({ name: defaultWorldName(worlds) }));
   await setCurrent(world);
   logLine("Created and saved.");
+}
+
+// First free "New World" / "New World N" name among existing worlds.
+function defaultWorldName(worlds) {
+  const taken = new Set(worlds.map((w) => w.name));
+  if (!taken.has("New World")) return "New World";
+  for (let i = 2; ; i++) if (!taken.has(`New World ${i}`)) return `New World ${i}`;
+}
+
+async function onRenameWorld(name) {
+  if (!current) return;
+  current.name = name;
+  current = await saveWorld(current);
+  await refreshWorldList();
+  logLine(`Renamed to "${name}".`);
 }
 
 async function onSelectWorld(e) {
@@ -146,11 +163,30 @@ async function onSave() {
   logLine("Saved.");
 }
 
+// Two-step delete (no confirm() — see onNewWorld). First click arms the button;
+// a second click within a few seconds deletes. Auto-disarms otherwise.
+let deleteTimer = null;
+function disarmDelete() {
+  clearTimeout(deleteTimer);
+  deleteTimer = null;
+  const btn = $("btn-delete");
+  btn.textContent = "Delete";
+  btn.classList.remove("armed");
+}
+
 async function onDelete() {
   if (!current) return;
-  if (!confirm(`Delete "${current.name}"?`)) return;
+  if (!deleteTimer) {
+    const btn = $("btn-delete");
+    btn.textContent = "Confirm delete";
+    btn.classList.add("armed");
+    deleteTimer = setTimeout(disarmDelete, 4000);
+    return;
+  }
+  disarmDelete();
+  const name = current.name;
   await deleteWorld(current.id);
-  logLine(`Deleted "${current.name}".`);
+  logLine(`Deleted "${name}".`);
   const worlds = await listWorlds();
   await setCurrent(worlds[0] || null);
 }

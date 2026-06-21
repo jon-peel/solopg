@@ -319,8 +319,13 @@ export function renderDungeonPanel({ dungeon, level, room }) {
   }
 }
 
-/** Replace the panel contents with a heading describing the current world. */
-export function showWorld(world) {
+/**
+ * Replace the panel contents with a heading describing the current world.
+ * The world name is an editable input (non-blocking rename — no prompt()).
+ * @param {object} world
+ * @param {{ onRename?: (name: string) => void }} [opts]
+ */
+export function showWorld(world, opts = {}) {
   const el = panel();
   if (!el) return;
   el.innerHTML = "";
@@ -328,9 +333,22 @@ export function showWorld(world) {
     logLine("No world loaded. Create one to begin.");
     return;
   }
-  const h = document.createElement("h2");
-  h.textContent = world.name;
-  el.appendChild(h);
+  const name = document.createElement("input");
+  name.className = "world-name";
+  name.value = world.name;
+  name.setAttribute("aria-label", "World name");
+  name.title = "Rename world";
+  if (opts.onRename) {
+    const commit = () => {
+      const v = name.value.trim();
+      if (v && v !== world.name) opts.onRename(v);
+    };
+    name.addEventListener("change", commit);
+    name.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") name.blur();
+    });
+  }
+  el.appendChild(name);
   // Fixed region for the selected-hex details (above the scrolling log).
   const sel = document.createElement("div");
   sel.id = "selection";
