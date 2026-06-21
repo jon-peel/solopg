@@ -1,9 +1,13 @@
 # Sub-plan 4.9.3 — Doors, passages & secret doors
 
 Part of [Phase 4.9](phase-4.9-dungeon-connectivity.md). Gives the room-graph edges **types** —
-`open / door / locked / stuck / secret` — and draws them, with **secret doors hidden** until a later
-reveal step (4.9.5). Also lands a light corridor-routing fix so passages clip through unrelated rooms
-less often.
+`open / door / locked / stuck / secret` — and draws them. This is the **GM/oracle map**, so secret
+doors ARE shown here (marked distinctly); hiding them in a future player view is deferred to 4.9.5.
+Also lands a light corridor-routing fix so passages clip through unrelated rooms less often.
+
+**Door symbols/colours (final):** door = wood (no letter), locked = red **L**, stuck/jammed =
+amber **J**, secret = violet **S**. Doors are wall-straddling rectangles oriented by `dx,dy`.
+Generation still keeps secret only on **loop** edges, so no room's *sole* route is a secret door.
 
 ## Design (`js/gen/dungeon-layout.js`)
 - **Edge types** assigned from weighted JS consts (structural rule, kept with the other layout

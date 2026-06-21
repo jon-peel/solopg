@@ -153,13 +153,16 @@ test("every edge has a valid type and the dungeon is solvable without secrets", 
   }
 });
 
-test("secret doors do appear (on loop edges), across seeds", () => {
-  let secrets = 0;
+test("secret doors appear (loop edges) and are shown as markers on the GM map", () => {
+  let secretEdges = 0;
+  let secretMarkers = 0;
   for (let s = 0; s < 200; s++) {
     const lay = layoutLevel(makeRooms(9), mulberry32(s));
-    if (lay.edges.some((e) => e.type === "secret")) secrets++;
+    if (lay.edges.some((e) => e.type === "secret")) secretEdges++;
+    if (lay.doors.some((d) => d.type === "secret")) secretMarkers++;
   }
-  assert.ok(secrets > 20, `expected some secret doors, got ${secrets}/200`);
+  assert.ok(secretEdges > 20, `expected some secret edges, got ${secretEdges}/200`);
+  assert.ok(secretMarkers > 20, `expected secret doors drawn, got ${secretMarkers}/200`);
 });
 
 test("doors list only visible types, sit on corridor cells, carry one-axis orientation, are unique", () => {
@@ -169,7 +172,7 @@ test("doors list only visible types, sit on corridor cells, carry one-axis orien
     const cells = corridorKey(lay);
     const seen = new Set();
     for (const d of lay.doors) {
-      assert.ok(["door", "locked", "stuck"].includes(d.type), `door type ${d.type}`);
+      assert.ok(["door", "locked", "stuck", "secret"].includes(d.type), `door type ${d.type}`);
       assert.ok(cells.has(`${d.x},${d.y}`), "door sits on a corridor cell");
       assert.equal(Math.abs(d.dx) + Math.abs(d.dy), 1, "door faces exactly one wall direction");
       const key = `${d.x},${d.y}`;

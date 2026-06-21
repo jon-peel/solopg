@@ -28,7 +28,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 3: typed edges (doors/locked/stuck/secret) + door markers (4.9.3).
 // 4: doors more common + bolder markers (4.9.3 follow-up).
 // 5: doors carry orientation (dx,dy) for wall-straddling rectangles + symbols.
-export const DUNGEON_BUILD = 5;
+// 6: secret doors shown on the GM map (carved + marked), not hidden.
+export const DUNGEON_BUILD = 6;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {

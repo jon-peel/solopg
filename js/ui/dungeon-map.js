@@ -12,7 +12,8 @@ const CONTENT_FILL = {
   Special: "#3b4b7c",
 };
 const CORRIDOR_FILL = "#262b36";
-const DOOR_FILL = { door: "#caa46a", locked: "#c0524a", stuck: "#c98a3a" };
+const DOOR_FILL = { door: "#caa46a", locked: "#c0524a", stuck: "#c98a3a", secret: "#9a6fd0" };
+const DOOR_SYMBOL = { locked: "L", stuck: "J", secret: "S" }; // plain door: no letter
 const ROOM_STROKE = "#11131a";
 const ENTRANCE_STROKE = "#5fbf77";
 const SELECTED_STROKE = "#6ea8fe";
@@ -154,7 +155,7 @@ export function render() {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(wx - w / 2, wy - h / 2, w, h);
 
-    const sym = d.type === "locked" ? "L" : d.type === "stuck" ? "S" : "";
+    const sym = DOOR_SYMBOL[d.type] || "";
     if (sym && cell >= 9) {
       ctx.fillStyle = "#1a1410";
       ctx.font = `bold ${Math.max(8, Math.floor(cell * 0.7))}px sans-serif`;

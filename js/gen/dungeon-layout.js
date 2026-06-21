@@ -217,9 +217,10 @@ export function layoutLevel(rooms, rng, opts = {}) {
     delete e.loop;
   }
 
-  // 4) Carve corridors (non-secret edges only — secret connections stay hidden)
-  //    and record a door marker for each visible non-open passage. The cheaper
-  //    L-orientation (fewer foreign-room cells) is chosen to reduce clipping.
+  // 4) Carve corridors and record a door marker for each non-open passage. This
+  //    is the GM map, so secret doors ARE shown (marked distinctly); a player
+  //    view can hide them later (4.9.5). The cheaper L-orientation (fewer
+  //    foreign-room cells) is chosen to reduce clipping.
   const byN = new Map(placed.map((p) => [p.n, p]));
   const foreignCount = (cells, ra, rb) =>
     cells.filter((c) => isRoomCell(c.x, c.y) && !inRect(c, ra) && !inRect(c, rb)).length;
@@ -227,7 +228,6 @@ export function layoutLevel(rooms, rng, opts = {}) {
   const doors = [];
   const doorAt = new Set(); // dedupe: at most one marker per cell
   for (const e of edges) {
-    if (e.type === "secret") continue; // hidden until revealed (4.9.5)
     const ra = byN.get(e.a);
     const rb = byN.get(e.b);
     const a = center(ra);
