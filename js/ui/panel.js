@@ -304,7 +304,17 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
-export function renderDungeonPanel({ dungeon, level, room, connections = [], surface = [], onGoTo }) {
+export function renderDungeonPanel({
+  dungeon,
+  level,
+  room,
+  connections = [],
+  surface = [],
+  onGoTo,
+  roomState,
+  onToggleRoom,
+  onNoteRoom,
+}) {
   const sel = document.getElementById("selection");
   if (!sel) return;
   sel.innerHTML = "";
@@ -345,6 +355,29 @@ export function renderDungeonPanel({ dungeon, level, room, connections = [], sur
         row.appendChild(actionButton(c.label, () => onGoTo(c.toLevel, c.toRoom)));
       }
       sel.appendChild(row);
+    }
+    // Exploration tracking: toggles + a GM note (kept separate from generated
+    // content, so it survives dungeon regeneration).
+    if (roomState && onToggleRoom) {
+      sel.appendChild(sectionLabel("Tracking"));
+      const row = document.createElement("div");
+      row.className = "tile-actions";
+      for (const field of ["explored", "cleared", "looted"]) {
+        const b = document.createElement("button");
+        b.className = "tile-action toggle" + (roomState[field] ? " on" : "");
+        b.textContent = field[0].toUpperCase() + field.slice(1);
+        b.addEventListener("click", () => onToggleRoom(field));
+        row.appendChild(b);
+      }
+      sel.appendChild(row);
+
+      const note = document.createElement("textarea");
+      note.className = "room-note";
+      note.rows = 2;
+      note.placeholder = "Notes…";
+      note.value = roomState.note || "";
+      if (onNoteRoom) note.addEventListener("change", () => onNoteRoom(note.value));
+      sel.appendChild(note);
     }
   } else {
     const hint = document.createElement("div");

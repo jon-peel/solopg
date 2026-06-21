@@ -239,6 +239,31 @@ button:hover {
   font-style: italic;
 }
 
+/* Exploration tracking toggles + GM note. */
+.tile-action.toggle.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #1b2433;
+}
+
+.room-note {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text, #e6e8ee);
+  background: #11131a;
+  border: 1px solid var(--border, #2b3140);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.room-note:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* "Add POI" disclosure dropdown. */
 .menu {
   position: relative;

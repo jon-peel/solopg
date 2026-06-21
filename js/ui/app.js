@@ -15,6 +15,7 @@ import {
 import { generateHex } from "../gen/hex.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
+import { getRoomState, withRoomState } from "../world/dungeon-state.js";
 import { profileFor, SIZE_ORDER } from "../gen/terrain-profile.js";
 import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
 import {
@@ -26,7 +27,7 @@ import {
   getLastWorldId,
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel } from "./panel.js";
-import { attachDungeon, setLevel, setSelectedRoom } from "./dungeon-map.js";
+import { attachDungeon, setLevel, setMarks, setSelectedRoom } from "./dungeon-map.js";
 import {
   attachMap,
   setWorld,
@@ -457,6 +458,15 @@ function roomSurface(dungeon, i, n) {
   return tags;
 }
 
+// Connector marks for a level PLUS per-room exploration state (for the renderer).
+function marksFor(dungeon, i) {
+  const m = levelMarks(dungeon, i);
+  const state = dungeonPoi.detail.dungeonState;
+  m.state = {};
+  for (const r of dungeon.levels[i].layout.rooms) m.state[r.n] = getRoomState(state, i, r.n);
+  return m;
+}
+
 function showDungeonLevel(i) {
   if (!dungeonPoi) return;
   dungeonLevelIndex = i;
@@ -464,14 +474,12 @@ function showDungeonLevel(i) {
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[i];
   renderLevelSwitcher();
-  setLevel(level, levelMarks(dungeon, i));
+  setLevel(level, marksFor(dungeon, i));
   renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo });
 }
 
-function onRoomClick(n) {
-  if (!dungeonPoi) return;
-  dungeonRoomN = n;
-  setSelectedRoom(n);
+// Render the side panel for one room (detail + stair nav + exploration tracking).
+function renderRoomPanel(n) {
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[dungeonLevelIndex];
   const room = (level.rooms || []).find((r) => r.n === n) || null;
@@ -483,7 +491,17 @@ function onRoomClick(n) {
     connections: roomConnections(dungeon, dungeonLevelIndex, n),
     surface: roomSurface(dungeon, dungeonLevelIndex, n),
     onGoTo,
+    roomState: getRoomState(dungeonPoi.detail.dungeonState, dungeonLevelIndex, n),
+    onToggleRoom: (field) => toggleRoomState(dungeonLevelIndex, n, field),
+    onNoteRoom: (text) => setRoomNote(dungeonLevelIndex, n, text),
   });
+}
+
+function onRoomClick(n) {
+  if (!dungeonPoi) return;
+  dungeonRoomN = n;
+  setSelectedRoom(n);
+  renderRoomPanel(n);
 }
 
 // Take a stair: switch to the connected level and select the connected room.
@@ -491,8 +509,26 @@ function onGoTo(levelIndex, roomN) {
   if (!dungeonPoi) return;
   dungeonLevelIndex = levelIndex;
   renderLevelSwitcher();
-  setLevel(dungeonPoi.detail.dungeon.levels[levelIndex], levelMarks(dungeonPoi.detail.dungeon, levelIndex));
+  setLevel(dungeonPoi.detail.dungeon.levels[levelIndex], marksFor(dungeonPoi.detail.dungeon, levelIndex));
   onRoomClick(roomN);
+}
+
+// --- exploration state (separate from generated content; survives regen) ---
+async function toggleRoomState(level, n, field) {
+  if (!dungeonPoi) return;
+  const cur = getRoomState(dungeonPoi.detail.dungeonState, level, n);
+  dungeonPoi.detail.dungeonState = withRoomState(dungeonPoi.detail.dungeonState, level, n, {
+    [field]: !cur[field],
+  });
+  current = await saveWorld(current);
+  setMarks(marksFor(dungeonPoi.detail.dungeon, level)); // refresh map badges, keep selection
+  renderRoomPanel(n); // refresh toggle states
+}
+
+async function setRoomNote(level, n, text) {
+  if (!dungeonPoi) return;
+  dungeonPoi.detail.dungeonState = withRoomState(dungeonPoi.detail.dungeonState, level, n, { note: text });
+  current = await saveWorld(current); // note has no map badge, so no re-render (keeps focus)
 }
 
 async function onRemovePoi(id) {

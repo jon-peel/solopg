@@ -52,6 +52,12 @@ export function setLevel(lvl, m = null) {
   resize();
 }
 
+/** Update just the connector/state marks and redraw (keeps the selection). */
+export function setMarks(m) {
+  marks = m;
+  render();
+}
+
 export function setSelectedRoom(n) {
   selectedRoom = n;
   render();
@@ -130,6 +136,12 @@ export function render() {
     ctx.fillStyle = CONTENT_FILL[contentFor(r.n)] || CONTENT_FILL.Empty;
     ctx.fillRect(x, y, w, h);
 
+    // Dim a cleared room (drawn under the number so it stays readable).
+    if (marks && marks.state && marks.state[r.n] && marks.state[r.n].cleared) {
+      ctx.fillStyle = "rgba(13,15,21,0.5)";
+      ctx.fillRect(x, y, w, h);
+    }
+
     const entrance = r.n === layout.entrance;
     ctx.strokeStyle =
       r.n === selectedRoom ? SELECTED_STROKE : entrance ? ENTRANCE_STROKE : ROOM_STROKE;
@@ -192,6 +204,32 @@ export function render() {
         ctx.fillStyle = col;
         ctx.fillText(chr, bx, by);
         bx += fs * 0.85;
+      }
+    }
+  }
+
+  // Exploration-state badges in each room's bottom-right corner.
+  if (marks && marks.state) {
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    const fs = Math.max(8, Math.floor(cell * 0.95));
+    ctx.font = `bold ${fs}px sans-serif`;
+    for (const r of layout.rooms) {
+      const st = marks.state[r.n];
+      if (!st) continue;
+      const badges = [];
+      if (st.explored) badges.push(["•", "#6ec6d6"]);
+      if (st.cleared) badges.push(["✓", "#5fbf77"]);
+      if (st.looted) badges.push(["$", "#d8b24a"]);
+      if (!badges.length) continue;
+      let bx = sx(r.x) + r.w * cell - 2;
+      const by = sy(r.y) + r.h * cell - 2;
+      for (const [chr, col] of badges.reverse()) {
+        ctx.fillStyle = "#0d0f15";
+        ctx.fillText(chr, bx + 1, by + 1);
+        ctx.fillStyle = col;
+        ctx.fillText(chr, bx, by);
+        bx -= fs * 0.85;
       }
     }
   }
