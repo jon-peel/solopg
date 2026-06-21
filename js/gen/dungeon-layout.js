@@ -20,8 +20,8 @@ const ROOM_MAX = 5;
 const TREE_DOORS = {
   id: "door-tree",
   entries: [
-    { weight: 6, value: "open" },
-    { weight: 4, value: "door" },
+    { weight: 6, value: "door" },
+    { weight: 3, value: "open" },
     { weight: 1, value: "stuck" },
     { weight: 1, value: "locked" },
   ],
@@ -29,8 +29,8 @@ const TREE_DOORS = {
 const LOOP_DOORS = {
   id: "door-loop",
   entries: [
-    { weight: 3, value: "open" },
-    { weight: 3, value: "door" },
+    { weight: 4, value: "door" },
+    { weight: 2, value: "open" },
     { weight: 3, value: "secret" },
     { weight: 1, value: "stuck" },
     { weight: 1, value: "locked" },

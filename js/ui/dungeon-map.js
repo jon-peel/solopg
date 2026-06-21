@@ -134,15 +134,16 @@ export function render() {
   }
 
   // Doors on visible passages (open passages and secret doors draw nothing).
+  // Drawn a touch larger than a cell with a bright outline so they read clearly.
   for (const d of layout.doors || []) {
-    const s = Math.max(3, Math.round(cell * 0.6));
-    const dx = sx(d.x) + (cell - s) / 2;
-    const dy = sy(d.y) + (cell - s) / 2;
+    const s = Math.max(6, Math.round(cell * 0.9));
+    const cx = sx(d.x) + cell / 2;
+    const cy = sy(d.y) + cell / 2;
     ctx.fillStyle = DOOR_FILL[d.type] || DOOR_FILL.door;
-    ctx.fillRect(dx, dy, s, s);
-    ctx.strokeStyle = "#11131a";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(dx + 0.5, dy + 0.5, s - 1, s - 1);
+    ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
+    ctx.strokeStyle = "#f4ead2";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - s / 2, cy - s / 2, s, s);
   }
 }
 
