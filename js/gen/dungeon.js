@@ -30,7 +30,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 5: doors carry orientation (dx,dy) for wall-straddling rectangles + symbols.
 // 6: secret doors shown on the GM map (carved + marked), not hidden.
 // 7: inter-level stairs + surface entrances/exits (4.9.4).
-export const DUNGEON_BUILD = 7;
+// 8: stairs vertically aligned + spread; entrances scale (any size) (4.9.4 follow-up).
+export const DUNGEON_BUILD = 8;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -155,24 +156,70 @@ function sampleRooms(rooms, count, rng) {
   return out;
 }
 
-// Stairs between adjacent levels (>=1 each so every level is reachable from the
-// surface), size-scaled surface entrances on level 0, and terrain-gated extra
-// exits that can surface on a deeper level (hill/mountain sites).
+// Centre of a positioned layout room.
+const roomCenter = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+// Pick `count` positioned rooms that are spread out (first random, each next is
+// the one farthest from those already chosen). Keeps multiple stairs apart.
+function spreadRooms(rooms, count, rng) {
+  const pool = rooms.slice();
+  const chosen = [pool.splice(Math.floor(rng() * pool.length), 1)[0]];
+  while (chosen.length < count && pool.length) {
+    let bestIdx = 0;
+    let bestD = -1;
+    for (let k = 0; k < pool.length; k++) {
+      let mind = Infinity;
+      for (const ch of chosen) mind = Math.min(mind, dist2(roomCenter(pool[k]), roomCenter(ch)));
+      if (mind > bestD) {
+        bestD = mind;
+        bestIdx = k;
+      }
+    }
+    chosen.push(pool.splice(bestIdx, 1)[0]);
+  }
+  return chosen;
+}
+
+// Stairs between adjacent levels (>=1 each so every level is reachable). Each
+// up-stair is placed at the lower-level room NEAREST below its down-stair, so
+// stairs line up roughly vertically; multiple down-stairs are spread apart so
+// their (aligned) up-stairs don't cluster. Plus size-scaled surface entrances on
+// level 0 and terrain-gated exits that can surface on a deeper level.
 function connectLevels(levels, sizeName, terrain, rng) {
   const stairs = [];
   for (let i = 0; i < levels.length - 1; i++) {
+    const upper = levels[i].layout.rooms; // positioned rooms (n,x,y,w,h)
+    const lower = levels[i + 1].layout.rooms;
     const big = sizeName === "Sizable" || sizeName === "Sprawling";
-    const n = 1 + (big && rng() < 0.4 ? 1 : 0);
-    for (let k = 0; k < n; k++) {
-      stairs.push({
-        down: { level: i, room: pick(rng, levels[i].rooms).n },
-        up: { level: i + 1, room: pick(rng, levels[i + 1].rooms).n },
-      });
+    const count = 1 + (big && rng() < 0.4 ? 1 : 0);
+
+    const downRooms = spreadRooms(upper, count, rng);
+    const usedLower = new Set();
+    for (const dr of downRooms) {
+      const dc = roomCenter(dr);
+      let best = null;
+      let bestD = Infinity;
+      for (const lr of lower) {
+        if (usedLower.has(lr.n)) continue;
+        const d = dist2(dc, roomCenter(lr));
+        if (d < bestD) {
+          bestD = d;
+          best = lr;
+        }
+      }
+      usedLower.add(best.n);
+      stairs.push({ down: { level: i, room: dr.n }, up: { level: i + 1, room: best.n } });
     }
   }
 
-  const entranceCount =
-    sizeName === "Sprawling" ? randInt(rng, 2, 3) : sizeName === "Sizable" ? randInt(rng, 1, 2) : 1;
+  // Entrances: always >=1; each extra entrance gets likelier with size (so even
+  // a Cramped dungeon can be a tunnel-through / all-rooms-open ruin, just rarely).
+  const entranceChance =
+    { Cramped: 0.15, Modest: 0.25, Sizable: 0.4, Sprawling: 0.55 }[sizeName] ?? 0.25;
+  let entranceCount = 1;
+  const cap = levels[0].rooms.length;
+  while (entranceCount < cap && rng() < entranceChance) entranceCount++;
   const entrances = sampleRooms(levels[0].rooms, entranceCount, rng).map((r) => ({
     level: 0,
     room: r.n,

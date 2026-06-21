@@ -190,19 +190,49 @@ test("stairs connect adjacent levels and every level is reachable from an entran
   }
 });
 
-test("entrances are on level 0 and scale with size", () => {
+test("entrances are on level 0, capped by rooms, and multi-entrance scales with size", () => {
   const t = tables();
-  const maxEntrances = (sz) => {
-    let m = 0;
-    for (let s = 0; s < 80; s++) {
+  const multiRate = (sz) => {
+    let multi = 0;
+    for (let s = 0; s < 200; s++) {
       const d = generateDungeon(t, mulberry32(s), { size: sz });
+      assert.ok(d.entrances.length >= 1, "at least one entrance");
       assert.ok(d.entrances.every((e) => e.level === 0), "entrances on level 0");
-      m = Math.max(m, d.entrances.length);
+      assert.ok(d.entrances.length <= d.levels[0].rooms.length, "capped by room count");
+      if (d.entrances.length > 1) multi++;
     }
-    return m;
+    return multi / 200;
   };
-  assert.equal(maxEntrances("Cramped"), 1, "Cramped has a single entrance");
-  assert.ok(maxEntrances("Sprawling") >= 2, "Sprawling has multiple entrances");
+  const cramped = multiRate("Cramped");
+  const sprawling = multiRate("Sprawling");
+  assert.ok(cramped > 0, "even small dungeons can have multiple entrances");
+  assert.ok(sprawling > cramped, "multi-entrance likelihood rises with size");
+});
+
+test("an up-stair sits at the lower-level room nearest below its down-stair", () => {
+  const t = tables();
+  const centerOf = (d, lvl, n) => {
+    const r = d.levels[lvl].layout.rooms.find((rr) => rr.n === n);
+    return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+  };
+  for (let s = 0; s < 200; s++) {
+    const d = generateDungeon(t, mulberry32(s), { size: "Sizable" });
+    // Only check level-pairs with a single stair (unambiguous nearest).
+    const byPair = new Map();
+    for (const st of d.stairs) byPair.set(st.down.level, (byPair.get(st.down.level) || 0) + 1);
+    for (const st of d.stairs) {
+      if (byPair.get(st.down.level) !== 1) continue;
+      const dc = centerOf(d, st.down.level, st.down.room);
+      let nearest = null;
+      let best = Infinity;
+      for (const r of d.levels[st.up.level].layout.rooms) {
+        const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+        const dd = (c.x - dc.x) ** 2 + (c.y - dc.y) ** 2;
+        if (dd < best) { best = dd; nearest = r.n; }
+      }
+      assert.equal(st.up.room, nearest, `stair not aligned (seed ${s}, level ${st.down.level})`);
+    }
+  }
 });
 
 test("exits only surface on deeper levels for hill/mountain terrain", () => {
