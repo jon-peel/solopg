@@ -1,10 +1,11 @@
-// Dungeon level layout (Phase 4 arc) — rooms + corridors on a coarse grid.
+// Dungeon level layout (Phase 4 arc) — rooms + a corridor GRAPH on a coarse grid.
 //
 // Pure + deterministic: given a level's stocked rooms and an rng stream, place
-// each room as a non-overlapping rectangle on a grid and connect them with
-// L-shaped corridors so every room is reachable. No DOM — the canvas renderer
-// (js/ui/dungeon-map.js) just draws the returned rectangles/cells; this module
-// is node-tested (no overlap, fully connected, deterministic).
+// each room as a non-overlapping rectangle on a grid, then connect them as a
+// GRAPH — a spanning tree for guaranteed connectivity plus extra "loop" edges so
+// levels have multiple pathways (4.9.2). Corridors are carved per edge. No DOM —
+// the canvas renderer (js/ui/dungeon-map.js) just draws the returned cells; this
+// module is node-tested (no overlap, fully connected, has loops, deterministic).
 
 import { randInt } from "../core/rng.js";
 
@@ -23,6 +24,19 @@ function overlaps(a, b, pad) {
 
 function center(rect) {
   return { x: rect.x + Math.floor(rect.w / 2), y: rect.y + Math.floor(rect.h / 2) };
+}
+
+function manhattan(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+// Chance a level has NO loops (a single connected tree). Higher for small
+// levels, so big levels are reliably loopy and tiny ones are sometimes linear.
+function linearChance(count) {
+  if (count <= 3) return 0.6;
+  if (count <= 5) return 0.3;
+  if (count <= 7) return 0.12;
+  return 0.05;
 }
 
 // Try to place one room rectangle on the grid, preferring a 1-cell gap and
@@ -65,11 +79,12 @@ function carve(a, b, isRoomCell, corridorSet) {
  * @param {() => number} rng deterministic sub-stream.
  * @param {{ side?: number }} [opts]
  * @returns {{ grid:{w:number,h:number}, rooms:{n:number,x:number,y:number,w:number,h:number}[],
- *   corridors:{x:number,y:number}[], entrance:number }}
+ *   corridors:{x:number,y:number}[], edges:{a:number,b:number,type:string}[], entrance:number }}
  */
 export function layoutLevel(rooms, rng, opts = {}) {
   const count = rooms.length;
-  if (count === 0) return { grid: { w: 8, h: 8 }, rooms: [], corridors: [], entrance: null };
+  if (count === 0)
+    return { grid: { w: 8, h: 8 }, rooms: [], corridors: [], edges: [], entrance: null };
 
   // Grid sized generously for the room count so placement (incl. a 1-cell gap)
   // reliably succeeds; grow and retry on the rare miss.
@@ -105,22 +120,64 @@ export function layoutLevel(rooms, rng, opts = {}) {
   }
   const isRoomCell = (x, y) => roomAt.has(`${x},${y}`);
 
-  // Connect each room to its nearest already-placed room (builds a spanning
-  // tree -> every room reachable from the entrance).
-  const corridorSet = new Set();
+  // --- Connection graph -------------------------------------------------
+  const centers = placed.map(center);
+  const edgeKey = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
+  const edgeSet = new Set();
+  const edges = [];
+  // ai, bi are indices into `placed`. Records an undirected edge once.
+  const addEdge = (ai, bi) => {
+    const a = placed[ai].n;
+    const b = placed[bi].n;
+    const key = edgeKey(a, b);
+    if (a === b || edgeSet.has(key)) return false;
+    edgeSet.add(key);
+    edges.push({ a, b, type: "open" });
+    return true;
+  };
+
+  // 1) Spanning tree: each room to its nearest already-placed room -> every
+  //    room reachable from the entrance.
   for (let i = 1; i < placed.length; i++) {
-    const c = center(placed[i]);
-    let best = null;
+    let best = -1;
     let bestD = Infinity;
     for (let j = 0; j < i; j++) {
-      const o = center(placed[j]);
-      const d = Math.abs(c.x - o.x) + Math.abs(c.y - o.y);
+      const d = manhattan(centers[i], centers[j]);
       if (d < bestD) {
         bestD = d;
-        best = o;
+        best = j;
       }
     }
-    carve(c, best, isRoomCell, corridorSet);
+    addEdge(i, best);
+  }
+
+  // 2) Loop edges: add nearby non-tree connections so the level has multiple
+  //    routes. Sometimes none (linear); more on larger levels.
+  if (placed.length >= 3 && rng() >= linearChance(count)) {
+    const lo = Math.max(1, Math.floor(count * 0.3));
+    const hi = Math.max(lo, Math.floor(count * 0.6));
+    let want = randInt(rng, lo, hi);
+    const cands = [];
+    for (let i = 0; i < placed.length; i++) {
+      for (let j = i + 1; j < placed.length; j++) {
+        if (!edgeSet.has(edgeKey(placed[i].n, placed[j].n))) {
+          cands.push({ i, j, d: manhattan(centers[i], centers[j]) });
+        }
+      }
+    }
+    // Nearest-first (with stable tiebreak) keeps loops local + deterministic.
+    cands.sort((p, q) => p.d - q.d || p.i - q.i || p.j - q.j);
+    for (const c of cands) {
+      if (want <= 0) break;
+      if (addEdge(c.i, c.j)) want--;
+    }
+  }
+
+  // Carve a corridor for every edge.
+  const corridorSet = new Set();
+  const byN = new Map(placed.map((p) => [p.n, p]));
+  for (const e of edges) {
+    carve(center(byN.get(e.a)), center(byN.get(e.b)), isRoomCell, corridorSet);
   }
 
   const corridors = Array.from(corridorSet, (key) => {
@@ -128,5 +185,5 @@ export function layoutLevel(rooms, rng, opts = {}) {
     return { x, y };
   });
 
-  return { grid, rooms: placed, corridors, entrance: placed[0].n };
+  return { grid, rooms: placed, corridors, edges, entrance: placed[0].n };
 }

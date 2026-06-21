@@ -82,6 +82,52 @@ test("every room is reachable from the entrance via corridors", () => {
   }
 });
 
+// Union-find connectivity over the edge graph (by room number).
+function graphConnected(layout) {
+  const parent = new Map(layout.rooms.map((r) => [r.n, r.n]));
+  const find = (x) => {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)));
+      x = parent.get(x);
+    }
+    return x;
+  };
+  for (const e of layout.edges) parent.set(find(e.a), find(e.b));
+  const roots = new Set(layout.rooms.map((r) => find(r.n)));
+  return roots.size <= 1;
+}
+
+test("edges reference real rooms and connect the whole level", () => {
+  for (let s = 0; s < 200; s++) {
+    const count = 3 + (s % 8);
+    const lay = layoutLevel(makeRooms(count), mulberry32(s));
+    const ns = new Set(lay.rooms.map((r) => r.n));
+    for (const e of lay.edges) {
+      assert.ok(ns.has(e.a) && ns.has(e.b), "edge endpoints are real rooms");
+      assert.notEqual(e.a, e.b, "no self-loop edge");
+    }
+    assert.ok(graphConnected(lay), `graph disconnected (seed ${s})`);
+    // A spanning tree has count-1 edges; loops add more (never fewer).
+    assert.ok(lay.edges.length >= count - 1, "at least a spanning tree");
+  }
+});
+
+test("large levels usually contain loops; small levels are sometimes linear", () => {
+  let bigLoopy = 0;
+  for (let s = 0; s < 120; s++) {
+    const lay = layoutLevel(makeRooms(10), mulberry32(s));
+    if (lay.edges.length > lay.rooms.length - 1) bigLoopy++;
+  }
+  assert.ok(bigLoopy > 90, `expected most 10-room levels to loop, got ${bigLoopy}/120`);
+
+  let smallLinear = 0;
+  for (let s = 0; s < 120; s++) {
+    const lay = layoutLevel(makeRooms(3), mulberry32(s));
+    if (lay.edges.length === lay.rooms.length - 1) smallLinear++;
+  }
+  assert.ok(smallLinear > 0, "some 3-room levels should be linear (no loops)");
+});
+
 test("a single-room level needs no corridors", () => {
   const lay = layoutLevel(makeRooms(1), mulberry32(1));
   assert.equal(lay.rooms.length, 1);
