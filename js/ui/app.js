@@ -572,10 +572,10 @@ async function init() {
   wire();
   attachMap($("map"), { onHexClick, onEmptyCellClick });
   attachDungeon($("dungeon-canvas"), { onRoomClick });
-  // Size names for the "Add dungeon" menu (single source of truth: the table).
+  // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {
     const sizeT = await loadTables(["dungeon-size"]);
-    dungeonSizes = sizeT.get("dungeon-size").entries.map((e) => e.value.size);
+    dungeonSizes = sizeT.get("dungeon-size").entries.map((e) => e.value);
   } catch {
     /* menu still works with random size only */
   }

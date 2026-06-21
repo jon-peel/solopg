@@ -20,6 +20,10 @@ the graph.
   (Cramped/Modest/Sizable/Sprawling, read from the `dungeon-size` table so it stays data-driven).
   `dungeon` is removed from the generic "Add POI ▾" list to avoid two ways in (a random POI roll can
   still produce a dungeon — random size).
+- **Follow-up (post-test):** Cramped and Modest looked identical because their room bands overlapped.
+  Reworked the tiers to **disjoint per-level room bands** (Cramped 3–4, Modest 5–7, Sizable 8–10,
+  Sprawling 11–14) and the menu now **spells out each size's level/room counts** (`"Sizable — 2–3
+  lvl, 8–10 rooms"`) with the flavor blurb as a tooltip, so the difference is obvious at pick time.
 - **Size names** are loaded once at init (`loadTables(["dungeon-size"])`) into a module var and passed
   to the panel model as `dungeonSizes` — single source of truth, no hardcoded list.
 

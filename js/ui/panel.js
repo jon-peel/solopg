@@ -184,10 +184,11 @@ function buildMenu(summaryText, items) {
 
   const list = document.createElement("div");
   list.className = "menu-list";
-  for (const { label, onClick } of items) {
+  for (const { label, onClick, title } of items) {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
+    if (title) b.title = title;
     b.addEventListener("click", () => {
       menu.open = false;
       onClick();
@@ -208,12 +209,18 @@ function addPoiMenu(model) {
   ]);
 }
 
-// "Add dungeon" dropdown: random size, then each named size from the table.
+// "Add dungeon" dropdown: random size, then each named size with its level/room
+// counts spelled out (so the sizes are clearly different) + a flavor tooltip.
 function addDungeonMenu(model) {
   const sizes = model.dungeonSizes || [];
+  const range = (r) => (r && r[0] === r[1] ? `${r[0]}` : `${r[0]}–${r[1]}`);
   return buildMenu("Add dungeon ▾", [
     { label: "Random size", onClick: () => model.onAddDungeon() },
-    ...sizes.map((s) => ({ label: s, onClick: () => model.onAddDungeon(s) })),
+    ...sizes.map((s) => ({
+      label: `${s.size} — ${range(s.levels)} lvl, ${range(s.rooms)} rooms`,
+      title: s.blurb || "",
+      onClick: () => model.onAddDungeon(s.size),
+    })),
   ]);
 }
 
