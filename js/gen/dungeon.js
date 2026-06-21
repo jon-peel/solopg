@@ -14,6 +14,7 @@
 
 import { rollTable } from "../core/table.js";
 import { randInt, pick } from "../core/rng.js";
+import { layoutLevel } from "./dungeon-layout.js";
 
 const MIN_ENCOUNTERS = 4;
 const MAX_ENCOUNTERS = 6;
@@ -118,7 +119,8 @@ export function generateDungeon(tables, rng, ctx = {}) {
       rooms.push({ n, content: room.content, monster, treasure });
     }
 
-    levels.push({ depth, theme, family, encounters, rooms });
+    const layout = layoutLevel(rooms, rng);
+    levels.push({ depth, theme, family, encounters, rooms, layout });
   }
 
   return { size: size.size, theme, levels };

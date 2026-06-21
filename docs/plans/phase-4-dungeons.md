@@ -106,9 +106,13 @@ its members for the wandering table, adds an occasional **interloper** from anot
 puts the family **elite** on the deepest level. `level.family` recorded. Tests cover cohesion
 (majority in-family), theme→family lean, and determinism. **95 passing.**
 
-### 4.7 — Layout (rooms + corridors on a grid; pure, node-tested) ◻
-`js/gen/dungeon-layout.js` `layoutLevel(rooms, rng)` → room rects + corridors + entrance, attached
-to each level. Tests: no overlap, all rooms reachable, deterministic.
+### 4.7 — Layout (rooms + corridors on a grid; pure, node-tested) ✅ built
+`js/gen/dungeon-layout.js` `layoutLevel(rooms, rng)` places each room as a non-overlapping rectangle
+on a generously-sized grid and connects each to its nearest placed room with an L-shaped corridor
+(spanning tree → all reachable). Returns `{ grid, rooms:[{n,x,y,w,h}], corridors:[{x,y}], entrance }`,
+attached to each level by `generateDungeon`. Tests: deterministic, one rect/room within grid, no
+overlaps, every room reachable from the entrance (flood fill), single-room/empty edge cases. **101
+passing.** (4.8's renderer crops to the cell bounding box.)
 
 ### 4.8 — Dungeon View UI (browser-verified) ◻
 `js/ui/dungeon-map.js` canvas renderer + view-mode toggle in `app.js`/`index.html`; level switcher;
