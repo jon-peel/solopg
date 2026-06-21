@@ -75,10 +75,42 @@ Added to `HEX_TABLE_IDS` in `js/ui/app.js`.
 - `test/migration.test.js` — v3 dungeon-stub world migrates to v4 with the stub dropped; v2 lands on
   the current version.
 
-## Status
-- **4.0** — engine + data + schema/migration + tests. ✅ built (87 `node --test` passing)
-- **4.1** — detail view + lazy generation wiring. ✅ built; ◻ pending manual browser verification
-- **4.2** — optional polish (only if agreed). ◻
+---
+
+# Arc 4.5–4.8 — Themed, explorable dungeons
+
+User-confirmed expansion: a **Dungeon View** with a per-level **map** (rooms + corridors), themed
+**monster families** with within-level cohesion, and **dungeon themes** that drive content. The
+explorable POI types (ruin/cave/mine) are **merged into `dungeon` as themes**.
+
+### 4.5 — Themes + POI-type merge (schema v5) ✅ built
+- `data/poi-types.json`: dropped ruin/cave/mine (now themes). `data/dungeon-theme.json`: rebuilt as
+  the canonical **theme manifest** (Ruin, Abandoned mine, Cave complex, Forgotten tomb, Mausoleum,
+  …); no longer rolled per level.
+- `js/gen/terrain-profile.js`: folded ruin/cave/mine into a single per-terrain `dungeon` weight; new
+  `DUNGEON_THEME_BIAS` (terrain → theme weights) + `dungeonThemeTable(terrain)`.
+- `js/gen/poi.js`: dungeon POIs roll a terrain-biased `detail.theme` at POI-roll time (drives the
+  map glyph); flavor simplified.
+- `js/gen/dungeon.js`: one theme per dungeon (from `ctx.theme`), inherited by every level; returns
+  top-level `theme`.
+- `js/ui/poi-style.js`: `THEME_GLYPHS` + `glyphForDungeon` + `glyphForPoi(poi)` (theme glyph for
+  dungeons). `map.js` / `panel.js` use `glyphForPoi`; panel header shows the theme.
+- Schema **4 → 5**; `migrateWorld` v4→v5 converts ruin/cave/mine POIs → themed dungeons.
+- `js/ui/app.js`: passes `theme` into lazy `generateDungeon`, backfills legacy dungeons' theme.
+- Tests updated (poi, migration, terrain-profile) + glyph/manifest coverage. **92 passing.**
+
+### 4.6 — Monster families + within-level ecology (node-tested) ◻ next
+`data/monster-families.json` + `data/dungeon-family.json` (theme → family weights); `dungeon.js`
+picks a theme-appropriate family per level (escalating deeper) + occasional interloper/elite.
+
+### 4.7 — Layout (rooms + corridors on a grid; pure, node-tested) ◻
+`js/gen/dungeon-layout.js` `layoutLevel(rooms, rng)` → room rects + corridors + entrance, attached
+to each level. Tests: no overlap, all rooms reachable, deterministic.
+
+### 4.8 — Dungeon View UI (browser-verified) ◻
+`js/ui/dungeon-map.js` canvas renderer + view-mode toggle in `app.js`/`index.html`; level switcher;
+click a room → contents in the panel; back-to-world. → hand the manual checklist.
 
 ## Deferred / backlog
-- Theme-biased monster pools and terrain-biased size; dungeon-specific art; per-level reroll.
+- Choose-theme on manual add; per-level reroll; richer room dressing; dungeon-specific art; tower as
+  a dungeon theme; merging shrine.

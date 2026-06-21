@@ -12,7 +12,9 @@ import { axialKey } from "../core/hexgeo.js";
 // `{present,count}`. See migrateWorld in portability.js.
 // v4: dungeon POIs gained a generated interior (Phase 4) at `detail.dungeon`,
 // replacing the Phase-3 `detail.stub` placeholder.
-export const SCHEMA_VERSION = 4;
+// v5: the explorable POI types (ruin/cave/mine) were merged into `dungeon` as
+// themes (Phase 4 arc) — such POIs become `type:"dungeon"` with `detail.theme`.
+export const SCHEMA_VERSION = 5;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

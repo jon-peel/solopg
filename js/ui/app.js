@@ -302,7 +302,13 @@ async function onSelectPoi(id) {
     const n = m ? Number(m[1]) : 0;
     const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon", n);
     poi.detail = poi.detail || {};
-    poi.detail.dungeon = generateDungeon(tables, rng, { terrain: hex.terrain });
+    poi.detail.dungeon = generateDungeon(tables, rng, {
+      theme: poi.detail.theme,
+      terrain: hex.terrain,
+    });
+    // Legacy dungeons predate themes — backfill from the generated interior so
+    // the map glyph reflects it.
+    poi.detail.theme = poi.detail.theme || poi.detail.dungeon.theme;
     await persistAndRefresh();
   } catch (err) {
     logLine(`Dungeon error: ${err.message}`);

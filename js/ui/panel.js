@@ -1,6 +1,6 @@
 // Side-panel rendering helpers.
 
-import { glyphForPoiType } from "./poi-style.js";
+import { glyphForPoi } from "./poi-style.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -65,7 +65,7 @@ function renderPoiSection(sel, hex, model) {
     box.className = "poi-detail";
     const title = document.createElement("div");
     title.className = "poi-detail-title";
-    title.textContent = `${glyphForPoiType(selectedPoi.type)} ${selectedPoi.name}`;
+    title.textContent = `${glyphForPoi(selectedPoi)} ${selectedPoi.name}`;
     box.appendChild(title);
     for (const line of [
       `Type: ${selectedPoi.type}`,
@@ -107,7 +107,7 @@ function renderPoiSection(sel, hex, model) {
     for (const poi of pois) {
       const row = document.createElement("button");
       row.className = "poi-row";
-      row.textContent = `${glyphForPoiType(poi.type)} ${poi.name}`;
+      row.textContent = `${glyphForPoi(poi)} ${poi.name}`;
       row.addEventListener("click", () => model.onSelectPoi(poi.id));
       list.appendChild(row);
     }
@@ -129,7 +129,9 @@ function renderPoiSection(sel, hex, model) {
 function appendDungeon(box, dungeon) {
   const levels = Array.isArray(dungeon.levels) ? dungeon.levels : [];
   box.appendChild(
-    sectionLabel(`Dungeon — ${dungeon.size}, ${levels.length} level(s)`),
+    sectionLabel(
+      `${dungeon.theme || "Dungeon"} — ${dungeon.size}, ${levels.length} level(s)`,
+    ),
   );
   for (const level of levels) {
     const det = document.createElement("details");

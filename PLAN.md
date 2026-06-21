@@ -9,11 +9,11 @@ remembers the evolving map.
 > [Roadmap & status](#roadmap--status)). Completed work is recorded in
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
-**Status (current):** Phases 0–3 complete (engine, persistence, visual hex map, terrain with
-pencil-art tiles, POIs with terrain-aware rules, settlements with sketch/zoom LOD). **Phase 4
-(Dungeons) built — generated interiors + panel detail view — pending manual browser verification.**
-**Schema v4. 87 `node --test` passing.** Work is on branch `claude/refine-local-plan-lg3hiu`
-(PR #1). **Next: Phase 5 — other POI types detailed.**
+**Status (current):** Phases 0–3 complete; Phase 4 base (generated dungeon interiors + panel
+detail view) done & verified. **Now in the Phase 4 dungeon arc (4.5–4.8): themed, explorable
+dungeons** — 4.5 (themes + merge of ruin/cave/mine into themed dungeons, schema v5) ▶ in progress.
+**Schema v5. 92 `node --test` passing.** Work is on branch `claude/refine-local-plan-lg3hiu`
+(PR #1). See [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md).
 
 ---
 
@@ -46,7 +46,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **4**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **5**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
@@ -104,20 +104,21 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v4)
+## Current data model (as built, schema v5)
 
-- **World:** `{ schemaVersion:3, id, name, seed, hexScale, hexes:{}, createdAt, updatedAt }`
+- **World:** `{ schemaVersion:5, id, name, seed, hexScale, hexes:{}, createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
   `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen }`.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
   `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Water).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
-  `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`; dungeon POIs gain a
-  generated interior at `detail.dungeon` (Phase 4), built lazily on first open. Auto-gen places
-  ≤1 POI; users add/remove more by hand.
+  `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`. **Dungeon** POIs carry a
+  terrain-biased `detail.theme` (drives the map glyph) and gain a generated interior at
+  `detail.dungeon`, built lazily on first open. Auto-gen places ≤1 POI; users add/remove more.
 - **Terrains:** Forest, Plains, Hills, Mountains, Swamp, Desert, Water. **POI types:** dungeon,
-  lair, ruin, shrine, camp, landmark, tower, mine, cave.
+  lair, shrine, camp, landmark, tower. The explorable types **ruin/cave/mine merged into `dungeon`
+  as themes** (Ruin, Cave complex, Abandoned mine, Forgotten tomb, Mausoleum, …).
 
 ### Canonical table schema
 ```json

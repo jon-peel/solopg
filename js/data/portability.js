@@ -61,9 +61,20 @@ export function importWorld(json) {
  *   generated interior at `detail.dungeon`. Migration can't roll (no tables/rng
  *   here), so it just drops the stale stub; the dungeon detail view generates
  *   and persists `detail.dungeon` the first time the POI is opened.
+ * - v4 -> v5: the explorable POI types (ruin/cave/mine) merged into `dungeon`
+ *   as themes. Such POIs become `type:"dungeon"` with `detail.theme` carried
+ *   over from the old type; any stale `detail.dungeon` is cleared so the themed
+ *   interior regenerates on next open.
  * @param {object} data
  * @returns {object} data (migrated)
  */
+// Old explorable POI type -> the dungeon theme it becomes (v4 -> v5).
+const MERGED_TYPE_THEME = {
+  ruin: "Ruin",
+  cave: "Cave complex",
+  mine: "Abandoned mine",
+};
+
 export function migrateWorld(data) {
   if (data.schemaVersion < 3) {
     for (const hex of Object.values(data.hexes || {})) {
@@ -78,6 +89,20 @@ export function migrateWorld(data) {
       }
     }
     data.schemaVersion = 4;
+  }
+  if (data.schemaVersion < 5) {
+    for (const hex of Object.values(data.hexes || {})) {
+      for (const poi of hex.pois || []) {
+        const theme = MERGED_TYPE_THEME[poi.type];
+        if (theme) {
+          poi.type = "dungeon";
+          poi.detail = poi.detail || {};
+          poi.detail.theme = theme;
+          delete poi.detail.dungeon; // regenerate themed interior on next open
+        }
+      }
+    }
+    data.schemaVersion = 5;
   }
   return data;
 }

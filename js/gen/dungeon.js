@@ -37,21 +37,22 @@ function buildEncounterTable(creatures, rng) {
  * @param {Map<string,object>} tables incl. dungeon-size, dungeon-theme,
  *   dungeon-room, creatures.
  * @param {() => number} rng a dedicated sub-stream for this dungeon.
- * @param {object} [ctx] reserved (e.g. terrain) for future biasing.
- * @returns {{ size: string, levels: object[] }}
+ * @param {{ theme?: string, terrain?: string }} [ctx] the dungeon's theme
+ *   (chosen at POI roll time) drives every level; falls back to a rolled theme.
+ * @returns {{ size: string, theme: string, levels: object[] }}
  */
 export function generateDungeon(tables, rng, ctx = {}) {
   const sizeTables = tables.get("dungeon-size");
-  const themeTable = tables.get("dungeon-theme");
   const roomTable = tables.get("dungeon-room");
   const creatures = tables.get("creatures");
 
+  // One theme per dungeon (from the POI); every level inherits it.
+  const theme = ctx.theme || rollTable(tables.get("dungeon-theme"), rng).value;
   const size = rollTable(sizeTables, rng).value;
   const levelCount = randInt(rng, size.levels[0], size.levels[1]);
 
   const levels = [];
   for (let depth = 1; depth <= levelCount; depth++) {
-    const theme = rollTable(themeTable, rng).value;
     const encounters = buildEncounterTable(creatures, rng);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
 
@@ -68,5 +69,5 @@ export function generateDungeon(tables, rng, ctx = {}) {
     levels.push({ depth, theme, encounters, rooms });
   }
 
-  return { size: size.size, levels };
+  return { size: size.size, theme, levels };
 }

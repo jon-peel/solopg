@@ -4,12 +4,9 @@
   "entries": [
     { "value": { "type": "dungeon", "label": "Dungeon", "occupantLean": "either" } },
     { "value": { "type": "lair", "label": "Lair", "occupantLean": "creature" } },
-    { "value": { "type": "ruin", "label": "Ruin", "occupantLean": "either" } },
     { "value": { "type": "shrine", "label": "Shrine", "occupantLean": "either" } },
     { "value": { "type": "camp", "label": "Camp", "occupantLean": "occupied" } },
     { "value": { "type": "landmark", "label": "Landmark", "occupantLean": "none" } },
-    { "value": { "type": "tower", "label": "Tower", "occupantLean": "occupied" } },
-    { "value": { "type": "mine", "label": "Mine", "occupantLean": "either" } },
-    { "value": { "type": "cave", "label": "Cave", "occupantLean": "either" } }
+    { "value": { "type": "tower", "label": "Tower", "occupantLean": "occupied" } }
   ]
 }

@@ -1,12 +1,16 @@
 {
   "id": "dungeon-theme",
-  "title": "Dungeon level theme",
+  "title": "Dungeon themes",
+  "_note": "Canonical list of dungeon themes (the merged ruin/cave/mine explorables are themes here). Per-terrain selection weighting lives in DUNGEON_THEME_BIAS (js/gen/terrain-profile.js); the weights below are the generic fallback when a terrain has no bias.",
   "entries": [
+    { "weight": 3, "value": "Ruin" },
+    { "weight": 2, "value": "Abandoned mine" },
+    { "weight": 2, "value": "Cave complex" },
     { "weight": 2, "value": "Forgotten tomb" },
+    { "weight": 1, "value": "Mausoleum" },
     { "weight": 2, "value": "Cult shrine" },
     { "weight": 1, "value": "Flooded cistern" },
     { "weight": 2, "value": "Goblin warren" },
-    { "weight": 2, "value": "Collapsed mine" },
     { "weight": 2, "value": "Ruined fort" },
     { "weight": 1, "value": "Wizard's sanctum" },
     { "weight": 2, "value": "Beast den" },

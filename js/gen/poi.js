@@ -6,7 +6,7 @@
 // Factions are deferred to a dedicated later phase.
 
 import { rollTable } from "../core/table.js";
-import { poiTypeTable } from "./terrain-profile.js";
+import { poiTypeTable, dungeonThemeTable } from "./terrain-profile.js";
 
 // Build a Map of poi type -> metadata from the poi-types table (keyed lookup).
 function poiTypeMeta(tables) {
@@ -26,16 +26,16 @@ function kindsForLean(tables, lean) {
   return { id: `poi-occupant:${lean}`, entries: kinds };
 }
 
-function nameFor(type, label, occupant) {
+function nameFor(label, occupant) {
   if (occupant.kind === "lair") return `${label} — ${occupant.creature} lair`;
   if (occupant.kind === "occupied") return `${label} — ${occupant.by}`;
   return label;
 }
 
-function flavorFor(type, occupant) {
-  if (occupant.kind === "lair") return `A ${type} that is home to ${occupant.creature.toLowerCase()}.`;
-  if (occupant.kind === "occupied") return `A ${type} held by ${occupant.by.toLowerCase()}.`;
-  return `An abandoned ${type}.`;
+function flavorFor(occupant) {
+  if (occupant.kind === "lair") return `Home to ${occupant.creature.toLowerCase()}.`;
+  if (occupant.kind === "occupied") return `Held by ${occupant.by.toLowerCase()}.`;
+  return "Long abandoned.";
 }
 
 /**
@@ -50,6 +50,16 @@ export function generatePoi(tables, rng, ctx) {
   const type = ctx.forceType || rollTable(poiTypeTable(ctx.terrain), rng).value;
   const meta = poiTypeMeta(tables).get(type) || { label: type, occupantLean: "none" };
 
+  // A dungeon carries a terrain-biased theme (Ruin, Abandoned mine, Tomb…). It
+  // is rolled here — not deferred to the lazy interior — because the map glyph
+  // and the POI label depend on it. The theme also drives the monster family
+  // when the interior is generated (js/gen/dungeon.js).
+  const theme =
+    type === "dungeon"
+      ? rollTable(dungeonThemeTable(ctx.terrain), rng).value
+      : null;
+  const label = theme || meta.label;
+
   // Decide occupant kind from the type's lean.
   const kind = rollTable(kindsForLean(tables, meta.occupantLean), rng).value;
   let occupant;
@@ -61,15 +71,15 @@ export function generatePoi(tables, rng, ctx) {
     occupant = { kind: "none" };
   }
 
-  const detail = { flavor: flavorFor(type, occupant) };
+  const detail = { flavor: flavorFor(occupant) };
   // Dungeon interiors are generated lazily on first open (see app.js +
-  // js/gen/dungeon.js) so generatePoi stays cheap and the POI-roll stream is
-  // untouched; the POI just records its type here.
+  // js/gen/dungeon.js); the POI records only its theme here.
+  if (theme) detail.theme = theme;
 
   return {
     id: `poi:${ctx.index}`,
     type,
-    name: nameFor(type, meta.label, occupant),
+    name: nameFor(label, occupant),
     occupant,
     detail,
   };

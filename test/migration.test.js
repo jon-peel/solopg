@@ -63,13 +63,57 @@ test("migrateWorld upgrades v2 -> current: pois become [], terrain/settlement ke
   assert.deepEqual(w.hexes["0,0"].settlement, { present: true, size: "Village" });
 });
 
-test("migrateWorld upgrades v3 -> v4: dungeon stub dropped, interior generated lazily", () => {
+test("migrateWorld upgrades v3 -> current: dungeon stub dropped, interior lazy", () => {
   const w = migrateWorld(v3WorldWithDungeonStub());
-  assert.equal(w.schemaVersion, 4);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION);
   const poi = w.hexes["0,0"].pois[0];
   assert.equal(poi.detail.stub, undefined);
   assert.equal(poi.detail.dungeon, undefined); // built on first open, not by migration
   assert.equal(poi.detail.flavor, "An abandoned dungeon."); // other detail preserved
+});
+
+// A v4 world with the now-merged explorable POI types (ruin/cave/mine).
+function v4WorldWithExplorables() {
+  const poi = (n, type) => ({
+    id: `poi:${n}`,
+    type,
+    name: type[0].toUpperCase() + type.slice(1),
+    occupant: { kind: "none" },
+    detail: { flavor: "Long abandoned.", dungeon: { size: "Cramped", levels: [] } },
+  });
+  return {
+    schemaVersion: 4,
+    id: "w4",
+    name: "Merge",
+    seed: 9,
+    hexScale: 6,
+    hexes: {
+      "0,0": {
+        key: "0,0", coords: { q: 0, r: 0 }, placed: true, terrain: "Hills",
+        terrainFeature: null, settlement: { present: false },
+        pois: [poi(0, "ruin"), poi(1, "cave"), poi(2, "mine"), poi(3, "shrine")],
+        explored: true,
+      },
+    },
+    createdAt: "x",
+    updatedAt: "x",
+  };
+}
+
+test("migrateWorld upgrades v4 -> v5: ruin/cave/mine become themed dungeons", () => {
+  const w = migrateWorld(v4WorldWithExplorables());
+  assert.equal(w.schemaVersion, 5);
+  const pois = w.hexes["0,0"].pois;
+  assert.deepEqual(
+    pois.map((p) => p.type),
+    ["dungeon", "dungeon", "dungeon", "shrine"], // shrine untouched
+  );
+  assert.equal(pois[0].detail.theme, "Ruin");
+  assert.equal(pois[1].detail.theme, "Cave complex");
+  assert.equal(pois[2].detail.theme, "Abandoned mine");
+  // Stale interiors cleared so the themed dungeon regenerates on next open.
+  assert.equal(pois[0].detail.dungeon, undefined);
+  assert.equal(pois[3].detail.theme, undefined); // shrine gets no theme
 });
 
 test("importWorld migrates a v2 JSON up to the current version", () => {

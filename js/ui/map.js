@@ -18,7 +18,7 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
-import { glyphForPoiType } from "./poi-style.js";
+import { glyphForPoi } from "./poi-style.js";
 import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
 
@@ -222,7 +222,7 @@ function drawDetailMarkers(cx, cy, hex) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
-    const label = pois.length === 1 ? glyphForPoiType(pois[0].type) : String(pois.length);
+    const label = pois.length === 1 ? glyphForPoi(pois[0]) : String(pois.length);
     drawMarker(cx + off, cy + off, label, size, pois.length === 1 ? undefined : "#fff");
   }
 }

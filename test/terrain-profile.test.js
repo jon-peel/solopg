@@ -1,13 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   TERRAIN_PROFILE,
+  DUNGEON_THEME_BIAS,
   profileFor,
   cappedSizeTable,
   poiTypeTable,
+  dungeonThemeTable,
   SIZE_ORDER,
   KNOWN_TERRAINS,
 } from "../js/gen/terrain-profile.js";
+import { THEME_GLYPHS } from "../js/ui/poi-style.js";
+
+const manifestThemes = new Set(
+  JSON.parse(readFileSync("./data/dungeon-theme.json", "utf8")).entries.map(
+    (e) => e.value,
+  ),
+);
 
 const sizeTable = {
   id: "settlement-size",
@@ -39,23 +49,52 @@ test("cappedSizeTable excludes oversized sizes and never mutates base", () => {
   assert.deepEqual(sizeTable, snapshot); // unchanged
 });
 
-test("Water POI weights exclude dungeon/mine/tower/camp", () => {
+test("Water POI weights exclude dungeon (no explorable on open water)", () => {
   const types = Object.keys(TERRAIN_PROFILE.Water.poi.weights);
-  for (const banned of ["dungeon", "mine", "tower", "camp"]) {
-    assert.ok(!types.includes(banned), `Water should not allow ${banned}`);
+  assert.ok(!types.includes("dungeon"), "Water should not auto-roll a dungeon");
+});
+
+test("dungeon is an allowed POI type on every land terrain", () => {
+  for (const [terrain, p] of Object.entries(TERRAIN_PROFILE)) {
+    if (terrain === "Water") continue;
+    assert.ok(p.poi.weights.dungeon > 0, `${terrain} should allow dungeons`);
   }
 });
 
-test("cave appears in at least one terrain's POI weights", () => {
-  const anyCave = Object.values(TERRAIN_PROFILE).some(
-    (p) => p.poi.weights.cave > 0,
-  );
-  assert.ok(anyCave, "expected cave to be allowed somewhere");
+test("the merged explorable types are gone (ruin/cave/mine are themes now)", () => {
+  for (const p of Object.values(TERRAIN_PROFILE)) {
+    for (const gone of ["ruin", "cave", "mine"]) {
+      assert.equal(p.poi.weights[gone], undefined, `${gone} should be a theme, not a type`);
+    }
+  }
 });
 
 test("poiTypeTable builds weighted entries from the profile", () => {
   const t = poiTypeTable("Mountains");
   const values = t.entries.map((e) => e.value);
-  assert.ok(values.includes("mine") && values.includes("dungeon"));
+  assert.ok(values.includes("dungeon") && values.includes("tower"));
   assert.ok(t.entries.every((e) => typeof e.weight === "number"));
+});
+
+test("dungeonThemeTable uses only themes that exist in the manifest", () => {
+  for (const terrain of [...KNOWN_TERRAINS, "Unknown"]) {
+    for (const e of dungeonThemeTable(terrain).entries) {
+      assert.ok(manifestThemes.has(e.value), `${terrain}: ${e.value} not in manifest`);
+      assert.ok(typeof e.weight === "number");
+    }
+  }
+});
+
+test("every DUNGEON_THEME_BIAS theme is a known manifest theme", () => {
+  for (const [terrain, themes] of Object.entries(DUNGEON_THEME_BIAS)) {
+    for (const theme of Object.keys(themes)) {
+      assert.ok(manifestThemes.has(theme), `${terrain}: ${theme} not in manifest`);
+    }
+  }
+});
+
+test("every manifest theme has a glyph", () => {
+  for (const theme of manifestThemes) {
+    assert.ok(THEME_GLYPHS[theme], `no glyph for theme ${theme}`);
+  }
 });
