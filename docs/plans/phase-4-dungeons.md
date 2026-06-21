@@ -99,9 +99,12 @@ explorable POI types (ruin/cave/mine) are **merged into `dungeon` as themes**.
 - `js/ui/app.js`: passes `theme` into lazy `generateDungeon`, backfills legacy dungeons' theme.
 - Tests updated (poi, migration, terrain-profile) + glyph/manifest coverage. **92 passing.**
 
-### 4.6 — Monster families + within-level ecology (node-tested) ◻ next
-`data/monster-families.json` + `data/dungeon-family.json` (theme → family weights); `dungeon.js`
-picks a theme-appropriate family per level (escalating deeper) + occasional interloper/elite.
+### 4.6 — Monster families + within-level ecology (node-tested) ✅ built
+`data/monster-families.json` (7 families with weighted members + an elite) + `data/dungeon-family
+.json` (theme → family weights). `dungeon.js` picks a theme-appropriate family per level, samples
+its members for the wandering table, adds an occasional **interloper** from another family, and
+puts the family **elite** on the deepest level. `level.family` recorded. Tests cover cohesion
+(majority in-family), theme→family lean, and determinism. **95 passing.**
 
 ### 4.7 — Layout (rooms + corridors on a grid; pure, node-tested) ◻
 `js/gen/dungeon-layout.js` `layoutLevel(rooms, rng)` → room rects + corridors + entrance, attached

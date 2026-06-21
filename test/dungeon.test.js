@@ -6,19 +6,34 @@ import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
 function tables() {
-  const ids = ["dungeon-size", "dungeon-theme", "dungeon-room", "creatures"];
-  return new Map(
+  const ids = ["dungeon-size", "dungeon-theme", "dungeon-room"];
+  const t = new Map(
     ids.map((id) => [
       id,
       validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8"))),
     ]),
   );
+  // Family tables aren't canonical weighted tables (value objects, no top-level
+  // weights), so load without validateTable.
+  for (const id of ["monster-families", "dungeon-family"]) {
+    t.set(id, JSON.parse(readFileSync(`./data/${id}.json`, "utf8")));
+  }
+  return t;
 }
 
 // Index size metadata for range checks.
 function sizeMeta(t) {
   const map = new Map();
   for (const e of t.get("dungeon-size").entries) map.set(e.value.size, e.value);
+  return map;
+}
+
+// Family name -> Set of its member species (for cohesion checks).
+function familyMembers(t) {
+  const map = new Map();
+  for (const e of t.get("monster-families").entries) {
+    map.set(e.value.family, new Set(e.value.members.map((m) => m.value)));
+  }
   return map;
 }
 
@@ -82,5 +97,47 @@ test("themes come from the dungeon-theme table", () => {
     for (const lvl of generateDungeon(t, mulberry32(s)).levels) {
       assert.ok(themes.has(lvl.theme), `theme ${lvl.theme} from table`);
     }
+  }
+});
+
+test("a level coheres: most of its monsters belong to its stated family", () => {
+  const t = tables();
+  const members = familyMembers(t);
+  for (let s = 0; s < 200; s++) {
+    for (const lvl of generateDungeon(t, mulberry32(s)).levels) {
+      const fam = members.get(lvl.family);
+      assert.ok(fam, `family ${lvl.family} is defined`);
+      const inFamily = lvl.encounters.filter((e) => fam.has(e.value)).length;
+      // Sampled mostly from the family; at most one interloper + maybe an elite.
+      assert.ok(
+        inFamily > lvl.encounters.length / 2,
+        `level family ${lvl.family}: ${inFamily}/${lvl.encounters.length} in-family`,
+      );
+    }
+  }
+});
+
+test("a Forgotten tomb leans undead; a Goblin warren leans goblinoid", () => {
+  const t = tables();
+  const tally = (theme, fam) => {
+    let hits = 0, total = 0;
+    for (let s = 0; s < 120; s++) {
+      for (const lvl of generateDungeon(t, mulberry32(s), { theme }).levels) {
+        total++;
+        if (lvl.family === fam) hits++;
+      }
+    }
+    return hits / total;
+  };
+  assert.ok(tally("Forgotten tomb", "Undead") > 0.6, "tomb should be mostly undead");
+  assert.ok(tally("Goblin warren", "Goblinoids") > 0.6, "warren should be mostly goblinoid");
+});
+
+test("ctx.theme is honored for every level", () => {
+  const t = tables();
+  for (let s = 0; s < 50; s++) {
+    const d = generateDungeon(t, mulberry32(s), { theme: "Mausoleum" });
+    assert.equal(d.theme, "Mausoleum");
+    assert.ok(d.levels.every((l) => l.theme === "Mausoleum"));
   }
 });

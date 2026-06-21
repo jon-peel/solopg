@@ -1,0 +1,51 @@
+{
+  "id": "monster-families",
+  "title": "Monster families",
+  "_note": "Each family has a weighted member list and an elite (boss) that may appear on a dungeon's deepest level. Family names are referenced by data/dungeon-family.json.",
+  "entries": [
+    { "value": { "family": "Undead", "elite": "Wraith", "members": [
+      { "weight": 3, "value": "Skeletons" },
+      { "weight": 3, "value": "Zombies" },
+      { "weight": 2, "value": "Ghouls" },
+      { "weight": 1, "value": "Wights" },
+      { "weight": 1, "value": "Shadows" }
+    ] } },
+    { "value": { "family": "Goblinoids", "elite": "Bugbear chief", "members": [
+      { "weight": 3, "value": "Goblins" },
+      { "weight": 2, "value": "Hobgoblins" },
+      { "weight": 2, "value": "Orcs" },
+      { "weight": 1, "value": "Bugbears" }
+    ] } },
+    { "value": { "family": "Beasts", "elite": "Owlbear", "members": [
+      { "weight": 3, "value": "Wolves" },
+      { "weight": 3, "value": "Giant rats" },
+      { "weight": 2, "value": "Giant spiders" },
+      { "weight": 1, "value": "Cave bear" },
+      { "weight": 1, "value": "Giant boar" }
+    ] } },
+    { "value": { "family": "Vermin", "elite": "Giant scorpion", "members": [
+      { "weight": 3, "value": "Giant rats" },
+      { "weight": 2, "value": "Giant centipedes" },
+      { "weight": 2, "value": "Giant spiders" },
+      { "weight": 1, "value": "Carrion crawler" }
+    ] } },
+    { "value": { "family": "Cultists", "elite": "Cult leader", "members": [
+      { "weight": 3, "value": "Cultists" },
+      { "weight": 2, "value": "Acolytes" },
+      { "weight": 1, "value": "Cult fanatics" },
+      { "weight": 1, "value": "Berserkers" }
+    ] } },
+    { "value": { "family": "Aberrations", "elite": "Otyugh", "members": [
+      { "weight": 2, "value": "Grey ooze" },
+      { "weight": 1, "value": "Gelatinous cube" },
+      { "weight": 1, "value": "Rust monster" },
+      { "weight": 1, "value": "Cave fisher" }
+    ] } },
+    { "value": { "family": "Bandits", "elite": "Bandit captain", "members": [
+      { "weight": 3, "value": "Bandits" },
+      { "weight": 2, "value": "Brigands" },
+      { "weight": 1, "value": "Mercenaries" },
+      { "weight": 1, "value": "Cutthroats" }
+    ] } }
+  ]
+}

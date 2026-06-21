@@ -49,6 +49,8 @@ const HEX_TABLE_IDS = [
   "dungeon-size",
   "dungeon-theme",
   "dungeon-room",
+  "monster-families",
+  "dungeon-family",
 ];
 
 let current = null; // the in-memory current world
