@@ -133,6 +133,18 @@ test("a Forgotten tomb leans undead; a Goblin warren leans goblinoid", () => {
   assert.ok(tally("Goblin warren", "Goblinoids") > 0.6, "warren should be mostly goblinoid");
 });
 
+test("every dungeon carries the build stamp and a layout per level", () => {
+  const t = tables();
+  for (let s = 0; s < 100; s++) {
+    const d = generateDungeon(t, mulberry32(s));
+    assert.equal(typeof d.build, "number", "build version stamped");
+    for (const lvl of d.levels) {
+      assert.ok(lvl.layout && Array.isArray(lvl.layout.rooms), "level has a layout");
+      assert.equal(lvl.layout.rooms.length, lvl.rooms.length, "layout covers every room");
+    }
+  }
+});
+
 test("ctx.theme is honored for every level", () => {
   const t = tables();
   for (let s = 0; s < 50; s++) {

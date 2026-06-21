@@ -20,6 +20,12 @@ const MIN_ENCOUNTERS = 4;
 const MAX_ENCOUNTERS = 6;
 const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 
+// Interior-shape version. Stamped on every generated dungeon; the UI regenerates
+// any persisted dungeon whose `build` differs (or is missing), so changing the
+// interior shape (e.g. adding per-level layout) self-heals old saves without a
+// world-schema migration. Bump this whenever the dungeon object shape changes.
+export const DUNGEON_BUILD = 1;
+
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
   const map = new Map();
@@ -123,5 +129,5 @@ export function generateDungeon(tables, rng, ctx = {}) {
     levels.push({ depth, theme, family, encounters, rooms, layout });
   }
 
-  return { size: size.size, theme, levels };
+  return { build: DUNGEON_BUILD, size: size.size, theme, levels };
 }

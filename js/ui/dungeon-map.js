@@ -83,7 +83,14 @@ export function render() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
   hitRects = [];
-  if (!level || !level.layout) return;
+  if (!level || !level.layout) {
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("No map for this level.", rect.width / 2, rect.height / 2);
+    return;
+  }
 
   const layout = level.layout;
   const bb = boundingBox(layout);
