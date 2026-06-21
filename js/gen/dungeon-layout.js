@@ -114,7 +114,8 @@ function pathCells(a, b, horizFirst) {
  * @param {{ side?: number }} [opts]
  * @returns {{ grid:{w:number,h:number}, rooms:{n:number,x:number,y:number,w:number,h:number}[],
  *   corridors:{x:number,y:number}[], edges:{a:number,b:number,type:string}[],
- *   doors:{x:number,y:number,type:string}[], entrance:number }}
+ *   doors:{x:number,y:number,type:string,dx:number,dy:number}[], entrance:number }}
+ *   (door dx,dy point from the door cell toward the room it adjoins — the wall side)
  */
 export function layoutLevel(rooms, rng, opts = {}) {
   const count = rooms.length;
@@ -224,6 +225,7 @@ export function layoutLevel(rooms, rng, opts = {}) {
     cells.filter((c) => isRoomCell(c.x, c.y) && !inRect(c, ra) && !inRect(c, rb)).length;
   const corridorSet = new Set();
   const doors = [];
+  const doorAt = new Set(); // dedupe: at most one marker per cell
   for (const e of edges) {
     if (e.type === "secret") continue; // hidden until revealed (4.9.5)
     const ra = byN.get(e.a);
@@ -234,13 +236,28 @@ export function layoutLevel(rooms, rng, opts = {}) {
     const optionV = pathCells(a, b, false);
     const cells = foreignCount(optionV, ra, rb) < foreignCount(optionH, ra, rb) ? optionV : optionH;
     let doorCell = null;
+    let prev = a; // previous path cell; for the first corridor cell it's a room cell
+    let dx = 0;
+    let dy = 0;
     for (const c of cells) {
-      if (isRoomCell(c.x, c.y)) continue;
-      corridorSet.add(`${c.x},${c.y}`);
-      if (!doorCell) doorCell = c; // first corridor cell leaving room a
+      if (!isRoomCell(c.x, c.y)) {
+        corridorSet.add(`${c.x},${c.y}`);
+        if (!doorCell) {
+          doorCell = c;
+          // Direction from the door cell back toward the room it adjoins -> the
+          // wall side, so the renderer can straddle/orient the door.
+          dx = Math.sign(prev.x - c.x);
+          dy = Math.sign(prev.y - c.y);
+        }
+      }
+      prev = c;
     }
     if (doorCell && e.type !== "open") {
-      doors.push({ x: doorCell.x, y: doorCell.y, type: e.type });
+      const key = `${doorCell.x},${doorCell.y}`;
+      if (!doorAt.has(key)) {
+        doorAt.add(key);
+        doors.push({ x: doorCell.x, y: doorCell.y, type: e.type, dx, dy });
+      }
     }
   }
 

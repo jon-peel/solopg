@@ -162,14 +162,19 @@ test("secret doors do appear (on loop edges), across seeds", () => {
   assert.ok(secrets > 20, `expected some secret doors, got ${secrets}/200`);
 });
 
-test("doors list only visible types and sit on corridor cells", () => {
+test("doors list only visible types, sit on corridor cells, carry one-axis orientation, are unique", () => {
   const corridorKey = (lay) => new Set(lay.corridors.map((c) => `${c.x},${c.y}`));
   for (let s = 0; s < 150; s++) {
     const lay = layoutLevel(makeRooms(3 + (s % 8)), mulberry32(s));
     const cells = corridorKey(lay);
+    const seen = new Set();
     for (const d of lay.doors) {
       assert.ok(["door", "locked", "stuck"].includes(d.type), `door type ${d.type}`);
       assert.ok(cells.has(`${d.x},${d.y}`), "door sits on a corridor cell");
+      assert.equal(Math.abs(d.dx) + Math.abs(d.dy), 1, "door faces exactly one wall direction");
+      const key = `${d.x},${d.y}`;
+      assert.ok(!seen.has(key), "no two doors on the same cell");
+      seen.add(key);
     }
   }
 });

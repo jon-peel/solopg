@@ -134,16 +134,34 @@ export function render() {
   }
 
   // Doors on visible passages (open passages and secret doors draw nothing).
-  // Drawn a touch larger than a cell with a bright outline so they read clearly.
+  // Drawn as a rectangle straddling the wall between room and corridor: long
+  // along the wall, thin across the passage, with L/S for locked/stuck.
   for (const d of layout.doors || []) {
-    const s = Math.max(6, Math.round(cell * 0.9));
-    const cx = sx(d.x) + cell / 2;
-    const cy = sy(d.y) + cell / 2;
+    const dx = d.dx || 0;
+    const dy = d.dy || 0;
+    // Centre on the wall line (half a cell from the corridor cell toward room).
+    const wx = sx(d.x) + cell / 2 + (dx * cell) / 2;
+    const wy = sy(d.y) + cell / 2 + (dy * cell) / 2;
+    const long = Math.max(7, cell * 1.15); // along the wall
+    const thick = Math.max(3, cell * 0.42); // across the passage (overlaps wall)
+    const vertWall = dx !== 0; // room left/right -> vertical wall -> tall door
+    const w = vertWall ? thick : long;
+    const h = vertWall ? long : thick;
+
     ctx.fillStyle = DOOR_FILL[d.type] || DOOR_FILL.door;
-    ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
-    ctx.strokeStyle = "#f4ead2";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(cx - s / 2, cy - s / 2, s, s);
+    ctx.fillRect(wx - w / 2, wy - h / 2, w, h);
+    ctx.strokeStyle = "#1a1410";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(wx - w / 2, wy - h / 2, w, h);
+
+    const sym = d.type === "locked" ? "L" : d.type === "stuck" ? "S" : "";
+    if (sym && cell >= 9) {
+      ctx.fillStyle = "#1a1410";
+      ctx.font = `bold ${Math.max(8, Math.floor(cell * 0.7))}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(sym, wx, wy);
+    }
   }
 }
 

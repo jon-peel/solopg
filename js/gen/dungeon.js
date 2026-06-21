@@ -27,7 +27,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 1: per-level rooms + tree corridors. 2: room graph with loop edges (4.9.2).
 // 3: typed edges (doors/locked/stuck/secret) + door markers (4.9.3).
 // 4: doors more common + bolder markers (4.9.3 follow-up).
-export const DUNGEON_BUILD = 4;
+// 5: doors carry orientation (dx,dy) for wall-straddling rectangles + symbols.
+export const DUNGEON_BUILD = 5;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
