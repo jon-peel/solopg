@@ -145,6 +145,28 @@ test("every dungeon carries the build stamp and a layout per level", () => {
   }
 });
 
+test("ctx.size is honored and its level/room counts stay in range", () => {
+  const t = tables();
+  const sizes = sizeMeta(t);
+  for (const [name, meta] of sizes) {
+    for (let s = 0; s < 25; s++) {
+      const d = generateDungeon(t, mulberry32(s), { size: name });
+      assert.equal(d.size, name);
+      assert.ok(
+        d.levels.length >= meta.levels[0] && d.levels.length <= meta.levels[1],
+        `${name}: levels ${d.levels.length} within ${meta.levels}`,
+      );
+    }
+  }
+});
+
+test("an unknown ctx.size falls back to a rolled size", () => {
+  const t = tables();
+  const valid = new Set([...sizeMeta(t).keys()]);
+  const d = generateDungeon(t, mulberry32(1), { size: "Gigantic" });
+  assert.ok(valid.has(d.size), "fell back to a real size");
+});
+
 test("ctx.theme is honored for every level", () => {
   const t = tables();
   for (let s = 0; s < 50; s++) {

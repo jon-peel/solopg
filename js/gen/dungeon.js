@@ -97,16 +97,20 @@ function buildLevelMonsters(families, theme, isDeepest, rng) {
  * @param {Map<string,object>} tables incl. dungeon-size, dungeon-theme,
  *   dungeon-room, monster-families, dungeon-family.
  * @param {() => number} rng a dedicated sub-stream for this dungeon.
- * @param {{ theme?: string, terrain?: string }} [ctx] the dungeon's theme
- *   (chosen at POI roll time) drives every level; falls back to a rolled theme.
- * @returns {{ size: string, theme: string, levels: object[] }}
+ * @param {{ theme?: string, size?: string, terrain?: string }} [ctx] the
+ *   dungeon's theme + size (both chosen at POI creation) drive generation;
+ *   each falls back to a roll when absent/unknown.
+ * @returns {{ build: number, size: string, theme: string, levels: object[] }}
  */
 export function generateDungeon(tables, rng, ctx = {}) {
   const roomTable = tables.get("dungeon-room");
+  const sizeTable = tables.get("dungeon-size");
 
-  // One theme per dungeon (from the POI); every level inherits it.
+  // One theme + size per dungeon (from the POI); every level inherits the theme.
   const theme = ctx.theme || rollTable(tables.get("dungeon-theme"), rng).value;
-  const size = rollTable(tables.get("dungeon-size"), rng).value;
+  const forcedSize =
+    ctx.size && sizeTable.entries.find((e) => e.value.size === ctx.size);
+  const size = forcedSize ? forcedSize.value : rollTable(sizeTable, rng).value;
   const levelCount = randInt(rng, size.levels[0], size.levels[1]);
 
   const levels = [];

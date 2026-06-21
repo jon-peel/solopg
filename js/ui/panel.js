@@ -119,8 +119,12 @@ function renderPoiSection(sel, hex, model) {
     sel.appendChild(none);
   }
 
-  // Single "Add POI" dropdown: Random + each specific type.
-  sel.appendChild(addPoiMenu(model));
+  // Add controls: dungeons (with size choice) get their own menu beside Add POI.
+  const adders = document.createElement("div");
+  adders.className = "tile-actions";
+  adders.appendChild(addDungeonMenu(model));
+  adders.appendChild(addPoiMenu(model));
+  sel.appendChild(adders);
 }
 
 // Render a dungeon's interior into the POI drill-in box: a size/levels header,
@@ -194,12 +198,22 @@ function buildMenu(summaryText, items) {
   return menu;
 }
 
-// "Add POI" dropdown: Random, then types alphabetically.
+// "Add POI" dropdown: Random, then types alphabetically. Dungeons have their own
+// menu (size choice), so they're excluded here — a "Random" POI can still be one.
 function addPoiMenu(model) {
-  const types = [...(model.poiTypes || [])].sort();
+  const types = [...(model.poiTypes || [])].filter((t) => t !== "dungeon").sort();
   return buildMenu("Add POI ▾", [
     { label: "Random", onClick: model.onAddRandomPoi },
     ...types.map((t) => ({ label: t, onClick: () => model.onAddPoi(t) })),
+  ]);
+}
+
+// "Add dungeon" dropdown: random size, then each named size from the table.
+function addDungeonMenu(model) {
+  const sizes = model.dungeonSizes || [];
+  return buildMenu("Add dungeon ▾", [
+    { label: "Random size", onClick: () => model.onAddDungeon() },
+    ...sizes.map((s) => ({ label: s, onClick: () => model.onAddDungeon(s) })),
   ]);
 }
 
