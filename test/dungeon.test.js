@@ -134,6 +134,25 @@ test("each room carries content-appropriate detail", () => {
   }
 });
 
+test("cave dungeons have far fewer crafted doors than built dungeons", () => {
+  const t = tables();
+  const doorRate = (theme) => {
+    let doors = 0, edges = 0;
+    for (let s = 0; s < 120; s++) {
+      for (const lvl of generateDungeon(t, mulberry32(s), { size: "Sizable", theme }).levels) {
+        for (const e of lvl.layout.edges) {
+          edges++;
+          if (e.type === "door" || e.type === "locked") doors++;
+        }
+      }
+    }
+    return doors / edges;
+  };
+  const cave = doorRate("Cave complex");
+  const ruin = doorRate("Ruin");
+  assert.ok(cave < ruin * 0.5, `caves (${cave.toFixed(2)}) should have far fewer doors than ruin (${ruin.toFixed(2)})`);
+});
+
 test("themes come from the dungeon-theme table", () => {
   const t = tables();
   const themes = new Set(t.get("dungeon-theme").entries.map((e) => e.value));

@@ -198,6 +198,18 @@ test("pinned rooms are placed at their given rects (for vertical stairs)", () =>
   }
 });
 
+test("doorStyle natural yields mostly open passages", () => {
+  let open = 0, total = 0;
+  for (let s = 0; s < 100; s++) {
+    const lay = layoutLevel(makeRooms(8), mulberry32(s), { doorStyle: "natural" });
+    for (const e of lay.edges) {
+      total++;
+      if (e.type === "open") open++;
+    }
+  }
+  assert.ok(open / total > 0.6, `natural style should be mostly open, got ${(open / total).toFixed(2)}`);
+});
+
 test("a single-room level needs no corridors", () => {
   const lay = layoutLevel(makeRooms(1), mulberry32(1));
   assert.equal(lay.rooms.length, 1);

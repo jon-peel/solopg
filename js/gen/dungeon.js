@@ -36,7 +36,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 //     treasure kind+guard (4.9.5).
 // 11: true vertical stairs — stair-up rooms pinned over their down-room (4.9.8).
 // 12: per-room lighting, decaying with distance/depth from an entrance (4.9.10).
-export const DUNGEON_BUILD = 12;
+// 13: theme-aware doors (caves open-heavy) + rare Vast (5-6 level) size (4.9.9).
+export const DUNGEON_BUILD = 13;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -187,6 +188,7 @@ export function generateDungeon(tables, rng, ctx = {}) {
     const incoming = pinsByLevel.get(i) || [];
     const layout = layoutLevel(rooms, rng, {
       pins: incoming.map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h })),
+      doorStyle: theme === "Cave complex" ? "natural" : "built",
     });
     levels.push({ depth: i + 1, theme, family, encounters, rooms, layout });
 

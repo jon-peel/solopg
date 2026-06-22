@@ -16,7 +16,8 @@ const ROOM_MAX = 5;
 // Edge (passage) types. Weighted JS consts (structural, like the other layout
 // consts). TREE edges connect the dungeon and are NEVER secret, so every room is
 // reachable without finding a secret door; LOOP edges are redundant shortcuts and
-// may be secret/locked/stuck.
+// may be secret/locked/stuck. Two styles: "built" (crafted doors) and "natural"
+// (caves — mostly open passages, the odd cave-in [stuck] or fissure [secret]).
 const TREE_DOORS = {
   id: "door-tree",
   entries: [
@@ -35,6 +36,28 @@ const LOOP_DOORS = {
     { weight: 1, value: "stuck" },
     { weight: 1, value: "locked" },
   ],
+};
+const CAVE_TREE_DOORS = {
+  id: "door-cave-tree",
+  entries: [
+    { weight: 10, value: "open" },
+    { weight: 1, value: "door" },
+    { weight: 2, value: "stuck" },
+    { weight: 1, value: "locked" },
+  ],
+};
+const CAVE_LOOP_DOORS = {
+  id: "door-cave-loop",
+  entries: [
+    { weight: 8, value: "open" },
+    { weight: 1, value: "door" },
+    { weight: 2, value: "secret" },
+    { weight: 2, value: "stuck" },
+  ],
+};
+const DOOR_STYLES = {
+  built: { tree: TREE_DOORS, loop: LOOP_DOORS },
+  natural: { tree: CAVE_TREE_DOORS, loop: CAVE_LOOP_DOORS },
 };
 
 // True if rectangles a and b overlap when each is grown by `pad` cells.
@@ -111,8 +134,9 @@ function pathCells(a, b, horizFirst) {
  * Lay out one dungeon level.
  * @param {{n:number}[]} rooms the level's stocked rooms (only `n` is used).
  * @param {() => number} rng deterministic sub-stream.
- * @param {{ side?: number, pins?: {x:number,y:number,w:number,h:number}[] }} [opts]
+ * @param {{ side?: number, pins?: {x:number,y:number,w:number,h:number}[], doorStyle?: string }} [opts]
  *   pins: rects placed FIRST (the first `pins.length` rooms), for vertical stairs.
+ *   doorStyle: "built" (default) or "natural" (caves — open-heavy door weights).
  * @returns {{ grid:{w:number,h:number}, rooms:{n:number,x:number,y:number,w:number,h:number}[],
  *   corridors:{x:number,y:number}[], edges:{a:number,b:number,type:string}[],
  *   doors:{x:number,y:number,type:string,dx:number,dy:number}[], entrance:number }}
@@ -243,9 +267,11 @@ export function layoutLevel(rooms, rng, opts = {}) {
   }
 
   // 3) Type each edge. Tree edges never secret (keeps every room reachable);
-  //    loop edges may be secret/locked/stuck.
+  //    loop edges may be secret/locked/stuck. Door style varies by theme
+  //    (caves lean to open passages).
+  const style = DOOR_STYLES[opts.doorStyle] || DOOR_STYLES.built;
   for (const e of edges) {
-    e.type = rollTable(e.loop ? LOOP_DOORS : TREE_DOORS, rng).value;
+    e.type = rollTable(e.loop ? style.loop : style.tree, rng).value;
     delete e.loop;
   }
 
