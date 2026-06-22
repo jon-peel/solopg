@@ -26,7 +26,13 @@ let level = null; // { layout, rooms, ... }
 let marks = null; // { entrance, exit, down, up } : Sets of room numbers
 let selectedRoom = null;
 let onRoomClick = () => {};
-let hitRects = []; // { n, x, y, w, h } in CSS px, for click testing
+let hitRects = []; // { n, x, y, w, h } in FITTED CSS px (pre-camera), for click testing
+let camera = { scale: 1, x: 0, y: 0 }; // user pan/zoom on top of the fit-to-view base
+let drag = null; // { x, y, moved } while a pointer is down
+
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 6;
+const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 
 /** Attach the renderer to a canvas. Call once. */
 export function attachDungeon(canvasEl, cbs = {}) {
@@ -35,6 +41,10 @@ export function attachDungeon(canvasEl, cbs = {}) {
   if (cbs.onRoomClick) onRoomClick = cbs.onRoomClick;
   new ResizeObserver(() => resize()).observe(canvas);
   canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointerleave", onPointerUp);
+  canvas.addEventListener("wheel", onWheel, { passive: false });
   resize();
 }
 
@@ -47,9 +57,16 @@ export function setLevel(lvl, m = null) {
   level = lvl;
   marks = m;
   selectedRoom = null;
+  camera = { scale: 1, x: 0, y: 0 }; // re-fit on each level change
   // The canvas may have been sized while its container was hidden; re-measure
   // now that the view is visible so the backing store matches (resize renders).
   resize();
+}
+
+/** Reset pan/zoom to fit the whole level. */
+export function fitView() {
+  camera = { scale: 1, x: 0, y: 0 };
+  render();
 }
 
 /** Update just the connector/state marks and redraw (keeps the selection). */
@@ -105,6 +122,12 @@ export function render() {
     ctx.fillText("No map for this level.", rect.width / 2, rect.height / 2);
     return;
   }
+
+  // User pan/zoom sits on top of the fit-to-view base. Drawing + fitted hitRects
+  // are computed at scale 1; the camera transform handles pan/zoom (and scales
+  // text/badges, fixing tiny-cell readability when zoomed in).
+  ctx.translate(camera.x, camera.y);
+  ctx.scale(camera.scale, camera.scale);
 
   const layout = level.layout;
   const bb = boundingBox(layout);
@@ -235,14 +258,58 @@ export function render() {
   }
 }
 
-function onPointerDown(e) {
+function pointerPos(e) {
   const rect = canvas.getBoundingClientRect();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function onPointerDown(e) {
+  const p = pointerPos(e);
+  drag = { x: p.x, y: p.y, moved: false };
+  canvas.setPointerCapture?.(e.pointerId);
+}
+
+function onPointerMove(e) {
+  if (!drag) return;
+  const p = pointerPos(e);
+  const dx = p.x - drag.x;
+  const dy = p.y - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+  drag.moved = true;
+  camera.x += dx;
+  camera.y += dy;
+  drag.x = p.x;
+  drag.y = p.y;
+  render();
+}
+
+function onPointerUp(e) {
+  if (!drag) return;
+  const wasDrag = drag.moved;
+  drag = null;
+  if (wasDrag) return; // a pan, not a click
+  // Click: inverse-transform into fitted space and hit-test.
+  const p = pointerPos(e);
+  const fx = (p.x - camera.x) / camera.scale;
+  const fy = (p.y - camera.y) / camera.scale;
   for (const r of hitRects) {
-    if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) {
+    if (fx >= r.x && fx <= r.x + r.w && fy >= r.y && fy <= r.y + r.h) {
       onRoomClick(r.n);
       return;
     }
   }
+}
+
+function onWheel(e) {
+  if (!level || !level.layout) return;
+  e.preventDefault();
+  const p = pointerPos(e);
+  const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * Math.exp(-e.deltaY * 0.0015)));
+  // Keep the point under the cursor fixed while zooming.
+  const worldX = (p.x - camera.x) / camera.scale;
+  const worldY = (p.y - camera.y) / camera.scale;
+  camera.scale = next;
+  camera.x = p.x - worldX * next;
+  camera.y = p.y - worldY * next;
+  render();
 }

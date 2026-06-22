@@ -137,6 +137,49 @@ button:hover {
   min-height: 0;
   display: block;
   background: #0d0f15;
+  cursor: grab;
+}
+
+#dungeon-canvas:active {
+  cursor: grabbing;
+}
+
+#dungeon-legend {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  max-width: 16rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  background: rgba(13, 15, 21, 0.92);
+  border: 1px solid var(--border, #2b3140);
+  border-radius: 6px;
+}
+
+#dungeon-legend[hidden] {
+  display: none;
+}
+
+#dungeon-legend .legend-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.7rem;
+  margin-top: 0.35rem;
+}
+
+#dungeon-legend .legend-group span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+#dungeon-legend .sw {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  display: inline-block;
 }
 
 #selection {

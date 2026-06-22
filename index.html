@@ -34,8 +34,35 @@
             <strong id="dungeon-title"></strong>
             <span class="spacer"></span>
             <div id="dungeon-levels"></div>
+            <button id="btn-dungeon-fit">Fit</button>
+            <button id="btn-dungeon-legend">Legend</button>
           </div>
           <canvas id="dungeon-canvas"></canvas>
+          <div id="dungeon-legend" hidden>
+            <strong>Legend</strong>
+            <div class="legend-group">
+              <span><i class="sw" style="background:#7c3b32"></i>Monster</span>
+              <span><i class="sw" style="background:#7c6b32"></i>Trap</span>
+              <span><i class="sw" style="background:#2f3542"></i>Empty</span>
+              <span><i class="sw" style="background:#3b4b7c"></i>Special</span>
+            </div>
+            <div class="legend-group">
+              <span><i class="sw" style="background:#caa46a"></i>Door</span>
+              <span><i class="sw" style="background:#c0524a"></i>L locked</span>
+              <span><i class="sw" style="background:#c98a3a"></i>J stuck</span>
+              <span><i class="sw" style="background:#9a6fd0"></i>S secret</span>
+            </div>
+            <div class="legend-group">
+              <span><b style="color:#5fbf77">E</b> entrance</span>
+              <span><b style="color:#5fbf77">X</b> exit</span>
+              <span><b style="color:#6ec6d6">▲▼</b> stairs (shaft = panel)</span>
+            </div>
+            <div class="legend-group">
+              <span><b style="color:#6ec6d6">•</b> explored</span>
+              <span><b style="color:#5fbf77">✓</b> cleared</span>
+              <span><b style="color:#d8b24a">$</b> looted</span>
+            </div>
+          </div>
         </section>
       </div>
       <aside id="panel"></aside>

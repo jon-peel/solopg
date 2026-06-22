@@ -27,7 +27,7 @@ import {
   getLastWorldId,
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel } from "./panel.js";
-import { attachDungeon, setLevel, setMarks, setSelectedRoom } from "./dungeon-map.js";
+import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView } from "./dungeon-map.js";
 import {
   attachMap,
   setWorld,
@@ -408,9 +408,14 @@ function closeDungeonView() {
   dungeonPoi = null;
   dungeonRoomN = null;
   $("dungeon-view").hidden = true;
+  $("dungeon-legend").hidden = true; // collapse the legend when leaving
   setLevel(null);
   selectedPoiId = null; // back to the hex's POI list
   renderSelection();
+}
+
+function onToggleLegend() {
+  $("dungeon-legend").hidden = !$("dungeon-legend").hidden;
 }
 
 function renderLevelSwitcher() {
@@ -653,6 +658,8 @@ function wire() {
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
+  $("btn-dungeon-fit").addEventListener("click", fitView);
+  $("btn-dungeon-legend").addEventListener("click", onToggleLegend);
 }
 
 let iconsOn = true;

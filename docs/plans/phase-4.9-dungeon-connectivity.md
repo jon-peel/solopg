@@ -122,5 +122,7 @@ Factions-inside ties to the deferred **Factions** phase — keep occupants as fa
 Dungeon art/tiles; restocking-over-time; full faction machinery inside dungeons; printable PDF export.
 
 ## Status
-- 4.9.1 ◻  · 4.9.2 ◻  · 4.9.3 ◻  · 4.9.4 ◻  · 4.9.5 ◻  · 4.9.6 ◻  · 4.9.7 ◻
-  *(high-level locked; each step gets its own `phase-4.9.N-*.md` sub-plan at build time)*
+- 4.9.1 ✅ · 4.9.2 ✅ · 4.9.3 ✅ · 4.9.4 ✅ · 4.9.5 ✅ · 4.9.6 ✅ · 4.9.7 ✅ (pending final manual test)
+  *(each step has its own `phase-4.9.N-*.md` sub-plan)*
+- **Deferred follow-ups:** reroll a dungeon/level; enter a dungeon by clicking its hex-map glyph;
+  monster stat detail (out of scope — system-agnostic).
