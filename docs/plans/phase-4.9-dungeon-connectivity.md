@@ -124,5 +124,7 @@ Dungeon art/tiles; restocking-over-time; full faction machinery inside dungeons;
 ## Status
 - 4.9.1 ✅ · 4.9.2 ✅ · 4.9.3 ✅ · 4.9.4 ✅ · 4.9.5 ✅ · 4.9.6 ✅ · 4.9.7 ✅ (pending final manual test)
   *(each step has its own `phase-4.9.N-*.md` sub-plan)*
-- **Deferred follow-ups:** reroll a dungeon/level; enter a dungeon by clicking its hex-map glyph;
-  monster stat detail (out of scope — system-agnostic).
+- **Deferred follow-ups:** **4.9.8 — square grid overlay + true vertical stairs** (draw a grid;
+  co-place stair-up rooms over the stair-down room across levels so they physically overlap on the
+  grid); reroll a dungeon/level; enter a dungeon by clicking its hex-map glyph; monster stat detail
+  (out of scope — system-agnostic).
