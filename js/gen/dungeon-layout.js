@@ -111,7 +111,8 @@ function pathCells(a, b, horizFirst) {
  * Lay out one dungeon level.
  * @param {{n:number}[]} rooms the level's stocked rooms (only `n` is used).
  * @param {() => number} rng deterministic sub-stream.
- * @param {{ side?: number }} [opts]
+ * @param {{ side?: number, pins?: {x:number,y:number,w:number,h:number}[] }} [opts]
+ *   pins: rects placed FIRST (the first `pins.length` rooms), for vertical stairs.
  * @returns {{ grid:{w:number,h:number}, rooms:{n:number,x:number,y:number,w:number,h:number}[],
  *   corridors:{x:number,y:number}[], edges:{a:number,b:number,type:string}[],
  *   doors:{x:number,y:number,type:string,dx:number,dy:number}[], entrance:number }}
@@ -122,28 +123,59 @@ export function layoutLevel(rooms, rng, opts = {}) {
   if (count === 0)
     return { grid: { w: 8, h: 8 }, rooms: [], corridors: [], edges: [], doors: [], entrance: null };
 
+  const pins = opts.pins || [];
+  const pinnedCount = Math.min(pins.length, count);
+
   // Grid sized generously for the room count so placement (incl. a 1-cell gap)
-  // reliably succeeds; grow and retry on the rare miss.
-  let side = Math.max(16, opts.side || Math.ceil(Math.sqrt(count)) * 9);
+  // reliably succeeds; grow and retry on the rare miss. Also large enough for any
+  // pin (a pinned stair room from an adjacent level).
+  let side = Math.max(18, opts.side || Math.ceil(Math.sqrt(count)) * 11);
+  for (const p of pins) side = Math.max(side, p.x + p.w + 1, p.y + p.h + 1);
   let placed = null;
-  for (let grow = 0; grow < 6 && !placed; grow++, side += 6) {
+  for (let grow = 0; grow < 8 && !placed; grow++, side += 8) {
     const grid = { w: side, h: side };
     const acc = [];
     let ok = true;
-    for (const room of rooms) {
-      const rect = placeRoom(rng, grid, acc);
-      if (!rect) {
+    // Pinned rooms first, at their exact rects (clamped into the grid).
+    for (let k = 0; k < pinnedCount; k++) {
+      const p = pins[k];
+      const w = Math.min(p.w, side - 2);
+      const h = Math.min(p.h, side - 2);
+      const x = Math.min(Math.max(1, p.x), side - w - 1);
+      const y = Math.min(Math.max(1, p.y), side - h - 1);
+      const rect = { x, y, w, h };
+      if (acc.some((a) => overlaps(a, rect, 0))) {
         ok = false;
         break;
       }
-      acc.push({ n: room.n, ...rect });
+      acc.push({ n: rooms[k].n, ...rect });
+    }
+    if (ok) {
+      for (let i = pinnedCount; i < rooms.length; i++) {
+        const rect = placeRoom(rng, grid, acc);
+        if (!rect) {
+          ok = false;
+          break;
+        }
+        acc.push({ n: rooms[i].n, ...rect });
+      }
     }
     if (ok) placed = acc;
   }
   if (!placed) {
-    // Extremely unlikely; degrade gracefully with a stacked column.
-    placed = rooms.map((room, i) => ({ n: room.n, x: 1, y: 1 + i * 4, w: 3, h: 3 }));
-    side = 4 + rooms.length * 4;
+    // Extremely unlikely; degrade gracefully — keep pinned rooms on their rects
+    // (so vertical stairs still line up) and stack the rest in a side column.
+    const acc = [];
+    for (let k = 0; k < pinnedCount; k++) {
+      const p = pins[k];
+      acc.push({ n: rooms[k].n, x: p.x, y: p.y, w: p.w, h: p.h });
+    }
+    const colX = Math.max(1, ...pins.map((p) => p.x + p.w + 2), 1);
+    for (let i = pinnedCount; i < rooms.length; i++) {
+      acc.push({ n: rooms[i].n, x: colX, y: 1 + (i - pinnedCount) * 4, w: 3, h: 3 });
+    }
+    placed = acc;
+    side = Math.max(colX + 5, 4 + rooms.length * 4);
   }
   const grid = { w: side, h: side };
 

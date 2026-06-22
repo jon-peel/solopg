@@ -182,6 +182,22 @@ test("doors list only visible types, sit on corridor cells, carry one-axis orien
   }
 });
 
+test("pinned rooms are placed at their given rects (for vertical stairs)", () => {
+  for (let s = 0; s < 80; s++) {
+    const pins = [{ x: 6, y: 8, w: 4, h: 3 }, { x: 20, y: 15, w: 3, h: 4 }];
+    const lay = layoutLevel(makeRooms(7), mulberry32(s), { pins });
+    // The first `pins.length` rooms must sit exactly on the pins.
+    pins.forEach((p, k) => {
+      const r = lay.rooms[k];
+      assert.deepEqual({ x: r.x, y: r.y, w: r.w, h: r.h }, p, `pin ${k} (seed ${s})`);
+    });
+    // And nothing overlaps.
+    for (let i = 0; i < lay.rooms.length; i++)
+      for (let j = i + 1; j < lay.rooms.length; j++)
+        assert.ok(!rectsOverlap(lay.rooms[i], lay.rooms[j]), `overlap (seed ${s})`);
+  }
+});
+
 test("a single-room level needs no corridors", () => {
   const lay = layoutLevel(makeRooms(1), mulberry32(1));
   assert.equal(lay.rooms.length, 1);

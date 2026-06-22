@@ -34,7 +34,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 9: more multi-stairs (scale w/ size), level-skipping shafts, more entrances.
 // 10: rich room contents — trap/special/dressing detail, monster number+status,
 //     treasure kind+guard (4.9.5).
-export const DUNGEON_BUILD = 10;
+// 11: true vertical stairs — stair-up rooms pinned over their down-room (4.9.8).
+export const DUNGEON_BUILD = 11;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -130,9 +131,21 @@ export function generateDungeon(tables, rng, ctx = {}) {
   const size = forcedSize ? forcedSize.value : rollTable(sizeTable, rng).value;
   const levelCount = randInt(rng, size.levels[0], size.levels[1]);
 
+  const sizeName = size.size;
+  const big = sizeName === "Sizable" || sizeName === "Sprawling";
+  const stairChance = sizeName === "Sprawling" ? 0.6 : big ? 0.45 : 0.3;
+  // Decide up-front which level (if any) sources a level-skipping shaft.
+  let shaftSource = -1;
+  if (levelCount >= 3 && rng() < (big ? 0.5 : 0.25)) shaftSource = randInt(rng, 0, levelCount - 3);
+
   const levels = [];
-  for (let depth = 1; depth <= levelCount; depth++) {
-    const isDeepest = depth === levelCount;
+  const stairs = [];
+  const pinsByLevel = new Map(); // target level index -> [{ x,y,w,h, rec }]
+
+  // Generate top-down so each level's stair rooms can be PINNED directly above
+  // their down-stair partner from the level(s) above (true vertical stairs).
+  for (let i = 0; i < levelCount; i++) {
+    const isDeepest = i + 1 === levelCount;
     const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
 
@@ -169,12 +182,44 @@ export function generateDungeon(tables, rng, ctx = {}) {
       rooms.push({ n, content, monster, trap, special, dressing, treasure });
     }
 
-    const layout = layoutLevel(rooms, rng);
-    levels.push({ depth, theme, family, encounters, rooms, layout });
+    const incoming = pinsByLevel.get(i) || [];
+    const layout = layoutLevel(rooms, rng, {
+      pins: incoming.map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h })),
+    });
+    levels.push({ depth: i + 1, theme, family, encounters, rooms, layout });
+
+    // Resolve incoming pins: the room laid out at pin k is this stair's UP end.
+    const pinnedCount = Math.min(incoming.length, rooms.length);
+    incoming.forEach((p, k) => {
+      const up = k < pinnedCount ? rooms[k].n : nearestRoom(p, layout.rooms, new Set()).n;
+      p.rec.up = { level: i, room: up };
+      stairs.push(p.rec);
+    });
+
+    // Register this level's outgoing stairs/shaft as pins for the deeper level,
+    // using its positioned rooms so the up rooms land exactly above them.
+    if (i < levelCount - 1) {
+      const cap = Math.min(layout.rooms.length, 3);
+      let count = 1;
+      while (count < cap && rng() < stairChance) count++;
+      for (const dr of spreadRooms(layout.rooms, count, rng)) {
+        registerPin(pinsByLevel, i + 1, dr, { down: { level: i, room: dr.n }, kind: "stairs" });
+      }
+    }
+    if (i === shaftSource) {
+      const dr = pick(rng, layout.rooms);
+      registerPin(pinsByLevel, i + 2, dr, { down: { level: i, room: dr.n }, kind: "shaft" });
+    }
   }
 
-  const { stairs, entrances, exits } = connectLevels(levels, size.size, ctx.terrain, rng);
-  return { build: DUNGEON_BUILD, size: size.size, theme, levels, stairs, entrances, exits };
+  const { entrances, exits } = surfaceConnections(levels, sizeName, ctx.terrain, rng);
+  return { build: DUNGEON_BUILD, size: sizeName, theme, levels, stairs, entrances, exits };
+}
+
+// Queue a pin (a positioned room's rect) for the UP end of a stair on `target`.
+function registerPin(map, target, room, rec) {
+  if (!map.has(target)) map.set(target, []);
+  map.get(target).push({ x: room.x, y: room.y, w: room.w, h: room.h, rec });
 }
 
 // Pick up to `count` distinct rooms from a level (deterministic, no replacement).
@@ -229,42 +274,11 @@ function nearestRoom(downRoom, targetRooms, used) {
   return best;
 }
 
-// Connect levels. Stairs join adjacent levels (>=1, count scales with size up to
-// 3) with each up-stair at the room NEAREST below its down-stair (vertical
-// alignment) and multiple down-stairs spread apart. Deep dungeons may also get a
-// level-skipping "shaft" (a long drop). Plus surface entrances on level 0 (count
-// scales with size, any size can have several) and terrain-gated deeper exits.
-function connectLevels(levels, sizeName, terrain, rng) {
-  const stairs = [];
-  const big = sizeName === "Sizable" || sizeName === "Sprawling";
-  const stairChance = sizeName === "Sprawling" ? 0.6 : big ? 0.45 : 0.3;
-
-  for (let i = 0; i < levels.length - 1; i++) {
-    const upper = levels[i].layout.rooms; // positioned rooms (n,x,y,w,h)
-    const lower = levels[i + 1].layout.rooms;
-    const cap = Math.min(upper.length, lower.length, 3);
-    let count = 1;
-    while (count < cap && rng() < stairChance) count++;
-
-    const downRooms = spreadRooms(upper, count, rng);
-    const usedLower = new Set();
-    for (const dr of downRooms) {
-      const up = nearestRoom(dr, lower, usedLower);
-      usedLower.add(up.n);
-      stairs.push({ down: { level: i, room: dr.n }, up: { level: i + 1, room: up.n }, kind: "stairs" });
-    }
-  }
-
-  // Occasional level-skipping shaft (links level i -> i+2) in deeper dungeons.
-  if (levels.length >= 3 && rng() < (big ? 0.5 : 0.25)) {
-    const i = randInt(rng, 0, levels.length - 3);
-    const dr = pick(rng, levels[i].layout.rooms);
-    const up = nearestRoom(dr, levels[i + 2].layout.rooms, new Set());
-    stairs.push({ down: { level: i, room: dr.n }, up: { level: i + 2, room: up.n }, kind: "shaft" });
-  }
-
-  // Entrances: always >=1; each extra entrance gets likelier with size (so even
-  // a Cramped dungeon can be a tunnel-through / all-rooms-open ruin, just rarely).
+// Surface connections (stairs are built top-down in generateDungeon). Entrances:
+// always >=1 on level 0; each extra gets likelier with size (so even a Cramped
+// dungeon can be a tunnel-through / all-rooms-open ruin, just rarely). Exits:
+// terrain-gated, can surface on a deeper level for Hills/Mountains.
+function surfaceConnections(levels, sizeName, terrain, rng) {
   const entranceChance =
     { Cramped: 0.22, Modest: 0.32, Sizable: 0.48, Sprawling: 0.62 }[sizeName] ?? 0.3;
   let entranceCount = 1;
@@ -284,5 +298,5 @@ function connectLevels(levels, sizeName, terrain, rng) {
     }
   }
 
-  return { stairs, entrances, exits };
+  return { entrances, exits };
 }

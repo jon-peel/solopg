@@ -24,6 +24,7 @@ let ctx = null;
 let dpr = 1;
 let level = null; // { layout, rooms, ... }
 let marks = null; // { entrance, exit, down, up } : Sets of room numbers
+let frame = null; // shared {minX,minY,w,h} bounding box across all levels (or null)
 let selectedRoom = null;
 let onRoomClick = () => {};
 let hitRects = []; // { n, x, y, w, h } in FITTED CSS px (pre-camera), for click testing
@@ -53,13 +54,13 @@ export function attachDungeon(canvasEl, cbs = {}) {
  * @param {object|null} lvl
  * @param {{entrance:Set,exit:Set,down:Set,up:Set}|null} [m] connector marks by room.
  */
-export function setLevel(lvl, m = null) {
+export function setLevel(lvl, m = null, f = null) {
   level = lvl;
   marks = m;
+  frame = f; // shared dungeon-wide bounding box, so levels line up; null = per-level fit
   selectedRoom = null;
-  camera = { scale: 1, x: 0, y: 0 }; // re-fit on each level change
-  // The canvas may have been sized while its container was hidden; re-measure
-  // now that the view is visible so the backing store matches (resize renders).
+  // Camera is NOT reset here, so switching levels keeps the view (overlapping
+  // stairs stay in place). Opening a dungeon calls fitView() to frame it.
   resize();
 }
 
@@ -130,7 +131,8 @@ export function render() {
   ctx.scale(camera.scale, camera.scale);
 
   const layout = level.layout;
-  const bb = boundingBox(layout);
+  // Use the shared dungeon-wide frame (so every level lines up) when given.
+  const bb = frame || boundingBox(layout);
   const cell = Math.max(
     4,
     Math.floor(
@@ -142,6 +144,20 @@ export function render() {
   const oy = Math.round((rect.height - bb.h * cell) / 2) - bb.minY * cell;
   const sx = (gx) => ox + gx * cell;
   const sy = (gy) => oy + gy * cell;
+
+  // Square grid (10 ft cells) under everything, for spatial reference.
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 1 / camera.scale;
+  ctx.beginPath();
+  for (let gx = bb.minX; gx <= bb.minX + bb.w; gx++) {
+    ctx.moveTo(sx(gx), sy(bb.minY));
+    ctx.lineTo(sx(gx), sy(bb.minY + bb.h));
+  }
+  for (let gy = bb.minY; gy <= bb.minY + bb.h; gy++) {
+    ctx.moveTo(sx(bb.minX), sy(gy));
+    ctx.lineTo(sx(bb.minX + bb.w), sy(gy));
+  }
+  ctx.stroke();
 
   // Corridors first (under the rooms).
   ctx.fillStyle = CORRIDOR_FILL;

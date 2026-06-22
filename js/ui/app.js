@@ -70,6 +70,7 @@ let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
 let dungeonLevelIndex = 0;
 let dungeonRoomN = null; // selected room number within the current level
 let dungeonSizes = []; // size names from the dungeon-size table (for the add menu)
+let dungeonFrameBB = null; // shared bounding box for the open dungeon's levels
 
 const $ = (id) => document.getElementById(id);
 
@@ -393,15 +394,35 @@ async function onSelectPoi(id) {
 
 // --- Dungeon View (overlay) -----------------------------------------------
 
+// Dungeon-wide bounding box (union of all levels' rooms/corridors) so every
+// level renders in the same frame and shared grid coords line up across levels.
+function dungeonFrame(dungeon) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const lvl of dungeon.levels) {
+    for (const r of lvl.layout.rooms) {
+      minX = Math.min(minX, r.x); minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.w); maxY = Math.max(maxY, r.y + r.h);
+    }
+    for (const c of lvl.layout.corridors) {
+      minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
+      maxX = Math.max(maxX, c.x + 1); maxY = Math.max(maxY, c.y + 1);
+    }
+  }
+  if (minX === Infinity) { minX = minY = 0; maxX = maxY = 1; }
+  return { minX, minY, w: maxX - minX, h: maxY - minY };
+}
+
 function openDungeonView(poi) {
   const dungeon = poi.detail && poi.detail.dungeon;
   if (!dungeon) return; // nothing to show (build failed); stay on the hex map
   dungeonPoi = poi;
+  dungeonFrameBB = dungeonFrame(dungeon);
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
   // the user looking at an unchanged map ("nothing happened").
   $("dungeon-view").hidden = false;
   $("dungeon-title").textContent = `${poi.detail.theme || dungeon.theme || "Dungeon"} — ${dungeon.size}`;
   showDungeonLevel(0);
+  fitView(); // frame the whole level on open
 }
 
 function closeDungeonView() {
@@ -479,7 +500,7 @@ function showDungeonLevel(i) {
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[i];
   renderLevelSwitcher();
-  setLevel(level, marksFor(dungeon, i));
+  setLevel(level, marksFor(dungeon, i), dungeonFrameBB);
   renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo });
 }
 
@@ -514,7 +535,7 @@ function onGoTo(levelIndex, roomN) {
   if (!dungeonPoi) return;
   dungeonLevelIndex = levelIndex;
   renderLevelSwitcher();
-  setLevel(dungeonPoi.detail.dungeon.levels[levelIndex], marksFor(dungeonPoi.detail.dungeon, levelIndex));
+  setLevel(dungeonPoi.detail.dungeon.levels[levelIndex], marksFor(dungeonPoi.detail.dungeon, levelIndex), dungeonFrameBB);
   onRoomClick(roomN);
 }
 

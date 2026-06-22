@@ -272,28 +272,19 @@ test("large dungeons commonly have multiple stairs between levels", () => {
   assert.ok(multi / pairs > 0.45, `expected many multi-stair pairs, got ${((multi / pairs) * 100).toFixed(0)}%`);
 });
 
-test("an up-stair sits at the lower-level room nearest below its down-stair", () => {
+test("every stair's down-room and up-room overlap on the shared grid", () => {
   const t = tables();
-  const centerOf = (d, lvl, n) => {
-    const r = d.levels[lvl].layout.rooms.find((rr) => rr.n === n);
-    return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
-  };
-  for (let s = 0; s < 200; s++) {
-    const d = generateDungeon(t, mulberry32(s), { size: "Sizable" });
-    // Only check level-pairs with a single stair (unambiguous nearest).
-    const byPair = new Map();
-    for (const st of d.stairs) byPair.set(st.down.level, (byPair.get(st.down.level) || 0) + 1);
-    for (const st of d.stairs) {
-      if (byPair.get(st.down.level) !== 1) continue;
-      const dc = centerOf(d, st.down.level, st.down.room);
-      let nearest = null;
-      let best = Infinity;
-      for (const r of d.levels[st.up.level].layout.rooms) {
-        const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
-        const dd = (c.x - dc.x) ** 2 + (c.y - dc.y) ** 2;
-        if (dd < best) { best = dd; nearest = r.n; }
+  const rectOf = (d, lvl, n) => d.levels[lvl].layout.rooms.find((r) => r.n === n);
+  const overlap = (a, b) =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  for (let s = 0; s < 250; s++) {
+    for (const sz of ["Modest", "Sizable", "Sprawling"]) {
+      const d = generateDungeon(t, mulberry32(s), { size: sz });
+      for (const st of d.stairs) {
+        const a = rectOf(d, st.down.level, st.down.room);
+        const b = rectOf(d, st.up.level, st.up.room);
+        assert.ok(overlap(a, b), `${st.kind} rooms don't overlap (${sz} seed ${s})`);
       }
-      assert.equal(st.up.room, nearest, `stair not aligned (seed ${s}, level ${st.down.level})`);
     }
   }
 });
