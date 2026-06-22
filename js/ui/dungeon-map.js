@@ -176,9 +176,10 @@ export function render() {
     ctx.fillStyle = CONTENT_FILL[contentFor(r.n)] || CONTENT_FILL.Empty;
     ctx.fillRect(x, y, w, h);
 
-    // Warm tint for a lit room (dark is the default look).
+    // Warm glow for a lit room (dark is the default look) — stronger so it
+    // reads at a glance, plus a lamp dot top-right for the rare lit room.
     if (litRooms.has(r.n)) {
-      ctx.fillStyle = "rgba(255,176,64,0.22)";
+      ctx.fillStyle = "rgba(255,168,56,0.4)";
       ctx.fillRect(x, y, w, h);
     }
 
@@ -196,6 +197,20 @@ export function render() {
 
     ctx.fillStyle = "#e6e8ee";
     ctx.fillText(String(r.n), x + w / 2, y + h / 2);
+
+    // Lamp dot (top-right) marks a lit room unmistakably.
+    if (litRooms.has(r.n)) {
+      const rad = Math.max(2, cell * 0.22);
+      const lx = x + w - rad - 2;
+      const ly = y + rad + 2;
+      ctx.beginPath();
+      ctx.arc(lx, ly, rad, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffd27a";
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#7a4a10";
+      ctx.stroke();
+    }
   }
 
   // Doors on visible passages (open passages and secret doors draw nothing).
