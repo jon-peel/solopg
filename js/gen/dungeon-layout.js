@@ -275,16 +275,15 @@ export function layoutLevel(rooms, rng, opts = {}) {
     delete e.loop;
   }
 
-  // 4) Carve corridors and record a door marker for each non-open passage. This
-  //    is the GM map, so secret doors ARE shown (marked distinctly); a player
-  //    view can hide them later (4.9.5). The cheaper L-orientation (fewer
+  // 4) Carve corridors and record each edge's door cell (e.door). Doors markers
+  //    are derived from edge types via deriveDoors() — so a later pass (occupied
+  //    frontier) can re-type a boundary edge and rebuild the markers. This is the
+  //    GM map, so secret doors ARE shown. The cheaper L-orientation (fewer
   //    foreign-room cells) is chosen to reduce clipping.
   const byN = new Map(placed.map((p) => [p.n, p]));
   const foreignCount = (cells, ra, rb) =>
     cells.filter((c) => isRoomCell(c.x, c.y) && !inRect(c, ra) && !inRect(c, rb)).length;
   const corridorSet = new Set();
-  const doors = [];
-  const doorAt = new Set(); // dedupe: at most one marker per cell
   for (const e of edges) {
     const ra = byN.get(e.a);
     const rb = byN.get(e.b);
@@ -310,14 +309,9 @@ export function layoutLevel(rooms, rng, opts = {}) {
       }
       prev = c;
     }
-    if (doorCell && e.type !== "open") {
-      const key = `${doorCell.x},${doorCell.y}`;
-      if (!doorAt.has(key)) {
-        doorAt.add(key);
-        doors.push({ x: doorCell.x, y: doorCell.y, type: e.type, dx, dy });
-      }
-    }
+    e.door = doorCell ? { x: doorCell.x, y: doorCell.y, dx, dy } : null;
   }
+  const doors = deriveDoors(edges);
 
   const corridors = Array.from(corridorSet, (key) => {
     const [x, y] = key.split(",").map(Number);
@@ -330,4 +324,24 @@ export function layoutLevel(rooms, rng, opts = {}) {
 // True if cell (x,y) is inside rectangle r.
 function inRect(c, r) {
   return c.x >= r.x && c.x < r.x + r.w && c.y >= r.y && c.y < r.y + r.h;
+}
+
+/**
+ * Door markers from typed edges (each edge carries its `door` cell). Non-open
+ * edges get a marker; deduped to one per cell. Re-runnable after re-typing edges
+ * (the occupied-frontier pass uses this).
+ * @param {{a:number,b:number,type:string,door:object|null}[]} edges
+ * @returns {{x:number,y:number,type:string,dx:number,dy:number}[]}
+ */
+export function deriveDoors(edges) {
+  const doors = [];
+  const seen = new Set();
+  for (const e of edges) {
+    if (e.type === "open" || !e.door) continue;
+    const key = `${e.door.x},${e.door.y}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    doors.push({ x: e.door.x, y: e.door.y, type: e.type, dx: e.door.dx, dy: e.door.dy });
+  }
+  return doors;
 }

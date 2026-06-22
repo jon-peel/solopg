@@ -17,6 +17,7 @@ function tables() {
     "dungeon-treasure-guard",
     "dungeon-monster-status",
     "dungeon-light",
+    "occupiers",
   ];
   const t = new Map(
     ids.map((id) => [
@@ -91,6 +92,7 @@ test("every Monster room's monster is drawn from that level's encounter table", 
     for (const lvl of generateDungeon(t, mulberry32(s)).levels) {
       const pool = new Set(lvl.encounters.map((e) => e.value));
       for (const room of lvl.rooms) {
+        if (room.held) continue; // occupied rooms hold the interloper group, not the pool
         if (room.content === "Monster") {
           assert.ok(pool.has(room.monster.name), `${room.monster.name} in level pool`);
         } else {
@@ -112,7 +114,7 @@ test("each room carries content-appropriate detail", () => {
   for (let s = 0; s < 120; s++) {
     for (const lvl of generateDungeon(t, mulberry32(s)).levels) {
       for (const room of lvl.rooms) {
-        if (room.content === "Monster") {
+        if (room.content === "Monster" && !room.held) {
           assert.ok(room.monster.number >= 1 && room.monster.number <= 6, "1-6 appear");
           assert.ok(statuses.has(room.monster.status), "valid status");
         }
@@ -334,7 +336,7 @@ test("rooms are dark or lit with a source; lighting thins with depth", () => {
     const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
     for (const lvl of d.levels) {
       for (const r of lvl.rooms) {
-        if (r.light) assert.ok(sources.has(r.light.source), "light source from table");
+        if (r.light && !r.held) assert.ok(sources.has(r.light.source), "light source from table");
       }
     }
     for (const r of d.levels[0].rooms) { l0tot++; if (r.light) l0lit++; }
@@ -345,6 +347,43 @@ test("rooms are dark or lit with a source; lighting thins with depth", () => {
   const deep = deepLit / deepTot;
   assert.ok(l0 > deep * 3, `level 0 lighting (${l0.toFixed(3)}) should far exceed deep (${deep.toFixed(4)})`);
   assert.ok(deep < 0.03, `deep lighting should be rare, got ${deep.toFixed(4)}`);
+});
+
+test("an occupied dungeon holds a lit, locked-off cluster by an entrance", () => {
+  const t = tables();
+  const occupiers = new Set(t.get("occupiers").entries.map((e) => e.value));
+  let sawOccupied = 0;
+  for (let s = 0; s < 400 && sawOccupied < 60; s++) {
+    // Smugglers' tunnels has the highest occupation chance.
+    const d = generateDungeon(t, mulberry32(s), { size: "Sizable", theme: "Smugglers' tunnels" });
+    if (!d.occupation) continue;
+    sawOccupied++;
+    assert.ok(occupiers.has(d.occupation.by), "occupier from the table");
+    assert.equal(d.occupation.level, 0);
+    const held = new Set(d.occupation.rooms);
+    assert.ok(held.size >= 1 && held.size < d.levels[0].rooms.length, "a frontier (not whole level)");
+    // Held rooms are lit + tagged.
+    for (const r of d.levels[0].rooms) {
+      if (held.has(r.n)) {
+        assert.equal(r.held, d.occupation.by);
+        assert.ok(r.light, "held room is lit");
+      }
+    }
+    // Every boundary edge is locked (never secret) and the level stays connected.
+    for (const e of d.levels[0].layout.edges) {
+      if (held.has(e.a) !== held.has(e.b)) assert.equal(e.type, "locked", "boundary is locked");
+    }
+  }
+  assert.ok(sawOccupied > 20, `expected occupied dungeons, saw ${sawOccupied}`);
+});
+
+test("native-occupant themes are rarely occupied by interlopers", () => {
+  const t = tables();
+  let occ = 0;
+  for (let s = 0; s < 300; s++) {
+    if (generateDungeon(t, mulberry32(s), { size: "Sizable", theme: "Beast den" }).occupation) occ++;
+  }
+  assert.ok(occ / 300 < 0.15, `Beast den rarely occupied, got ${(occ / 300).toFixed(2)}`);
 });
 
 test("ctx.theme is honored for every level", () => {

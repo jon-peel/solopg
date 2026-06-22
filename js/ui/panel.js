@@ -324,6 +324,12 @@ export function renderDungeonPanel({
   sel.appendChild(h);
 
   sel.appendChild(sectionLabel(`Level ${level.depth} — ${level.family}`));
+  if (dungeon.occupation && dungeon.occupation.level === level.depth - 1) {
+    const occ = document.createElement("div");
+    occ.className = "log-line";
+    occ.textContent = `Occupied near an entrance by ${dungeon.occupation.by} (locked door beyond)`;
+    sel.appendChild(occ);
+  }
   const wandering = document.createElement("div");
   wandering.className = "log-line";
   wandering.textContent =
@@ -333,6 +339,7 @@ export function renderDungeonPanel({
   if (room) {
     sel.appendChild(sectionLabel(`Room ${room.n}`));
     for (const line of [
+      room.held ? `Held by ${room.held}` : null,
       room.monster
         ? `Monster: ${room.monster.number}× ${room.monster.name} (${room.monster.status})`
         : `Content: ${room.content}`,

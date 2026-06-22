@@ -14,7 +14,7 @@
 
 import { rollTable } from "../core/table.js";
 import { randInt, pick } from "../core/rng.js";
-import { layoutLevel } from "./dungeon-layout.js";
+import { layoutLevel, deriveDoors } from "./dungeon-layout.js";
 
 const MIN_ENCOUNTERS = 4;
 const MAX_ENCOUNTERS = 6;
@@ -37,7 +37,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 11: true vertical stairs — stair-up rooms pinned over their down-room (4.9.8).
 // 12: per-room lighting, decaying with distance/depth from an entrance (4.9.10).
 // 13: theme-aware doors (caves open-heavy) + rare Vast (5-6 level) size (4.9.9).
-export const DUNGEON_BUILD = 13;
+// 14: occupied frontier — held+lit entrance cluster, locked boundary (4.9.11).
+export const DUNGEON_BUILD = 14;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -217,8 +218,75 @@ export function generateDungeon(tables, rng, ctx = {}) {
   }
 
   const { entrances, exits } = surfaceConnections(levels, sizeName, ctx.terrain, rng);
+  const occupation = assignOccupation(levels, entrances, tables.get("occupiers"), rng, theme);
   assignLighting(levels, stairs, entrances, lightTable, rng);
-  return { build: DUNGEON_BUILD, size: sizeName, theme, levels, stairs, entrances, exits };
+  return { build: DUNGEON_BUILD, size: sizeName, theme, levels, stairs, entrances, exits, occupation };
+}
+
+// Occupied frontier: a chance interlopers hold the rooms by an entrance — lit,
+// with a locked door sealing the dark depths they never explored. Themes that
+// are abandoned/empty attract squatters; native-occupant themes rarely do.
+const OCCUPATION_CHANCE = {
+  "Smugglers' tunnels": 0.6,
+  "Ruined fort": 0.45,
+  "Cult shrine": 0.45,
+  Ruin: 0.4,
+  "Abandoned mine": 0.35,
+  "Cave complex": 0.35,
+  "Prison vaults": 0.3,
+  "Forgotten tomb": 0.3,
+  "Flooded cistern": 0.2,
+  Mausoleum: 0.2,
+  "Wizard's sanctum": 0.15,
+  "Goblin warren": 0.1,
+  "Beast den": 0.05,
+};
+
+function assignOccupation(levels, entrances, occupiers, rng, theme) {
+  if (rng() >= (OCCUPATION_CHANCE[theme] ?? 0.25)) return null;
+  const ents = entrances.filter((e) => e.level === 0);
+  const level0 = levels[0];
+  const rooms = level0.layout.rooms;
+  if (!ents.length || rooms.length < 2) return null; // need an entry + a frontier
+
+  // BFS a contiguous cluster from an entrance over level-0 edges.
+  const adj = new Map();
+  const link = (a, b) => {
+    if (!adj.has(a)) adj.set(a, []);
+    adj.get(a).push(b);
+  };
+  for (const e of level0.layout.edges) {
+    link(e.a, e.b);
+    link(e.b, e.a);
+  }
+  const want = Math.min(rooms.length - 1, randInt(rng, 2, 4));
+  const heldSet = new Set();
+  const order = [];
+  const queue = [pick(rng, ents).room];
+  while (queue.length && heldSet.size < want) {
+    const n = queue.shift();
+    if (heldSet.has(n)) continue;
+    heldSet.add(n);
+    order.push(n);
+    for (const m of adj.get(n) || []) if (!heldSet.has(m)) queue.push(m);
+  }
+
+  const group = rollTable(occupiers, rng).value;
+  for (const room of level0.rooms) {
+    if (!heldSet.has(room.n)) continue;
+    room.held = group;
+    room.light = { source: `Lit — held by ${group}` };
+    if (room.content === "Monster") {
+      room.monster = { name: group, number: randInt(rng, 3, 8), status: "alert" };
+    }
+  }
+  // Boundary: lock every level-0 edge crossing held<->unheld (sealed but openable).
+  for (const e of level0.layout.edges) {
+    if (heldSet.has(e.a) !== heldSet.has(e.b)) e.type = "locked";
+  }
+  level0.layout.doors = deriveDoors(level0.layout.edges);
+
+  return { by: group, level: 0, rooms: order };
 }
 
 // Lighting: dark by default; chance-to-be-lit decays with distance from the
@@ -279,6 +347,7 @@ function assignLighting(levels, stairs, entrances, lightTable, rng) {
 
   for (let l = 0; l < levels.length; l++) {
     for (const room of levels[l].rooms) {
+      if (room.held) continue; // occupied rooms are already lit by their holders
       const d = dist.get(key(l, room.n)) ?? Infinity;
       const p = Math.min(LIGHT_BASE, Math.max(LIGHT_MIN, LIGHT_BASE * LIGHT_DECAY ** d));
       room.light = rng() < p ? { source: rollTable(lightTable, rng).value } : null;
