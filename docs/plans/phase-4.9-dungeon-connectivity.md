@@ -122,9 +122,15 @@ Factions-inside ties to the deferred **Factions** phase — keep occupants as fa
 Dungeon art/tiles; restocking-over-time; full faction machinery inside dungeons; printable PDF export.
 
 ## Status
-- 4.9.1 ✅ · 4.9.2 ✅ · 4.9.3 ✅ · 4.9.4 ✅ · 4.9.5 ✅ · 4.9.6 ✅ · 4.9.7 ✅ (pending final manual test)
+- 4.9.1 ✅ · 4.9.2 ✅ · 4.9.3 ✅ · 4.9.4 ✅ · 4.9.5 ✅ · 4.9.6 ✅ · 4.9.7 ✅ · 4.9.8 ✅
   *(each step has its own `phase-4.9.N-*.md` sub-plan)*
-- **Deferred follow-ups:** **4.9.8 — square grid overlay + true vertical stairs** (draw a grid;
-  co-place stair-up rooms over the stair-down room across levels so they physically overlap on the
-  grid); reroll a dungeon/level; enter a dungeon by clicking its hex-map glyph; monster stat detail
-  (out of scope — system-agnostic).
+- **Planned follow-ups:**
+  - **4.9.9 — Cave doors + "Vast" size:** theme-aware door weights (caves lean to open passages,
+    few crafted doors; a stuck door in a cave reads as a cave-in); add a rare **Vast** size (5–6
+    levels) — very low roll-weight, always pickable from the Add-dungeon menu.
+  - **4.9.10 — Lighting (Tier A):** per-room `light`, almost always dark; small chance lit with a
+    theme-biased source + reason (candle, embers, torches, magical glow).
+  - **4.9.11 — Lighting (Tier B, occupied frontier):** a chance the dungeon is occupied — first few
+    rooms from an entrance are held + lit, a locked/secret door seals the dark monster-filled depths.
+- **Deferred:** reroll a dungeon/level; enter a dungeon by clicking its hex-map glyph; monster stat
+  detail (out of scope — system-agnostic).
