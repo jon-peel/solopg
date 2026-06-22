@@ -35,7 +35,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 10: rich room contents — trap/special/dressing detail, monster number+status,
 //     treasure kind+guard (4.9.5).
 // 11: true vertical stairs — stair-up rooms pinned over their down-room (4.9.8).
-export const DUNGEON_BUILD = 11;
+// 12: per-room lighting, decaying with distance/depth from an entrance (4.9.10).
+export const DUNGEON_BUILD = 12;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -123,6 +124,7 @@ export function generateDungeon(tables, rng, ctx = {}) {
   const treasureTable = tables.get("dungeon-treasure");
   const guardTable = tables.get("dungeon-treasure-guard");
   const statusTable = tables.get("dungeon-monster-status");
+  const lightTable = tables.get("dungeon-light");
 
   // One theme + size per dungeon (from the POI); every level inherits the theme.
   const theme = ctx.theme || rollTable(tables.get("dungeon-theme"), rng).value;
@@ -213,7 +215,73 @@ export function generateDungeon(tables, rng, ctx = {}) {
   }
 
   const { entrances, exits } = surfaceConnections(levels, sizeName, ctx.terrain, rng);
+  assignLighting(levels, stairs, entrances, lightTable, rng);
   return { build: DUNGEON_BUILD, size: sizeName, theme, levels, stairs, entrances, exits };
+}
+
+// Lighting: dark by default; chance-to-be-lit decays with distance from the
+// nearest surface entrance through the dungeon graph (a staircase costs more, so
+// depth thins lighting fast). p = BASE * DECAY^dist, never quite zero.
+const LIGHT_BASE = 0.25;
+const LIGHT_DECAY = 0.75;
+const LIGHT_STAIR_COST = 6; // hops a staircase/shaft adds (depth penalty)
+const LIGHT_MIN = 0.0004;
+
+function assignLighting(levels, stairs, entrances, lightTable, rng) {
+  const key = (l, n) => `${l}:${n}`;
+  const adj = new Map();
+  const link = (a, b, cost) => {
+    if (!adj.has(a)) adj.set(a, []);
+    adj.get(a).push({ to: b, cost });
+  };
+  for (let l = 0; l < levels.length; l++) {
+    for (const e of levels[l].layout.edges) {
+      link(key(l, e.a), key(l, e.b), 1);
+      link(key(l, e.b), key(l, e.a), 1);
+    }
+  }
+  for (const st of stairs) {
+    const a = key(st.down.level, st.down.room);
+    const b = key(st.up.level, st.up.room);
+    link(a, b, LIGHT_STAIR_COST);
+    link(b, a, LIGHT_STAIR_COST);
+  }
+
+  // Dijkstra from every entrance room (small graphs — naive min-extract is fine).
+  const dist = new Map();
+  const frontier = [];
+  for (const en of entrances) {
+    const k = key(en.level, en.room);
+    if (!dist.has(k)) {
+      dist.set(k, 0);
+      frontier.push(k);
+    }
+  }
+  const done = new Set();
+  while (frontier.length) {
+    let mi = 0;
+    for (let i = 1; i < frontier.length; i++) {
+      if ((dist.get(frontier[i]) ?? Infinity) < (dist.get(frontier[mi]) ?? Infinity)) mi = i;
+    }
+    const u = frontier.splice(mi, 1)[0];
+    if (done.has(u)) continue;
+    done.add(u);
+    for (const { to, cost } of adj.get(u) || []) {
+      const nd = dist.get(u) + cost;
+      if (nd < (dist.get(to) ?? Infinity)) {
+        dist.set(to, nd);
+        frontier.push(to);
+      }
+    }
+  }
+
+  for (let l = 0; l < levels.length; l++) {
+    for (const room of levels[l].rooms) {
+      const d = dist.get(key(l, room.n)) ?? Infinity;
+      const p = Math.min(LIGHT_BASE, Math.max(LIGHT_MIN, LIGHT_BASE * LIGHT_DECAY ** d));
+      room.light = rng() < p ? { source: rollTable(lightTable, rng).value } : null;
+    }
+  }
 }
 
 // Queue a pin (a positioned room's rect) for the UP end of a stair on `target`.

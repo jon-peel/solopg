@@ -340,6 +340,7 @@ export function renderDungeonPanel({
       room.special ? `Special: ${room.special}` : null,
       room.dressing || null,
       room.treasure ? `Treasure: ${room.treasure.kind} (${room.treasure.guard})` : null,
+      room.light ? `Lit: ${room.light.source}` : null,
       ...surface, // "Dungeon entrance (surface)", "Exit to surface"
     ].filter(Boolean)) {
       const div = document.createElement("div");

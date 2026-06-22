@@ -131,6 +131,7 @@ export function render() {
   ctx.scale(camera.scale, camera.scale);
 
   const layout = level.layout;
+  const litRooms = new Set((level.rooms || []).filter((r) => r.light).map((r) => r.n));
   // Use the shared dungeon-wide frame (so every level lines up) when given.
   const bb = frame || boundingBox(layout);
   const cell = Math.max(
@@ -174,6 +175,12 @@ export function render() {
 
     ctx.fillStyle = CONTENT_FILL[contentFor(r.n)] || CONTENT_FILL.Empty;
     ctx.fillRect(x, y, w, h);
+
+    // Warm tint for a lit room (dark is the default look).
+    if (litRooms.has(r.n)) {
+      ctx.fillStyle = "rgba(255,176,64,0.22)";
+      ctx.fillRect(x, y, w, h);
+    }
 
     // Dim a cleared room (drawn under the number so it stays readable).
     if (marks && marks.state && marks.state[r.n] && marks.state[r.n].cleared) {

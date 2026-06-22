@@ -57,6 +57,7 @@ const HEX_TABLE_IDS = [
   "dungeon-treasure",
   "dungeon-treasure-guard",
   "dungeon-monster-status",
+  "dungeon-light",
   "monster-families",
   "dungeon-family",
 ];

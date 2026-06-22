@@ -16,6 +16,7 @@ function tables() {
     "dungeon-treasure",
     "dungeon-treasure-guard",
     "dungeon-monster-status",
+    "dungeon-light",
   ];
   const t = new Map(
     ids.map((id) => [
@@ -304,6 +305,27 @@ test("exits only surface on deeper levels for hill/mountain terrain", () => {
     }
   }
   assert.ok(sawDeepExit, "Mountains dungeons sometimes have a deeper exit");
+});
+
+test("rooms are dark or lit with a source; lighting thins with depth", () => {
+  const t = tables();
+  const sources = new Set(t.get("dungeon-light").entries.map((e) => e.value));
+  let l0lit = 0, l0tot = 0, deepLit = 0, deepTot = 0;
+  for (let s = 0; s < 300; s++) {
+    const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
+    for (const lvl of d.levels) {
+      for (const r of lvl.rooms) {
+        if (r.light) assert.ok(sources.has(r.light.source), "light source from table");
+      }
+    }
+    for (const r of d.levels[0].rooms) { l0tot++; if (r.light) l0lit++; }
+    const deep = d.levels[d.levels.length - 1];
+    for (const r of deep.rooms) { deepTot++; if (r.light) deepLit++; }
+  }
+  const l0 = l0lit / l0tot;
+  const deep = deepLit / deepTot;
+  assert.ok(l0 > deep * 3, `level 0 lighting (${l0.toFixed(3)}) should far exceed deep (${deep.toFixed(4)})`);
+  assert.ok(deep < 0.03, `deep lighting should be rare, got ${deep.toFixed(4)}`);
 });
 
 test("ctx.theme is honored for every level", () => {

@@ -1,0 +1,14 @@
+{
+  "id": "dungeon-light",
+  "title": "Light source (a lit room)",
+  "entries": [
+    { "weight": 3, "value": "A lone candle burns — yet the dust says no one has passed in years" },
+    { "weight": 3, "value": "Embers still glow in a fire pit; someone camped here recently" },
+    { "weight": 2, "value": "Torches sputter in wall sconces" },
+    { "weight": 2, "value": "A shuttered lantern hangs, its oil low" },
+    { "weight": 2, "value": "Pale phosphorescent fungus casts a dim glow" },
+    { "weight": 1, "value": "A faint magical light seeps from the very stones" },
+    { "weight": 1, "value": "A brazier of coals, tended by unseen hands" },
+    { "weight": 1, "value": "Daylight leaks through a crack far overhead" }
+  ]
+}
