@@ -16,8 +16,8 @@ import { rollTable } from "../core/table.js";
 import { randInt, pick } from "../core/rng.js";
 import { layoutLevel, deriveDoors } from "./dungeon-layout.js";
 
-const MIN_ENCOUNTERS = 4;
-const MAX_ENCOUNTERS = 6;
+const MIN_ENCOUNTERS = 2; // smallest wandering list (tiny levels)
+const MAX_ENCOUNTERS = 6; // largest wandering list (big levels)
 const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 
 // Interior-shape version. Stamped on every generated dungeon; the UI regenerates
@@ -39,7 +39,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 13: theme-aware doors (caves open-heavy) + rare Vast (5-6 level) size (4.9.9).
 // 14: occupied frontier — held+lit entrance cluster, locked boundary (4.9.11).
 // 15: bigger tiered monster roster + new den themes (4.9.12).
-export const DUNGEON_BUILD = 15;
+// 16: wandering-monster list scales with level size (4.9.12 follow-up).
+export const DUNGEON_BUILD = 16;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -81,12 +82,17 @@ function sampleDistinct(memberList, want, rng, seen = new Map()) {
  * interloper and (on the deepest level) the family's elite.
  * @returns {{ family: string, encounters: {weight:number,value:string}[] }}
  */
-function buildLevelMonsters(families, theme, isDeepest, rng) {
+function buildLevelMonsters(families, theme, isDeepest, rng, roomCount = 8) {
   const familyName = rollTable(familyTableForTheme(families, theme), rng).value;
   const index = familyIndex(families);
   const family = index.get(familyName) || { members: [{ weight: 1, value: "Vermin" }] };
 
-  const want = randInt(rng, MIN_ENCOUNTERS, MAX_ENCOUNTERS);
+  // Wandering list scales with the level's size: a tiny tunnel has few wanderers,
+  // a sprawling level has the full spread.
+  const want = Math.max(
+    MIN_ENCOUNTERS,
+    Math.min(MAX_ENCOUNTERS, randInt(rng, Math.floor(roomCount / 3), Math.ceil(roomCount / 2))),
+  );
   const seen = sampleDistinct(family.members, want, rng);
 
   // Occasional interloper from a different family.
@@ -151,10 +157,10 @@ export function generateDungeon(tables, rng, ctx = {}) {
   // their down-stair partner from the level(s) above (true vertical stairs).
   for (let i = 0; i < levelCount; i++) {
     const isDeepest = i + 1 === levelCount;
-    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng);
+    const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
+    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
 
-    const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
     const rooms = [];
     for (let n = 1; n <= roomCount; n++) {
       const { content, treasureChance } = rollTable(roomTable, rng).value;

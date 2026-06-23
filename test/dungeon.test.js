@@ -40,11 +40,13 @@ function sizeMeta(t) {
   return map;
 }
 
-// Family name -> Set of its member species (for cohesion checks).
+// Family name -> Set of its member species + elite (for cohesion checks).
 function familyMembers(t) {
   const map = new Map();
   for (const e of t.get("monster-families").entries) {
-    map.set(e.value.family, new Set(e.value.members.map((m) => m.value)));
+    const set = new Set(e.value.members.map((m) => m.value));
+    set.add(e.value.elite);
+    map.set(e.value.family, set);
   }
   return map;
 }
