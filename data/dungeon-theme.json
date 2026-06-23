@@ -15,6 +15,11 @@
     { "weight": 1, "value": "Wizard's sanctum" },
     { "weight": 2, "value": "Beast den" },
     { "weight": 1, "value": "Prison vaults" },
-    { "weight": 1, "value": "Smugglers' tunnels" }
+    { "weight": 1, "value": "Smugglers' tunnels" },
+    { "weight": 1, "value": "Kobold tunnels" },
+    { "weight": 1, "value": "Spider nest" },
+    { "weight": 1, "value": "Ghoul warren" },
+    { "weight": 1, "value": "Troglodyte caves" },
+    { "weight": 1, "value": "Ogre lair" }
   ]
 }

@@ -1,51 +1,84 @@
 {
   "id": "monster-families",
   "title": "Monster families",
-  "_note": "Each family has a weighted member list and an elite (boss) that may appear on a dungeon's deepest level. Family names are referenced by data/dungeon-family.json.",
+  "_note": "Each family has a weighted member list and an elite (boss). Members carry a tier (1 weak .. 4 deadly) used by depth/difficulty scaling. Names are from the OSE free basic list (open content). Referenced by data/dungeon-family.json.",
   "entries": [
-    { "value": { "family": "Undead", "elite": "Wraith", "members": [
-      { "weight": 3, "value": "Skeletons" },
-      { "weight": 3, "value": "Zombies" },
-      { "weight": 2, "value": "Ghouls" },
-      { "weight": 1, "value": "Wights" },
-      { "weight": 1, "value": "Shadows" }
+    { "value": { "family": "Undead", "elite": "Vampire", "members": [
+      { "weight": 3, "value": "Skeletons", "tier": 1 },
+      { "weight": 3, "value": "Zombies", "tier": 1 },
+      { "weight": 2, "value": "Ghouls", "tier": 2 },
+      { "weight": 2, "value": "Shadows", "tier": 2 },
+      { "weight": 1, "value": "Wights", "tier": 3 },
+      { "weight": 1, "value": "Wraiths", "tier": 4 },
+      { "weight": 1, "value": "Mummies", "tier": 4 },
+      { "weight": 1, "value": "Spectres", "tier": 4 }
     ] } },
     { "value": { "family": "Goblinoids", "elite": "Bugbear chief", "members": [
-      { "weight": 3, "value": "Goblins" },
-      { "weight": 2, "value": "Hobgoblins" },
-      { "weight": 2, "value": "Orcs" },
-      { "weight": 1, "value": "Bugbears" }
+      { "weight": 3, "value": "Kobolds", "tier": 1 },
+      { "weight": 3, "value": "Goblins", "tier": 1 },
+      { "weight": 2, "value": "Orcs", "tier": 2 },
+      { "weight": 2, "value": "Hobgoblins", "tier": 2 },
+      { "weight": 1, "value": "Gnolls", "tier": 3 },
+      { "weight": 1, "value": "Bugbears", "tier": 3 },
+      { "weight": 1, "value": "Thouls", "tier": 3 }
     ] } },
     { "value": { "family": "Beasts", "elite": "Owlbear", "members": [
-      { "weight": 3, "value": "Wolves" },
-      { "weight": 3, "value": "Giant rats" },
-      { "weight": 2, "value": "Giant spiders" },
-      { "weight": 1, "value": "Cave bear" },
-      { "weight": 1, "value": "Giant boar" }
+      { "weight": 3, "value": "Giant rats", "tier": 1 },
+      { "weight": 2, "value": "Giant shrews", "tier": 1 },
+      { "weight": 2, "value": "Wolves", "tier": 2 },
+      { "weight": 2, "value": "Boars", "tier": 2 },
+      { "weight": 1, "value": "Mountain lions", "tier": 2 },
+      { "weight": 1, "value": "Dire wolves", "tier": 3 },
+      { "weight": 1, "value": "Giant boars", "tier": 3 },
+      { "weight": 1, "value": "Cave bears", "tier": 4 }
     ] } },
     { "value": { "family": "Vermin", "elite": "Giant scorpion", "members": [
-      { "weight": 3, "value": "Giant rats" },
-      { "weight": 2, "value": "Giant centipedes" },
-      { "weight": 2, "value": "Giant spiders" },
-      { "weight": 1, "value": "Carrion crawler" }
+      { "weight": 3, "value": "Giant centipedes", "tier": 1 },
+      { "weight": 2, "value": "Giant fire beetles", "tier": 1 },
+      { "weight": 2, "value": "Stirges", "tier": 1 },
+      { "weight": 2, "value": "Crab spiders", "tier": 2 },
+      { "weight": 1, "value": "Insect swarm", "tier": 2 },
+      { "weight": 1, "value": "Giant spiders", "tier": 3 },
+      { "weight": 1, "value": "Carrion crawler", "tier": 3 }
     ] } },
     { "value": { "family": "Cultists", "elite": "Cult leader", "members": [
-      { "weight": 3, "value": "Cultists" },
-      { "weight": 2, "value": "Acolytes" },
-      { "weight": 1, "value": "Cult fanatics" },
-      { "weight": 1, "value": "Berserkers" }
+      { "weight": 3, "value": "Acolytes", "tier": 1 },
+      { "weight": 3, "value": "Cultists", "tier": 1 },
+      { "weight": 2, "value": "Zealots", "tier": 2 },
+      { "weight": 2, "value": "Berserkers", "tier": 2 },
+      { "weight": 1, "value": "Robed adepts", "tier": 2 },
+      { "weight": 1, "value": "Cult fanatics", "tier": 3 }
     ] } },
-    { "value": { "family": "Aberrations", "elite": "Otyugh", "members": [
-      { "weight": 2, "value": "Grey ooze" },
-      { "weight": 1, "value": "Gelatinous cube" },
-      { "weight": 1, "value": "Rust monster" },
-      { "weight": 1, "value": "Cave fisher" }
+    { "value": { "family": "Aberrations", "elite": "Black pudding", "members": [
+      { "weight": 3, "value": "Green slime", "tier": 1 },
+      { "weight": 2, "value": "Grey ooze", "tier": 2 },
+      { "weight": 2, "value": "Rust monster", "tier": 2 },
+      { "weight": 2, "value": "Cave fisher", "tier": 2 },
+      { "weight": 1, "value": "Ochre jelly", "tier": 3 },
+      { "weight": 1, "value": "Gelatinous cube", "tier": 3 },
+      { "weight": 1, "value": "Gargoyles", "tier": 3 }
     ] } },
     { "value": { "family": "Bandits", "elite": "Bandit captain", "members": [
-      { "weight": 3, "value": "Bandits" },
-      { "weight": 2, "value": "Brigands" },
-      { "weight": 1, "value": "Mercenaries" },
-      { "weight": 1, "value": "Cutthroats" }
+      { "weight": 3, "value": "Bandits", "tier": 1 },
+      { "weight": 2, "value": "Brigands", "tier": 1 },
+      { "weight": 2, "value": "Deserters", "tier": 1 },
+      { "weight": 2, "value": "Cutthroats", "tier": 2 },
+      { "weight": 1, "value": "Mercenaries", "tier": 2 },
+      { "weight": 1, "value": "Veterans", "tier": 2 }
+    ] } },
+    { "value": { "family": "Reptiles", "elite": "Basilisk", "members": [
+      { "weight": 3, "value": "Cave geckos", "tier": 1 },
+      { "weight": 2, "value": "Lizard men", "tier": 2 },
+      { "weight": 2, "value": "Troglodytes", "tier": 2 },
+      { "weight": 1, "value": "Giant lizards", "tier": 3 },
+      { "weight": 1, "value": "Giant snakes", "tier": 3 }
+    ] } },
+    { "value": { "family": "Giants", "elite": "Cyclops", "members": [
+      { "weight": 3, "value": "Ogres", "tier": 3 },
+      { "weight": 2, "value": "Minotaurs", "tier": 3 },
+      { "weight": 2, "value": "Trolls", "tier": 4 },
+      { "weight": 1, "value": "Ettins", "tier": 4 },
+      { "weight": 1, "value": "Hill giants", "tier": 4 }
     ] } }
   ]
 }

@@ -22,9 +22,9 @@
       { "weight": 2, "value": "Vermin" }, { "weight": 2, "value": "Aberrations" },
       { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Undead" } ] } },
     { "value": { "theme": "Goblin warren", "families": [
-      { "weight": 4, "value": "Goblinoids" }, { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Vermin" } ] } },
+      { "weight": 6, "value": "Goblinoids" }, { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Vermin" }, { "weight": 1, "value": "Giants" } ] } },
     { "value": { "theme": "Ruined fort", "families": [
-      { "weight": 3, "value": "Bandits" }, { "weight": 2, "value": "Goblinoids" }, { "weight": 1, "value": "Undead" } ] } },
+      { "weight": 3, "value": "Bandits" }, { "weight": 2, "value": "Goblinoids" }, { "weight": 1, "value": "Undead" }, { "weight": 1, "value": "Giants" } ] } },
     { "value": { "theme": "Wizard's sanctum", "families": [
       { "weight": 3, "value": "Aberrations" }, { "weight": 1, "value": "Undead" }, { "weight": 1, "value": "Cultists" } ] } },
     { "value": { "theme": "Beast den", "families": [
@@ -33,6 +33,16 @@
       { "weight": 2, "value": "Undead" }, { "weight": 2, "value": "Bandits" },
       { "weight": 1, "value": "Goblinoids" }, { "weight": 1, "value": "Aberrations" } ] } },
     { "value": { "theme": "Smugglers' tunnels", "families": [
-      { "weight": 4, "value": "Bandits" }, { "weight": 1, "value": "Vermin" }, { "weight": 1, "value": "Beasts" } ] } }
+      { "weight": 4, "value": "Bandits" }, { "weight": 1, "value": "Vermin" }, { "weight": 1, "value": "Beasts" } ] } },
+    { "value": { "theme": "Kobold tunnels", "families": [
+      { "weight": 4, "value": "Goblinoids" }, { "weight": 1, "value": "Reptiles" }, { "weight": 1, "value": "Vermin" } ] } },
+    { "value": { "theme": "Spider nest", "families": [
+      { "weight": 4, "value": "Vermin" }, { "weight": 1, "value": "Beasts" } ] } },
+    { "value": { "theme": "Ghoul warren", "families": [
+      { "weight": 4, "value": "Undead" }, { "weight": 1, "value": "Vermin" } ] } },
+    { "value": { "theme": "Troglodyte caves", "families": [
+      { "weight": 3, "value": "Reptiles" }, { "weight": 1, "value": "Aberrations" }, { "weight": 1, "value": "Beasts" } ] } },
+    { "value": { "theme": "Ogre lair", "families": [
+      { "weight": 4, "value": "Giants" }, { "weight": 1, "value": "Goblinoids" } ] } }
   ]
 }

@@ -25,6 +25,11 @@ export const THEME_GLYPHS = {
   "Beast den": "🐾",
   "Prison vaults": "🔒",
   "Smugglers' tunnels": "🕳️",
+  "Kobold tunnels": "🐲",
+  "Spider nest": "🕸️",
+  "Ghoul warren": "💀",
+  "Troglodyte caves": "🦎",
+  "Ogre lair": "👹",
 };
 
 export const SETTLEMENT_GLYPH = "🏠";

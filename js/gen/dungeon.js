@@ -38,7 +38,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 12: per-room lighting, decaying with distance/depth from an entrance (4.9.10).
 // 13: theme-aware doors (caves open-heavy) + rare Vast (5-6 level) size (4.9.9).
 // 14: occupied frontier — held+lit entrance cluster, locked boundary (4.9.11).
-export const DUNGEON_BUILD = 14;
+// 15: bigger tiered monster roster + new den themes (4.9.12).
+export const DUNGEON_BUILD = 15;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {

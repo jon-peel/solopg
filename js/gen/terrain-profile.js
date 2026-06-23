@@ -52,12 +52,12 @@ const DEFAULT_PROFILE = {
 // data/dungeon-theme.json (the canonical manifest). A terrain with no entry
 // here falls back to DEFAULT_THEME_BIAS.
 export const DUNGEON_THEME_BIAS = {
-  Forest: { Ruin: 3, "Beast den": 2, "Cave complex": 1, "Forgotten tomb": 1, "Cult shrine": 1, "Goblin warren": 1 },
-  Plains: { Ruin: 3, "Ruined fort": 2, "Forgotten tomb": 1, "Cult shrine": 1, "Goblin warren": 1 },
-  Hills: { "Abandoned mine": 3, "Cave complex": 3, Ruin: 1, "Goblin warren": 1, "Ruined fort": 1 },
-  Mountains: { "Abandoned mine": 3, "Cave complex": 3, "Goblin warren": 2, "Wizard's sanctum": 1, "Prison vaults": 1 },
-  Swamp: { "Flooded cistern": 2, Ruin: 2, "Cult shrine": 2, "Beast den": 1, "Cave complex": 1 },
-  Desert: { "Forgotten tomb": 3, Mausoleum: 2, Ruin: 2, "Cult shrine": 1, "Cave complex": 1 },
+  Forest: { Ruin: 3, "Beast den": 2, "Cave complex": 1, "Forgotten tomb": 1, "Cult shrine": 1, "Goblin warren": 1, "Spider nest": 1, "Kobold tunnels": 1 },
+  Plains: { Ruin: 3, "Ruined fort": 2, "Forgotten tomb": 1, "Cult shrine": 1, "Goblin warren": 1, "Kobold tunnels": 1 },
+  Hills: { "Abandoned mine": 3, "Cave complex": 3, Ruin: 1, "Goblin warren": 1, "Ruined fort": 1, "Kobold tunnels": 2, "Troglodyte caves": 1, "Ogre lair": 1 },
+  Mountains: { "Abandoned mine": 3, "Cave complex": 3, "Goblin warren": 2, "Wizard's sanctum": 1, "Prison vaults": 1, "Kobold tunnels": 2, "Troglodyte caves": 2, "Ogre lair": 1 },
+  Swamp: { "Flooded cistern": 2, Ruin: 2, "Cult shrine": 2, "Beast den": 1, "Cave complex": 1, "Ghoul warren": 1, "Troglodyte caves": 1, "Spider nest": 1 },
+  Desert: { "Forgotten tomb": 3, Mausoleum: 2, Ruin: 2, "Cult shrine": 1, "Cave complex": 1, "Ghoul warren": 1 },
   Water: { "Flooded cistern": 2, Ruin: 1 }, // only reachable via a manual (forced) dungeon on water
 };
 
