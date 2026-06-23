@@ -1,0 +1,12 @@
+{
+  "id": "dungeon-size",
+  "title": "Dungeon size",
+  "_note": "levels = per-dungeon range; rooms = per-LEVEL range. Bands are kept disjoint so sizes look distinct (Cramped 3-4, Modest 5-7, Sizable 8-10, Sprawling 11-14 rooms per level). blurb is shown in the Add-dungeon menu.",
+  "entries": [
+    { "weight": 4, "value": { "size": "Cramped", "levels": [1, 1], "rooms": [3, 4], "blurb": "A den or bolt-hole." } },
+    { "weight": 3, "value": { "size": "Modest", "levels": [1, 2], "rooms": [5, 7], "blurb": "A small complex." } },
+    { "weight": 2, "value": { "size": "Sizable", "levels": [2, 3], "rooms": [8, 10], "blurb": "A proper dungeon." } },
+    { "weight": 1, "value": { "size": "Sprawling", "levels": [3, 4], "rooms": [11, 14], "blurb": "A vast labyrinth." } },
+    { "weight": 0.5, "value": { "size": "Vast", "levels": [5, 6], "rooms": [12, 16], "blurb": "A mega-dungeon — a campaign in itself." } }
+  ]
+}

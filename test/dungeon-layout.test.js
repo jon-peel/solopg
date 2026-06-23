@@ -1,0 +1,224 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { layoutLevel } from "../js/gen/dungeon-layout.js";
+import { mulberry32 } from "../js/core/rng.js";
+
+const makeRooms = (n) => Array.from({ length: n }, (_, i) => ({ n: i + 1 }));
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// Flood-fill over room-interior ∪ corridor cells from the entrance room; return
+// the set of visited "x,y" cells.
+function reachableCells(layout) {
+  const room = layout.rooms.find((r) => r.n === layout.entrance);
+  const open = new Set();
+  for (const r of layout.rooms) {
+    for (let dx = 0; dx < r.w; dx++)
+      for (let dy = 0; dy < r.h; dy++) open.add(`${r.x + dx},${r.y + dy}`);
+  }
+  for (const c of layout.corridors) open.add(`${c.x},${c.y}`);
+
+  const seen = new Set();
+  const stack = [`${room.x},${room.y}`];
+  while (stack.length) {
+    const key = stack.pop();
+    if (seen.has(key) || !open.has(key)) continue;
+    seen.add(key);
+    const [x, y] = key.split(",").map(Number);
+    stack.push(`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`);
+  }
+  return seen;
+}
+
+test("layoutLevel is deterministic for a given seed", () => {
+  const a = layoutLevel(makeRooms(7), mulberry32(3));
+  const b = layoutLevel(makeRooms(7), mulberry32(3));
+  assert.deepEqual(a, b);
+});
+
+test("places exactly one rectangle per room, inside the grid", () => {
+  for (let s = 0; s < 100; s++) {
+    const count = 3 + (s % 8);
+    const lay = layoutLevel(makeRooms(count), mulberry32(s));
+    assert.equal(lay.rooms.length, count);
+    assert.deepEqual(
+      lay.rooms.map((r) => r.n).sort((x, y) => x - y),
+      makeRooms(count).map((r) => r.n),
+    );
+    for (const r of lay.rooms) {
+      assert.ok(r.x >= 0 && r.y >= 0, "non-negative origin");
+      assert.ok(r.x + r.w <= lay.grid.w && r.y + r.h <= lay.grid.h, "within grid");
+    }
+  }
+});
+
+test("rooms never overlap", () => {
+  for (let s = 0; s < 200; s++) {
+    const lay = layoutLevel(makeRooms(3 + (s % 8)), mulberry32(s));
+    for (let i = 0; i < lay.rooms.length; i++) {
+      for (let j = i + 1; j < lay.rooms.length; j++) {
+        assert.ok(
+          !rectsOverlap(lay.rooms[i], lay.rooms[j]),
+          `rooms ${i} and ${j} overlap (seed ${s})`,
+        );
+      }
+    }
+  }
+});
+
+test("every room is reachable from the entrance via corridors", () => {
+  for (let s = 0; s < 200; s++) {
+    const count = 3 + (s % 8);
+    const lay = layoutLevel(makeRooms(count), mulberry32(s));
+    const seen = reachableCells(lay);
+    for (const r of lay.rooms) {
+      // At least the room's center cell must be reachable.
+      const cx = r.x + Math.floor(r.w / 2);
+      const cy = r.y + Math.floor(r.h / 2);
+      assert.ok(seen.has(`${cx},${cy}`), `room ${r.n} unreachable (seed ${s})`);
+    }
+  }
+});
+
+// Union-find connectivity over the edge graph (by room number).
+function graphConnected(layout) {
+  const parent = new Map(layout.rooms.map((r) => [r.n, r.n]));
+  const find = (x) => {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)));
+      x = parent.get(x);
+    }
+    return x;
+  };
+  for (const e of layout.edges) parent.set(find(e.a), find(e.b));
+  const roots = new Set(layout.rooms.map((r) => find(r.n)));
+  return roots.size <= 1;
+}
+
+test("edges reference real rooms and connect the whole level", () => {
+  for (let s = 0; s < 200; s++) {
+    const count = 3 + (s % 8);
+    const lay = layoutLevel(makeRooms(count), mulberry32(s));
+    const ns = new Set(lay.rooms.map((r) => r.n));
+    for (const e of lay.edges) {
+      assert.ok(ns.has(e.a) && ns.has(e.b), "edge endpoints are real rooms");
+      assert.notEqual(e.a, e.b, "no self-loop edge");
+    }
+    assert.ok(graphConnected(lay), `graph disconnected (seed ${s})`);
+    // A spanning tree has count-1 edges; loops add more (never fewer).
+    assert.ok(lay.edges.length >= count - 1, "at least a spanning tree");
+  }
+});
+
+test("large levels usually contain loops; small levels are sometimes linear", () => {
+  let bigLoopy = 0;
+  for (let s = 0; s < 120; s++) {
+    const lay = layoutLevel(makeRooms(10), mulberry32(s));
+    if (lay.edges.length > lay.rooms.length - 1) bigLoopy++;
+  }
+  assert.ok(bigLoopy > 90, `expected most 10-room levels to loop, got ${bigLoopy}/120`);
+
+  let smallLinear = 0;
+  for (let s = 0; s < 120; s++) {
+    const lay = layoutLevel(makeRooms(3), mulberry32(s));
+    if (lay.edges.length === lay.rooms.length - 1) smallLinear++;
+  }
+  assert.ok(smallLinear > 0, "some 3-room levels should be linear (no loops)");
+});
+
+const DOOR_TYPES = new Set(["open", "door", "locked", "stuck", "secret"]);
+
+// Connectivity using only NON-secret edges (secret doors must never be a room's
+// sole route in).
+function connectedWithoutSecret(layout) {
+  const parent = new Map(layout.rooms.map((r) => [r.n, r.n]));
+  const find = (x) => {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)));
+      x = parent.get(x);
+    }
+    return x;
+  };
+  for (const e of layout.edges) if (e.type !== "secret") parent.set(find(e.a), find(e.b));
+  return new Set(layout.rooms.map((r) => find(r.n))).size <= 1;
+}
+
+test("every edge has a valid type and the dungeon is solvable without secrets", () => {
+  for (let s = 0; s < 250; s++) {
+    const lay = layoutLevel(makeRooms(3 + (s % 8)), mulberry32(s));
+    for (const e of lay.edges) assert.ok(DOOR_TYPES.has(e.type), `bad type ${e.type}`);
+    assert.ok(connectedWithoutSecret(lay), `secret-only room (seed ${s})`);
+  }
+});
+
+test("secret doors appear (loop edges) and are shown as markers on the GM map", () => {
+  let secretEdges = 0;
+  let secretMarkers = 0;
+  for (let s = 0; s < 200; s++) {
+    const lay = layoutLevel(makeRooms(9), mulberry32(s));
+    if (lay.edges.some((e) => e.type === "secret")) secretEdges++;
+    if (lay.doors.some((d) => d.type === "secret")) secretMarkers++;
+  }
+  assert.ok(secretEdges > 20, `expected some secret edges, got ${secretEdges}/200`);
+  assert.ok(secretMarkers > 20, `expected secret doors drawn, got ${secretMarkers}/200`);
+});
+
+test("doors list only visible types, sit on corridor cells, carry one-axis orientation, are unique", () => {
+  const corridorKey = (lay) => new Set(lay.corridors.map((c) => `${c.x},${c.y}`));
+  for (let s = 0; s < 150; s++) {
+    const lay = layoutLevel(makeRooms(3 + (s % 8)), mulberry32(s));
+    const cells = corridorKey(lay);
+    const seen = new Set();
+    for (const d of lay.doors) {
+      assert.ok(["door", "locked", "stuck", "secret"].includes(d.type), `door type ${d.type}`);
+      assert.ok(cells.has(`${d.x},${d.y}`), "door sits on a corridor cell");
+      assert.equal(Math.abs(d.dx) + Math.abs(d.dy), 1, "door faces exactly one wall direction");
+      const key = `${d.x},${d.y}`;
+      assert.ok(!seen.has(key), "no two doors on the same cell");
+      seen.add(key);
+    }
+  }
+});
+
+test("pinned rooms are placed at their given rects (for vertical stairs)", () => {
+  for (let s = 0; s < 80; s++) {
+    const pins = [{ x: 6, y: 8, w: 4, h: 3 }, { x: 20, y: 15, w: 3, h: 4 }];
+    const lay = layoutLevel(makeRooms(7), mulberry32(s), { pins });
+    // The first `pins.length` rooms must sit exactly on the pins.
+    pins.forEach((p, k) => {
+      const r = lay.rooms[k];
+      assert.deepEqual({ x: r.x, y: r.y, w: r.w, h: r.h }, p, `pin ${k} (seed ${s})`);
+    });
+    // And nothing overlaps.
+    for (let i = 0; i < lay.rooms.length; i++)
+      for (let j = i + 1; j < lay.rooms.length; j++)
+        assert.ok(!rectsOverlap(lay.rooms[i], lay.rooms[j]), `overlap (seed ${s})`);
+  }
+});
+
+test("doorStyle natural yields mostly open passages", () => {
+  let open = 0, total = 0;
+  for (let s = 0; s < 100; s++) {
+    const lay = layoutLevel(makeRooms(8), mulberry32(s), { doorStyle: "natural" });
+    for (const e of lay.edges) {
+      total++;
+      if (e.type === "open") open++;
+    }
+  }
+  assert.ok(open / total > 0.6, `natural style should be mostly open, got ${(open / total).toFixed(2)}`);
+});
+
+test("a single-room level needs no corridors", () => {
+  const lay = layoutLevel(makeRooms(1), mulberry32(1));
+  assert.equal(lay.rooms.length, 1);
+  assert.equal(lay.corridors.length, 0);
+  assert.equal(lay.entrance, 1);
+});
+
+test("an empty level degrades gracefully", () => {
+  const lay = layoutLevel([], mulberry32(1));
+  assert.deepEqual(lay.rooms, []);
+  assert.equal(lay.entrance, null);
+});

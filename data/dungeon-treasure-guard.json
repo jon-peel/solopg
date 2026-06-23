@@ -1,0 +1,12 @@
+{
+  "id": "dungeon-treasure-guard",
+  "title": "How the treasure is protected",
+  "entries": [
+    { "weight": 3, "value": "in plain sight" },
+    { "weight": 3, "value": "hidden" },
+    { "weight": 2, "value": "locked away" },
+    { "weight": 2, "value": "trapped" },
+    { "weight": 2, "value": "guarded" },
+    { "weight": 1, "value": "cursed" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "creatures",
+  "title": "Lair occupants",
+  "entries": [
+    { "weight": 3, "value": "Goblins" },
+    { "weight": 2, "value": "Giant spiders" },
+    { "weight": 2, "value": "Wolves" },
+    { "weight": 2, "value": "Giant rats" },
+    { "weight": 1, "value": "Ogre" },
+    { "weight": 1, "value": "Wyvern" },
+    { "weight": 1, "value": "Harpies" },
+    { "weight": 1, "value": "Troll" }
+  ]
+}

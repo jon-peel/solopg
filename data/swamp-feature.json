@@ -1,0 +1,10 @@
+{
+  "id": "swamp-feature",
+  "title": "Swamp feature",
+  "entries": [
+    { "weight": 1, "value": "Sunken ruin" },
+    { "weight": 2, "value": "Tangled mangroves" },
+    { "weight": 1, "value": "Will-o'-wisp lights" },
+    { "weight": 2, "value": "Stagnant pools" }
+  ]
+}

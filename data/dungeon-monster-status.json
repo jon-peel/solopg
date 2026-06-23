@@ -1,0 +1,13 @@
+{
+  "id": "dungeon-monster-status",
+  "title": "Monster status",
+  "entries": [
+    { "weight": 3, "value": "alert" },
+    { "weight": 2, "value": "asleep" },
+    { "weight": 2, "value": "feeding" },
+    { "weight": 2, "value": "on guard" },
+    { "weight": 1, "value": "squabbling" },
+    { "weight": 1, "value": "wounded" },
+    { "weight": 1, "value": "wandering" }
+  ]
+}

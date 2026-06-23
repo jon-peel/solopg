@@ -1,0 +1,48 @@
+{
+  "id": "dungeon-family",
+  "title": "Dungeon theme -> monster family weights",
+  "_note": "Which monster families a themed dungeon level leans toward. Theme names match data/dungeon-theme.json; family names match data/monster-families.json. Themes absent here fall back to a generic spread in js/gen/dungeon.js.",
+  "entries": [
+    { "value": { "theme": "Ruin", "families": [
+      { "weight": 2, "value": "Beasts" }, { "weight": 2, "value": "Goblinoids" },
+      { "weight": 2, "value": "Bandits" }, { "weight": 1, "value": "Undead" }, { "weight": 1, "value": "Vermin" } ] } },
+    { "value": { "theme": "Abandoned mine", "families": [
+      { "weight": 3, "value": "Goblinoids" }, { "weight": 2, "value": "Vermin" },
+      { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Aberrations" } ] } },
+    { "value": { "theme": "Cave complex", "families": [
+      { "weight": 3, "value": "Beasts" }, { "weight": 2, "value": "Vermin" },
+      { "weight": 1, "value": "Goblinoids" }, { "weight": 1, "value": "Aberrations" } ] } },
+    { "value": { "theme": "Forgotten tomb", "families": [
+      { "weight": 4, "value": "Undead" }, { "weight": 1, "value": "Vermin" } ] } },
+    { "value": { "theme": "Mausoleum", "families": [
+      { "weight": 4, "value": "Undead" }, { "weight": 1, "value": "Cultists" } ] } },
+    { "value": { "theme": "Cult shrine", "families": [
+      { "weight": 4, "value": "Cultists" }, { "weight": 1, "value": "Undead" } ] } },
+    { "value": { "theme": "Flooded cistern", "families": [
+      { "weight": 2, "value": "Vermin" }, { "weight": 2, "value": "Aberrations" },
+      { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Undead" } ] } },
+    { "value": { "theme": "Goblin warren", "families": [
+      { "weight": 6, "value": "Goblinoids" }, { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Vermin" }, { "weight": 1, "value": "Giants" } ] } },
+    { "value": { "theme": "Ruined fort", "families": [
+      { "weight": 3, "value": "Bandits" }, { "weight": 2, "value": "Goblinoids" }, { "weight": 1, "value": "Undead" }, { "weight": 1, "value": "Giants" } ] } },
+    { "value": { "theme": "Wizard's sanctum", "families": [
+      { "weight": 3, "value": "Aberrations" }, { "weight": 1, "value": "Undead" }, { "weight": 1, "value": "Cultists" } ] } },
+    { "value": { "theme": "Beast den", "families": [
+      { "weight": 4, "value": "Beasts" }, { "weight": 1, "value": "Vermin" } ] } },
+    { "value": { "theme": "Prison vaults", "families": [
+      { "weight": 2, "value": "Undead" }, { "weight": 2, "value": "Bandits" },
+      { "weight": 1, "value": "Goblinoids" }, { "weight": 1, "value": "Aberrations" } ] } },
+    { "value": { "theme": "Smugglers' tunnels", "families": [
+      { "weight": 4, "value": "Bandits" }, { "weight": 1, "value": "Vermin" }, { "weight": 1, "value": "Beasts" } ] } },
+    { "value": { "theme": "Kobold tunnels", "families": [
+      { "weight": 4, "value": "Goblinoids" }, { "weight": 1, "value": "Reptiles" }, { "weight": 1, "value": "Vermin" } ] } },
+    { "value": { "theme": "Spider nest", "families": [
+      { "weight": 4, "value": "Vermin" }, { "weight": 1, "value": "Beasts" } ] } },
+    { "value": { "theme": "Ghoul warren", "families": [
+      { "weight": 4, "value": "Undead" }, { "weight": 1, "value": "Vermin" } ] } },
+    { "value": { "theme": "Troglodyte caves", "families": [
+      { "weight": 3, "value": "Reptiles" }, { "weight": 1, "value": "Aberrations" }, { "weight": 1, "value": "Beasts" } ] } },
+    { "value": { "theme": "Ogre lair", "families": [
+      { "weight": 4, "value": "Giants" }, { "weight": 1, "value": "Goblinoids" } ] } }
+  ]
+}

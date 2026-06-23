@@ -1,0 +1,16 @@
+{
+  "id": "dungeon-dressing",
+  "title": "Empty-room dressing",
+  "entries": [
+    { "weight": 3, "value": "Dust and rubble, long undisturbed" },
+    { "weight": 2, "value": "Water drips steadily from the ceiling" },
+    { "weight": 2, "value": "Old bones picked clean in a corner" },
+    { "weight": 2, "value": "Scorch marks blacken one wall" },
+    { "weight": 2, "value": "A cold draft from an unseen gap" },
+    { "weight": 2, "value": "Broken furniture and a faded tapestry" },
+    { "weight": 1, "value": "Faint scratching echoes from the walls" },
+    { "weight": 1, "value": "A foul smell with no obvious source" },
+    { "weight": 1, "value": "Claw marks gouged into the stone floor" },
+    { "weight": 1, "value": "Guttered candle stubs and a circle of ash" }
+  ]
+}

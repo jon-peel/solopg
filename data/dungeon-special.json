@@ -1,0 +1,16 @@
+{
+  "id": "dungeon-special",
+  "title": "Dungeon special features",
+  "entries": [
+    { "weight": 2, "value": "A defaced altar humming with faint power" },
+    { "weight": 2, "value": "A clear pool that reflects the wrong room" },
+    { "weight": 2, "value": "A weathered statue whose eyes seem to follow you" },
+    { "weight": 2, "value": "A prisoner chained to the wall, half-mad" },
+    { "weight": 2, "value": "A sealed door with a riddle carved above it" },
+    { "weight": 1, "value": "A shimmering archway that leads elsewhere" },
+    { "weight": 1, "value": "A deep well exhaling cold air" },
+    { "weight": 1, "value": "A mural depicting the dungeon's downfall" },
+    { "weight": 1, "value": "A forge gone cold, tools scattered mid-task" },
+    { "weight": 1, "value": "A library of mouldering, unreadable books" }
+  ]
+}

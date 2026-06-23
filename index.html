@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World Oracle</title>
+    <link rel="stylesheet" href="./css/app.css" />
+  </head>
+  <body>
+    <header id="command-bar">
+      <strong class="brand">World Oracle</strong>
+      <label class="world-picker">
+        World:
+        <select id="world-select"></select>
+      </label>
+      <span class="spacer"></span>
+      <button id="btn-new">New World</button>
+      <button id="btn-save">Save</button>
+      <button id="btn-delete">Delete</button>
+      <button id="btn-export">Export</button>
+      <button id="btn-import">Import</button>
+      <span class="bar-divider"></span>
+      <button id="btn-icons">Icons: on</button>
+      <input id="import-file" type="file" accept="application/json,.json" hidden />
+    </header>
+
+    <main id="workspace">
+      <div id="stage">
+        <!-- Hex grid (Phase 2). The Dungeon View overlays it when open. -->
+        <canvas id="map"></canvas>
+        <section id="dungeon-view" hidden>
+          <div id="dungeon-toolbar">
+            <button id="btn-dungeon-back">← World</button>
+            <strong id="dungeon-title"></strong>
+            <span class="spacer"></span>
+            <div id="dungeon-levels"></div>
+            <button id="btn-dungeon-fit">Fit</button>
+            <button id="btn-dungeon-legend">Legend</button>
+          </div>
+          <canvas id="dungeon-canvas"></canvas>
+          <div id="dungeon-legend" hidden>
+            <strong>Legend</strong>
+            <div class="legend-group">
+              <span><i class="sw" style="background:#7c3b32"></i>Monster</span>
+              <span><i class="sw" style="background:#7c6b32"></i>Trap</span>
+              <span><i class="sw" style="background:#2f3542"></i>Empty</span>
+              <span><i class="sw" style="background:#3b4b7c"></i>Special</span>
+            </div>
+            <div class="legend-group">
+              <span><i class="sw" style="background:#caa46a"></i>Door</span>
+              <span><i class="sw" style="background:#c0524a"></i>L locked</span>
+              <span><i class="sw" style="background:#c98a3a"></i>J stuck</span>
+              <span><i class="sw" style="background:#9a6fd0"></i>S secret</span>
+            </div>
+            <div class="legend-group">
+              <span><b style="color:#5fbf77">E</b> entrance</span>
+              <span><b style="color:#5fbf77">X</b> exit</span>
+              <span><b style="color:#6ec6d6">▲▼</b> stairs (shaft = panel)</span>
+            </div>
+            <div class="legend-group">
+              <span><b style="color:#6ec6d6">•</b> explored</span>
+              <span><b style="color:#5fbf77">✓</b> cleared</span>
+              <span><b style="color:#d8b24a">$</b> looted</span>
+            </div>
+            <div class="legend-group">
+              <span>▦ grid square = 10 ft</span>
+              <span><i class="sw" style="background:rgba(255,176,64,0.5)"></i>lit room (else dark)</span>
+            </div>
+          </div>
+        </section>
+      </div>
+      <aside id="panel"></aside>
+    </main>
+
+    <script type="module" src="./js/ui/app.js"></script>
+  </body>
+</html>

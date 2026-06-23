@@ -1,0 +1,409 @@
+:root {
+  --bg: #1c1f26;
+  --panel-bg: #232732;
+  --bar-bg: #14161c;
+  --fg: #e6e8ee;
+  --muted: #9aa3b2;
+  --accent: #6ea8fe;
+  --border: #343a47;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  font: 14px/1.5 system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+#command-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bar-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  color: var(--accent);
+}
+
+.world-picker {
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+button,
+select {
+  font: inherit;
+  color: var(--fg);
+  background: #2b3140;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+#workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  min-height: 0;
+}
+
+#stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #11131a;
+  cursor: grab;
+}
+
+#map.dragging {
+  cursor: grabbing;
+}
+
+/* Dungeon View overlays the hex map within the stage. */
+#dungeon-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0d0f15;
+}
+
+#dungeon-view[hidden] {
+  display: none;
+}
+
+#dungeon-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bar-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+#dungeon-title {
+  color: var(--accent);
+}
+
+#dungeon-levels {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+#dungeon-levels button {
+  padding: 0.2rem 0.55rem;
+}
+
+#dungeon-levels button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#dungeon-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  display: block;
+  background: #0d0f15;
+  cursor: grab;
+}
+
+#dungeon-canvas:active {
+  cursor: grabbing;
+}
+
+#dungeon-legend {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  max-width: 16rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  background: rgba(13, 15, 21, 0.92);
+  border: 1px solid var(--border, #2b3140);
+  border-radius: 6px;
+}
+
+#dungeon-legend[hidden] {
+  display: none;
+}
+
+#dungeon-legend .legend-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.7rem;
+  margin-top: 0.35rem;
+}
+
+#dungeon-legend .legend-group span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+#dungeon-legend .sw {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+#selection {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+#selection h3 {
+  margin: 0.25rem 0;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.tile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.tile-action {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Thin separator between command-bar groups. */
+.bar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+
+/* Small uppercase section label in the selection panel. */
+.section-label {
+  margin-top: 0.6rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Selected-POI list rows. */
+.poi-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.poi-row {
+  text-align: left;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.poi-detail {
+  margin-top: 0.25rem;
+}
+
+.poi-detail-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+/* Dungeon interior: stacked, expandable per-level disclosures. */
+.dungeon-level {
+  margin-top: 0.3rem;
+  border: 1px solid var(--border, #2b3140);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+
+.dungeon-level > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.15rem 0;
+}
+
+.dungeon-level > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dungeon-body {
+  padding: 0.2rem 0 0.1rem 0.5rem;
+}
+
+.room-row {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text, inherit);
+}
+
+.room-row.encounters {
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Exploration tracking toggles + GM note. */
+.tile-action.toggle.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #1b2433;
+}
+
+.room-note {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text, #e6e8ee);
+  background: #11131a;
+  border: 1px solid var(--border, #2b3140);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.room-note:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* "Add POI" disclosure dropdown. */
+.menu {
+  position: relative;
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
+.menu > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  background: #2b3140;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu > summary:hover {
+  border-color: var(--accent);
+}
+
+.menu-list {
+  position: absolute;
+  z-index: 10;
+  margin-top: 0.25rem;
+  min-width: 9rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  background: var(--bar-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.menu-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+}
+
+.menu-list button:hover {
+  background: #2b3140;
+}
+
+#panel {
+  background: var(--panel-bg);
+  border-left: 1px solid var(--border);
+  padding: 0.75rem;
+  overflow-y: auto;
+}
+
+#panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+/* Editable world name (replaces the old prompt()-based rename). */
+.world-name {
+  width: 100%;
+  margin: 0 0 0.5rem;
+  padding: 0.15rem 0.3rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text, #e6e8ee);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.world-name:hover {
+  border-color: var(--border, #2b3140);
+}
+
+.world-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #11131a;
+}
+
+/* Armed state for the two-step Delete button. */
+#btn-delete.armed {
+  border-color: #c0524a;
+  color: #ffb4ad;
+}
+
+.log-line {
+  padding: 0.15rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}

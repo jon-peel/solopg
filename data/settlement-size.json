@@ -1,0 +1,11 @@
+{
+  "id": "settlement-size",
+  "title": "Settlement size",
+  "entries": [
+    { "weight": 5, "value": { "size": "Thorp" } },
+    { "weight": 4, "value": { "size": "Hamlet" } },
+    { "weight": 3, "value": { "size": "Village" } },
+    { "weight": 2, "value": { "size": "Town" } },
+    { "weight": 1, "value": { "size": "City" } }
+  ]
+}
