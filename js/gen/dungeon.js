@@ -14,7 +14,12 @@
 
 import { rollTable } from "../core/table.js";
 import { randInt, pick } from "../core/rng.js";
+import { rollDice } from "../core/dice.js";
 import { layoutLevel, deriveDoors } from "./dungeon-layout.js";
+
+// Weight (in coins/cn) per gp of value, by bulk: coins ~ their own weight; gems/
+// magic are light (the smart haul); statues/plate are heavy to haul out.
+const BULK_FACTOR = { coin: 1, light: 0.05, heavy: 1.5 };
 
 const MIN_ENCOUNTERS = 2; // smallest wandering list (tiny levels)
 const MAX_ENCOUNTERS = 6; // largest wandering list (big levels)
@@ -41,7 +46,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 15: bigger tiered monster roster + new den themes (4.9.12).
 // 16: wandering-monster list scales with level size (4.9.12 follow-up).
 // 17: depth/difficulty scaling — monster + treasure tier rise with depth (4.9.13).
-export const DUNGEON_BUILD = 17;
+// 18: treasure carries rolled gp value + weight (cn) by bulk.
+export const DUNGEON_BUILD = 18;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -216,13 +222,14 @@ export function generateDungeon(tables, rng, ctx = {}) {
         dressing = rollTable(dressingTable, rng).value;
       }
       // Treasure (not in Special rooms — the feature is the point there).
-      // Value scales with depth via the level's tier-weighted treasure table.
+      // Value scales with depth via the level's tier-weighted treasure table;
+      // gp is rolled from a dice expression and weight (cn) from its bulk.
       let treasure = null;
       if (content !== "Special" && rng() < treasureChance) {
-        treasure = {
-          kind: rollTable(levelTreasure, rng).value.kind,
-          guard: rollTable(guardTable, rng).value,
-        };
+        const kind = rollTable(levelTreasure, rng).value;
+        const gp = rollDice(kind.gp, rng).total;
+        const weight = gp > 0 ? Math.max(1, Math.round(gp * (BULK_FACTOR[kind.bulk] ?? 1))) : 0;
+        treasure = { kind: kind.kind, guard: rollTable(guardTable, rng).value, gp, weight };
       }
       rooms.push({ n, content, monster, trap, special, dressing, treasure });
     }

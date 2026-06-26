@@ -304,6 +304,12 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
+// "Treasure: <kind> — <gp> gp, <weight> cn (<guard>)"; omits value for leads/magic.
+function treasureLine(t) {
+  const amount = t.gp > 0 ? ` — ${t.gp} gp${t.weight ? `, ${t.weight} cn` : ""}` : "";
+  return `Treasure: ${t.kind}${amount} (${t.guard})`;
+}
+
 export function renderDungeonPanel({
   dungeon,
   level,
@@ -352,7 +358,7 @@ export function renderDungeonPanel({
       room.trap ? `Trap: ${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}` : null,
       room.special ? `Special: ${room.special}` : null,
       room.dressing || null,
-      room.treasure ? `Treasure: ${room.treasure.kind} (${room.treasure.guard})` : null,
+      room.treasure ? treasureLine(room.treasure) : null,
       room.light ? `Lit: ${room.light.source}` : null,
       ...surface, // "Dungeon entrance (surface)", "Exit to surface"
     ].filter(Boolean)) {

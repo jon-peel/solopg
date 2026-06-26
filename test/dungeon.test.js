@@ -132,6 +132,8 @@ test("each room carries content-appropriate detail", () => {
         if (room.content === "Empty") assert.ok(dressings.has(room.dressing));
         if (room.treasure) {
           assert.ok(kinds.has(room.treasure.kind) && guards.has(room.treasure.guard));
+          assert.ok(Number.isInteger(room.treasure.gp) && room.treasure.gp >= 0, "gp value");
+          assert.ok(Number.isInteger(room.treasure.weight) && room.treasure.weight >= 0, "cn weight");
         }
       }
     }
