@@ -8,7 +8,7 @@
     { "weight": 3, "value": { "kind": "A purse of silver and gold", "tier": 2, "gp": "4d6*10", "bulk": "coin" } },
     { "weight": 2, "value": { "kind": "Gems and jewellery", "tier": 2, "gp": "3d6*20", "bulk": "light" } },
     { "weight": 2, "value": { "kind": "A map to further riches", "tier": 2, "gp": "0", "bulk": "light" } },
-    { "weight": 1, "value": { "kind": "A hoard of coin and plate", "tier": 3, "gp": "4d6*100", "bulk": "coin" } },
+    { "weight": 1, "value": { "kind": "A hoard of plate and bullion", "tier": 3, "gp": "4d6*100", "bulk": "heavy" } },
     { "weight": 1, "value": { "kind": "A gilded idol or statuette", "tier": 3, "gp": "3d6*50", "bulk": "heavy" } },
     { "weight": 1, "value": { "kind": "A magic item", "tier": 3, "gp": "0", "bulk": "light" } }
   ]

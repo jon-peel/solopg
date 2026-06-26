@@ -117,7 +117,7 @@ test("each room carries content-appropriate detail", () => {
     for (const lvl of generateDungeon(t, mulberry32(s)).levels) {
       for (const room of lvl.rooms) {
         if (room.content === "Monster" && !room.held) {
-          assert.ok(room.monster.number >= 1 && room.monster.number <= 6, "1-6 appear");
+          assert.match(room.monster.na, /^\d*\s*[dD]?\s*\d+/, "number appearing is a dice/number expr");
           assert.ok(statuses.has(room.monster.status), "valid status");
         }
         if (room.content === "Trap") {
@@ -131,9 +131,21 @@ test("each room carries content-appropriate detail", () => {
         }
         if (room.content === "Empty") assert.ok(dressings.has(room.dressing));
         if (room.treasure) {
-          assert.ok(kinds.has(room.treasure.kind) && guards.has(room.treasure.guard));
-          assert.ok(Number.isInteger(room.treasure.gp) && room.treasure.gp >= 0, "gp value");
-          assert.ok(Number.isInteger(room.treasure.weight) && room.treasure.weight >= 0, "cn weight");
+          const tr = room.treasure;
+          assert.ok(kinds.has(tr.kind) && guards.has(tr.guard));
+          if (tr.dice !== undefined) {
+            // Coins: a dice expression for value, no rolled gp, no weight.
+            assert.match(tr.dice, /^\d+d\d+(×\d+)?$/, "coin value is a dice expr");
+            assert.equal(tr.gp, undefined, "coins carry no rolled gp");
+            assert.equal(tr.weight, undefined, "coins carry no weight");
+          } else if (tr.gp !== undefined) {
+            // Gems/idols/plate: a rolled value with a carry weight.
+            assert.ok(Number.isInteger(tr.gp) && tr.gp > 0, "gp value");
+            assert.ok(Number.isInteger(tr.weight) && tr.weight >= 1, "cn weight");
+          } else {
+            // Leads / magic items: neither a value nor a weight.
+            assert.equal(tr.weight, undefined, "valueless treasure has no weight");
+          }
         }
       }
     }

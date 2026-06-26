@@ -17,9 +17,12 @@ import { randInt, pick } from "../core/rng.js";
 import { rollDice } from "../core/dice.js";
 import { layoutLevel, deriveDoors } from "./dungeon-layout.js";
 
-// Weight (in coins/cn) per gp of value, by bulk: coins ~ their own weight; gems/
-// magic are light (the smart haul); statues/plate are heavy to haul out.
-const BULK_FACTOR = { coin: 1, light: 0.05, heavy: 1.5 };
+// Weight (in coins/cn) per gp of value, by bulk: gems/magic are light (the smart
+// haul); statues/plate are heavy to haul out. Coins show their dice, not weight.
+const BULK_FACTOR = { light: 0.05, heavy: 1.5 };
+// Number appearing (a dice expression, book-style) by monster tier: weak swarm,
+// tough few. Used so a room reads "2d4 Goblins" rather than a fixed count.
+const NA_BY_TIER = { 1: "2d4", 2: "1d6", 3: "1d4", 4: "1d2" };
 
 const MIN_ENCOUNTERS = 2; // smallest wandering list (tiny levels)
 const MAX_ENCOUNTERS = 6; // largest wandering list (big levels)
@@ -47,7 +50,7 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 16: wandering-monster list scales with level size (4.9.12 follow-up).
 // 17: depth/difficulty scaling — monster + treasure tier rise with depth (4.9.13).
 // 18: treasure carries rolled gp value + weight (cn) by bulk.
-export const DUNGEON_BUILD = 18;
+export const DUNGEON_BUILD = 19;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -155,6 +158,14 @@ export function generateDungeon(tables, rng, ctx = {}) {
   const statusTable = tables.get("dungeon-monster-status");
   const lightTable = tables.get("dungeon-light");
 
+  // Number-appearing (dice) per creature name, from each member's tier.
+  const naByName = new Map();
+  for (const e of tables.get("monster-families").entries) {
+    for (const m of e.value.members) naByName.set(m.value, NA_BY_TIER[m.tier] || "1d6");
+    naByName.set(e.value.elite, "1");
+  }
+  const naFor = (name) => naByName.get(name) || "1d6";
+
   // One theme + size per dungeon (from the POI); every level inherits the theme.
   const theme = ctx.theme || rollTable(tables.get("dungeon-theme"), rng).value;
   const forcedSize =
@@ -209,11 +220,8 @@ export function generateDungeon(tables, rng, ctx = {}) {
       let special = null;
       let dressing = null;
       if (content === "Monster") {
-        monster = {
-          name: rollTable(encounterTable, rng).value,
-          number: randInt(rng, 1, 6),
-          status: rollTable(statusTable, rng).value,
-        };
+        const name = rollTable(encounterTable, rng).value;
+        monster = { name, na: naFor(name), status: rollTable(statusTable, rng).value };
       } else if (content === "Trap") {
         trap = rollTable(trapTable, rng).value;
       } else if (content === "Special") {
@@ -222,14 +230,21 @@ export function generateDungeon(tables, rng, ctx = {}) {
         dressing = rollTable(dressingTable, rng).value;
       }
       // Treasure (not in Special rooms — the feature is the point there).
-      // Value scales with depth via the level's tier-weighted treasure table;
-      // gp is rolled from a dice expression and weight (cn) from its bulk.
+      // Value scales with depth via the level's tier-weighted treasure table.
+      // Coins are shown as a dice expression (book-style, GM rolls), no weight;
+      // gems/idols/plate roll a concrete value + weight (cn) by bulk.
       let treasure = null;
       if (content !== "Special" && rng() < treasureChance) {
         const kind = rollTable(levelTreasure, rng).value;
-        const gp = rollDice(kind.gp, rng).total;
-        const weight = gp > 0 ? Math.max(1, Math.round(gp * (BULK_FACTOR[kind.bulk] ?? 1))) : 0;
-        treasure = { kind: kind.kind, guard: rollTable(guardTable, rng).value, gp, weight };
+        const guard = rollTable(guardTable, rng).value;
+        if (kind.bulk === "coin") {
+          treasure = { kind: kind.kind, guard, dice: kind.gp.replace("*", "×") };
+        } else if (kind.gp === "0") {
+          treasure = { kind: kind.kind, guard }; // a lead or a magic item — no value
+        } else {
+          const gp = rollDice(kind.gp, rng).total;
+          treasure = { kind: kind.kind, guard, gp, weight: Math.max(1, Math.round(gp * BULK_FACTOR[kind.bulk])) };
+        }
       }
       rooms.push({ n, content, monster, trap, special, dressing, treasure });
     }
@@ -325,7 +340,7 @@ function assignOccupation(levels, entrances, occupiers, rng, theme) {
     room.held = group;
     room.light = { source: `Lit — held by ${group}` };
     if (room.content === "Monster") {
-      room.monster = { name: group, number: randInt(rng, 3, 8), status: "alert" };
+      room.monster = { name: group, na: "2d6", status: "alert" };
     }
   }
   // Boundary: lock every level-0 edge crossing held<->unheld (sealed but openable).

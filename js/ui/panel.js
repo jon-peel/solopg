@@ -304,9 +304,13 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
-// "Treasure: <kind> — <gp> gp, <weight> cn (<guard>)"; omits value for leads/magic.
+// Coins read book-style as a dice expression, no weight ("Loose coins (2d6×10 gp)");
+// gems/idols/plate roll a concrete value + weight ("— 240 gp, 12 cn"); leads/magic
+// show neither. Guard is always appended.
 function treasureLine(t) {
-  const amount = t.gp > 0 ? ` — ${t.gp} gp${t.weight ? `, ${t.weight} cn` : ""}` : "";
+  let amount = "";
+  if (t.dice) amount = ` (${t.dice} gp)`;
+  else if (t.gp > 0) amount = ` — ${t.gp} gp${t.weight ? `, ${t.weight} cn` : ""}`;
   return `Treasure: ${t.kind}${amount} (${t.guard})`;
 }
 
@@ -353,7 +357,7 @@ export function renderDungeonPanel({
     for (const line of [
       room.held ? `Held by ${room.held}` : null,
       room.monster
-        ? `Monster: ${room.monster.number}× ${room.monster.name} (${room.monster.status})`
+        ? `Monster: ${room.monster.na} ${room.monster.name} (${room.monster.status})`
         : `Content: ${room.content}`,
       room.trap ? `Trap: ${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}` : null,
       room.special ? `Special: ${room.special}` : null,
