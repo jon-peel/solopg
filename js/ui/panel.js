@@ -322,6 +322,12 @@ export function renderDungeonPanel({
   const h = document.createElement("h3");
   h.textContent = `${dungeon.theme || "Dungeon"} — ${dungeon.size}`;
   sel.appendChild(h);
+  if (dungeon.difficulty) {
+    const diff = document.createElement("div");
+    diff.className = "log-line";
+    diff.textContent = `Difficulty: ${dungeon.difficulty}`;
+    sel.appendChild(diff);
+  }
 
   sel.appendChild(sectionLabel(`Level ${level.depth} — ${level.family}`));
   if (dungeon.occupation && dungeon.occupation.level === level.depth - 1) {

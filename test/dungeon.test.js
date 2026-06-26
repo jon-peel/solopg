@@ -110,7 +110,7 @@ test("each room carries content-appropriate detail", () => {
   const traps = new Set(t.get("dungeon-trap").entries.map((e) => e.value.name));
   const specials = new Set(t.get("dungeon-special").entries.map((e) => e.value));
   const dressings = new Set(t.get("dungeon-dressing").entries.map((e) => e.value));
-  const kinds = new Set(t.get("dungeon-treasure").entries.map((e) => e.value));
+  const kinds = new Set(t.get("dungeon-treasure").entries.map((e) => e.value.kind));
   const guards = new Set(t.get("dungeon-treasure-guard").entries.map((e) => e.value));
   const statuses = new Set(t.get("dungeon-monster-status").entries.map((e) => e.value));
   for (let s = 0; s < 120; s++) {
@@ -386,6 +386,54 @@ test("native-occupant themes are rarely occupied by interlopers", () => {
     if (generateDungeon(t, mulberry32(s), { size: "Sizable", theme: "Beast den" }).occupation) occ++;
   }
   assert.ok(occ / 300 < 0.15, `Beast den rarely occupied, got ${(occ / 300).toFixed(2)}`);
+});
+
+test("monster difficulty rises with depth and with dungeon difficulty", () => {
+  const t = tables();
+  // name -> tier (incl. elites at tier 5 so bosses count as toughest).
+  const tierOf = new Map();
+  for (const e of t.get("monster-families").entries) {
+    for (const m of e.value.members) tierOf.set(m.value, m.tier);
+    tierOf.set(e.value.elite, 5);
+  }
+  const avgByDepth = (theme, restrictDifficulty) => {
+    const sum = [];
+    const cnt = [];
+    for (let s = 0; s < 600; s++) {
+      const d = generateDungeon(t, mulberry32(s), { size: "Sprawling", theme });
+      if (restrictDifficulty && d.difficulty !== restrictDifficulty) continue;
+      d.levels.forEach((lvl, i) => {
+        for (const m of lvl.encounters) {
+          const ti = tierOf.get(m.value);
+          if (ti == null) continue;
+          sum[i] = (sum[i] || 0) + ti;
+          cnt[i] = (cnt[i] || 0) + 1;
+        }
+      });
+    }
+    return sum.map((s, i) => s / cnt[i]);
+  };
+  // Forgotten tomb (Undead) spans tiers 1-4, a clean gradient.
+  const byDepth = avgByDepth("Forgotten tomb");
+  assert.ok(
+    byDepth[byDepth.length - 1] > byDepth[0] + 0.5,
+    `deep monsters tougher than shallow: ${byDepth.map((x) => x.toFixed(2)).join(", ")}`,
+  );
+  const soft = avgByDepth("Forgotten tomb", "soft");
+  const deadly = avgByDepth("Forgotten tomb", "deadly");
+  assert.ok(deadly[0] > soft[0], `deadly level-1 tougher than soft (${deadly[0].toFixed(2)} vs ${soft[0].toFixed(2)})`);
+});
+
+test("treasure value rises with depth", () => {
+  const t = tables();
+  const tierOf = new Map(t.get("dungeon-treasure").entries.map((e) => [e.value.kind, e.value.tier]));
+  let shallow = 0, shallowN = 0, deep = 0, deepN = 0;
+  for (let s = 0; s < 600; s++) {
+    const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
+    for (const r of d.levels[0].rooms) if (r.treasure) { shallow += tierOf.get(r.treasure.kind); shallowN++; }
+    for (const r of d.levels[d.levels.length - 1].rooms) if (r.treasure) { deep += tierOf.get(r.treasure.kind); deepN++; }
+  }
+  assert.ok(deep / deepN > shallow / shallowN + 0.3, `deep treasure richer: ${(deep / deepN).toFixed(2)} vs ${(shallow / shallowN).toFixed(2)}`);
 });
 
 test("ctx.theme is honored for every level", () => {

@@ -40,7 +40,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 14: occupied frontier — held+lit entrance cluster, locked boundary (4.9.11).
 // 15: bigger tiered monster roster + new den themes (4.9.12).
 // 16: wandering-monster list scales with level size (4.9.12 follow-up).
-export const DUNGEON_BUILD = 16;
+// 17: depth/difficulty scaling — monster + treasure tier rise with depth (4.9.13).
+export const DUNGEON_BUILD = 17;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -77,15 +78,28 @@ function sampleDistinct(memberList, want, rng, seen = new Map()) {
   return seen;
 }
 
+// Weight multiplier favouring members/treasure whose tier is near the level's
+// target tier (1 at the target, halving per step away). Drives depth scaling.
+function tierAffinity(tier, target) {
+  return 2 ** -Math.abs((tier || 1) - target);
+}
+
 /**
- * Build one level's monster set: mostly the chosen family, plus a chance of an
+ * Build one level's monster set: mostly the chosen family (re-weighted toward
+ * `targetTier` so deeper/deadlier levels skew tough), plus a chance of an
  * interloper and (on the deepest level) the family's elite.
  * @returns {{ family: string, encounters: {weight:number,value:string}[] }}
  */
-function buildLevelMonsters(families, theme, isDeepest, rng, roomCount = 8) {
+function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTier = 1) {
   const familyName = rollTable(familyTableForTheme(families, theme), rng).value;
   const index = familyIndex(families);
-  const family = index.get(familyName) || { members: [{ weight: 1, value: "Vermin" }] };
+  const family = index.get(familyName) || { members: [{ weight: 1, value: "Vermin", tier: 1 }] };
+
+  // Re-weight members toward the level's target tier (depth + difficulty).
+  const members = family.members.map((m) => ({
+    value: m.value,
+    weight: (("weight" in m ? m.weight : 1)) * tierAffinity(m.tier, targetTier),
+  }));
 
   // Wandering list scales with the level's size: a tiny tunnel has few wanderers,
   // a sprawling level has the full spread.
@@ -93,7 +107,7 @@ function buildLevelMonsters(families, theme, isDeepest, rng, roomCount = 8) {
     MIN_ENCOUNTERS,
     Math.min(MAX_ENCOUNTERS, randInt(rng, Math.floor(roomCount / 3), Math.ceil(roomCount / 2))),
   );
-  const seen = sampleDistinct(family.members, want, rng);
+  const seen = sampleDistinct(members, want, rng);
 
   // Occasional interloper from a different family.
   if (rng() < INTERLOPER_CHANCE) {
@@ -145,6 +159,14 @@ export function generateDungeon(tables, rng, ctx = {}) {
   const sizeName = size.size;
   const big = sizeName === "Sizable" || sizeName === "Sprawling";
   const stairChance = sizeName === "Sprawling" ? 0.6 : big ? 0.45 : 0.3;
+  // Per-dungeon difficulty shifts the depth tier curve (some dungeons just nastier).
+  const difficulty = rollTable(
+    { id: "difficulty", entries: [
+      { weight: 1, value: "soft" }, { weight: 2, value: "standard" }, { weight: 1, value: "deadly" },
+    ] },
+    rng,
+  ).value;
+  const shift = difficulty === "soft" ? -1 : difficulty === "deadly" ? 1 : 0;
   // Decide up-front which level (if any) sources a level-skipping shaft.
   let shaftSource = -1;
   if (levelCount >= 3 && rng() < (big ? 0.5 : 0.25)) shaftSource = randInt(rng, 0, levelCount - 3);
@@ -156,10 +178,21 @@ export function generateDungeon(tables, rng, ctx = {}) {
   // Generate top-down so each level's stair rooms can be PINNED directly above
   // their down-stair partner from the level(s) above (true vertical stairs).
   for (let i = 0; i < levelCount; i++) {
-    const isDeepest = i + 1 === levelCount;
+    const depth = i + 1;
+    const isDeepest = depth === levelCount;
+    const monsterTier = Math.max(1, Math.min(4, depth + shift));
+    const treasureTier = Math.max(1, Math.min(3, depth + shift)); // tracks monster difficulty
     const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
-    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount);
+    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
+    // Treasure for this level, re-weighted toward its target tier (depth scaling).
+    const levelTreasure = {
+      id: "treasure",
+      entries: treasureTable.entries.map((e) => ({
+        value: e.value,
+        weight: (("weight" in e ? e.weight : 1)) * tierAffinity(e.value.tier, treasureTier),
+      })),
+    };
 
     const rooms = [];
     for (let n = 1; n <= roomCount; n++) {
@@ -183,10 +216,11 @@ export function generateDungeon(tables, rng, ctx = {}) {
         dressing = rollTable(dressingTable, rng).value;
       }
       // Treasure (not in Special rooms — the feature is the point there).
+      // Value scales with depth via the level's tier-weighted treasure table.
       let treasure = null;
       if (content !== "Special" && rng() < treasureChance) {
         treasure = {
-          kind: rollTable(treasureTable, rng).value,
+          kind: rollTable(levelTreasure, rng).value.kind,
           guard: rollTable(guardTable, rng).value,
         };
       }
@@ -227,7 +261,7 @@ export function generateDungeon(tables, rng, ctx = {}) {
   const { entrances, exits } = surfaceConnections(levels, sizeName, ctx.terrain, rng);
   const occupation = assignOccupation(levels, entrances, tables.get("occupiers"), rng, theme);
   assignLighting(levels, stairs, entrances, lightTable, rng);
-  return { build: DUNGEON_BUILD, size: sizeName, theme, levels, stairs, entrances, exits, occupation };
+  return { build: DUNGEON_BUILD, size: sizeName, theme, difficulty, levels, stairs, entrances, exits, occupation };
 }
 
 // Occupied frontier: a chance interlopers hold the rooms by an entrance — lit,
