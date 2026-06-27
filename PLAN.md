@@ -150,7 +150,7 @@ graph TD
 | 2 — Hex map (+2.1 interaction, +2.2 terrain look) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | 3 — POIs + terrain-aware gen (+3.1–3.5 POIs/art/LOD) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
-| **5 — Other POI types detailed** | ▶ **next** | — |
+| **5 — Other POI types detailed** | ▶ **next** | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | 6 — Rumors | ◻ later | — |
 | 7 — Additional small oracles | ◻ later | see catalog below |
 | 8 — QoL & customization (editable tables, notes, themes) | ◻ later | — |
