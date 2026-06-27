@@ -10,10 +10,11 @@ generic occupant + one flavour line (`js/gen/poi.js` `flavorFor`). Two tiers:
   dungeon machinery (level stack, vertical-stair pinning, occupied frontier, boss room, lighting)
   with the vertical axis pointing **up**.
 
-**Out of scope (explicit):** `lair` — already covered by the dungeon den themes (`Beast den`,
-`Goblin warren`, `Ogre lair`, `Kobold tunnels`, …). Phase 5 adds it **no** detail. Whether to retire
-the flat `lair` POI type entirely (it's redundant with those themes) is a **separate later decision**,
-not part of this phase.
+**Lair — retired (5.1):** the standalone `lair` POI type was redundant with the dungeon den themes
+(`Beast den`, `Goblin warren`, `Ogre lair`, `Kobold tunnels`, …), so it was removed from the Add-POI
+list and from auto-generation (its terrain weight folded into `dungeon`). A creature lair now arises
+as a dungeon den. The `lair` **occupant** kind still exists (a creature lairing inside a dungeon), and
+old saves' lair POIs still render (legacy 🐾 glyph).
 
 ## Sub-steps (build order)
 | Step | Scope |
@@ -168,4 +169,4 @@ schema/tests/render), or (b) signed floors (negative = below ground). Settled be
 1. **Shrine watcher** — optional light watcher when condition warrants (lean: yes), or none.
 2. **Storage** — store structured picks + compose on render (lean: yes), or store finished string.
 3. **Tower vertical model** — `orientation` flag on shared `levels[]` (lean), or signed floors.
-4. **Retire flat `lair` POI type?** — deferred out of this phase; flagged for a later call.
+4. **Retire flat `lair` POI type?** — ✅ done in 5.1 (folded into dungeon den themes).

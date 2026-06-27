@@ -128,8 +128,9 @@ graph TD
   terrain-biased `detail.theme` (drives the map glyph) and gain a generated interior at
   `detail.dungeon`, built lazily on first open. Auto-gen places ≤1 POI; users add/remove more.
 - **Terrains:** Forest, Plains, Hills, Mountains, Swamp, Desert, Water. **POI types:** dungeon,
-  lair, shrine, camp, landmark, tower. The explorable types **ruin/cave/mine merged into `dungeon`
-  as themes** (Ruin, Cave complex, Abandoned mine, Forgotten tomb, Mausoleum, …).
+  shrine, camp, landmark, tower. The explorable types **ruin/cave/mine — and creature lairs —
+  merged into `dungeon` as themes** (Ruin, Cave complex, Abandoned mine, Beast den, Ogre lair, …).
+  The standalone `lair` POI type was retired in Phase 5.1 (a creature lair is now a dungeon den).
 
 ### Canonical table schema
 ```json

@@ -15,31 +15,31 @@ export const SIZE_ORDER = ["Thorp", "Hamlet", "Village", "Town", "City"];
 export const TERRAIN_PROFILE = {
   Forest: {
     settlement: { chance: 0.3, maxSize: "City" },
-    poi: { chance: 0.55, weights: { dungeon: 4, lair: 4, shrine: 2, camp: 2, landmark: 1, tower: 1 } },
+    poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, camp: 2, landmark: 1, tower: 1 } },
   },
   Plains: {
     settlement: { chance: 0.45, maxSize: "City" },
-    poi: { chance: 0.4, weights: { dungeon: 3, camp: 3, shrine: 2, landmark: 2, lair: 1, tower: 1 } },
+    poi: { chance: 0.4, weights: { dungeon: 4, camp: 3, shrine: 2, landmark: 2, tower: 1 } },
   },
   Hills: {
     settlement: { chance: 0.35, maxSize: "Town" },
-    poi: { chance: 0.55, weights: { dungeon: 5, lair: 3, tower: 2, shrine: 1 } },
+    poi: { chance: 0.55, weights: { dungeon: 8, tower: 2, shrine: 1 } },
   },
   Mountains: {
     settlement: { chance: 0.15, maxSize: "Hamlet" },
-    poi: { chance: 0.6, weights: { dungeon: 6, lair: 3, tower: 2, shrine: 1 } },
+    poi: { chance: 0.6, weights: { dungeon: 9, tower: 2, shrine: 1 } },
   },
   Swamp: {
     settlement: { chance: 0.15, maxSize: "Hamlet" },
-    poi: { chance: 0.55, weights: { dungeon: 4, lair: 4, shrine: 2, landmark: 1 } },
+    poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, landmark: 1 } },
   },
   Desert: {
     settlement: { chance: 0.2, maxSize: "Town" },
-    poi: { chance: 0.45, weights: { dungeon: 5, shrine: 3, lair: 2, landmark: 2, tower: 1 } },
+    poi: { chance: 0.45, weights: { dungeon: 7, shrine: 3, landmark: 2, tower: 1 } },
   },
   Water: {
     settlement: null, // no settlements on open water
-    poi: { chance: 0.2, weights: { landmark: 2, shrine: 1, lair: 1 } }, // no dungeon on open water
+    poi: { chance: 0.2, weights: { landmark: 2, shrine: 1 } }, // no dungeon on open water
   },
 };
 

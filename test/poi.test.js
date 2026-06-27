@@ -40,7 +40,7 @@ test("Water never yields a dungeon (terrain-weighted types)", () => {
   }
 });
 
-test("a camp is occupier-leaning; a lair yields a creature", () => {
+test("a camp is occupier-leaning; a dungeon can house a creature lair", () => {
   const t = tables();
   // camp -> occupied lean: force type roll to camp by using a terrain whose
   // table contains camp, then force kind to "occupied".
@@ -50,10 +50,15 @@ test("a camp is occupier-leaning; a lair yields a creature", () => {
   if (camp.type === "camp") {
     assert.ok(["occupied", "none"].includes(camp.occupant.kind));
   }
-  // A lair type must carry a creature occupant or none.
-  const lair = generatePoi(t, forced([0.0, 0.0, 0.0]), { terrain: "Forest", index: 1 });
-  if (lair.occupant.kind === "lair") {
-    assert.ok(typeof lair.occupant.creature === "string");
+  // The standalone "lair" POI type was retired (folded into dungeon den themes);
+  // a creature lair now arises from a dungeon's "either" lean.
+  const dungeon = generatePoi(t, forced([0.0, 0.0, 0.0]), {
+    terrain: "Forest",
+    index: 1,
+    forceType: "dungeon",
+  });
+  if (dungeon.occupant.kind === "lair") {
+    assert.ok(typeof dungeon.occupant.creature === "string");
   }
 });
 
@@ -107,8 +112,10 @@ test("forceType supports a non-dungeon type (tower)", () => {
 
 test("name embeds the occupant for lair/occupied", () => {
   const t = tables();
+  // A dungeon leans "either" and can roll a creature lair; its name embeds it
+  // (e.g. "Beast den — Troll lair").
   for (let s = 0; s < 100; s++) {
-    const poi = generatePoi(t, mulberry32(s), { terrain: "Forest", index: 0, forceType: "lair" });
+    const poi = generatePoi(t, mulberry32(s), { terrain: "Forest", index: 0, forceType: "dungeon" });
     if (poi.occupant.kind === "lair") {
       assert.ok(poi.name.includes(poi.occupant.creature));
       break;
