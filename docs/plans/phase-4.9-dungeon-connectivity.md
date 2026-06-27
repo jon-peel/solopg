@@ -132,5 +132,5 @@ Dungeon art/tiles; restocking-over-time; full faction machinery inside dungeons;
     theme-biased source + reason (candle, embers, torches, magical glow).
   - **4.9.11 — Lighting (Tier B, occupied frontier):** a chance the dungeon is occupied — first few
     rooms from an entrance are held + lit, a locked/secret door seals the dark monster-filled depths.
-- **Deferred:** reroll a dungeon/level; enter a dungeon by clicking its hex-map glyph; monster stat
-  detail (out of scope — system-agnostic).
+- **Deferred:** named-den signature-creature bias (a themed den leans toward its namesake species
+  among current residents); monster stat detail (out of scope — system-agnostic).
