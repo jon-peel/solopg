@@ -20,9 +20,10 @@ description engine** for **shrine / camp / landmark** (`js/gen/feature-detail.js
 a **Tier-2 mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View with an `orientation:"up"`
 flag — floors that climb, a garrison from the POI's occupant, and the master on top. The standalone
 `lair` POI type was retired (folded into dungeon den themes). **In progress: Phase 6 — Hooks** (Type-1
-local adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)). Sub-step **6.1**
-(foundation: schema **v6** + the **Known** pattern + a settlement Hooks panel) is built and node-tested.
-**Schema v6. 160 `node --test` passing.** Work merges to **`main`** via PR.
+local adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)). **6.1** (foundation: schema
+**v6** + the **Known** pattern + a settlement Hooks panel) and **6.2** (the **Distant** pattern — lazy
+target-tile generation: a hook points *n* hexes away and spawns just that one tile) are built and
+node-tested. **Schema v6. 165 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 

@@ -6,6 +6,8 @@ import {
   hookName,
   hookDescription,
   bearingTo,
+  rollHookPattern,
+  chooseDistantTarget,
   HOOK_BUILD,
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
@@ -13,7 +15,7 @@ import { mulberry32 } from "../js/core/rng.js";
 import { axialDistance } from "../js/core/hexgeo.js";
 
 function tables() {
-  const ids = ["hook-verb", "hook-source", "hook-accuracy", "hook-explore", "hook-threat"];
+  const ids = ["hook-pattern", "hook-verb", "hook-source", "hook-accuracy", "hook-explore", "hook-threat"];
   return new Map(
     ids.map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
   );
@@ -125,6 +127,66 @@ test("bearingTo gives a sensible compass label (and null when coincident)", () =
   assert.equal(bearingTo({ q: 0, r: 0 }, { q: 3, r: 0 }), "E");
   assert.equal(bearingTo({ q: 0, r: 0 }, { q: -3, r: 0 }), "W");
   assert.equal(bearingTo({ q: 0, r: 0 }, { q: 0, r: 0 }), null);
+});
+
+// --- 6.2: distant pattern ---------------------------------------------------
+
+test("rollHookPattern falls back to distant when there are no subjects", () => {
+  const t = tables();
+  for (let s = 0; s < 50; s++) {
+    assert.equal(rollHookPattern(t, mulberry32(s), false), "distant");
+  }
+  // With subjects, both patterns appear over many seeds.
+  const seen = new Set();
+  for (let s = 0; s < 200; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
+  assert.deepEqual([...seen].sort(), ["distant", "known"]);
+});
+
+test("chooseDistantTarget lands a free cell at the requested straight-line distance", () => {
+  const origin = { q: 0, r: 0 };
+  for (let s = 0; s < 200; s++) {
+    const spot = chooseDistantTarget(mulberry32(s), origin, () => false, { minDistance: 2, maxDistance: 6 });
+    assert.ok(spot, "found a spot on empty ground");
+    assert.ok(spot.distance >= 2 && spot.distance <= 6);
+    // Walking a straight axial direction, the hex distance equals the step count.
+    assert.equal(axialDistance(origin.q, origin.r, spot.q, spot.r), spot.distance);
+    // And a straight line yields a clean compass bearing.
+    assert.ok(bearingTo(origin, spot));
+  }
+});
+
+test("chooseDistantTarget avoids occupied cells, and gives up when boxed in", () => {
+  const origin = { q: 0, r: 0 };
+  // Everything occupied → null.
+  assert.equal(chooseDistantTarget(mulberry32(1), origin, () => true), null);
+  // Only one specific cell free: every returned spot must be unoccupied.
+  const free = (q, r) => !(q === 0 && r === 0);
+  for (let s = 0; s < 50; s++) {
+    const spot = chooseDistantTarget(mulberry32(s), origin, (q, r) => !free(q, r));
+    if (spot) assert.ok(free(spot.q, spot.r));
+  }
+});
+
+test("a distant hook carries pattern + distance and points at its lone subject", () => {
+  const t = tables();
+  const subject = { poiId: "poi:0", name: "Tomb", type: "dungeon", q: 4, r: -4, occupant: { kind: "none" } };
+  const h = generateHook(t, mulberry32(5), {
+    subjects: [subject], origin: { q: 0, r: 0 }, index: 0, pattern: "distant", distance: 4,
+  });
+  assert.equal(h.pattern, "distant");
+  assert.equal(h.distance, 4);
+  assert.equal(h.subject.poiId, "poi:0");
+  assert.equal(h.target.q, 4);
+  assert.equal(h.target.r, -4);
+  const lines = hookDescription(h);
+  assert.match(lines[0], /Tomb, 4 hexes to the /);
+});
+
+test("a known hook's distance is derived from the geometry", () => {
+  const subject = { poiId: "poi:0", name: "Ruin", type: "dungeon", q: 0, r: 3, occupant: { kind: "none" } };
+  const h = generateHook(tables(), mulberry32(2), { subjects: [subject], origin: { q: 0, r: 0 }, index: 0 });
+  assert.equal(h.pattern, "known");
+  assert.equal(h.distance, 3);
 });
 
 test("hookName + hookDescription compose prose from the picks", () => {

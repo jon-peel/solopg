@@ -4,7 +4,7 @@
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
 import { axialKey, neighbors } from "../core/hexgeo.js";
-import { generateHook, hookName } from "../gen/hooks.js";
+import { generateHook, hookName, rollHookPattern, chooseDistantTarget } from "../gen/hooks.js";
 import {
   createWorld,
   addHex,
@@ -77,7 +77,10 @@ const HEX_TABLE_IDS = [
 ];
 
 // Tables the hook generator rolls on (loaded on demand when a hook is generated).
+// A Distant hook also needs the hex/POI tables to build its target tile, so
+// onGenerateHook loads HEX_TABLE_IDS alongside these.
 const HOOK_TABLE_IDS = [
+  "hook-pattern",
   "hook-verb",
   "hook-source",
   "hook-accuracy",
@@ -712,28 +715,68 @@ function hookSubjects(world) {
   return subs;
 }
 
+// Build the lazily-generated target tile for a Distant hook: a normal placed hex
+// (random terrain; generated in isolation, so the route to it stays blank) that
+// carries a forced dungeon POI as the hook's subject. Marked unexplored.
+function buildDistantTargetHex(tables, q, r) {
+  const hexRng = subRng(current.seed, "hex", q, r, 0);
+  const hex = generateHex(tables, hexRng, {
+    key: axialKey(q, r),
+    coords: { q, r },
+    placed: true,
+    neighborTerrains: neighborTerrains(q, r),
+    seed: current.seed,
+    gen: 0,
+  });
+  hex.gen = 0;
+  hex.explored = false; // not yet visited; the intervening hexes are blank
+  hex.settlement = { present: false }; // a remote wilderness site
+  // Force the promised explorable (a dungeon) from its own sub-stream, replacing
+  // any auto-rolled POI so the hook reliably points at something.
+  const poiRng = subRng(current.seed, "hex", q, r, "poi", "hook");
+  const poi = generatePoi(tables, poiRng, { terrain: hex.terrain, index: 0, forceType: "dungeon" });
+  poi.id = "poi:0";
+  hex.pois = [poi];
+  return hex;
+}
+
 async function onGenerateHook() {
   if (!current || !selected) return;
   const hex = getHex(current, selected.q, selected.r);
   if (!hex || !hex.placed) return;
-  const subjects = hookSubjects(current);
-  if (!subjects.length) {
-    return logLine("No points of interest on the map yet — add some POIs first.");
-  }
   try {
-    const tables = await loadTables(HOOK_TABLE_IDS);
+    // Distant hooks build a target tile, so load the hex/POI tables too.
+    const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));
     if (!Array.isArray(current.hooks)) current.hooks = [];
     const n = nextHookId(current);
-    const rng = subRng(current.seed, "hook", selected.q, selected.r, n);
-    const hook = generateHook(tables, rng, {
-      subjects,
-      origin: { q: selected.q, r: selected.r },
-      index: n,
-    });
+    const origin = { q: selected.q, r: selected.r };
+    const rng = subRng(current.seed, "hook", origin.q, origin.r, n);
+
+    const subjects = hookSubjects(current);
+    const pattern = rollHookPattern(tables, rng, subjects.length > 0);
+
+    let hook;
+    if (pattern === "distant") {
+      const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
+      if (!spot) return logLine("No open ground nearby for a distant hook.");
+      const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+      addHex(current, targetHex);
+      const poi = targetHex.pois[0];
+      const subject = {
+        poiId: poi.id, name: poi.name, type: poi.type,
+        q: spot.q, r: spot.r, occupant: poi.occupant,
+      };
+      hook = generateHook(tables, rng, {
+        subjects: [subject], origin, index: n, pattern: "distant", distance: spot.distance,
+      });
+    } else {
+      hook = generateHook(tables, rng, { subjects, origin, index: n });
+    }
+
     if (!hook) return logLine("Nothing to gossip about here.");
     current.hooks.push(hook);
     await persistAndRefresh();
-    logLine(`New hook — ${hookName(hook)}.`);
+    logLine(`New hook — ${hookName(hook)}${pattern === "distant" ? " (distant — a new site appeared on the map)" : ""}.`);
   } catch (err) {
     logLine(`Generate hook error: ${err.message}`);
   }
