@@ -312,6 +312,8 @@ function renderHooksSection(sel, model) {
   const actions = document.createElement("div");
   actions.className = "tile-actions";
   actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
+  // "Read map": the party pores over a map found below → forces a Map hook.
+  actions.appendChild(actionButton("Read map", model.onReadMap));
   sel.appendChild(actions);
 }
 

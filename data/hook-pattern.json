@@ -3,6 +3,7 @@
   "title": "Hook resolution pattern (how the target comes to exist)",
   "entries": [
     { "weight": 3, "value": "known" },
-    { "weight": 2, "value": "distant" }
+    { "weight": 2, "value": "distant" },
+    { "weight": 1, "value": "map" }
   ]
 }

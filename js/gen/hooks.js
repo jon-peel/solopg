@@ -117,7 +117,7 @@ export function generateHook(tables, rng, ctx) {
 
   const verb = ctx.verb || rollTable(tables.get("hook-verb"), rng).value;
   const claim = rollTable(tables.get(`hook-${verb}`), rng).value;
-  const source = rollTable(tables.get("hook-source"), rng).value;
+  const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
   const accuracy = ctx.accuracy || rollTable(tables.get("hook-accuracy"), rng).value;
 
   // `indicated` = where the party is told to look. Accurate/false point at the
@@ -142,6 +142,8 @@ export function generateHook(tables, rng, ctx) {
     claim,
     source,
     status: "open",
+    // The revealed corridor (Map pattern) — the run of hexes from origin to target.
+    ...(ctx.path ? { path: ctx.path } : {}),
   };
 }
 
@@ -161,11 +163,14 @@ export function hookName(hook) {
 export function hookDescription(hook) {
   if (!hook) return [];
   const dirWord = hook.bearing ? BEARING_WORDS[hook.bearing] : null;
-  // Distant hooks name a travel distance; known hooks (nearby) just give a bearing.
+  const d = hook.distance;
+  const whither = dirWord ? `${d} hex${d === 1 ? "" : "es"} to the ${dirWord}` : `${d} hexes off`;
+  // Each pattern phrases the destination differently: Map names a charted route,
+  // Distant a travel distance, Known (nearby) just a bearing.
   let line0;
-  if (hook.pattern === "distant") {
-    const d = hook.distance;
-    const whither = dirWord ? `${d} hex${d === 1 ? "" : "es"} to the ${dirWord}` : `${d} hexes off`;
+  if (hook.pattern === "map") {
+    line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
+  } else if (hook.pattern === "distant") {
     line0 = `${hook.source}: ${cap(hook.claim)} at ${hook.subject.name}, ${whither}.`;
   } else {
     const dir = dirWord ? ` to the ${dirWord}` : "";

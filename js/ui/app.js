@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, neighbors } from "../core/hexgeo.js";
+import { axialKey, neighbors, axialLine } from "../core/hexgeo.js";
 import { generateHook, hookName, rollHookPattern, chooseDistantTarget } from "../gen/hooks.js";
 import {
   createWorld,
@@ -291,7 +291,8 @@ function renderSelection() {
     // Hooks are heard "in town", so the section shows only at a settlement.
     hooksEnabled: settled,
     hooks: hooksAt(q, r),
-    onGenerateHook,
+    onGenerateHook: () => onGenerateHook(),
+    onReadMap,
     onResolveHook,
     onIgnoreHook,
     onRemoveHook,
@@ -740,12 +741,45 @@ function buildDistantTargetHex(tables, q, r) {
   return hex;
 }
 
-async function onGenerateHook() {
+// A subject descriptor for the hook generator, from a placed hex's first POI.
+function subjectFromHex(hex, poi) {
+  return {
+    poiId: poi.id, name: poi.name, type: poi.type,
+    q: hex.coords.q, r: hex.coords.r, occupant: poi.occupant,
+  };
+}
+
+// Map pattern: place the target tile AND reveal the corridor of hexes from the
+// origin to it (the "found map" traces a route). Returns { subject, path }.
+function buildMapTargetAndPath(tables, origin, spot) {
+  const path = axialLine(origin.q, origin.r, spot.q, spot.r);
+  for (const cell of path) {
+    const isOrigin = cell.q === origin.q && cell.r === origin.r;
+    const isTarget = cell.q === spot.q && cell.r === spot.r;
+    if (isOrigin || isTarget) continue; // origin already exists; target built below
+    if (hasHexAt(current, cell.q, cell.r)) continue; // don't clobber existing terrain
+    addHex(current, buildRandomHex(tables, cell.q, cell.r, 0)); // a revealed route hex
+  }
+  const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+  addHex(current, targetHex);
+  return { subject: subjectFromHex(targetHex, targetHex.pois[0]), path };
+}
+
+const HOOK_NOTE = {
+  distant: " (distant — a new site appeared on the map)",
+  map: " (map — a route was revealed to a new site)",
+  known: "",
+};
+
+// Generate a hook at the selected settlement. `opts.forcePattern` (e.g. the "Read
+// map" button forcing "map") skips the pattern roll; `opts.source` overrides the
+// rolled source for a triggered hook.
+async function onGenerateHook(opts = {}) {
   if (!current || !selected) return;
   const hex = getHex(current, selected.q, selected.r);
   if (!hex || !hex.placed) return;
   try {
-    // Distant hooks build a target tile, so load the hex/POI tables too.
+    // Distant/Map hooks build new tiles, so load the hex/POI tables too.
     const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));
     if (!Array.isArray(current.hooks)) current.hooks = [];
     const n = nextHookId(current);
@@ -753,22 +787,26 @@ async function onGenerateHook() {
     const rng = subRng(current.seed, "hook", origin.q, origin.r, n);
 
     const subjects = hookSubjects(current);
-    const pattern = rollHookPattern(tables, rng, subjects.length > 0);
+    const pattern = opts.forcePattern || rollHookPattern(tables, rng, subjects.length > 0);
 
     let hook;
-    if (pattern === "distant") {
+    if (pattern === "map" || pattern === "distant") {
       const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
-      if (!spot) return logLine("No open ground nearby for a distant hook.");
-      const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
-      addHex(current, targetHex);
-      const poi = targetHex.pois[0];
-      const subject = {
-        poiId: poi.id, name: poi.name, type: poi.type,
-        q: spot.q, r: spot.r, occupant: poi.occupant,
-      };
-      hook = generateHook(tables, rng, {
-        subjects: [subject], origin, index: n, pattern: "distant", distance: spot.distance,
-      });
+      if (!spot) return logLine("No open ground nearby for that hook.");
+      if (pattern === "map") {
+        const { subject, path } = buildMapTargetAndPath(tables, origin, spot);
+        hook = generateHook(tables, rng, {
+          subjects: [subject], origin, index: n, pattern: "map",
+          distance: spot.distance, verb: "explore", path, source: opts.source,
+        });
+      } else {
+        const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+        addHex(current, targetHex);
+        hook = generateHook(tables, rng, {
+          subjects: [subjectFromHex(targetHex, targetHex.pois[0])],
+          origin, index: n, pattern: "distant", distance: spot.distance,
+        });
+      }
     } else {
       hook = generateHook(tables, rng, { subjects, origin, index: n });
     }
@@ -776,11 +814,14 @@ async function onGenerateHook() {
     if (!hook) return logLine("Nothing to gossip about here.");
     current.hooks.push(hook);
     await persistAndRefresh();
-    logLine(`New hook — ${hookName(hook)}${pattern === "distant" ? " (distant — a new site appeared on the map)" : ""}.`);
+    logLine(`New hook — ${hookName(hook)}${HOOK_NOTE[hook.pattern] || ""}.`);
   } catch (err) {
     logLine(`Generate hook error: ${err.message}`);
   }
 }
+
+// "Read map": the party reads a map found below, back in town → a Map hook.
+const onReadMap = () => onGenerateHook({ forcePattern: "map", source: "A map found below" });
 
 // Toggle a hook's status (clicking the same status again clears it back to open).
 async function setHookStatus(id, status) {

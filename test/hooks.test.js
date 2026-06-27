@@ -12,7 +12,7 @@ import {
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
-import { axialDistance } from "../js/core/hexgeo.js";
+import { axialDistance, axialLine } from "../js/core/hexgeo.js";
 
 function tables() {
   const ids = ["hook-pattern", "hook-verb", "hook-source", "hook-accuracy", "hook-explore", "hook-threat"];
@@ -131,15 +131,17 @@ test("bearingTo gives a sensible compass label (and null when coincident)", () =
 
 // --- 6.2: distant pattern ---------------------------------------------------
 
-test("rollHookPattern falls back to distant when there are no subjects", () => {
+test("rollHookPattern never yields known without subjects (only known needs one)", () => {
   const t = tables();
-  for (let s = 0; s < 50; s++) {
-    assert.equal(rollHookPattern(t, mulberry32(s), false), "distant");
+  for (let s = 0; s < 100; s++) {
+    // Distant and Map make their own target, so they're fine with no subjects;
+    // only Known needs an existing POI, and it must fall back when there is none.
+    assert.notEqual(rollHookPattern(t, mulberry32(s), false), "known");
   }
-  // With subjects, both patterns appear over many seeds.
+  // With subjects, all three patterns appear over many seeds.
   const seen = new Set();
-  for (let s = 0; s < 200; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
-  assert.deepEqual([...seen].sort(), ["distant", "known"]);
+  for (let s = 0; s < 300; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
+  assert.deepEqual([...seen].sort(), ["distant", "known", "map"]);
 });
 
 test("chooseDistantTarget lands a free cell at the requested straight-line distance", () => {
@@ -187,6 +189,43 @@ test("a known hook's distance is derived from the geometry", () => {
   const h = generateHook(tables(), mulberry32(2), { subjects: [subject], origin: { q: 0, r: 0 }, index: 0 });
   assert.equal(h.pattern, "known");
   assert.equal(h.distance, 3);
+});
+
+// --- 6.3: map pattern (treasure maps) --------------------------------------
+
+test("axialLine returns a contiguous straight run inclusive of both ends", () => {
+  const line = axialLine(0, 0, 4, -4);
+  assert.equal(line.length, 5); // distance 4 → 5 cells
+  assert.deepEqual(line[0], { q: 0, r: 0 });
+  assert.deepEqual(line[line.length - 1], { q: 4, r: -4 });
+  for (let i = 1; i < line.length; i++) {
+    assert.equal(axialDistance(line[i - 1].q, line[i - 1].r, line[i].q, line[i].r), 1, "each step is adjacent");
+  }
+  // A zero-length line is just the single cell.
+  assert.deepEqual(axialLine(2, 2, 2, 2), [{ q: 2, r: 2 }]);
+});
+
+test("a map hook carries pattern, a path, and a charted-route description", () => {
+  const t = tables();
+  const origin = { q: 0, r: 0 };
+  const subject = { poiId: "poi:0", name: "Tomb", type: "dungeon", q: 0, r: 4, occupant: { kind: "none" } };
+  const path = axialLine(origin.q, origin.r, subject.q, subject.r);
+  const h = generateHook(t, mulberry32(8), {
+    subjects: [subject], origin, index: 0, pattern: "map", distance: 4, verb: "explore", path,
+    source: "A map found below",
+  });
+  assert.equal(h.pattern, "map");
+  assert.equal(h.verb, "explore");
+  assert.deepEqual(h.path, path);
+  assert.equal(h.source, "A map found below"); // ctx.source override honoured
+  const lines = hookDescription(h);
+  assert.match(lines[0], /^A map found below: a map marks Tomb, 4 hexes to the /);
+});
+
+test("a non-map hook has no path field", () => {
+  const subject = { poiId: "poi:0", name: "Ruin", type: "dungeon", q: 0, r: 3, occupant: { kind: "none" } };
+  const h = generateHook(tables(), mulberry32(2), { subjects: [subject], origin: { q: 0, r: 0 }, index: 0 });
+  assert.equal("path" in h, false);
 });
 
 test("hookName + hookDescription compose prose from the picks", () => {
