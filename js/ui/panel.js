@@ -2,7 +2,7 @@
 
 import { glyphForPoi } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
-import { hookDescription } from "../gen/hooks.js";
+import { hookName, hookDescription } from "../gen/hooks.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -265,56 +265,77 @@ function renderSettlementSection(sel, hex, model) {
   }
 }
 
-// Hooks section (Phase 6): only at a settlement (hooks are heard "in town"). A
-// "Generate hook" button plus each hook heard here, with its GM-visible accuracy
-// and a resolve/ignore/remove/jump row.
+// Per-cell Hooks section (Phase 6): just the create affordances. Town gossip
+// ("Generate hook") is heard in town; a found map can be read anywhere. The list
+// of existing hooks lives in the always-visible global section (renderGlobalHooks).
 function renderHooksSection(sel, model) {
   if (!model.hooksEnabled) return;
   sel.appendChild(sectionLabel("Hooks"));
-
-  const hooks = model.hooks || [];
-  if (hooks.length === 0) {
-    const none = document.createElement("div");
-    none.className = "log-line";
-    none.textContent = "none yet";
-    sel.appendChild(none);
-  }
-
-  for (const hook of hooks) {
-    const box = document.createElement("div");
-    box.className = "hook" + (hook.status && hook.status !== "open" ? ` ${hook.status}` : "");
-    for (const line of hookDescription(hook)) {
-      const div = document.createElement("div");
-      div.className = "log-line";
-      div.textContent = line;
-      box.appendChild(div);
-    }
-    if (hook.status && hook.status !== "open") {
-      const tag = document.createElement("div");
-      tag.className = "log-line hook-status";
-      tag.textContent = `(${hook.status})`;
-      box.appendChild(tag);
-    }
-    const row = document.createElement("div");
-    row.className = "tile-actions";
-    row.appendChild(actionButton("Go to", () => model.onGoToHook(hook.id)));
-    row.appendChild(
-      actionButton(hook.status === "resolved" ? "Unresolve" : "Resolve", () => model.onResolveHook(hook.id)),
-    );
-    row.appendChild(
-      actionButton(hook.status === "ignored" ? "Unignore" : "Ignore", () => model.onIgnoreHook(hook.id)),
-    );
-    row.appendChild(actionButton("Remove", () => model.onRemoveHook(hook.id)));
-    box.appendChild(row);
-    sel.appendChild(box);
-  }
-
   const actions = document.createElement("div");
   actions.className = "tile-actions";
-  // Town gossip is heard in town; a found map can be read anywhere.
   if (model.canGossip) actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
   actions.appendChild(actionButton("Read map", model.onReadMap));
   sel.appendChild(actions);
+}
+
+// One hook's card: name + status, its prose (rumour + GM accuracy), and a row of
+// actions including jumps to the target and back to the origin.
+function hookCard(hook, model) {
+  const status = hook.status || "open";
+  const box = document.createElement("div");
+  box.className = "hook" + (status !== "open" ? ` ${status}` : "");
+
+  const title = document.createElement("div");
+  title.className = "poi-detail-title";
+  title.textContent = hookName(hook) + (status !== "open" ? ` (${status})` : "");
+  box.appendChild(title);
+
+  for (const line of hookDescription(hook)) {
+    const div = document.createElement("div");
+    div.className = "log-line";
+    div.textContent = line;
+    box.appendChild(div);
+  }
+
+  const row = document.createElement("div");
+  row.className = "tile-actions";
+  row.appendChild(actionButton("→ Target", () => model.onGoToHook(hook.id)));
+  row.appendChild(actionButton("↩ Origin", () => model.onGoToHookOrigin(hook.id)));
+  row.appendChild(actionButton(status === "resolved" ? "Reopen" : "Resolve", () => model.onResolveHook(hook.id)));
+  row.appendChild(actionButton(status === "ignored" ? "Reopen" : "Ignore", () => model.onIgnoreHook(hook.id)));
+  row.appendChild(actionButton("Remove", () => model.onRemoveHook(hook.id)));
+  box.appendChild(row);
+  return box;
+}
+
+// Rank for sorting the global list: open hooks first, then resolved/ignored.
+const hookStatusRank = (h) => ((h.status || "open") === "open" ? 0 : 1);
+
+/**
+ * Render the always-visible global hooks list into #global-hooks. Open hooks
+ * sort first (and undimmed); resolved/ignored dim below so nothing is lost.
+ * @param {{ hooks: object[], onGoToHook, onGoToHookOrigin, onResolveHook,
+ *   onIgnoreHook, onRemoveHook }} model
+ */
+export function renderGlobalHooks(model) {
+  const host = document.getElementById("global-hooks");
+  if (!host) return;
+  host.innerHTML = "";
+  const hooks = model.hooks || [];
+  if (!hooks.length) return; // keep the panel uncluttered until there are hooks
+
+  const openCount = hooks.filter((h) => (h.status || "open") === "open").length;
+  const details = document.createElement("details");
+  details.className = "global-hooks";
+  details.open = openCount > 0;
+  const summary = document.createElement("summary");
+  summary.textContent = `Hooks — ${openCount} open / ${hooks.length} total`;
+  details.appendChild(summary);
+
+  for (const hook of [...hooks].sort((a, b) => hookStatusRank(a) - hookStatusRank(b))) {
+    details.appendChild(hookCard(hook, model));
+  }
+  host.appendChild(details);
 }
 
 // "Place terrain" dropdown for an empty cell: Random, then terrains alphabetically.
@@ -516,6 +537,11 @@ export function showWorld(world, opts = {}) {
   const sel = document.createElement("div");
   sel.id = "selection";
   el.appendChild(sel);
+  // Always-visible global hooks list (filled by renderGlobalHooks), shown from
+  // any selection — even none — so open hooks are reachable anywhere.
+  const gh = document.createElement("div");
+  gh.id = "global-hooks";
+  el.appendChild(gh);
   logLine(`seed: ${world.seed}`);
   logLine(`hex scale: ${world.hexScale} miles`);
   logLine(`hexes: ${Object.keys(world.hexes).length}`);

@@ -29,7 +29,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks } from "./panel.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView } from "./dungeon-map.js";
 import {
   attachMap,
@@ -158,6 +158,7 @@ async function setCurrent(world) {
     if (focus) recenterOn(focus.q, focus.r);
   }
   renderSelection();
+  refreshGlobalHooks();
   await refreshWorldList();
 }
 
@@ -288,11 +289,10 @@ function renderSelection() {
     selectedPoiId,
     poiTypes: Object.keys(POI_GLYPHS),
     dungeonSizes,
-    // The hook list + "Read map" show on any selected cell; town gossip
-    // ("Generate hook") is heard in town, so it's gated to a settlement.
+    // The per-cell section is just the create buttons; the hook LIST is global
+    // (renderGlobalHooks). Town gossip ("Generate hook") is gated to a settlement.
     hooksEnabled: true,
     canGossip: settled,
-    hooks: hooksAt(q, r),
     onGenerateHook: () => onGenerateHook(),
     onReadMap,
     onResolveHook,
@@ -685,9 +685,16 @@ async function onRemovePoi(id) {
 
 // --- hooks (Phase 6) -------------------------------------------------------
 
-// Hooks whose origin is the cell at (q,r) — the ones heard "in this town".
-function hooksAt(q, r) {
-  return (current.hooks || []).filter((h) => h.origin && h.origin.q === q && h.origin.r === r);
+// Refresh the always-visible global hooks list (open hooks reachable anywhere).
+function refreshGlobalHooks() {
+  renderGlobalHooks({
+    hooks: (current && current.hooks) || [],
+    onGoToHook,
+    onGoToHookOrigin,
+    onResolveHook,
+    onIgnoreHook,
+    onRemoveHook,
+  });
 }
 
 // Next free "hook:<n>" id across the whole world (hooks are world-level).
@@ -850,10 +857,19 @@ function onGoToHook(id) {
   recenterOn(h.target.q, h.target.r);
 }
 
+// Jump back to where a hook was heard / where the party reports in (its origin).
+function onGoToHookOrigin(id) {
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h || !h.origin) return;
+  selectCell(h.origin.q, h.origin.r);
+  recenterOn(h.origin.q, h.origin.r);
+}
+
 async function persistAndRefresh() {
   current = await saveWorld(current);
   setWorld(current);
   renderSelection();
+  refreshGlobalHooks();
 }
 
 // Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.
