@@ -15,6 +15,7 @@ import {
 import { generateHex } from "../gen/hex.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
+import { describeFeature, featureName, FEATURE_BUILD, FEATURE_TYPES } from "../gen/feature-detail.js";
 import { getRoomState, withRoomState } from "../world/dungeon-state.js";
 import { profileFor, SIZE_ORDER } from "../gen/terrain-profile.js";
 import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
@@ -60,6 +61,10 @@ const HEX_TABLE_IDS = [
   "dungeon-light",
   "monster-families",
   "dungeon-family",
+  "shrine-form",
+  "shrine-dedication",
+  "shrine-condition",
+  "shrine-detail",
 ];
 
 let current = null; // the in-memory current world
@@ -336,6 +341,10 @@ async function addPoiToSelected(forceType, opts = {}) {
       poi.detail = poi.detail || {};
       poi.detail.sizeHint = opts.sizeHint;
     }
+    // Tier-1 feature types (shrine, …) get their structured detail eagerly here,
+    // so the POI's name reads richly in the list right away. Older saves backfill
+    // the same detail on first open (see onSelectPoi) — both from one sub-stream.
+    buildFeatureDetail(poi, hex.terrain, q, r, n, tables);
     hex.pois.push(poi);
     selectedPoiId = null; // stay on the list so the Add menu remains for more
     await persistAndRefresh();
@@ -359,6 +368,34 @@ function dungeonNeedsBuild(poi) {
   return !Array.isArray(d.levels) || d.levels.some((l) => !l || !l.layout);
 }
 
+// Tier-1 feature detail (shrine, …) needs (re)building if absent or stamped by an
+// older FEATURE_BUILD — same self-heal pattern as dungeons, no world-schema bump.
+function featureNeedsBuild(poi) {
+  if (!FEATURE_TYPES.has(poi.type)) return false;
+  const f = poi.detail && poi.detail.feature;
+  return !f || f.build !== FEATURE_BUILD;
+}
+
+// Attach a feature type's structured detail + a richer name. Deterministic from a
+// dedicated sub-stream so the eager build (on add) and the self-heal (on open of
+// an older save) yield identical picks. No-op for non-feature types.
+function buildFeatureDetail(poi, terrain, q, r, n, tables) {
+  if (!FEATURE_TYPES.has(poi.type)) return;
+  const rng = subRng(current.seed, "hex", q, r, "feature", n);
+  poi.detail = poi.detail || {};
+  poi.detail.feature = describeFeature(tables, rng, { type: poi.type, terrain });
+  const base = featureName(poi.detail.feature);
+  if (!base) return;
+  // Keep any occupant suffix the list name carried (shrines lean "either").
+  if (poi.occupant && poi.occupant.kind === "lair") {
+    poi.name = `${base} — ${poi.occupant.creature} lair`;
+  } else if (poi.occupant && poi.occupant.kind === "occupied") {
+    poi.name = `${base} — ${poi.occupant.by}`;
+  } else {
+    poi.name = base;
+  }
+}
+
 // Select a POI. Non-dungeon POIs drill into the side panel; a dungeon POI opens
 // the Dungeon View (generating its interior lazily on first open — deterministic
 // from the world seed + coords + the POI's index — then persisting).
@@ -366,31 +403,48 @@ async function onSelectPoi(id) {
   selectedPoiId = id;
   const hex = current && selected && getHex(current, selected.q, selected.r);
   const poi = hex && (hex.pois || []).find((p) => p.id === id);
-  if (!poi || poi.type !== "dungeon") return renderSelection();
+  if (!poi) return renderSelection();
 
-  if (dungeonNeedsBuild(poi)) {
-    renderSelection(); // show the "Generating dungeon…" placeholder immediately
+  if (poi.type === "dungeon") {
+    if (dungeonNeedsBuild(poi)) {
+      renderSelection(); // show the "Generating dungeon…" placeholder immediately
+      try {
+        const tables = await loadTables(HEX_TABLE_IDS);
+        const m = /^poi:(\d+)$/.exec(poi.id || "");
+        const n = m ? Number(m[1]) : 0;
+        const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon", n);
+        poi.detail = poi.detail || {};
+        poi.detail.dungeon = generateDungeon(tables, rng, {
+          theme: poi.detail.theme,
+          size: poi.detail.sizeHint,
+          terrain: hex.terrain,
+        });
+        // Legacy dungeons predate themes — backfill from the generated interior so
+        // the map glyph reflects it.
+        poi.detail.theme = poi.detail.theme || poi.detail.dungeon.theme;
+        await persistAndRefresh();
+      } catch (err) {
+        logLine(`Dungeon error: ${err.message}`);
+        return;
+      }
+    }
+    return openDungeonView(poi);
+  }
+
+  // Tier-1 feature types (shrine, …) drill into the side panel. Self-heal the
+  // detail for older saves (placed before 5.1) on first open, then render.
+  if (featureNeedsBuild(poi)) {
     try {
       const tables = await loadTables(HEX_TABLE_IDS);
       const m = /^poi:(\d+)$/.exec(poi.id || "");
       const n = m ? Number(m[1]) : 0;
-      const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon", n);
-      poi.detail = poi.detail || {};
-      poi.detail.dungeon = generateDungeon(tables, rng, {
-        theme: poi.detail.theme,
-        size: poi.detail.sizeHint,
-        terrain: hex.terrain,
-      });
-      // Legacy dungeons predate themes — backfill from the generated interior so
-      // the map glyph reflects it.
-      poi.detail.theme = poi.detail.theme || poi.detail.dungeon.theme;
+      buildFeatureDetail(poi, hex.terrain, selected.q, selected.r, n, tables);
       await persistAndRefresh();
     } catch (err) {
-      logLine(`Dungeon error: ${err.message}`);
-      return;
+      logLine(`POI detail error: ${err.message}`);
     }
   }
-  openDungeonView(poi);
+  renderSelection();
 }
 
 // --- Dungeon View (overlay) -----------------------------------------------

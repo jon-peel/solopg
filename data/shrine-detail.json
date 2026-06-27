@@ -1,0 +1,19 @@
+{
+  "id": "shrine-detail",
+  "title": "Shrine telling detail",
+  "_note": "A small, specific sign of recent (or long-past) attention — the line that makes a shrine feel lived-with. Lowercase noun phrases, composed after the condition.",
+  "entries": [
+    { "weight": 2, "value": "a guttering candle left by a recent pilgrim" },
+    { "weight": 2, "value": "a scatter of offering-coins" },
+    { "weight": 1, "value": "a ring of melted wax" },
+    { "weight": 1, "value": "picked-clean bones at its foot" },
+    { "weight": 1, "value": "a wilted garland" },
+    { "weight": 1, "value": "prayers scratched into the stone" },
+    { "weight": 1, "value": "an empty offering bowl" },
+    { "weight": 2, "value": "fresh footprints in the dust around it" },
+    { "weight": 1, "value": "dried bloodstains on the stone" },
+    { "weight": 1, "value": "faded ribbons tied to it" },
+    { "weight": 1, "value": "a single fresh-cut flower" },
+    { "weight": 1, "value": "a heap of small cairns left by travellers" }
+  ]
+}

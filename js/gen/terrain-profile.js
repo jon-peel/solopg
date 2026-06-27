@@ -110,6 +110,45 @@ export function dungeonThemeTable(terrain) {
   return { id: `dungeon-theme:${terrain}`, entries };
 }
 
+// Which shrine FORMS a terrain leans toward (Tier-1 POI detail, Phase 5.1). Form
+// names must exist in data/shrine-form.json (the canonical manifest). Mirrors
+// DUNGEON_THEME_BIAS; a terrain with no entry falls back to DEFAULT_SHRINE_FORM_BIAS.
+export const SHRINE_FORM_BIAS = {
+  Forest: { "a tree-shrine": 3, "a carved stone face": 2, "a standing stone": 1, "a roadside idol": 1, "a small statue": 1, "a cairn": 1 },
+  Plains: { "a standing stone": 3, "a wayside marker": 2, "a weathered altar": 2, "a small statue": 1, "a roadside idol": 1 },
+  Hills: { "a cairn": 3, "a standing stone": 2, "a carved stone face": 1, "a weathered altar": 1, "an obelisk": 1 },
+  Mountains: { "a colossal carving": 2, "a carved stone face": 2, "a cairn": 2, "an obelisk": 1, "a weathered altar": 1 },
+  Swamp: { "a roadside idol": 2, "a standing stone": 2, "a carved stone face": 1, "a weathered altar": 1, "a tree-shrine": 1 },
+  Desert: { "an obelisk": 3, "a colossal carving": 2, "a weathered altar": 1, "a carved stone face": 1, "a standing stone": 1 },
+  Water: { "a standing stone": 1, "a cairn": 1, "a weathered altar": 1 },
+};
+
+const DEFAULT_SHRINE_FORM_BIAS = { "a weathered altar": 3, "a standing stone": 3, "a small statue": 2, "a cairn": 1, "a wayside marker": 1 };
+
+/** Weighted shrine-form table for a terrain (mirrors dungeonThemeTable). */
+export function shrineFormTable(terrain) {
+  const weights = SHRINE_FORM_BIAS[terrain] || DEFAULT_SHRINE_FORM_BIAS;
+  const entries = Object.entries(weights).map(([form, weight]) => ({
+    weight,
+    value: form,
+  }));
+  return { id: `shrine-form:${terrain}`, entries };
+}
+
+// Terrain "skin": where a shrine sits, as a prepositional phrase composed into
+// the description (e.g. Desert → "half-buried by a dune"). Kept beside the bias
+// as a per-terrain rule; the generator picks one (js/gen/feature-detail.js).
+export const SHRINE_SETTING = {
+  Forest: ["beneath the forest canopy", "wrapped in moss and creeper", "among the roots of an old tree"],
+  Plains: ["beside an old road", "alone on the open grass", "atop a low rise"],
+  Hills: ["on a windswept hillside", "among tumbled boulders", "above an old barrow"],
+  Mountains: ["set into the cliff face", "on a high mountain ledge", "at the mouth of a pass"],
+  Swamp: ["on a hummock above black water", "half-sunk in the mire", "slick with bog-slime"],
+  Desert: ["in the wind-scoured sand", "half-buried by a dune", "under a blistering sun"],
+  Water: ["on a rocky islet", "where the tide laps at its base"],
+};
+export const SHRINE_SETTING_DEFAULT = ["in a lonely place", "beside an old track"];
+
 // Re-export for parity tests (every styled terrain should have a profile).
 export const KNOWN_TERRAINS = Object.keys(TERRAIN_COLORS);
 

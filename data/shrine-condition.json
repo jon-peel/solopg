@@ -1,0 +1,15 @@
+{
+  "id": "shrine-condition",
+  "title": "Shrine condition",
+  "_note": "How well-kept the shrine is, sentence-initial (capitalised). The desecrated/overgrown conditions can invite a light 'watcher' (see DESECRATED in js/gen/feature-detail.js) — keep those exact strings in sync.",
+  "entries": [
+    { "weight": 2, "value": "Freshly tended" },
+    { "weight": 2, "value": "Carefully kept" },
+    { "weight": 3, "value": "Weathered with age" },
+    { "weight": 2, "value": "Overgrown with vines" },
+    { "weight": 1, "value": "Toppled and cracked" },
+    { "weight": 1, "value": "Defaced and desecrated" },
+    { "weight": 2, "value": "Half-buried" },
+    { "weight": 2, "value": "Long abandoned" }
+  ]
+}

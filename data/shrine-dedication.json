@@ -1,0 +1,19 @@
+{
+  "id": "shrine-dedication",
+  "title": "Shrine dedication",
+  "_note": "Who/what a shrine honours. Not terrain-biased (any power can be honoured anywhere). Values are 'to …' phrases so they compose into both the name ('Shrine to a war-god') and the description.",
+  "entries": [
+    { "weight": 2, "value": "to a war-god" },
+    { "weight": 2, "value": "to a harvest-goddess" },
+    { "weight": 2, "value": "to a god of the dead" },
+    { "weight": 1, "value": "to a sea-god" },
+    { "weight": 1, "value": "to a sun-god" },
+    { "weight": 2, "value": "to a god of the wild" },
+    { "weight": 1, "value": "to a trickster-god" },
+    { "weight": 2, "value": "to a forgotten god" },
+    { "weight": 2, "value": "to a hero of old" },
+    { "weight": 1, "value": "to an ancestor-spirit" },
+    { "weight": 1, "value": "to a local saint" },
+    { "weight": 1, "value": "to the old nameless powers" }
+  ]
+}

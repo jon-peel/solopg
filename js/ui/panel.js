@@ -1,6 +1,7 @@
 // Side-panel rendering helpers.
 
 import { glyphForPoi } from "./poi-style.js";
+import { featureDescription } from "../gen/feature-detail.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -67,10 +68,17 @@ function renderPoiSection(sel, hex, model) {
     title.className = "poi-detail-title";
     title.textContent = `${glyphForPoi(selectedPoi)} ${selectedPoi.name}`;
     box.appendChild(title);
+    // Tier-1 feature types (shrine, …) show a composed description in place of the
+    // generic flavour line, and hide the Occupant line when there's no occupant.
+    const feature = selectedPoi.detail && selectedPoi.detail.feature;
+    const occ = occupantSummary(selectedPoi.occupant);
+    const detailLines = feature
+      ? featureDescription(feature)
+      : [selectedPoi.detail && selectedPoi.detail.flavor];
     for (const line of [
       `Type: ${selectedPoi.type}`,
-      `Occupant: ${occupantSummary(selectedPoi.occupant)}`,
-      selectedPoi.detail && selectedPoi.detail.flavor,
+      feature && occ === "empty" ? null : `Occupant: ${occ}`,
+      ...detailLines,
     ].filter(Boolean)) {
       const div = document.createElement("div");
       div.className = "log-line";
