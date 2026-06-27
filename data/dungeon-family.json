@@ -1,7 +1,7 @@
 {
   "id": "dungeon-family",
   "title": "Dungeon theme -> monster family weights",
-  "_note": "Which monster families a themed dungeon level leans toward. Theme names match data/dungeon-theme.json; family names match data/monster-families.json. Themes absent here fall back to a generic spread in js/gen/dungeon.js.",
+  "_note": "Which monster families a themed dungeon level leans toward. Theme names match data/dungeon-theme.json; family names match data/monster-families.json. Themes absent here fall back to a generic spread in js/gen/dungeon.js. Optional 'signature' (a member name from monster-families.json) makes an eponymous den lean toward its namesake on shallow levels (boost decays with depth); see buildLevelMonsters.",
   "entries": [
     { "value": { "theme": "Ruin", "families": [
       { "weight": 2, "value": "Beasts" }, { "weight": 2, "value": "Goblinoids" },
@@ -21,7 +21,7 @@
     { "value": { "theme": "Flooded cistern", "families": [
       { "weight": 2, "value": "Vermin" }, { "weight": 2, "value": "Aberrations" },
       { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Undead" } ] } },
-    { "value": { "theme": "Goblin warren", "families": [
+    { "value": { "theme": "Goblin warren", "signature": "Goblins", "families": [
       { "weight": 6, "value": "Goblinoids" }, { "weight": 1, "value": "Beasts" }, { "weight": 1, "value": "Vermin" }, { "weight": 1, "value": "Giants" } ] } },
     { "value": { "theme": "Ruined fort", "families": [
       { "weight": 3, "value": "Bandits" }, { "weight": 2, "value": "Goblinoids" }, { "weight": 1, "value": "Undead" }, { "weight": 1, "value": "Giants" } ] } },
@@ -34,15 +34,15 @@
       { "weight": 1, "value": "Goblinoids" }, { "weight": 1, "value": "Aberrations" } ] } },
     { "value": { "theme": "Smugglers' tunnels", "families": [
       { "weight": 4, "value": "Bandits" }, { "weight": 1, "value": "Vermin" }, { "weight": 1, "value": "Beasts" } ] } },
-    { "value": { "theme": "Kobold tunnels", "families": [
+    { "value": { "theme": "Kobold tunnels", "signature": "Kobolds", "families": [
       { "weight": 4, "value": "Goblinoids" }, { "weight": 1, "value": "Reptiles" }, { "weight": 1, "value": "Vermin" } ] } },
-    { "value": { "theme": "Spider nest", "families": [
+    { "value": { "theme": "Spider nest", "signature": "Crab spiders", "families": [
       { "weight": 4, "value": "Vermin" }, { "weight": 1, "value": "Beasts" } ] } },
-    { "value": { "theme": "Ghoul warren", "families": [
+    { "value": { "theme": "Ghoul warren", "signature": "Ghouls", "families": [
       { "weight": 4, "value": "Undead" }, { "weight": 1, "value": "Vermin" } ] } },
-    { "value": { "theme": "Troglodyte caves", "families": [
+    { "value": { "theme": "Troglodyte caves", "signature": "Troglodytes", "families": [
       { "weight": 3, "value": "Reptiles" }, { "weight": 1, "value": "Aberrations" }, { "weight": 1, "value": "Beasts" } ] } },
-    { "value": { "theme": "Ogre lair", "families": [
+    { "value": { "theme": "Ogre lair", "signature": "Ogres", "families": [
       { "weight": 4, "value": "Giants" }, { "weight": 1, "value": "Goblinoids" } ] } }
   ]
 }

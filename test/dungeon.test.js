@@ -450,6 +450,40 @@ test("treasure value rises with depth", () => {
   assert.ok(deep / deepN > shallow / shallowN + 0.3, `deep treasure richer: ${(deep / deepN).toFixed(2)} vs ${(shallow / shallowN).toFixed(2)}`);
 });
 
+test("a named den leans toward its signature creature, fading with depth", () => {
+  const t = tables();
+  const fam = JSON.parse(readFileSync("./data/dungeon-family.json", "utf8"));
+  // Every named den's signature; threshold guards against the bias being a no-op.
+  const dens = fam.entries
+    .filter((e) => e.value.signature)
+    .map((e) => [e.value.theme, e.value.signature]);
+  assert.ok(dens.length >= 6, "the eponymous dens carry a signature");
+
+  const shareOf = (theme, sig, deepest) => {
+    let acc = 0, n = 0;
+    for (let s = 0; s < 200; s++) {
+      const d = generateDungeon(t, mulberry32(s), { size: "Sizable", theme });
+      const lvl = deepest ? d.levels[d.levels.length - 1] : d.levels[0];
+      const tot = lvl.encounters.reduce((a, e) => a + e.weight, 0);
+      const sg = lvl.encounters
+        .filter((e) => e.value === sig)
+        .reduce((a, e) => a + e.weight, 0);
+      acc += sg / tot; n++;
+    }
+    return acc / n;
+  };
+
+  for (const [theme, sig] of dens) {
+    const top = shareOf(theme, sig, false);
+    const deep = shareOf(theme, sig, true);
+    assert.ok(top > 0.25, `${theme}: ${sig} is a plurality on level 1 (${top.toFixed(2)})`);
+    assert.ok(top > deep, `${theme}: ${sig} bias fades with depth (${top.toFixed(2)} -> ${deep.toFixed(2)})`);
+  }
+
+  // A generic, un-signed den applies no such bias to that same creature.
+  assert.ok(shareOf("Ruin", "Goblins", false) < 0.2, "generic dens stay emergent");
+});
+
 test("ctx.theme is honored for every level", () => {
   const t = tables();
   for (let s = 0; s < 50; s++) {

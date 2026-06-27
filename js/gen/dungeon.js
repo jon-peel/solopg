@@ -50,7 +50,7 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 16: wandering-monster list scales with level size (4.9.12 follow-up).
 // 17: depth/difficulty scaling — monster + treasure tier rise with depth (4.9.13).
 // 18: treasure carries rolled gp value + weight (cn) by bulk.
-export const DUNGEON_BUILD = 19;
+export const DUNGEON_BUILD = 20;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -73,6 +73,15 @@ function familyTableForTheme(tables, theme) {
     { weight: 1, value: "Undead" },
   ];
   return { id: `dungeon-family:${theme}`, entries: families };
+}
+
+// A named den's signature creature (e.g. Kobold tunnels -> "Kobolds"), or null.
+// Only eponymous themes carry one; generic themes stay purely emergent.
+function signatureForTheme(tables, theme) {
+  const row = tables
+    .get("dungeon-family")
+    .entries.find((e) => e.value.theme === theme);
+  return (row && row.value.signature) || null;
 }
 
 // Sample up to `want` DISTINCT members from a weighted list, keeping weights.
@@ -99,7 +108,7 @@ function tierAffinity(tier, target) {
  * interloper and (on the deepest level) the family's elite.
  * @returns {{ family: string, encounters: {weight:number,value:string}[] }}
  */
-function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTier = 1) {
+function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTier = 1, depth = 1) {
   const familyName = rollTable(familyTableForTheme(families, theme), rng).value;
   const index = familyIndex(families);
   const family = index.get(familyName) || { members: [{ weight: 1, value: "Vermin", tier: 1 }] };
@@ -109,6 +118,17 @@ function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTi
     value: m.value,
     weight: (("weight" in m ? m.weight : 1)) * tierAffinity(m.tier, targetTier),
   }));
+
+  // Named-den signature bias: on shallow levels, a den named after a creature
+  // skews strongly toward that creature — so "Kobold tunnels" opens with kobolds.
+  // The boost decays with depth, and only applies when the level's family still
+  // contains the signature (deeper levels may escalate to another family).
+  const signature = signatureForTheme(families, theme);
+  const sigBoost = depth === 1 ? 4 : depth === 2 ? 2 : 1;
+  if (signature && sigBoost > 1) {
+    const m = members.find((x) => x.value === signature);
+    if (m) m.weight *= sigBoost;
+  }
 
   // Wandering list scales with the level's size: a tiny tunnel has few wanderers,
   // a sprawling level has the full spread.
@@ -200,7 +220,7 @@ export function generateDungeon(tables, rng, ctx = {}) {
     const monsterTier = Math.max(1, Math.min(4, depth + shift));
     const treasureTier = Math.max(1, Math.min(3, depth + shift)); // tracks monster difficulty
     const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
-    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier);
+    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier, depth);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
     // Treasure for this level, re-weighted toward its target tier (depth scaling).
     const levelTreasure = {
