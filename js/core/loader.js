@@ -17,7 +17,19 @@ const cache = new Map();
 export async function loadTable(id, basePath = "./data") {
   if (cache.has(id)) return cache.get(id);
 
-  const res = await fetch(`${basePath}/${id}.json`);
+  // Retry transient network failures. Loading many tables at once fires a burst of
+  // concurrent fetches; a single-threaded dev server can occasionally drop one,
+  // surfacing as a `fetch` rejection ("Failed to fetch") rather than an HTTP error.
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${basePath}/${id}.json`);
+      break;
+    } catch (err) {
+      if (attempt >= 2) throw err;
+      await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+    }
+  }
   if (!res.ok) {
     throw new Error(`Failed to load table "${id}": HTTP ${res.status}`);
   }

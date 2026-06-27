@@ -288,8 +288,10 @@ function renderSelection() {
     selectedPoiId,
     poiTypes: Object.keys(POI_GLYPHS),
     dungeonSizes,
-    // Hooks are heard "in town", so the section shows only at a settlement.
-    hooksEnabled: settled,
+    // The hook list + "Read map" show on any selected cell; town gossip
+    // ("Generate hook") is heard in town, so it's gated to a settlement.
+    hooksEnabled: true,
+    canGossip: settled,
     hooks: hooksAt(q, r),
     onGenerateHook: () => onGenerateHook(),
     onReadMap,
@@ -775,9 +777,9 @@ const HOOK_NOTE = {
 // map" button forcing "map") skips the pattern roll; `opts.source` overrides the
 // rolled source for a triggered hook.
 async function onGenerateHook(opts = {}) {
+  // The origin is wherever the GM is looking. A hook — especially a read map —
+  // can be made from any selected cell, placed or not.
   if (!current || !selected) return;
-  const hex = getHex(current, selected.q, selected.r);
-  if (!hex || !hex.placed) return;
   try {
     // Distant/Map hooks build new tiles, so load the hex/POI tables too.
     const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));

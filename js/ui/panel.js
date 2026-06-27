@@ -311,8 +311,8 @@ function renderHooksSection(sel, model) {
 
   const actions = document.createElement("div");
   actions.className = "tile-actions";
-  actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
-  // "Read map": the party pores over a map found below → forces a Map hook.
+  // Town gossip is heard in town; a found map can be read anywhere.
+  if (model.canGossip) actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
   actions.appendChild(actionButton("Read map", model.onReadMap));
   sel.appendChild(actions);
 }
@@ -346,8 +346,10 @@ export function renderSelectionPanel(model) {
     }
     renderSettlementSection(sel, hex, model);
     renderPoiSection(sel, hex, model);
-    renderHooksSection(sel, model);
   }
+
+  // Hooks (incl. "Read map") are available on any selected cell, placed or empty.
+  renderHooksSection(sel, model);
 
   if (hex) {
     sel.appendChild(sectionLabel("Hex"));
