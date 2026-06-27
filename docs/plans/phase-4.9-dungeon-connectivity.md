@@ -132,5 +132,9 @@ Dungeon art/tiles; restocking-over-time; full faction machinery inside dungeons;
     theme-biased source + reason (candle, embers, torches, magical glow).
   - **4.9.11 — Lighting (Tier B, occupied frontier):** a chance the dungeon is occupied — first few
     rooms from an entrance are held + lit, a locked/secret door seals the dark monster-filled depths.
-- **Deferred:** reroll a dungeon/level; enter a dungeon by clicking its hex-map glyph; monster stat
-  detail (out of scope — system-agnostic).
+  - **4.9.14 — Named-den signature bias ✅:** eponymous dens (Goblin warren, Kobold tunnels,
+    Ghoul warren, Ogre lair, Spider nest, Troglodyte caves) carry a `signature` member that gets a
+    depth-decaying weight boost (×4 level 1, ×2 level 2, ×1 deeper), so a named den opens with its
+    namesake while deeper levels keep the emergent spread + escalation. Generic dens (Ruin, tombs,
+    caves…) are untouched.
+- **Deferred:** monster stat detail (out of scope — system-agnostic).

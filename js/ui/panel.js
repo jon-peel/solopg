@@ -1,6 +1,7 @@
 // Side-panel rendering helpers.
 
 import { glyphForPoi } from "./poi-style.js";
+import { featureDescription } from "../gen/feature-detail.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -67,10 +68,18 @@ function renderPoiSection(sel, hex, model) {
     title.className = "poi-detail-title";
     title.textContent = `${glyphForPoi(selectedPoi)} ${selectedPoi.name}`;
     box.appendChild(title);
+    // Tier-1 feature types (shrine, …) show a composed description in place of the
+    // generic flavour line, and hide the Occupant line when there's no occupant.
+    const feature = selectedPoi.detail && selectedPoi.detail.feature;
+    const occ = occupantSummary(selectedPoi.occupant);
+    const detailLines = feature
+      ? featureDescription(feature)
+      : [selectedPoi.detail && selectedPoi.detail.flavor];
     for (const line of [
       `Type: ${selectedPoi.type}`,
-      `Occupant: ${occupantSummary(selectedPoi.occupant)}`,
-      selectedPoi.detail && selectedPoi.detail.flavor,
+      // A camp's description already names who holds it; hide the generic line.
+      feature && (selectedPoi.type === "camp" || occ === "empty") ? null : `Occupant: ${occ}`,
+      ...detailLines,
     ].filter(Boolean)) {
       const div = document.createElement("div");
       div.className = "log-line";
@@ -304,6 +313,16 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
+// Coins read book-style as a dice expression, no weight ("Loose coins (2d6×10 gp)");
+// gems/idols/plate roll a concrete value + weight ("— 240 gp, 12 cn"); leads/magic
+// show neither. Guard is always appended.
+function treasureLine(t) {
+  let amount = "";
+  if (t.dice) amount = ` (${t.dice} gp)`;
+  else if (t.gp > 0) amount = ` — ${t.gp} gp${t.weight ? `, ${t.weight} cn` : ""}`;
+  return `Treasure: ${t.kind}${amount} (${t.guard})`;
+}
+
 export function renderDungeonPanel({
   dungeon,
   level,
@@ -322,31 +341,43 @@ export function renderDungeonPanel({
   const h = document.createElement("h3");
   h.textContent = `${dungeon.theme || "Dungeon"} — ${dungeon.size}`;
   sel.appendChild(h);
+  if (dungeon.difficulty) {
+    const diff = document.createElement("div");
+    diff.className = "log-line";
+    diff.textContent = `Difficulty: ${dungeon.difficulty}`;
+    sel.appendChild(diff);
+  }
 
-  sel.appendChild(sectionLabel(`Level ${level.depth} — ${level.family}`));
+  // Towers ("up" orientation) are floors, not levels; their floors carry a
+  // garrison rather than a family, and have no wandering-monster table.
+  const floorWord = dungeon.orientation === "up" ? "Floor" : "Level";
+  sel.appendChild(
+    sectionLabel(level.family ? `${floorWord} ${level.depth} — ${level.family}` : `${floorWord} ${level.depth}`),
+  );
   if (dungeon.occupation && dungeon.occupation.level === level.depth - 1) {
     const occ = document.createElement("div");
     occ.className = "log-line";
     occ.textContent = `Occupied near an entrance by ${dungeon.occupation.by} (locked door beyond)`;
     sel.appendChild(occ);
   }
-  const wandering = document.createElement("div");
-  wandering.className = "log-line";
-  wandering.textContent =
-    "Wandering: " + (level.encounters || []).map((e) => e.value).join(", ");
-  sel.appendChild(wandering);
+  if (level.encounters && level.encounters.length) {
+    const wandering = document.createElement("div");
+    wandering.className = "log-line";
+    wandering.textContent = "Wandering: " + level.encounters.map((e) => e.value).join(", ");
+    sel.appendChild(wandering);
+  }
 
   if (room) {
     sel.appendChild(sectionLabel(`Room ${room.n}`));
     for (const line of [
       room.held ? `Held by ${room.held}` : null,
       room.monster
-        ? `Monster: ${room.monster.number}× ${room.monster.name} (${room.monster.status})`
+        ? `Monster: ${room.monster.na} ${room.monster.name} (${room.monster.status})`
         : `Content: ${room.content}`,
       room.trap ? `Trap: ${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}` : null,
       room.special ? `Special: ${room.special}` : null,
       room.dressing || null,
-      room.treasure ? `Treasure: ${room.treasure.kind} (${room.treasure.guard})` : null,
+      room.treasure ? treasureLine(room.treasure) : null,
       room.light ? `Lit: ${room.light.source}` : null,
       ...surface, // "Dungeon entrance (surface)", "Exit to surface"
     ].filter(Boolean)) {

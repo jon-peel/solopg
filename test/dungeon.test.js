@@ -110,14 +110,14 @@ test("each room carries content-appropriate detail", () => {
   const traps = new Set(t.get("dungeon-trap").entries.map((e) => e.value.name));
   const specials = new Set(t.get("dungeon-special").entries.map((e) => e.value));
   const dressings = new Set(t.get("dungeon-dressing").entries.map((e) => e.value));
-  const kinds = new Set(t.get("dungeon-treasure").entries.map((e) => e.value));
+  const kinds = new Set(t.get("dungeon-treasure").entries.map((e) => e.value.kind));
   const guards = new Set(t.get("dungeon-treasure-guard").entries.map((e) => e.value));
   const statuses = new Set(t.get("dungeon-monster-status").entries.map((e) => e.value));
   for (let s = 0; s < 120; s++) {
     for (const lvl of generateDungeon(t, mulberry32(s)).levels) {
       for (const room of lvl.rooms) {
         if (room.content === "Monster" && !room.held) {
-          assert.ok(room.monster.number >= 1 && room.monster.number <= 6, "1-6 appear");
+          assert.match(room.monster.na, /^\d*\s*[dD]?\s*\d+/, "number appearing is a dice/number expr");
           assert.ok(statuses.has(room.monster.status), "valid status");
         }
         if (room.content === "Trap") {
@@ -131,7 +131,21 @@ test("each room carries content-appropriate detail", () => {
         }
         if (room.content === "Empty") assert.ok(dressings.has(room.dressing));
         if (room.treasure) {
-          assert.ok(kinds.has(room.treasure.kind) && guards.has(room.treasure.guard));
+          const tr = room.treasure;
+          assert.ok(kinds.has(tr.kind) && guards.has(tr.guard));
+          if (tr.dice !== undefined) {
+            // Coins: a dice expression for value, no rolled gp, no weight.
+            assert.match(tr.dice, /^\d+d\d+(×\d+)?$/, "coin value is a dice expr");
+            assert.equal(tr.gp, undefined, "coins carry no rolled gp");
+            assert.equal(tr.weight, undefined, "coins carry no weight");
+          } else if (tr.gp !== undefined) {
+            // Gems/idols/plate: a rolled value with a carry weight.
+            assert.ok(Number.isInteger(tr.gp) && tr.gp > 0, "gp value");
+            assert.ok(Number.isInteger(tr.weight) && tr.weight >= 1, "cn weight");
+          } else {
+            // Leads / magic items: neither a value nor a weight.
+            assert.equal(tr.weight, undefined, "valueless treasure has no weight");
+          }
         }
       }
     }
@@ -386,6 +400,88 @@ test("native-occupant themes are rarely occupied by interlopers", () => {
     if (generateDungeon(t, mulberry32(s), { size: "Sizable", theme: "Beast den" }).occupation) occ++;
   }
   assert.ok(occ / 300 < 0.15, `Beast den rarely occupied, got ${(occ / 300).toFixed(2)}`);
+});
+
+test("monster difficulty rises with depth and with dungeon difficulty", () => {
+  const t = tables();
+  // name -> tier (incl. elites at tier 5 so bosses count as toughest).
+  const tierOf = new Map();
+  for (const e of t.get("monster-families").entries) {
+    for (const m of e.value.members) tierOf.set(m.value, m.tier);
+    tierOf.set(e.value.elite, 5);
+  }
+  const avgByDepth = (theme, restrictDifficulty) => {
+    const sum = [];
+    const cnt = [];
+    for (let s = 0; s < 600; s++) {
+      const d = generateDungeon(t, mulberry32(s), { size: "Sprawling", theme });
+      if (restrictDifficulty && d.difficulty !== restrictDifficulty) continue;
+      d.levels.forEach((lvl, i) => {
+        for (const m of lvl.encounters) {
+          const ti = tierOf.get(m.value);
+          if (ti == null) continue;
+          sum[i] = (sum[i] || 0) + ti;
+          cnt[i] = (cnt[i] || 0) + 1;
+        }
+      });
+    }
+    return sum.map((s, i) => s / cnt[i]);
+  };
+  // Forgotten tomb (Undead) spans tiers 1-4, a clean gradient.
+  const byDepth = avgByDepth("Forgotten tomb");
+  assert.ok(
+    byDepth[byDepth.length - 1] > byDepth[0] + 0.5,
+    `deep monsters tougher than shallow: ${byDepth.map((x) => x.toFixed(2)).join(", ")}`,
+  );
+  const soft = avgByDepth("Forgotten tomb", "soft");
+  const deadly = avgByDepth("Forgotten tomb", "deadly");
+  assert.ok(deadly[0] > soft[0], `deadly level-1 tougher than soft (${deadly[0].toFixed(2)} vs ${soft[0].toFixed(2)})`);
+});
+
+test("treasure value rises with depth", () => {
+  const t = tables();
+  const tierOf = new Map(t.get("dungeon-treasure").entries.map((e) => [e.value.kind, e.value.tier]));
+  let shallow = 0, shallowN = 0, deep = 0, deepN = 0;
+  for (let s = 0; s < 600; s++) {
+    const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
+    for (const r of d.levels[0].rooms) if (r.treasure) { shallow += tierOf.get(r.treasure.kind); shallowN++; }
+    for (const r of d.levels[d.levels.length - 1].rooms) if (r.treasure) { deep += tierOf.get(r.treasure.kind); deepN++; }
+  }
+  assert.ok(deep / deepN > shallow / shallowN + 0.3, `deep treasure richer: ${(deep / deepN).toFixed(2)} vs ${(shallow / shallowN).toFixed(2)}`);
+});
+
+test("a named den leans toward its signature creature, fading with depth", () => {
+  const t = tables();
+  const fam = JSON.parse(readFileSync("./data/dungeon-family.json", "utf8"));
+  // Every named den's signature; threshold guards against the bias being a no-op.
+  const dens = fam.entries
+    .filter((e) => e.value.signature)
+    .map((e) => [e.value.theme, e.value.signature]);
+  assert.ok(dens.length >= 6, "the eponymous dens carry a signature");
+
+  const shareOf = (theme, sig, deepest) => {
+    let acc = 0, n = 0;
+    for (let s = 0; s < 200; s++) {
+      const d = generateDungeon(t, mulberry32(s), { size: "Sizable", theme });
+      const lvl = deepest ? d.levels[d.levels.length - 1] : d.levels[0];
+      const tot = lvl.encounters.reduce((a, e) => a + e.weight, 0);
+      const sg = lvl.encounters
+        .filter((e) => e.value === sig)
+        .reduce((a, e) => a + e.weight, 0);
+      acc += sg / tot; n++;
+    }
+    return acc / n;
+  };
+
+  for (const [theme, sig] of dens) {
+    const top = shareOf(theme, sig, false);
+    const deep = shareOf(theme, sig, true);
+    assert.ok(top > 0.25, `${theme}: ${sig} is a plurality on level 1 (${top.toFixed(2)})`);
+    assert.ok(top > deep, `${theme}: ${sig} bias fades with depth (${top.toFixed(2)} -> ${deep.toFixed(2)})`);
+  }
+
+  // A generic, un-signed den applies no such bias to that same creature.
+  assert.ok(shareOf("Ruin", "Goblins", false) < 0.2, "generic dens stay emergent");
 });
 
 test("ctx.theme is honored for every level", () => {

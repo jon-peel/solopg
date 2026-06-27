@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BRANCH="claude/refine-local-plan-lg3hiu"
+BRANCH="main"
 PORT="${1:-8000}"
 
 # Always operate on the repo this script lives in (so it serves index.html at root).

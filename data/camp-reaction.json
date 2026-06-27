@@ -1,0 +1,12 @@
+{
+  "id": "camp-reaction",
+  "title": "Camp reaction",
+  "_note": "How the occupants meet a stranger — a light reaction roll used only when the camp is manned. Composed after the head-count (e.g. 'About 31 of them — wary of strangers.').",
+  "entries": [
+    { "weight": 1, "value": "openly hostile" },
+    { "weight": 2, "value": "wary of strangers" },
+    { "weight": 2, "value": "indifferent to your passing" },
+    { "weight": 1, "value": "willing to talk" },
+    { "weight": 1, "value": "looking to bargain" }
+  ]
+}

@@ -1,13 +1,15 @@
 {
   "id": "dungeon-treasure",
   "title": "Treasure kind",
+  "_note": "tier (1 modest .. 3 rich) scales with depth/difficulty. gp is a dice expression for the value; bulk sets the weight in coins (cn): coin = weight≈value (bulky), light = gems/jewellery/magic (the smart haul), heavy = statues/plate (tempting but a chore to carry). gp 0 = no coin value (a lead or a magic item).",
   "entries": [
-    { "weight": 4, "value": "A handful of coins" },
-    { "weight": 3, "value": "A purse of silver and gold" },
-    { "weight": 2, "value": "Gems and small valuables" },
-    { "weight": 2, "value": "Useful supplies and gear" },
-    { "weight": 1, "value": "A hoard of coin and plate" },
-    { "weight": 1, "value": "A magic item" },
-    { "weight": 1, "value": "A map or cryptic clue" }
+    { "weight": 4, "value": { "kind": "Loose coins", "tier": 1, "gp": "2d6*10", "bulk": "coin" } },
+    { "weight": 3, "value": { "kind": "Travellers' supplies and gear", "tier": 1, "gp": "1d6*5", "bulk": "heavy" } },
+    { "weight": 3, "value": { "kind": "A purse of silver and gold", "tier": 2, "gp": "4d6*10", "bulk": "coin" } },
+    { "weight": 2, "value": { "kind": "Gems and jewellery", "tier": 2, "gp": "3d6*20", "bulk": "light" } },
+    { "weight": 2, "value": { "kind": "A map to further riches", "tier": 2, "gp": "0", "bulk": "light" } },
+    { "weight": 1, "value": { "kind": "A hoard of plate and bullion", "tier": 3, "gp": "4d6*100", "bulk": "heavy" } },
+    { "weight": 1, "value": { "kind": "A gilded idol or statuette", "tier": 3, "gp": "3d6*50", "bulk": "heavy" } },
+    { "weight": 1, "value": { "kind": "A magic item", "tier": 3, "gp": "0", "bulk": "light" } }
   ]
 }

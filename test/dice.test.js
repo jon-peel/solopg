@@ -21,6 +21,15 @@ test("dM defaults the count to 1", () => {
   }
 });
 
+test("multipliers (xK) scale the dice sum, before any modifier", () => {
+  const r = mulberry32(7);
+  for (let i = 0; i < 1000; i++) {
+    const { total } = rollDice("2d6*10", r);
+    assert.ok(total >= 20 && total <= 120 && total % 10 === 0, `bad ${total}`);
+  }
+  assert.equal(rollDice("1d1x100+5", mulberry32(1)).total, 105); // (1*100)+5
+});
+
 test("modifiers are applied", () => {
   const r = mulberry32(3);
   for (let i = 0; i < 500; i++) {

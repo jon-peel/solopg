@@ -1,0 +1,15 @@
+{
+  "id": "tower-kind",
+  "title": "Tower kind",
+  "_note": "What the tower IS (Phase 5.4). Noun phrases; the leading article is stripped for the title/name. Flavors the structure; the master at the top (when occupied) comes from tower-master.json.",
+  "entries": [
+    { "weight": 3, "value": "a watchtower" },
+    { "weight": 2, "value": "a robber-knight's tower" },
+    { "weight": 2, "value": "a wizard's spire" },
+    { "weight": 2, "value": "a border keep's tower" },
+    { "weight": 1, "value": "a ruined mage-tower" },
+    { "weight": 1, "value": "a hermit's folly" },
+    { "weight": 1, "value": "a fallen lord's tower" },
+    { "weight": 1, "value": "a signal tower" }
+  ]
+}

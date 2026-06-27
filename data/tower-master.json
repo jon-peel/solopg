@@ -1,0 +1,16 @@
+{
+  "id": "tower-master",
+  "title": "Tower master",
+  "_note": "Who rules the top floor when the tower is occupied — the boss waiting at the climb's end (number appearing 1). Flavor only, system-agnostic.",
+  "entries": [
+    { "weight": 2, "value": "a robber-knight" },
+    { "weight": 2, "value": "a hedge-wizard" },
+    { "weight": 1, "value": "a fallen priest" },
+    { "weight": 2, "value": "a petty warlord" },
+    { "weight": 1, "value": "a necromancer" },
+    { "weight": 1, "value": "an exiled noble" },
+    { "weight": 1, "value": "a bandit chief" },
+    { "weight": 1, "value": "a mad astrologer" },
+    { "weight": 1, "value": "a witch" }
+  ]
+}

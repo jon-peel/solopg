@@ -2,12 +2,16 @@
 
 export const POI_GLYPHS = {
   dungeon: "🏰", // default; a dungeon's actual glyph comes from its theme
-  lair: "🐾",
   shrine: "⛩️",
   camp: "⛺",
   landmark: "🗿",
   tower: "🗼",
 };
+
+// Retired POI types, kept renderable so older saves still show a sensible glyph.
+// `lair` was folded into dungeon den themes (Phase 5.1) and is no longer addable;
+// the paw print lives on as the "Beast den" theme glyph in THEME_GLYPHS.
+const LEGACY_POI_GLYPHS = { lair: "🐾" };
 
 // Dungeon glyphs by theme (the merged ruin/cave/mine explorables live here).
 // Theme names match data/dungeon-theme.json. Unknown themes fall back to 🏰.
@@ -35,7 +39,7 @@ export const THEME_GLYPHS = {
 export const SETTLEMENT_GLYPH = "🏠";
 
 export function glyphForPoiType(type) {
-  return POI_GLYPHS[type] || "❖";
+  return POI_GLYPHS[type] || LEGACY_POI_GLYPHS[type] || "❖";
 }
 
 /** Glyph for a dungeon theme (falls back to the generic dungeon glyph). */

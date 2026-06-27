@@ -1,0 +1,18 @@
+{
+  "id": "shrine-form",
+  "title": "Shrine form",
+  "_note": "Canonical manifest of above-ground shrine forms (Phase 5.1). Per-terrain selection weighting lives in SHRINE_FORM_BIAS (js/gen/terrain-profile.js); the weights below are the generic fallback when a terrain has no bias. Values are noun phrases composed into the description (capitalised when sentence-initial).",
+  "entries": [
+    { "weight": 3, "value": "a weathered altar" },
+    { "weight": 3, "value": "a standing stone" },
+    { "weight": 2, "value": "a carved stone face" },
+    { "weight": 2, "value": "a small statue" },
+    { "weight": 2, "value": "a roadside idol" },
+    { "weight": 2, "value": "a cairn" },
+    { "weight": 1, "value": "an obelisk" },
+    { "weight": 1, "value": "a holy spring" },
+    { "weight": 1, "value": "a tree-shrine" },
+    { "weight": 1, "value": "a wayside marker" },
+    { "weight": 1, "value": "a colossal carving" }
+  ]
+}

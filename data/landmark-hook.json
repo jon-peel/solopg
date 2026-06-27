@@ -1,0 +1,15 @@
+{
+  "id": "landmark-hook",
+  "title": "Landmark hook",
+  "_note": "An optional rumour/secret seed (appears ~half the time) — a light bridge toward Phases 6 (rumors) and 7 (oracles). Full sentences with their own terminal punctuation.",
+  "entries": [
+    { "weight": 1, "value": "Locals leave offerings at its foot and won't say why." },
+    { "weight": 1, "value": "They say it marks where something lies buried." },
+    { "weight": 1, "value": "Travellers use it to find their way for miles." },
+    { "weight": 1, "value": "A rumour places a hidden cache somewhere near." },
+    { "weight": 1, "value": "Something is said to nest within it." },
+    { "weight": 1, "value": "Folk swear the dead walk here on certain nights." },
+    { "weight": 1, "value": "An old road, now lost, once ran past it." },
+    { "weight": 1, "value": "Those who camp beneath it report strange dreams." }
+  ]
+}
