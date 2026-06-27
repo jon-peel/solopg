@@ -1,0 +1,16 @@
+{
+  "id": "landmark-trait",
+  "title": "Landmark trait",
+  "_note": "What makes the landmark notable — a standalone clause composed as the second sentence (capitalised). Lowercase-initial so cap() handles the sentence start.",
+  "entries": [
+    { "weight": 2, "value": "visible for a day's travel in any direction" },
+    { "weight": 2, "value": "older than any local memory" },
+    { "weight": 1, "value": "wreathed in mist even at noon" },
+    { "weight": 1, "value": "scarred by an ancient lightning-strike" },
+    { "weight": 1, "value": "humming faintly at dawn" },
+    { "weight": 1, "value": "ringed by ground where nothing grows" },
+    { "weight": 1, "value": "warm to the touch, always" },
+    { "weight": 1, "value": "covered in worn, unreadable carvings" },
+    { "weight": 1, "value": "leaning at an impossible angle" }
+  ]
+}

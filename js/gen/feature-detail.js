@@ -20,6 +20,9 @@ import {
   SHRINE_SETTING_DEFAULT,
   CAMP_SETTING,
   CAMP_SETTING_DEFAULT,
+  landmarkFeatureTable,
+  LANDMARK_SETTING,
+  LANDMARK_SETTING_DEFAULT,
 } from "./terrain-profile.js";
 
 // Detail-shape version, stamped on every generated feature. app.js rebuilds a
@@ -27,8 +30,11 @@ import {
 // shape self-heals old saves without a world-schema migration. Bump on shape change.
 export const FEATURE_BUILD = 1;
 
-// POI types that carry a Tier-1 text feature (no map). Grows in 5.3.
-export const FEATURE_TYPES = new Set(["shrine", "camp"]);
+// POI types that carry a Tier-1 text feature (no map).
+export const FEATURE_TYPES = new Set(["shrine", "camp", "landmark"]);
+
+// A landmark sometimes carries an optional rumour/secret hook.
+const HOOK_CHANCE = 0.5;
 
 // Conditions that can invite a light "watcher" (keep in sync with the
 // corresponding values in data/shrine-condition.json).
@@ -72,28 +78,45 @@ function describeCamp(tables, rng, terrain, occupant) {
   return { build: FEATURE_BUILD, type: "camp", size: scale.size, signs: scale.signs, setting, who, number, reaction };
 }
 
+// A landmark is pure description: a terrain-biased feature, a notable trait, a
+// terrain setting, and (about half the time) a light rumour/secret hook. No
+// occupant, no encounter.
+function describeLandmark(tables, rng, terrain) {
+  const feature = rollTable(landmarkFeatureTable(terrain), rng).value;
+  const trait = rollTable(tables.get("landmark-trait"), rng).value;
+  const setting = pick(rng, LANDMARK_SETTING[terrain] || LANDMARK_SETTING_DEFAULT);
+  // Chance rolled unconditionally so the stream stays stable whether or not a
+  // hook lands.
+  const chance = rng();
+  const hook = chance < HOOK_CHANCE ? rollTable(tables.get("landmark-hook"), rng).value : null;
+  return { build: FEATURE_BUILD, type: "landmark", feature, trait, setting, hook };
+}
+
 /**
  * Generate one POI's Tier-1 feature detail (structured picks), or null for a
  * type that has none yet.
- * @param {Map<string,object>} tables incl. shrine-*, camp-*, creatures, occupiers.
+ * @param {Map<string,object>} tables incl. shrine-*, camp-*, landmark-*, creatures, occupiers.
  * @param {() => number} rng a dedicated sub-stream for this POI's feature.
  * @param {{ type: string, terrain: string, occupant?: object }} ctx
  */
 export function describeFeature(tables, rng, { type, terrain, occupant }) {
   if (type === "shrine") return describeShrine(tables, rng, terrain);
   if (type === "camp") return describeCamp(tables, rng, terrain, occupant);
+  if (type === "landmark") return describeLandmark(tables, rng, terrain);
   return null;
 }
+
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const stripArticle = (s) => (s ? s.replace(/^(a |an |the )/i, "") : s);
 
 /** Short label for the POI list / map glyph (e.g. "Shrine to a war-god"). */
 export function featureName(feature) {
   if (!feature) return null;
   if (feature.type === "shrine") return `Shrine ${feature.dedication}`;
   if (feature.type === "camp") return feature.who ? `Camp — ${feature.who}` : "Deserted camp";
+  if (feature.type === "landmark") return cap(stripArticle(feature.feature));
   return null;
 }
-
-const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Composed description lines for the drill-in (prose built from the picks). */
 export function featureDescription(feature) {
@@ -113,6 +136,14 @@ export function featureDescription(feature) {
       `${cap(feature.signs)} — ${feature.who ? "still in use" : "long cold"}.`,
     ];
     if (feature.who) lines.push(`About ${feature.number} of them — ${feature.reaction}.`);
+    return lines;
+  }
+  if (feature.type === "landmark") {
+    const lines = [
+      `${cap(feature.feature)}, ${feature.setting}.`,
+      `${cap(feature.trait)}.`,
+    ];
+    if (feature.hook) lines.push(feature.hook); // hook carries its own punctuation
     return lines;
   }
   return [];

@@ -7,7 +7,13 @@ import {
   featureDescription,
   FEATURE_BUILD,
 } from "../js/gen/feature-detail.js";
-import { SHRINE_SETTING, SHRINE_FORM_BIAS, CAMP_SETTING } from "../js/gen/terrain-profile.js";
+import {
+  SHRINE_SETTING,
+  SHRINE_FORM_BIAS,
+  CAMP_SETTING,
+  LANDMARK_SETTING,
+  LANDMARK_FEATURE_BIAS,
+} from "../js/gen/terrain-profile.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -19,6 +25,9 @@ function tables() {
     "shrine-detail",
     "camp-scale",
     "camp-reaction",
+    "landmark-feature",
+    "landmark-trait",
+    "landmark-hook",
     "creatures",
     "occupiers",
   ];
@@ -169,6 +178,58 @@ test("featureName + featureDescription compose camp prose", () => {
   const lines = featureDescription(cold);
   assert.equal(lines.length, 2);
   assert.match(lines[1], /long cold/);
+});
+
+test("describeFeature(landmark) returns a terrain-skinned feature + trait", () => {
+  const t = tables();
+  const features = valuesOf(t.get("landmark-feature"));
+  const traits = valuesOf(t.get("landmark-trait"));
+  const hooks = valuesOf(t.get("landmark-hook"));
+  for (let s = 0; s < 50; s++) {
+    const f = describeFeature(t, mulberry32(s), { type: "landmark", terrain: "Desert" });
+    assert.equal(f.type, "landmark");
+    assert.ok(features.has(f.feature), `feature ${f.feature} from manifest`);
+    assert.ok(traits.has(f.trait));
+    assert.ok(LANDMARK_SETTING.Desert.includes(f.setting));
+    if (f.hook !== null) assert.ok(hooks.has(f.hook));
+  }
+});
+
+test("landmark feature is terrain-biased (Desert excludes a lone ancient tree)", () => {
+  const t = tables();
+  let sawPetrified = false;
+  for (let s = 0; s < 300; s++) {
+    const f = describeFeature(t, mulberry32(s), { type: "landmark", terrain: "Desert" });
+    if (f.feature === "a petrified beast") sawPetrified = true;
+    assert.ok(LANDMARK_FEATURE_BIAS.Desert[f.feature], `${f.feature} is a Desert feature`);
+    assert.notEqual(f.feature, "a lone ancient tree");
+  }
+  assert.ok(sawPetrified, "expected a petrified beast in the Desert over many seeds");
+});
+
+test("featureName + featureDescription compose landmark prose", () => {
+  const withHook = {
+    build: FEATURE_BUILD,
+    type: "landmark",
+    feature: "the ruin of a colossal statue",
+    trait: "older than any local memory",
+    setting: "on the cracked hardpan",
+    hook: "They say it marks where something lies buried.",
+  };
+  assert.equal(featureName(withHook), "Ruin of a colossal statue");
+  assert.deepEqual(featureDescription(withHook), [
+    "The ruin of a colossal statue, on the cracked hardpan.",
+    "Older than any local memory.",
+    "They say it marks where something lies buried.",
+  ]);
+  const noHook = { ...withHook, hook: null };
+  assert.equal(featureDescription(noHook).length, 2);
+});
+
+test("describeFeature is deterministic for a landmark seed + terrain", () => {
+  const a = describeFeature(tables(), mulberry32(11), { type: "landmark", terrain: "Forest" });
+  const b = describeFeature(tables(), mulberry32(11), { type: "landmark", terrain: "Forest" });
+  assert.deepEqual(a, b);
 });
 
 test("describeFeature returns null for a type with no Tier-1 detail yet", () => {

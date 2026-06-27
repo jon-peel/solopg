@@ -162,6 +162,42 @@ export const CAMP_SETTING = {
 };
 export const CAMP_SETTING_DEFAULT = ["beside an old track", "in a sheltered spot"];
 
+// Which landmark FEATURES a terrain leans toward (Tier-1 POI detail, Phase 5.3).
+// Feature names must exist in data/landmark-feature.json. Mirrors SHRINE_FORM_BIAS.
+export const LANDMARK_FEATURE_BIAS = {
+  Forest: { "a lone ancient tree": 3, "a ring of standing stones": 2, "a great standing monolith": 1, "a petrified beast": 1, "a natural stone arch": 1 },
+  Plains: { "a field of old battle-bones": 3, "a ring of standing stones": 2, "a great standing monolith": 2, "a meteorite crater": 1, "the ruin of a colossal statue": 1 },
+  Hills: { "a natural stone arch": 2, "a ring of standing stones": 2, "a great standing monolith": 2, "a spire of wind-carved rock": 1, "a thundering waterfall": 1 },
+  Mountains: { "a thundering waterfall": 2, "a spire of wind-carved rock": 2, "a steaming fissure": 2, "a natural stone arch": 1, "the ruin of a colossal statue": 1 },
+  Swamp: { "a petrified beast": 2, "a lone ancient tree": 2, "the ruin of a colossal statue": 1, "a ring of standing stones": 1, "a steaming fissure": 1 },
+  Desert: { "a petrified beast": 2, "the ruin of a colossal statue": 2, "a spire of wind-carved rock": 2, "a meteorite crater": 1, "a natural stone arch": 1 },
+  Water: { "a natural stone arch": 1, "a spire of wind-carved rock": 1, "the ruin of a colossal statue": 1 },
+};
+
+const DEFAULT_LANDMARK_FEATURE_BIAS = { "a great standing monolith": 2, "a ring of standing stones": 2, "a lone ancient tree": 1, "a field of old battle-bones": 1, "a natural stone arch": 1 };
+
+/** Weighted landmark-feature table for a terrain (mirrors shrineFormTable). */
+export function landmarkFeatureTable(terrain) {
+  const weights = LANDMARK_FEATURE_BIAS[terrain] || DEFAULT_LANDMARK_FEATURE_BIAS;
+  const entries = Object.entries(weights).map(([feature, weight]) => ({
+    weight,
+    value: feature,
+  }));
+  return { id: `landmark-feature:${terrain}`, entries };
+}
+
+// Terrain "skin" for landmarks: where it stands, composed into the description.
+export const LANDMARK_SETTING = {
+  Forest: ["deep in the old wood", "in a forgotten glade", "where the trees grow strange"],
+  Plains: ["alone on the open plain", "on a windswept rise", "beside the old road"],
+  Hills: ["on a bare hilltop", "in a fold of the hills", "above a steep dale"],
+  Mountains: ["high on the mountainside", "in a lonely pass", "above the snowline"],
+  Swamp: ["amid the black water", "on the only firm ground for miles", "wreathed in marsh-mist"],
+  Desert: ["amid the trackless dunes", "on the cracked hardpan", "where the wind never stops"],
+  Water: ["rising from the waves", "on a wave-battered skerry"],
+};
+export const LANDMARK_SETTING_DEFAULT = ["in a lonely place", "off the beaten track"];
+
 // Re-export for parity tests (every styled terrain should have a profile).
 export const KNOWN_TERRAINS = Object.keys(TERRAIN_COLORS);
 

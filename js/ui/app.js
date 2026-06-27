@@ -67,6 +67,9 @@ const HEX_TABLE_IDS = [
   "shrine-detail",
   "camp-scale",
   "camp-reaction",
+  "landmark-feature",
+  "landmark-trait",
+  "landmark-hook",
 ];
 
 let current = null; // the in-memory current world
