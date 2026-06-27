@@ -33,7 +33,7 @@ test("a tower stacks floors that go up, with the master on top", () => {
     const tower = generateTower(t, mulberry32(s), { occupant: occupied });
     assert.equal(tower.build, TOWER_BUILD);
     assert.equal(tower.orientation, "up");
-    assert.ok(tower.levels.length >= 2 && tower.levels.length <= 4);
+    assert.ok(tower.levels.length >= 2 && tower.levels.length <= 5);
     // Floors are 1-indexed bottom-up; each carries a layout.
     tower.levels.forEach((lvl, i) => {
       assert.equal(lvl.depth, i + 1);

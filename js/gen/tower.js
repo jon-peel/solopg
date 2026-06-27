@@ -23,7 +23,7 @@ import { layoutLevel } from "./dungeon-layout.js";
 export const TOWER_BUILD = 1;
 
 const FLOORS_MIN = 2;
-const FLOORS_MAX = 4;
+const FLOORS_MAX = 5;
 const ROOMS_PER_FLOOR_MIN = 1;
 const ROOMS_PER_FLOOR_MAX = 3;
 const GARRISON_NA = "1d4"; // defenders in a manned room
