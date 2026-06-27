@@ -1,0 +1,11 @@
+{
+  "id": "camp-scale",
+  "title": "Camp scale",
+  "_note": "Size of the camp; low tiers commonest. Each carries the visible 'signs' (defenses scale with size) and a number-appearing dice, rolled to a concrete head-count when the camp is manned. Composed in js/gen/feature-detail.js.",
+  "entries": [
+    { "weight": 4, "value": { "size": "a small camp", "signs": "a fire-pit and a lean-to", "na": "1d6" } },
+    { "weight": 3, "value": { "size": "a travellers' camp", "signs": "a few tents and a picket line", "na": "2d6" } },
+    { "weight": 2, "value": { "size": "a war-band's camp", "signs": "rows of tents, drying racks, a gibbet", "na": "4d10" } },
+    { "weight": 1, "value": { "size": "a fortified camp", "signs": "ringed by a ditch and a timber palisade", "na": "5d10" } }
+  ]
+}

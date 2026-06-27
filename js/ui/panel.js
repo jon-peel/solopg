@@ -77,7 +77,8 @@ function renderPoiSection(sel, hex, model) {
       : [selectedPoi.detail && selectedPoi.detail.flavor];
     for (const line of [
       `Type: ${selectedPoi.type}`,
-      feature && occ === "empty" ? null : `Occupant: ${occ}`,
+      // A camp's description already names who holds it; hide the generic line.
+      feature && (selectedPoi.type === "camp" || occ === "empty") ? null : `Occupant: ${occ}`,
       ...detailLines,
     ].filter(Boolean)) {
       const div = document.createElement("div");

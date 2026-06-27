@@ -65,6 +65,8 @@ const HEX_TABLE_IDS = [
   "shrine-dedication",
   "shrine-condition",
   "shrine-detail",
+  "camp-scale",
+  "camp-reaction",
 ];
 
 let current = null; // the in-memory current world
@@ -383,17 +385,15 @@ function buildFeatureDetail(poi, terrain, q, r, n, tables) {
   if (!FEATURE_TYPES.has(poi.type)) return;
   const rng = subRng(current.seed, "hex", q, r, "feature", n);
   poi.detail = poi.detail || {};
-  poi.detail.feature = describeFeature(tables, rng, { type: poi.type, terrain });
-  const base = featureName(poi.detail.feature);
-  if (!base) return;
-  // Keep any occupant suffix the list name carried (shrines lean "either").
-  if (poi.occupant && poi.occupant.kind === "lair") {
-    poi.name = `${base} — ${poi.occupant.creature} lair`;
-  } else if (poi.occupant && poi.occupant.kind === "occupied") {
-    poi.name = `${base} — ${poi.occupant.by}`;
-  } else {
-    poi.name = base;
-  }
+  // The camp's "who" is the POI's own occupant (single source of truth), so pass
+  // it through; other types ignore it.
+  poi.detail.feature = describeFeature(tables, rng, {
+    type: poi.type,
+    terrain,
+    occupant: poi.occupant,
+  });
+  const name = featureName(poi.detail.feature);
+  if (name) poi.name = name;
 }
 
 // Select a POI. Non-dungeon POIs drill into the side panel; a dungeon POI opens

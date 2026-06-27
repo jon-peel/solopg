@@ -149,6 +149,19 @@ export const SHRINE_SETTING = {
 };
 export const SHRINE_SETTING_DEFAULT = ["in a lonely place", "beside an old track"];
 
+// Terrain "skin" for camps: where a camp pitches, as a phrase composed into the
+// description (e.g. Hills → "at a cave mouth", Swamp → "on a raft of lashed logs").
+export const CAMP_SETTING = {
+  Forest: ["in a forest clearing", "under the eaves of the wood", "beside a woodland stream"],
+  Plains: ["on the open steppe", "beside an old road", "in the lee of a low rise"],
+  Hills: ["at a cave mouth", "in a sheltered hollow", "behind a stony ridge"],
+  Mountains: ["in a high col", "on a windswept ledge", "at the head of a pass"],
+  Swamp: ["on a reed island", "on a raft of lashed logs", "on the only dry ground for miles"],
+  Desert: ["around a desert spring", "in the lee of a dune", "among weathered rocks"],
+  Water: ["on a shingle beach", "in a sheltered cove"],
+};
+export const CAMP_SETTING_DEFAULT = ["beside an old track", "in a sheltered spot"];
+
 // Re-export for parity tests (every styled terrain should have a profile).
 export const KNOWN_TERRAINS = Object.keys(TERRAIN_COLORS);
 

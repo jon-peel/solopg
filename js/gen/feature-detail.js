@@ -13,15 +13,22 @@
 
 import { rollTable } from "../core/table.js";
 import { pick } from "../core/rng.js";
-import { shrineFormTable, SHRINE_SETTING, SHRINE_SETTING_DEFAULT } from "./terrain-profile.js";
+import { rollDice } from "../core/dice.js";
+import {
+  shrineFormTable,
+  SHRINE_SETTING,
+  SHRINE_SETTING_DEFAULT,
+  CAMP_SETTING,
+  CAMP_SETTING_DEFAULT,
+} from "./terrain-profile.js";
 
 // Detail-shape version, stamped on every generated feature. app.js rebuilds a
 // POI whose feature.build differs (or is missing) on next open, so changing the
 // shape self-heals old saves without a world-schema migration. Bump on shape change.
 export const FEATURE_BUILD = 1;
 
-// POI types that carry a Tier-1 text feature (no map). Grows in 5.2 / 5.3.
-export const FEATURE_TYPES = new Set(["shrine"]);
+// POI types that carry a Tier-1 text feature (no map). Grows in 5.3.
+export const FEATURE_TYPES = new Set(["shrine", "camp"]);
 
 // Conditions that can invite a light "watcher" (keep in sync with the
 // corresponding values in data/shrine-condition.json).
@@ -49,21 +56,40 @@ function describeShrine(tables, rng, terrain) {
   return { build: FEATURE_BUILD, type: "shrine", form, dedication, condition, setting, detail, watcher };
 }
 
+// A camp's narrative hangs off its scale (size + visible signs + a head-count
+// dice) and its OCCUPANT — the same occupier already rolled on the POI, so the
+// camp has a single "who". Occupant "occupied" → a manned camp (head-count +
+// reaction); "none" → an abandoned, cold camp.
+function describeCamp(tables, rng, terrain, occupant) {
+  const scale = rollTable(tables.get("camp-scale"), rng).value; // { size, signs, na }
+  const setting = pick(rng, CAMP_SETTING[terrain] || CAMP_SETTING_DEFAULT);
+  const who = occupant && occupant.kind === "occupied" ? occupant.by : null;
+  // Manned camps get a concrete head-count + a reaction; cold camps get neither.
+  // The branch turns on persisted data (occupant), so the eager build and the
+  // self-heal stay in lock-step.
+  const number = who ? rollDice(scale.na, rng).total : null;
+  const reaction = who ? rollTable(tables.get("camp-reaction"), rng).value : null;
+  return { build: FEATURE_BUILD, type: "camp", size: scale.size, signs: scale.signs, setting, who, number, reaction };
+}
+
 /**
  * Generate one POI's Tier-1 feature detail (structured picks), or null for a
  * type that has none yet.
- * @param {Map<string,object>} tables incl. shrine-* and creatures.
+ * @param {Map<string,object>} tables incl. shrine-*, camp-*, creatures, occupiers.
  * @param {() => number} rng a dedicated sub-stream for this POI's feature.
- * @param {{ type: string, terrain: string }} ctx
+ * @param {{ type: string, terrain: string, occupant?: object }} ctx
  */
-export function describeFeature(tables, rng, { type, terrain }) {
+export function describeFeature(tables, rng, { type, terrain, occupant }) {
   if (type === "shrine") return describeShrine(tables, rng, terrain);
+  if (type === "camp") return describeCamp(tables, rng, terrain, occupant);
   return null;
 }
 
 /** Short label for the POI list / map glyph (e.g. "Shrine to a war-god"). */
 export function featureName(feature) {
-  if (feature && feature.type === "shrine") return `Shrine ${feature.dedication}`;
+  if (!feature) return null;
+  if (feature.type === "shrine") return `Shrine ${feature.dedication}`;
+  if (feature.type === "camp") return feature.who ? `Camp — ${feature.who}` : "Deserted camp";
   return null;
 }
 
@@ -71,11 +97,23 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Composed description lines for the drill-in (prose built from the picks). */
 export function featureDescription(feature) {
-  if (!feature || feature.type !== "shrine") return [];
-  const lines = [
-    `${cap(feature.form)} ${feature.dedication}, ${feature.setting}.`,
-    `${feature.condition} — ${feature.detail}.`,
-  ];
-  if (feature.watcher) lines.push(`Lurking nearby: ${feature.watcher}.`);
-  return lines;
+  if (!feature) return [];
+  if (feature.type === "shrine") {
+    const lines = [
+      `${cap(feature.form)} ${feature.dedication}, ${feature.setting}.`,
+      `${feature.condition} — ${feature.detail}.`,
+    ];
+    if (feature.watcher) lines.push(`Lurking nearby: ${feature.watcher}.`);
+    return lines;
+  }
+  if (feature.type === "camp") {
+    const who = feature.who ? ` of ${feature.who.toLowerCase()}` : "";
+    const lines = [
+      `${cap(feature.size)}${who}, ${feature.setting}.`,
+      `${cap(feature.signs)} — ${feature.who ? "still in use" : "long cold"}.`,
+    ];
+    if (feature.who) lines.push(`About ${feature.number} of them — ${feature.reaction}.`);
+    return lines;
+  }
+  return [];
 }
