@@ -9,18 +9,19 @@ remembers the evolving map.
 > [Roadmap & status](#roadmap--status)). Completed work is recorded in
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
-**Status (current):** Phases 0–4 complete. Phase 4 delivered the full dungeon arc: base
-interiors + panel view, the 4.5–4.8 themed/explorable arc (themes + ruin/cave/mine merge,
-schema v5; themed monster families; rooms+corridors layout; Dungeon View UI), and the **4.9
-depth-&-connectivity sub-project (4.9.1–4.9.14)** — size selection, room-graph + loops, doors /
-secret doors, inter-level stairs + level-skip shafts, multiple entrances/exits, rich room
-contents, exploration state + GM notes, view polish, a 10ft grid + true vertical stairs, cave
-doors + a rare Vast size, depth-decaying lighting + an occupied frontier, an expanded tiered
-monster roster + dens, depth/difficulty scaling, dice-notation treasure/number-appearing, and
-named-den signature creatures. **Schema v5. 132 `node --test` passing.** **Next: Phase 5 — other
-POI types detailed.** Work is on branch `claude/refine-local-plan-lg3hiu` (PR #1). See
-[phase-4-dungeons.md](docs/plans/phase-4-dungeons.md) and
-[phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md).
+**Status (current):** Phases 0–5 complete. Phase 4 delivered the full dungeon arc (base interiors +
+Dungeon View; themed/explorable 4.5–4.8 arc; the 4.9.1–4.9.14 depth-&-connectivity sub-project —
+sizes, room-graphs + loops, doors/secret doors, inter-level + vertical stairs, multiple
+entrances/exits, rich room contents, exploration state + GM notes, lighting + occupied frontier,
+tiered monster roster + dens, depth/difficulty scaling, dice-notation treasure, named-den
+signatures). **Phase 5 detailed the other POI types** (see
+[phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md)): a shared, terrain-aware **Tier-1
+description engine** for **shrine / camp / landmark** (`js/gen/feature-detail.js`), and **towers** as
+a **Tier-2 mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View with an `orientation:"up"`
+flag — floors that climb, a garrison from the POI's occupant, and the master on top. The standalone
+`lair` POI type was retired (folded into dungeon den themes). **Schema v5. 149 `node --test` passing.**
+**Next: Phase 6 — Rumors** (needs only the map + POIs; see [Roadmap & status](#roadmap--status) and the
+[small-oracle catalog](#small-oracle-catalog-for-phase-7-selection)). Work merges to **`main`** via PR.
 
 ---
 
@@ -83,8 +84,11 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           dice.js (rollDice)   table.js (validateTable, rollTable)   loader.js (loadTables, makeResolver)
           hexgeo.js (axial<->pixel, cube rounding, neighbors, axialKey/parseKey)
   /gen    hex.js (generateHex, weightedTerrainTable)   poi.js (generatePoi)
-          terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS)   terrain-affinity.js (adjacency)
+          terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
+          terrain-affinity.js (adjacency)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
+          feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
+          tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
   /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
   /ui     app.js (bootstrap/wiring; dungeon view toggle + lazy build)   map.js (canvas renderer + LOD)
@@ -92,10 +96,13 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           terrain-style.js / terrain-art.js / poi-style.js (+ THEME_GLYPHS) / settlement-art.js
 /data     terrain, swamp-feature, settlement-size, poi-types, poi-occupant, creatures, occupiers,
           dungeon-{size,theme,room,trap,special,dressing,treasure,treasure-guard,monster-status,light},
-          monster-families, dungeon-family (JSON)
+          monster-families, dungeon-family,
+          shrine-{form,dedication,condition,detail}, camp-{scale,reaction},
+          landmark-{feature,trait,hook}, tower-{kind,master} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites (rng, dice, table, world, hexgeo, hex, terrain-weight,
-          terrain-profile, terrain-art, settlement-art, poi, migration, dungeon, dungeon-layout)
+          terrain-profile, terrain-art, settlement-art, poi, migration, dungeon, dungeon-layout,
+          feature-detail, tower)
 /docs/plans  per-step sub-plans (this overview links them)
 ```
 
@@ -126,7 +133,11 @@ graph TD
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
   `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`. **Dungeon** POIs carry a
   terrain-biased `detail.theme` (drives the map glyph) and gain a generated interior at
-  `detail.dungeon`, built lazily on first open. Auto-gen places ≤1 POI; users add/remove more.
+  `detail.dungeon`, built lazily on first open. **Tower** POIs likewise build a mapped interior at
+  `detail.dungeon` (with `orientation:"up"`, `build:TOWER_BUILD`) on open. **Shrine / camp / landmark**
+  carry structured **Tier-1 detail** at `detail.feature` (`{build, type, …axis picks…}`); prose is
+  composed at render. All interiors/features self-heal from a build stamp (no schema bump). Auto-gen
+  places ≤1 POI; users add/remove more.
 - **Terrains:** Forest, Plains, Hills, Mountains, Swamp, Desert, Water. **POI types:** dungeon,
   shrine, camp, landmark, tower. The explorable types **ruin/cave/mine — and creature lairs —
   merged into `dungeon` as themes** (Ruin, Cave complex, Abandoned mine, Beast den, Ogre lair, …).
@@ -151,8 +162,8 @@ graph TD
 | 2 — Hex map (+2.1 interaction, +2.2 terrain look) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | 3 — POIs + terrain-aware gen (+3.1–3.5 POIs/art/LOD) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
-| **5 — Other POI types detailed** | ▶ **next** | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
-| 6 — Rumors | ◻ later | — |
+| **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
+| **6 — Rumors** | ▶ **next** | — |
 | 7 — Additional small oracles | ◻ later | see catalog below |
 | 8 — QoL & customization (editable tables, notes, themes) | ◻ later | — |
 
@@ -166,6 +177,21 @@ richly stocked rooms (themed monster families with depth/difficulty scaling, dic
 treasure & number-appearing, named-den signature creatures), plus exploration state + GM notes.
 See [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md) and
 [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md).
+
+**Phase 5 (done) — Other POI types detailed:** two tiers. **Tier 1** — `shrine`, `camp`, `landmark`
+generate a terrain-aware **composable description** (independent axes × a terrain "skin") via a shared
+pure engine (`js/gen/feature-detail.js`); picks are stored on `poi.detail.feature`, prose is composed
+at render, and a `FEATURE_BUILD` stamp self-heals older saves on open (no schema bump). **Tier 2** —
+`tower` opens into a **mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View and layout
+engine with an `orientation:"up"` flag: a stack of narrow floors that climb (index 0 = ground/entrance,
+master on top), garrisoned by the POI's occupant (held = lit, empty = dark). `lair` retired (a creature
+lair is now a dungeon den). See [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md).
+
+**Phase 6 (next) — Rumors:** not yet planned. Needs only the map + POIs (no Phase 5 dependency). Follow
+the design loop (brainstorm → plan → **approve** → build): write `docs/plans/phase-6-rumors.md` first.
+A natural fit with what's already generated — settlements, POIs (incl. the new shrine/camp/landmark
+hooks and dungeon contents) — as the subjects rumors point at. The landmark `hook` axis already seeds
+this. See the [small-oracle catalog](#small-oracle-catalog-for-phase-7-selection) for adjacent oracles.
 
 ---
 
