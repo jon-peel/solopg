@@ -22,9 +22,12 @@ flag — floors that climb, a garrison from the POI's occupant, and the master o
 `lair` POI type was retired (folded into dungeon den themes). **In progress: Phase 6 — Hooks** (Type-1
 local adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)). **6.1** (foundation: schema
 **v6** + the **Known** pattern + a settlement Hooks panel), **6.2** (the **Distant** pattern — lazy
-target-tile generation: a hook points *n* hexes away and spawns just that one tile) and **6.3** (the
-**Map** pattern — a treasure map that also reveals a corridor of hexes to the target, plus a "Read map"
-trigger) are built and node-tested. **Schema v6. 168 `node --test` passing.** Work merges to **`main`** via PR.
+target-tile generation: a hook points *n* hexes away and spawns just that one tile), **6.3** (the **Map**
+pattern — a treasure map that also reveals a corridor of hexes to the target, plus a "Read map" trigger)
+and **6.4** (the **Chain** pattern — a breadcrumb hunt that winds clue-by-clue to a payoff, each step
+generated lazily by "Follow the clue") are built and node-tested. A global always-visible open-hooks
+list (→ Target / ↩ Origin jumps) ties them together. **Schema v6. 172 `node --test` passing.** Work
+merges to **`main`** via PR.
 
 ---
 

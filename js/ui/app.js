@@ -4,7 +4,14 @@
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
 import { axialKey, neighbors, axialLine } from "../core/hexgeo.js";
-import { generateHook, hookName, rollHookPattern, chooseDistantTarget } from "../gen/hooks.js";
+import {
+  generateHook,
+  hookName,
+  rollHookPattern,
+  chooseDistantTarget,
+  startChain,
+  buildChainStep,
+} from "../gen/hooks.js";
 import {
   createWorld,
   addHex,
@@ -86,6 +93,7 @@ const HOOK_TABLE_IDS = [
   "hook-accuracy",
   "hook-explore",
   "hook-threat",
+  "hook-clue",
 ];
 
 let current = null; // the in-memory current world
@@ -691,6 +699,7 @@ function refreshGlobalHooks() {
     hooks: (current && current.hooks) || [],
     onGoToHook,
     onGoToHookOrigin,
+    onFollowClue,
     onResolveHook,
     onIgnoreHook,
     onRemoveHook,
@@ -777,6 +786,7 @@ function buildMapTargetAndPath(tables, origin, spot) {
 const HOOK_NOTE = {
   distant: " (distant — a new site appeared on the map)",
   map: " (map — a route was revealed to a new site)",
+  chain: " (chain — follow the clues to the prize)",
   known: "",
 };
 
@@ -799,7 +809,18 @@ async function onGenerateHook(opts = {}) {
     const pattern = opts.forcePattern || rollHookPattern(tables, rng, subjects.length > 0);
 
     let hook;
-    if (pattern === "map" || pattern === "distant") {
+    if (pattern === "chain") {
+      const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
+      if (!spot) return logLine("No open ground nearby to lay a trail.");
+      const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+      addHex(current, targetHex);
+      const subject = subjectFromHex(targetHex, targetHex.pois[0]);
+      hook = startChain(tables, rng, {
+        origin, index: n,
+        target: { q: spot.q, r: spot.r, poiId: subject.poiId },
+        subject: { poiId: subject.poiId, name: subject.name, type: subject.type },
+      });
+    } else if (pattern === "map" || pattern === "distant") {
       const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
       if (!spot) return logLine("No open ground nearby for that hook.");
       if (pattern === "map") {
@@ -863,6 +884,44 @@ function onGoToHookOrigin(id) {
   if (!h || !h.origin) return;
   selectCell(h.origin.q, h.origin.r);
   recenterOn(h.origin.q, h.origin.r);
+}
+
+// Advance a breadcrumb chain: generate the next site (winding on from where the
+// current clue was found) and move the hook to it. The prior site stays on the map.
+async function onFollowClue(id) {
+  if (!current) return;
+  const hook = (current.hooks || []).find((x) => x.id === id);
+  if (!hook || hook.pattern !== "chain") return;
+  if (hook.chain.step >= hook.chain.total) return; // already at the prize
+  try {
+    const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));
+    const m = /^hook:(\d+)$/.exec(hook.id || "");
+    const hookN = m ? Number(m[1]) : 0;
+    const nextStep = hook.chain.step + 1;
+    const rng = subRng(current.seed, "hook", hookN, "chain", nextStep);
+    const legOrigin = { q: hook.target.q, r: hook.target.r };
+    const spot = chooseDistantTarget(rng, legOrigin, (q, r) => hasHexAt(current, q, r));
+    if (!spot) return logLine("The trail goes cold — no open ground for the next clue.");
+    const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+    addHex(current, targetHex);
+    const subj = subjectFromHex(targetHex, targetHex.pois[0]);
+    const fields = buildChainStep(tables, rng, {
+      legOrigin, target: { q: spot.q, r: spot.r, poiId: subj.poiId },
+      step: nextStep, total: hook.chain.total,
+    });
+    Object.assign(hook, fields, {
+      subject: { poiId: subj.poiId, name: subj.name, type: subj.type },
+      chain: { total: hook.chain.total, step: nextStep },
+    });
+    await persistAndRefresh();
+    logLine(
+      nextStep >= hook.chain.total
+        ? `The trail ends — the prize lies at ${subj.name}.`
+        : `The clue leads on to ${subj.name}.`,
+    );
+  } catch (err) {
+    logLine(`Follow clue error: ${err.message}`);
+  }
 }
 
 async function persistAndRefresh() {

@@ -1,0 +1,13 @@
+{
+  "id": "hook-clue",
+  "title": "Intermediate breadcrumb clue (points onward to the next site)",
+  "entries": [
+    { "value": "a worn inscription points onward" },
+    { "value": "a carved map fragment hints at the next site" },
+    { "value": "a dying scrawl names another place" },
+    { "value": "a hidden marker shows the way on" },
+    { "value": "a riddle on the wall names the next landmark" },
+    { "value": "a torn page describes where to look next" },
+    { "value": "a keyed cipher gives the next bearing" }
+  ]
+}

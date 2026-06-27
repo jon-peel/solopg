@@ -147,11 +147,63 @@ export function generateHook(tables, rng, ctx) {
   };
 }
 
+/**
+ * Build the per-leg fields of a chain step: where this clue points, how far, and
+ * the clue/treasure text. Intermediate steps roll an onward clue (hook-clue); the
+ * final step rolls the payoff (hook-explore). bearing/distance are for THIS leg
+ * (from where the last clue was found), not the chain's start.
+ * @param {{ legOrigin:{q,r}, target:{q,r,poiId}, step:number, total:number, accuracy?:string }} ctx
+ */
+export function buildChainStep(tables, rng, ctx) {
+  const final = ctx.step >= ctx.total;
+  const claim = final
+    ? rollTable(tables.get("hook-explore"), rng).value
+    : rollTable(tables.get("hook-clue"), rng).value;
+  const accuracy = ctx.accuracy || rollTable(tables.get("hook-accuracy"), rng).value;
+  const target = ctx.target;
+  let indicated = { q: target.q, r: target.r };
+  if (accuracy === "off-by-one") indicated = pick(rng, neighbors(target.q, target.r));
+  return {
+    target,
+    indicated,
+    bearing: bearingTo(ctx.legOrigin, target),
+    distance: axialDistance(ctx.legOrigin.q, ctx.legOrigin.r, target.q, target.r),
+    accuracy,
+    claim,
+  };
+}
+
+/**
+ * Start a breadcrumb chain — a multi-step treasure hunt whose first clue points
+ * at `ctx.target`. Later steps are generated lazily as each clue is followed
+ * (buildChainStep). The returned hook's current fields mirror step 1; `chain`
+ * tracks { total, step }. Origin stays the chain's start (where you report in).
+ * @param {{ origin:{q,r}, target:{q,r,poiId}, subject:object, index?:number, source?:string }} ctx
+ */
+export function startChain(tables, rng, ctx) {
+  const total = 3 + Math.floor(rng() * 3); // 3–5 sites
+  const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
+  const step = buildChainStep(tables, rng, { legOrigin: ctx.origin, target: ctx.target, step: 1, total });
+  return {
+    id: ctx.index != null ? `hook:${ctx.index}` : undefined,
+    build: HOOK_BUILD,
+    pattern: "chain",
+    verb: "explore",
+    subject: ctx.subject,
+    origin: { q: ctx.origin.q, r: ctx.origin.r },
+    source,
+    status: "open",
+    chain: { total, step: 1 },
+    ...step,
+  };
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the hook list (e.g. "Threat: Ruin — Troll lair"). */
 export function hookName(hook) {
   if (!hook) return null;
+  if (hook.pattern === "chain") return `Hunt → ${hook.subject.name}`;
   return `${cap(hook.verb)}: ${hook.subject.name}`;
 }
 
@@ -165,10 +217,18 @@ export function hookDescription(hook) {
   const dirWord = hook.bearing ? BEARING_WORDS[hook.bearing] : null;
   const d = hook.distance;
   const whither = dirWord ? `${d} hex${d === 1 ? "" : "es"} to the ${dirWord}` : `${d} hexes off`;
-  // Each pattern phrases the destination differently: Map names a charted route,
-  // Distant a travel distance, Known (nearby) just a bearing.
+  // Each pattern phrases the destination differently: Chain tracks a trail of
+  // clues, Map names a charted route, Distant a travel distance, Known a bearing.
   let line0;
-  if (hook.pattern === "map") {
+  let progress = null;
+  if (hook.pattern === "chain") {
+    const { step, total } = hook.chain;
+    const final = step >= total;
+    line0 = final
+      ? `${hook.source}: the trail ends at ${hook.subject.name}, ${whither} — ${hook.claim}.`
+      : `${hook.source}: ${cap(hook.claim)} — the trail leads on to ${hook.subject.name}, ${whither}.`;
+    progress = `Clue ${step} of ${total}${final ? " — the prize" : ""}.`;
+  } else if (hook.pattern === "map") {
     line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "distant") {
     line0 = `${hook.source}: ${cap(hook.claim)} at ${hook.subject.name}, ${whither}.`;
@@ -177,6 +237,7 @@ export function hookDescription(hook) {
     line0 = `${hook.source}: ${cap(hook.claim)} at ${hook.subject.name}${dir}.`;
   }
   const lines = [line0];
+  if (progress) lines.push(progress);
   if (hook.accuracy === "off-by-one") {
     lines.push(`GM: the directions are a hex off — the real site is at (${hook.target.q}, ${hook.target.r}).`);
   } else if (hook.accuracy === "false") {

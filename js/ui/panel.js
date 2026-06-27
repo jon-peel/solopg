@@ -301,6 +301,10 @@ function hookCard(hook, model) {
   row.className = "tile-actions";
   row.appendChild(actionButton("→ Target", () => model.onGoToHook(hook.id)));
   row.appendChild(actionButton("↩ Origin", () => model.onGoToHookOrigin(hook.id)));
+  // A chain advances clue-by-clue until the final site (the prize).
+  if (hook.pattern === "chain" && hook.chain && hook.chain.step < hook.chain.total && model.onFollowClue) {
+    row.appendChild(actionButton("Follow the clue", () => model.onFollowClue(hook.id)));
+  }
   row.appendChild(actionButton(status === "resolved" ? "Reopen" : "Resolve", () => model.onResolveHook(hook.id)));
   row.appendChild(actionButton(status === "ignored" ? "Reopen" : "Ignore", () => model.onIgnoreHook(hook.id)));
   row.appendChild(actionButton("Remove", () => model.onRemoveHook(hook.id)));
