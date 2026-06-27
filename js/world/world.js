@@ -14,7 +14,9 @@ import { axialKey } from "../core/hexgeo.js";
 // replacing the Phase-3 `detail.stub` placeholder.
 // v5: the explorable POI types (ruin/cave/mine) were merged into `dungeon` as
 // themes (Phase 4 arc) — such POIs become `type:"dungeon"` with `detail.theme`.
-export const SCHEMA_VERSION = 5;
+// v6: worlds gained a top-level `hooks` array (Phase 6) — adventure hooks that
+// point at a hex/POI. Older worlds backfill `hooks: []`. See migrateWorld.
+export const SCHEMA_VERSION = 6;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
@@ -35,6 +37,9 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     seed: seed ?? randomSeed(),
     hexScale: DEFAULT_HEX_SCALE,
     hexes: {},
+    // Adventure hooks (Phase 6) — seeds pointing at a hex/POI. A flat top-level
+    // list because a hook spans tiles (origin ≠ target), so it isn't owned by one hex.
+    hooks: [],
     createdAt: now,
     updatedAt: now,
   };

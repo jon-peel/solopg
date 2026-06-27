@@ -88,3 +88,8 @@ export function hexCorners(cx, cy, s) {
 export function neighbors(q, r) {
   return NEIGHBOR_DIRS.map(([dq, dr]) => ({ q: q + dq, r: r + dr }));
 }
+
+/** Hex distance (cube metric) between two axial cells — the number of steps. */
+export function axialDistance(aq, ar, bq, br) {
+  return (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+}

@@ -102,7 +102,7 @@ function v4WorldWithExplorables() {
 
 test("migrateWorld upgrades v4 -> v5: ruin/cave/mine become themed dungeons", () => {
   const w = migrateWorld(v4WorldWithExplorables());
-  assert.equal(w.schemaVersion, 5);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION);
   const pois = w.hexes["0,0"].pois;
   assert.deepEqual(
     pois.map((p) => p.type),
@@ -114,6 +114,21 @@ test("migrateWorld upgrades v4 -> v5: ruin/cave/mine become themed dungeons", ()
   // Stale interiors cleared so the themed dungeon regenerates on next open.
   assert.equal(pois[0].detail.dungeon, undefined);
   assert.equal(pois[3].detail.theme, undefined); // shrine gets no theme
+});
+
+test("migrateWorld upgrades v5 -> v6: a hooks list is seeded", () => {
+  const v5 = { ...v2World(), schemaVersion: 5 };
+  delete v5.hooks;
+  const w = migrateWorld(v5);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION);
+  assert.deepEqual(w.hooks, []);
+});
+
+test("migrateWorld preserves an existing hooks list", () => {
+  const v6 = { ...v2World(), schemaVersion: 6, hooks: [{ id: "hook:0", pattern: "known" }] };
+  const w = migrateWorld(v6);
+  assert.equal(w.hooks.length, 1);
+  assert.equal(w.hooks[0].id, "hook:0");
 });
 
 test("importWorld migrates a v2 JSON up to the current version", () => {

@@ -1,0 +1,14 @@
+{
+  "id": "hook-source",
+  "title": "Where the hook was heard",
+  "entries": [
+    { "value": "Tavern talk" },
+    { "value": "A passing traveller" },
+    { "value": "A nervous merchant" },
+    { "value": "A boastful old hunter" },
+    { "value": "A drunk by the fire" },
+    { "value": "A frightened farmer" },
+    { "value": "A wandering pedlar" },
+    { "value": "A dying man's last words" }
+  ]
+}

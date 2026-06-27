@@ -4,6 +4,7 @@
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
 import { axialKey, neighbors } from "../core/hexgeo.js";
+import { generateHook, hookName } from "../gen/hooks.js";
 import {
   createWorld,
   addHex,
@@ -73,6 +74,15 @@ const HEX_TABLE_IDS = [
   "landmark-hook",
   "tower-kind",
   "tower-master",
+];
+
+// Tables the hook generator rolls on (loaded on demand when a hook is generated).
+const HOOK_TABLE_IDS = [
+  "hook-verb",
+  "hook-source",
+  "hook-accuracy",
+  "hook-explore",
+  "hook-threat",
 ];
 
 let current = null; // the in-memory current world
@@ -266,6 +276,7 @@ function renderSelection() {
   if (!current || !selected) return renderSelectionPanel(null);
   const { q, r } = selected;
   const hex = getHex(current, q, r);
+  const settled = !!(hex && hex.placed && hex.settlement && hex.settlement.present);
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
@@ -274,6 +285,14 @@ function renderSelection() {
     selectedPoiId,
     poiTypes: Object.keys(POI_GLYPHS),
     dungeonSizes,
+    // Hooks are heard "in town", so the section shows only at a settlement.
+    hooksEnabled: settled,
+    hooks: hooksAt(q, r),
+    onGenerateHook,
+    onResolveHook,
+    onIgnoreHook,
+    onRemoveHook,
+    onGoToHook,
     onAddSettlement,
     onAddRandomSettlement,
     onRemoveSettlement,
@@ -656,6 +675,93 @@ async function onRemovePoi(id) {
   hex.pois = (hex.pois || []).filter((p) => p.id !== id);
   if (selectedPoiId === id) selectedPoiId = null;
   await persistAndRefresh();
+}
+
+// --- hooks (Phase 6) -------------------------------------------------------
+
+// Hooks whose origin is the cell at (q,r) — the ones heard "in this town".
+function hooksAt(q, r) {
+  return (current.hooks || []).filter((h) => h.origin && h.origin.q === q && h.origin.r === r);
+}
+
+// Next free "hook:<n>" id across the whole world (hooks are world-level).
+function nextHookId(world) {
+  let max = -1;
+  for (const h of world.hooks || []) {
+    const m = /^hook:(\d+)$/.exec(h.id || "");
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+
+// Candidate subjects for a Known hook: every POI already placed on the map.
+function hookSubjects(world) {
+  const subs = [];
+  for (const hex of placedHexes(world)) {
+    for (const poi of hex.pois || []) {
+      subs.push({
+        poiId: poi.id,
+        name: poi.name,
+        type: poi.type,
+        q: hex.coords.q,
+        r: hex.coords.r,
+        occupant: poi.occupant,
+      });
+    }
+  }
+  return subs;
+}
+
+async function onGenerateHook() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const subjects = hookSubjects(current);
+  if (!subjects.length) {
+    return logLine("No points of interest on the map yet — add some POIs first.");
+  }
+  try {
+    const tables = await loadTables(HOOK_TABLE_IDS);
+    if (!Array.isArray(current.hooks)) current.hooks = [];
+    const n = nextHookId(current);
+    const rng = subRng(current.seed, "hook", selected.q, selected.r, n);
+    const hook = generateHook(tables, rng, {
+      subjects,
+      origin: { q: selected.q, r: selected.r },
+      index: n,
+    });
+    if (!hook) return logLine("Nothing to gossip about here.");
+    current.hooks.push(hook);
+    await persistAndRefresh();
+    logLine(`New hook — ${hookName(hook)}.`);
+  } catch (err) {
+    logLine(`Generate hook error: ${err.message}`);
+  }
+}
+
+// Toggle a hook's status (clicking the same status again clears it back to open).
+async function setHookStatus(id, status) {
+  if (!current) return;
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h) return;
+  h.status = h.status === status ? "open" : status;
+  await persistAndRefresh();
+}
+const onResolveHook = (id) => setHookStatus(id, "resolved");
+const onIgnoreHook = (id) => setHookStatus(id, "ignored");
+
+async function onRemoveHook(id) {
+  if (!current) return;
+  current.hooks = (current.hooks || []).filter((x) => x.id !== id);
+  await persistAndRefresh();
+}
+
+// Jump the map to a hook's TRUE target (the GM sees through an off-by-one error).
+function onGoToHook(id) {
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h || !h.target) return;
+  selectCell(h.target.q, h.target.r);
+  recenterOn(h.target.q, h.target.r);
 }
 
 async function persistAndRefresh() {

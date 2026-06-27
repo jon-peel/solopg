@@ -1,0 +1,8 @@
+{
+  "id": "hook-verb",
+  "title": "Hook nature (what the hook is about)",
+  "entries": [
+    { "weight": 3, "value": "explore" },
+    { "weight": 3, "value": "threat" }
+  ]
+}

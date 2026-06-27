@@ -2,6 +2,7 @@
 
 import { glyphForPoi } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
+import { hookDescription } from "../gen/hooks.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -264,6 +265,56 @@ function renderSettlementSection(sel, hex, model) {
   }
 }
 
+// Hooks section (Phase 6): only at a settlement (hooks are heard "in town"). A
+// "Generate hook" button plus each hook heard here, with its GM-visible accuracy
+// and a resolve/ignore/remove/jump row.
+function renderHooksSection(sel, model) {
+  if (!model.hooksEnabled) return;
+  sel.appendChild(sectionLabel("Hooks"));
+
+  const hooks = model.hooks || [];
+  if (hooks.length === 0) {
+    const none = document.createElement("div");
+    none.className = "log-line";
+    none.textContent = "none yet";
+    sel.appendChild(none);
+  }
+
+  for (const hook of hooks) {
+    const box = document.createElement("div");
+    box.className = "hook" + (hook.status && hook.status !== "open" ? ` ${hook.status}` : "");
+    for (const line of hookDescription(hook)) {
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.textContent = line;
+      box.appendChild(div);
+    }
+    if (hook.status && hook.status !== "open") {
+      const tag = document.createElement("div");
+      tag.className = "log-line hook-status";
+      tag.textContent = `(${hook.status})`;
+      box.appendChild(tag);
+    }
+    const row = document.createElement("div");
+    row.className = "tile-actions";
+    row.appendChild(actionButton("Go to", () => model.onGoToHook(hook.id)));
+    row.appendChild(
+      actionButton(hook.status === "resolved" ? "Unresolve" : "Resolve", () => model.onResolveHook(hook.id)),
+    );
+    row.appendChild(
+      actionButton(hook.status === "ignored" ? "Unignore" : "Ignore", () => model.onIgnoreHook(hook.id)),
+    );
+    row.appendChild(actionButton("Remove", () => model.onRemoveHook(hook.id)));
+    box.appendChild(row);
+    sel.appendChild(box);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "tile-actions";
+  actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
+  sel.appendChild(actions);
+}
+
 // "Place terrain" dropdown for an empty cell: Random, then terrains alphabetically.
 function placeTerrainMenu(model) {
   const terrains = [...(model.terrains || [])].sort();
@@ -293,6 +344,7 @@ export function renderSelectionPanel(model) {
     }
     renderSettlementSection(sel, hex, model);
     renderPoiSection(sel, hex, model);
+    renderHooksSection(sel, model);
   }
 
   if (hex) {

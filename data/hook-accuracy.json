@@ -1,0 +1,9 @@
+{
+  "id": "hook-accuracy",
+  "title": "How reliable the directions are (GM-visible)",
+  "entries": [
+    { "weight": 6, "value": "accurate" },
+    { "weight": 3, "value": "off-by-one" },
+    { "weight": 1, "value": "false" }
+  ]
+}

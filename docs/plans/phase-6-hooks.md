@@ -133,7 +133,7 @@ Each sub-step is a usable vertical slice; later steps add patterns/verbs as most
 
 | Step | Scope | Status |
 |---|---|---|
-| **6.1** | **Foundation** — schema v6 + migration + portability; `js/gen/hooks.js`; tables; **Known** pattern with a starter verb set (explore + threat); a settlement **Hooks** panel: a **"Generate hook" button**, accuracy shown inline (GM-visible), resolve/ignore, click-to-select target. Node tests. | ◻ |
+| **6.1** | **Foundation** — schema v6 + migration + portability; `js/gen/hooks.js`; tables; **Known** pattern with a starter verb set (explore + threat); a settlement **Hooks** panel: a **"Generate hook" button**, accuracy shown inline (GM-visible), resolve/ignore, click-to-select target. Node tests. | 🔨 built — awaiting manual test |
 | **6.2** | **Distant targets** — lazy target-tile generation (the signature mechanic): isolated target hex *n* away, bearing + distance, blank route, **click-to-jump** the map to the target. | ◻ |
 | **6.3** | **Treasure maps** — Map pattern: target **plus a revealed corridor**; a **"Read map" trigger** (from camp / a cleared dungeon) that forces a Map hook; "found map" source flavour. | ◻ |
 | **6.4** | **Breadcrumb chains** — Chain pattern: multi-step clue→clue→payoff, each step generated lazily; a **"Follow the clue" trigger** advances the chain; per-step resolve. | ◻ |

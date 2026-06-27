@@ -65,6 +65,8 @@ export function importWorld(json) {
  *   as themes. Such POIs become `type:"dungeon"` with `detail.theme` carried
  *   over from the old type; any stale `detail.dungeon` is cleared so the themed
  *   interior regenerates on next open.
+ * - v5 -> v6: worlds gained a top-level `hooks` array (Phase 6). Older worlds
+ *   never had one, so we just seed an empty list; hooks are created by the user.
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -103,6 +105,10 @@ export function migrateWorld(data) {
       }
     }
     data.schemaVersion = 5;
+  }
+  if (data.schemaVersion < 6) {
+    if (!Array.isArray(data.hooks)) data.hooks = [];
+    data.schemaVersion = 6;
   }
   return data;
 }

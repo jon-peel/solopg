@@ -19,9 +19,10 @@ signatures). **Phase 5 detailed the other POI types** (see
 description engine** for **shrine / camp / landmark** (`js/gen/feature-detail.js`), and **towers** as
 a **Tier-2 mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View with an `orientation:"up"`
 flag — floors that climb, a garrison from the POI's occupant, and the master on top. The standalone
-`lair` POI type was retired (folded into dungeon den themes). **Schema v5. 149 `node --test` passing.**
-**Next: Phase 6 — Rumors** (needs only the map + POIs; see [Roadmap & status](#roadmap--status) and the
-[small-oracle catalog](#small-oracle-catalog-for-phase-7-selection)). Work merges to **`main`** via PR.
+`lair` POI type was retired (folded into dungeon den themes). **In progress: Phase 6 — Hooks** (Type-1
+local adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)). Sub-step **6.1**
+(foundation: schema **v6** + the **Known** pattern + a settlement Hooks panel) is built and node-tested.
+**Schema v6. 160 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 
@@ -113,7 +114,7 @@ written into the World (`js/world`) → persisted to IndexedDB → rendered to c
 graph TD
     P0[0 Foundation] --> P1[1 Single hex] --> P2[2 Hex map] --> P3[3 POIs + terrain rules]
     P3 --> P4[4 Dungeons] --> P5[5 Other POI detail]
-    P2 --> P6[6 Rumors]
+    P2 --> P6[6 Hooks]
     P3 --> P7[7 Small oracles]
     P5 --> P8[8 QoL & customization]
     P6 --> P8
@@ -163,7 +164,7 @@ graph TD
 | 3 — POIs + terrain-aware gen (+3.1–3.5 POIs/art/LOD) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
-| **6 — Rumors** | ▶ **next** | — |
+| **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | 🔨 in progress (6.1) | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — Additional small oracles | ◻ later | see catalog below |
 | 8 — QoL & customization (editable tables, notes, themes) | ◻ later | — |
 
@@ -187,11 +188,17 @@ engine with an `orientation:"up"` flag: a stack of narrow floors that climb (ind
 master on top), garrisoned by the POI's occupant (held = lit, empty = dark). `lair` retired (a creature
 lair is now a dungeon den). See [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md).
 
-**Phase 6 (next) — Rumors:** not yet planned. Needs only the map + POIs (no Phase 5 dependency). Follow
-the design loop (brainstorm → plan → **approve** → build): write `docs/plans/phase-6-rumors.md` first.
-A natural fit with what's already generated — settlements, POIs (incl. the new shrine/camp/landmark
-hooks and dungeon contents) — as the subjects rumors point at. The landmark `hook` axis already seeds
-this. See the [small-oracle catalog](#small-oracle-catalog-for-phase-7-selection) for adjacent oracles.
+**Phase 6 (in progress) — Hooks** (renamed from "Rumors"): Type-1 **local adventure hooks** — a
+**resolution pattern** (Known / Distant / Map / Chain / Return) × a **verb** (explore, threat,
+opportunity, rescue, warning, escort, event), pointing at an existing or freshly-generated hex/POI. The
+signature mechanic is **lazy target-tile generation** (point at a tile that doesn't exist yet → generate
+just that tile). It's a **GM-only tool**, so a hook's reliability is a **GM-visible `accuracy`**
+(accurate / off-by-one / false) — weighted reliable, "wrong" is usually a positional error, not a lie.
+Generation is a **manual "Generate hook" button** (context-sensitive: settlement gossip vs camp/dungeon
+"Read map"); auto-generation waits on a future Travel feature. Type-2 "distant powers" (roaming/region/
+news-propagation) is deferred to the Factions phase. Sub-steps **6.1–6.6**; **6.1 (foundation) built**.
+See [phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
+[small-oracle catalog](#small-oracle-catalog-for-phase-7-selection).
 
 ---
 

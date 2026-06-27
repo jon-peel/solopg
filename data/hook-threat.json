@@ -1,0 +1,13 @@
+{
+  "id": "hook-threat",
+  "title": "Threat claim (reads after \"… where\")",
+  "entries": [
+    { "value": "raiders have been preying on the road" },
+    { "value": "those who pass too near do not return" },
+    { "value": "something has been carrying off livestock by night" },
+    { "value": "the folk there have turned hostile of late" },
+    { "value": "a foul thing has made its lair" },
+    { "value": "its masters demand tribute from passing trade" },
+    { "value": "a sickness spreads from whatever festers there" }
+  ]
+}
