@@ -348,18 +348,24 @@ export function renderDungeonPanel({
     sel.appendChild(diff);
   }
 
-  sel.appendChild(sectionLabel(`Level ${level.depth} — ${level.family}`));
+  // Towers ("up" orientation) are floors, not levels; their floors carry a
+  // garrison rather than a family, and have no wandering-monster table.
+  const floorWord = dungeon.orientation === "up" ? "Floor" : "Level";
+  sel.appendChild(
+    sectionLabel(level.family ? `${floorWord} ${level.depth} — ${level.family}` : `${floorWord} ${level.depth}`),
+  );
   if (dungeon.occupation && dungeon.occupation.level === level.depth - 1) {
     const occ = document.createElement("div");
     occ.className = "log-line";
     occ.textContent = `Occupied near an entrance by ${dungeon.occupation.by} (locked door beyond)`;
     sel.appendChild(occ);
   }
-  const wandering = document.createElement("div");
-  wandering.className = "log-line";
-  wandering.textContent =
-    "Wandering: " + (level.encounters || []).map((e) => e.value).join(", ");
-  sel.appendChild(wandering);
+  if (level.encounters && level.encounters.length) {
+    const wandering = document.createElement("div");
+    wandering.className = "log-line";
+    wandering.textContent = "Wandering: " + level.encounters.map((e) => e.value).join(", ");
+    sel.appendChild(wandering);
+  }
 
   if (room) {
     sel.appendChild(sectionLabel(`Room ${room.n}`));

@@ -17,12 +17,12 @@ as a dungeon den. The `lair` **occupant** kind still exists (a creature lairing 
 old saves' lair POIs still render (legacy 🐾 glyph).
 
 ## Sub-steps (build order)
-| Step | Scope |
-|---|---|
-| **5.1** | Tier-1 description engine + **shrine** (proves the engine) |
-| **5.2** | **camp** (same engine, scale-driven; reaction + numbers) |
-| **5.3** | **landmark** (lightest config — pure description) |
-| **5.4** | **tower** — generalised structure interior (the one architectural change) |
+| Step | Scope | Status |
+|---|---|---|
+| **5.1** | Tier-1 description engine + **shrine** (proves the engine) | ✅ done |
+| **5.2** | **camp** (same engine, scale-driven; reaction + numbers) | ✅ done |
+| **5.3** | **landmark** (lightest config — pure description) | ✅ done |
+| **5.4** | **tower** — mapped interior reusing the dungeon machinery | ✅ done |
 
 Tier-1 first: cheap, high coverage, low risk. Tower last: the only piece that touches the interior
 generator/renderer.
@@ -132,9 +132,14 @@ the **dungeon theme** is when it's deep/explorable enough to map. Same fiction, 
 shrine-POI vs `Cult shrine`-dungeon and tower-POI vs `Wizard's sanctum`-dungeon are intentional, not
 redundant.
 
-**Decision to confirm at 5.4 kickoff:** model the vertical axis as (a) reuse the existing `levels[]`
-with an `orientation:"up"` flag + a basement count (my lean — smallest change, shared
-schema/tests/render), or (b) signed floors (negative = below ground). Settled before building 5.4.
+**Decided (built):** the vertical axis is an `orientation:"up"` flag on the shared `levels[]` (option
+a). A tower is a focused `generateTower` (`js/gen/tower.js`) that produces the **same interior shape**
+the Dungeon View already renders and reuses `layoutLevel` + vertical-stair pinning; only the ▲/▼ stair
+direction and the up/down stair labels flip on orientation (`js/ui/app.js` `levelMarks`/
+`roomConnections`), and the panel reads "Floor" instead of "Level". Index 0 = ground (the entrance);
+higher index = higher floor; the master waits on top. A held tower is lit throughout and garrisoned by
+the POI's occupant; an empty tower is dark. A **below-ground cellar is deferred** (towers go up from
+the ground in v1).
 
 ---
 
@@ -168,5 +173,5 @@ schema/tests/render), or (b) signed floors (negative = below ground). Settled be
 ## Open decisions (to confirm before building)
 1. **Shrine watcher** — optional light watcher when condition warrants (lean: yes), or none.
 2. **Storage** — store structured picks + compose on render (lean: yes), or store finished string.
-3. **Tower vertical model** — `orientation` flag on shared `levels[]` (lean), or signed floors.
+3. **Tower vertical model** — ✅ `orientation:"up"` flag on the shared `levels[]` (cellar deferred).
 4. **Retire flat `lair` POI type?** — ✅ done in 5.1 (folded into dungeon den themes).
