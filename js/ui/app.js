@@ -103,6 +103,9 @@ const HOOK_TABLE_IDS = [
   "hook-recipient",
   "hook-clue",
   "hook-payoff",
+  "hook-patron",
+  "hook-reward",
+  "creatures",
 ];
 
 let current = null; // the in-memory current world

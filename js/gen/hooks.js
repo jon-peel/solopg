@@ -121,12 +121,28 @@ export function generateHook(tables, rng, ctx) {
   const claim = rollTable(tables.get(`hook-${verb}`), rng).value;
   const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
 
+  // A THREAT names the menace (the occupant), to be tracked to its lair (the
+  // place). With no occupant, the menace is an unknown creature (creatures table).
+  let subjectName = subject.name;
+  let lair = null;
+  if (verb === "threat") {
+    const occ = subject.occupant;
+    subjectName =
+      occ && occ.kind === "lair" ? occ.creature
+      : occ && occ.kind === "occupied" ? occ.by
+      : rollTable(tables.get("creatures"), rng).value;
+    lair = subject.name; // the place the menace lairs
+  }
+
+  // Bounty hooks (threat/rescue) may carry a reward (a patron + coin, or glory).
+  const reward = verb === "threat" || verb === "rescue" ? rollReward(tables, rng) : undefined;
+
   return {
     id: ctx.index != null ? `hook:${ctx.index}` : undefined,
     build: HOOK_BUILD,
     pattern,
     verb,
-    subject: { poiId: subject.poiId, name: subject.name, type: subject.type },
+    subject: { poiId: subject.poiId, name: subjectName, type: subject.type },
     origin,
     target,
     bearing: bearingTo(origin, target),
@@ -135,8 +151,20 @@ export function generateHook(tables, rng, ctx) {
     claim,
     source,
     status: "open",
+    ...(lair ? { lair } : {}),
+    ...(reward ? { reward } : {}),
     // The revealed corridor (Map pattern) — the run of hexes from origin to target.
     ...(ctx.path ? { path: ctx.path } : {}),
+  };
+}
+
+// Roll a reward for a bounty/job hook: a patron + coin, or (sometimes) glory only.
+const REWARD_GLORY_CHANCE = 0.25;
+function rollReward(tables, rng) {
+  if (rng() < REWARD_GLORY_CHANCE) return { glory: true };
+  return {
+    patron: rollTable(tables.get("hook-patron"), rng).value,
+    amount: rollTable(tables.get("hook-reward"), rng).value,
   };
 }
 
@@ -188,6 +216,7 @@ export function buildEscortHook(tables, rng, ctx) {
   const cargo = rollTable(tables.get("hook-cargo"), rng).value;
   const recipient = rollTable(tables.get("hook-recipient"), rng).value;
   const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
+  const reward = rollReward(tables, rng); // a delivery is paid (or for glory)
   const target = { q: ctx.destination.q, r: ctx.destination.r, poiId: ctx.destination.poiId };
   return {
     id: ctx.index != null ? `hook:${ctx.index}` : undefined,
@@ -202,6 +231,7 @@ export function buildEscortHook(tables, rng, ctx) {
     targetTerrain: ctx.terrain || null,
     cargo,
     claim: cargo,
+    reward,
     source,
     status: "open",
   };
@@ -308,12 +338,22 @@ export function hookDescription(hook, opts = {}) {
     line0 = `${hook.source}: carry ${hook.cargo} to ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "map") {
     line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
+  } else if (hook.verb === "threat") {
+    // The menace is the subject; the place it lairs is where to track it down.
+    line0 = `${hook.source}: ${cap(hook.subject.name)} ${hook.claim}. Their lair: ${hook.lair}, ${whither}.`;
   } else {
-    // known / distant
+    // known / distant explore / rescue / warning
     line0 = `${hook.source}: ${cap(hook.claim)} at ${hook.subject.name}, ${whither}.`;
   }
   const lines = [line0];
   if (prizeLine) lines.push(prizeLine);
   if (progress) lines.push(progress);
+  if (hook.reward) {
+    lines.push(
+      hook.reward.glory
+        ? "Reward: fame and glory only."
+        : `Reward: ${hook.reward.amount} from ${hook.reward.patron}.`,
+    );
+  }
   return lines;
 }

@@ -30,8 +30,10 @@ pattern — a treasure map that also reveals a corridor of hexes to the target, 
 built and node-tested. **6.5.1** sharpened the hook target line — POI **base name** (occupant split
 off), distance in **miles**, target **terrain** — and **removed the accuracy/"GM:" line** (off-ness is
 left to GM judgement + future travel rules). A global always-visible open-hooks list (→ Target / ↩ Origin
-jumps) ties them together. Remaining: **6.5.2** (threat reframing + reward axis) and **6.6** (return
-trips + lifecycle/map polish). **Schema v6. 177 `node --test` passing.** Work merges to **`main`** via PR.
+jumps) ties them together. **6.5.2** reframed threats (the menace *is* the occupant — "Threat: Bandits",
+tracked to "their lair") and added a **reward axis** (a patron + coin, or glory) to threat/rescue/escort.
+Remaining: **6.6** (return trips + lifecycle/map polish). **Schema v6. 181 `node --test` passing.** Work
+merges to **`main`** via PR.
 
 ---
 

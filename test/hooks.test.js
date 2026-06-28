@@ -25,6 +25,7 @@ function tables() {
     "hook-opportunity", "hook-commodity", "hook-event",
     "hook-cargo", "hook-recipient",
     "hook-clue", "hook-payoff",
+    "hook-patron", "hook-reward", "creatures",
   ];
   return new Map(
     ids.map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
@@ -240,6 +241,58 @@ test("threats/warnings cluster on dangerous (occupied/lair) subjects", () => {
   assert.ok(hostileWarn > hostileExplore, `warnings favour the den (${hostileWarn} vs explore ${hostileExplore})`);
 });
 
+test("a threat names the menace (occupant), with its lair as the place to track", () => {
+  const t = tables();
+  const den = { poiId: "poi:0", name: "Cult shrine", type: "dungeon", q: 3, r: -1, terrain: "Hills",
+    occupant: { kind: "occupied", by: "Bandits" } };
+  const h = generateHook(t, mulberry32(0), { subjects: [den], origin: ORIGIN, index: 0, verb: "threat" });
+  assert.equal(h.subject.name, "Bandits"); // the menace, not the place
+  assert.equal(hookName(h), "Threat: Bandits");
+  assert.equal(h.lair, "Cult shrine"); // the place it lairs
+  assert.equal(h.target.poiId, "poi:0"); // → Target still goes to the site
+  assert.match(hookDescription(h)[0], /^.*: Bandits .+\. Their lair: Cult shrine, \d+ miles to the /);
+});
+
+test("a threat with no occupant invents a creature as the menace", () => {
+  const t = tables();
+  const creatures = valuesOf(t.get("creatures"));
+  const empty = { poiId: "poi:0", name: "Old ruin", type: "dungeon", q: 2, r: 0, terrain: "Plains",
+    occupant: { kind: "none" } };
+  const h = generateHook(t, mulberry32(4), { subjects: [empty], origin: ORIGIN, index: 0, verb: "threat" });
+  assert.ok(creatures.has(h.subject.name), `menace ${h.subject.name} from the creatures table`);
+  assert.equal(h.lair, "Old ruin");
+});
+
+test("threat & rescue hooks carry a reward (coin from a patron, or glory)", () => {
+  const t = tables();
+  const patrons = valuesOf(t.get("hook-patron"));
+  const amounts = valuesOf(t.get("hook-reward"));
+  const subj = { poiId: "poi:0", name: "Ruin", type: "dungeon", q: 3, r: 0, terrain: "Hills", occupant: { kind: "lair", creature: "Ogre" } };
+  let sawCoin = false, sawGlory = false;
+  for (const verb of ["threat", "rescue"]) {
+    for (let s = 0; s < 60; s++) {
+      const h = generateHook(t, mulberry32(s), { subjects: [subj], origin: ORIGIN, index: 0, verb });
+      assert.ok(h.reward, `${verb} has a reward`);
+      if (h.reward.glory) { sawGlory = true; assert.match(hookDescription(h).at(-1), /fame and glory only/); }
+      else {
+        sawCoin = true;
+        assert.ok(patrons.has(h.reward.patron) && amounts.has(h.reward.amount));
+        assert.match(hookDescription(h).at(-1), /^Reward: .+ from .+\.$/);
+      }
+    }
+  }
+  assert.ok(sawCoin && sawGlory, "both coin and glory rewards appear");
+});
+
+test("explore/warning hooks carry no reward", () => {
+  const t = tables();
+  const subj = { poiId: "poi:0", name: "Ruin", type: "dungeon", q: 3, r: 0, terrain: "Hills", occupant: { kind: "none" } };
+  for (const verb of ["explore", "warning"]) {
+    const h = generateHook(t, mulberry32(1), { subjects: [subj], origin: ORIGIN, index: 0, verb });
+    assert.equal("reward" in h, false);
+  }
+});
+
 test("buildLocalHook(opportunity) names a commodity at the origin", () => {
   const t = tables();
   const offers = valuesOf(t.get("hook-opportunity"));
@@ -292,6 +345,7 @@ test("buildEscortHook is a two-endpoint errand with cargo + recipient + a real t
     assert.equal(h.target.q, 5);
     assert.equal(h.distance, 5);
     assert.ok(h.bearing); // a real destination → a bearing
+    assert.ok(h.reward); // a delivery is paid (coin or glory)
     const cargo = h.cargo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const recipient = h.subject.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     assert.match(
