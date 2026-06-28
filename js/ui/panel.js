@@ -275,6 +275,8 @@ function renderHooksSection(sel, model) {
   actions.className = "tile-actions";
   if (model.canGossip) actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
   actions.appendChild(actionButton("Read map", model.onReadMap));
+  // A found riddle/clue starts a breadcrumb chain — from any site.
+  actions.appendChild(actionButton("Follow a trail", model.onStartChain));
   sel.appendChild(actions);
 }
 

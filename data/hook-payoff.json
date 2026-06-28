@@ -1,0 +1,14 @@
+{
+  "id": "hook-payoff",
+  "title": "Chain prize (reads after \"word of …\" and \"and … with it\")",
+  "entries": [
+    { "value": "a warlord's buried war-chest" },
+    { "value": "the long-lost Sunken Crown" },
+    { "value": "a dragon's scattered hoard" },
+    { "value": "a reliquary worth a king's ransom" },
+    { "value": "an archmage's hidden spellhoard" },
+    { "value": "a vault of antique coin and plate" },
+    { "value": "the crown jewels of a fallen house" },
+    { "value": "a saint's tomb heaped with old offerings" }
+  ]
+}

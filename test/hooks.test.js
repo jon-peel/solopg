@@ -17,7 +17,7 @@ import { mulberry32 } from "../js/core/rng.js";
 import { axialDistance, axialLine } from "../js/core/hexgeo.js";
 
 function tables() {
-  const ids = ["hook-pattern", "hook-verb", "hook-source", "hook-accuracy", "hook-explore", "hook-threat", "hook-clue"];
+  const ids = ["hook-pattern", "hook-verb", "hook-source", "hook-accuracy", "hook-explore", "hook-threat", "hook-clue", "hook-payoff"];
   return new Map(
     ids.map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
   );
@@ -232,9 +232,10 @@ test("a non-map hook has no path field", () => {
 
 // --- 6.4: breadcrumb chains -------------------------------------------------
 
-test("startChain builds a chain hook whose first clue points onward", () => {
+test("startChain builds a chain hook with a named prize and a first clue", () => {
   const t = tables();
   const clues = valuesOf(t.get("hook-clue"));
+  const prizes = valuesOf(t.get("hook-payoff"));
   const origin = { q: 0, r: 0 };
   const target = { q: 3, r: 0, poiId: "poi:0" };
   const subject = { poiId: "poi:0", name: "Crypt", type: "dungeon" };
@@ -244,26 +245,23 @@ test("startChain builds a chain hook whose first clue points onward", () => {
     assert.equal(h.verb, "explore");
     assert.equal(h.chain.step, 1);
     assert.ok(h.chain.total >= 3 && h.chain.total <= 5);
+    assert.ok(prizes.has(h.chain.prize), `prize ${h.chain.prize} from hook-payoff`);
     assert.deepEqual(h.target, target);
-    // Step 1 of a 3+ chain is intermediate → an onward clue, not the payoff.
     assert.ok(clues.has(h.claim), `step-1 claim ${h.claim} is a clue`);
     assert.equal(h.distance, 3); // leg from origin to target
   }
 });
 
-test("buildChainStep: intermediate steps clue onward, the final step pays off", () => {
+test("buildChainStep carries an onward clue + this leg's bearing/distance", () => {
   const t = tables();
   const clues = valuesOf(t.get("hook-clue"));
-  const treasure = valuesOf(t.get("hook-explore"));
   const legOrigin = { q: 0, r: 0 };
   const target = { q: 0, r: 4, poiId: "poi:1" };
-  const mid = buildChainStep(t, mulberry32(1), { legOrigin, target, step: 2, total: 4 });
-  assert.ok(clues.has(mid.claim));
-  assert.equal(mid.distance, 4);
-  const last = buildChainStep(t, mulberry32(1), { legOrigin, target, step: 4, total: 4 });
-  assert.ok(treasure.has(last.claim), "final step rolls the payoff from hook-explore");
+  const step = buildChainStep(t, mulberry32(1), { legOrigin, target });
+  assert.ok(clues.has(step.claim));
+  assert.equal(step.distance, 4);
   // off-by-one nudges the indicated cell off the true target.
-  const off = buildChainStep(t, mulberry32(1), { legOrigin, target, step: 2, total: 4, accuracy: "off-by-one" });
+  const off = buildChainStep(t, mulberry32(1), { legOrigin, target, accuracy: "off-by-one" });
   assert.equal(axialDistance(off.indicated.q, off.indicated.r, target.q, target.r), 1);
 });
 
@@ -274,25 +272,30 @@ test("startChain is deterministic for a given seed", () => {
   assert.deepEqual(a, b);
 });
 
-test("chain prose tracks the trail and flags the final prize", () => {
+test("chain prose: a lure names the prize up front and the payoff names it again", () => {
   const t = tables();
-  const intermediate = startChain(t, mulberry32(3), {
+  const start = startChain(t, mulberry32(3), {
     origin: { q: 0, r: 0 }, target: { q: 0, r: 3, poiId: "poi:0" },
     subject: { poiId: "poi:0", name: "Tomb", type: "dungeon" }, index: 0, source: "An old map-seller",
   });
-  assert.equal(hookName(intermediate), "Hunt → Tomb");
-  const il = hookDescription(intermediate);
-  assert.match(il[0], /the trail leads on to Tomb,/);
-  assert.match(il[1], /^Clue 1 of [345]\.$/);
+  assert.equal(hookName(start), "Hunt → Tomb");
+  const sl = hookDescription(start);
+  // Step 1 is the lure: it states the prize and points at the first site.
+  assert.match(sl[0], new RegExp(`^An old map-seller: word of ${start.chain.prize.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} sets a trail — the first clue lies at Tomb,`));
+  assert.match(sl[1], /^Clue 1 of [345]\.$/);
 
-  // A final-step chain reads as the payoff.
+  // A mid-trail step shows the onward clue.
+  const mid = hookDescription({ ...start, chain: { ...start.chain, step: 2 }, claim: "a worn inscription points onward" });
+  assert.match(mid[0], /A worn inscription points onward — the trail leads on to Tomb,/);
+
+  // The final step names the prize again.
   const finalHook = {
     pattern: "chain", verb: "explore", subject: { name: "Vault" }, source: "An old map-seller",
     target: { q: 0, r: 5 }, bearing: "S", distance: 2, accuracy: "accurate",
-    claim: "a lost relic lies hidden", chain: { total: 3, step: 3 },
+    claim: "ignored at the end", chain: { total: 3, step: 3, prize: "a dragon's hoard" },
   };
   const fl = hookDescription(finalHook);
-  assert.match(fl[0], /the trail ends at Vault, .* — a lost relic lies hidden\./);
+  assert.match(fl[0], /the trail ends at Vault, .* — and a dragon's hoard with it\./);
   assert.match(fl[1], /Clue 3 of 3 — the prize\./);
 });
 

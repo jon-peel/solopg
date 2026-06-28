@@ -94,6 +94,7 @@ const HOOK_TABLE_IDS = [
   "hook-explore",
   "hook-threat",
   "hook-clue",
+  "hook-payoff",
 ];
 
 let current = null; // the in-memory current world
@@ -303,6 +304,7 @@ function renderSelection() {
     canGossip: settled,
     onGenerateHook: () => onGenerateHook(),
     onReadMap,
+    onStartChain,
     onResolveHook,
     onIgnoreHook,
     onRemoveHook,
@@ -819,6 +821,7 @@ async function onGenerateHook(opts = {}) {
         origin, index: n,
         target: { q: spot.q, r: spot.r, poiId: subject.poiId },
         subject: { poiId: subject.poiId, name: subject.name, type: subject.type },
+        source: opts.source,
       });
     } else if (pattern === "map" || pattern === "distant") {
       const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
@@ -850,8 +853,10 @@ async function onGenerateHook(opts = {}) {
   }
 }
 
-// "Read map": the party reads a map found below, back in town → a Map hook.
+// "Read map": the party reads a found map → a Map hook (from any selected cell).
 const onReadMap = () => onGenerateHook({ forcePattern: "map", source: "A map found below" });
+// "Follow a trail": the party finds a riddle/clue here → start a chain anywhere.
+const onStartChain = () => onGenerateHook({ forcePattern: "chain", source: "A riddle found here" });
 
 // Toggle a hook's status (clicking the same status again clears it back to open).
 async function setHookStatus(id, status) {
@@ -911,7 +916,7 @@ async function onFollowClue(id) {
     });
     Object.assign(hook, fields, {
       subject: { poiId: subj.poiId, name: subj.name, type: subj.type },
-      chain: { total: hook.chain.total, step: nextStep },
+      chain: { ...hook.chain, step: nextStep }, // keep total + prize
     });
     await persistAndRefresh();
     logLine(

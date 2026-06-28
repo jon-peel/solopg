@@ -149,16 +149,13 @@ export function generateHook(tables, rng, ctx) {
 
 /**
  * Build the per-leg fields of a chain step: where this clue points, how far, and
- * the clue/treasure text. Intermediate steps roll an onward clue (hook-clue); the
- * final step rolls the payoff (hook-explore). bearing/distance are for THIS leg
- * (from where the last clue was found), not the chain's start.
- * @param {{ legOrigin:{q,r}, target:{q,r,poiId}, step:number, total:number, accuracy?:string }} ctx
+ * the onward-clue text (hook-clue). bearing/distance are for THIS leg (from where
+ * the last clue was found), not the chain's start. The prize itself lives on the
+ * chain (rolled once in startChain), so steps just carry the trail.
+ * @param {{ legOrigin:{q,r}, target:{q,r,poiId}, accuracy?:string }} ctx
  */
 export function buildChainStep(tables, rng, ctx) {
-  const final = ctx.step >= ctx.total;
-  const claim = final
-    ? rollTable(tables.get("hook-explore"), rng).value
-    : rollTable(tables.get("hook-clue"), rng).value;
+  const claim = rollTable(tables.get("hook-clue"), rng).value;
   const accuracy = ctx.accuracy || rollTable(tables.get("hook-accuracy"), rng).value;
   const target = ctx.target;
   let indicated = { q: target.q, r: target.r };
@@ -174,16 +171,19 @@ export function buildChainStep(tables, rng, ctx) {
 }
 
 /**
- * Start a breadcrumb chain — a multi-step treasure hunt whose first clue points
- * at `ctx.target`. Later steps are generated lazily as each clue is followed
- * (buildChainStep). The returned hook's current fields mirror step 1; `chain`
- * tracks { total, step }. Origin stays the chain's start (where you report in).
+ * Start a breadcrumb chain — a multi-step treasure hunt for a named `prize`
+ * (rolled once, up front, so the opening lure and the final payoff name the same
+ * goal). The first clue points at `ctx.target`; later steps are generated lazily
+ * as each clue is followed (buildChainStep). The returned hook's current fields
+ * mirror step 1; `chain` tracks { total, step, prize }. Origin stays the chain's
+ * start (where you report in).
  * @param {{ origin:{q,r}, target:{q,r,poiId}, subject:object, index?:number, source?:string }} ctx
  */
 export function startChain(tables, rng, ctx) {
   const total = 3 + Math.floor(rng() * 3); // 3–5 sites
   const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
-  const step = buildChainStep(tables, rng, { legOrigin: ctx.origin, target: ctx.target, step: 1, total });
+  const prize = rollTable(tables.get("hook-payoff"), rng).value;
+  const step = buildChainStep(tables, rng, { legOrigin: ctx.origin, target: ctx.target });
   return {
     id: ctx.index != null ? `hook:${ctx.index}` : undefined,
     build: HOOK_BUILD,
@@ -193,7 +193,7 @@ export function startChain(tables, rng, ctx) {
     origin: { q: ctx.origin.q, r: ctx.origin.r },
     source,
     status: "open",
-    chain: { total, step: 1 },
+    chain: { total, step: 1, prize },
     ...step,
   };
 }
@@ -223,10 +223,15 @@ export function hookDescription(hook) {
   let progress = null;
   if (hook.pattern === "chain") {
     const { step, total } = hook.chain;
+    const prize = hook.chain.prize || "a great prize";
     const final = step >= total;
-    line0 = final
-      ? `${hook.source}: the trail ends at ${hook.subject.name}, ${whither} — ${hook.claim}.`
-      : `${hook.source}: ${cap(hook.claim)} — the trail leads on to ${hook.subject.name}, ${whither}.`;
+    if (final) {
+      line0 = `${hook.source}: the trail ends at ${hook.subject.name}, ${whither} — and ${prize} with it.`;
+    } else if (step === 1) {
+      line0 = `${hook.source}: word of ${prize} sets a trail — the first clue lies at ${hook.subject.name}, ${whither}.`;
+    } else {
+      line0 = `${hook.source}: ${cap(hook.claim)} — the trail leads on to ${hook.subject.name}, ${whither}.`;
+    }
     progress = `Clue ${step} of ${total}${final ? " — the prize" : ""}.`;
   } else if (hook.pattern === "map") {
     line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
