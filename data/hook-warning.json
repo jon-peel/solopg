@@ -1,0 +1,13 @@
+{
+  "id": "hook-warning",
+  "title": "Warning / avoid claim (reads \"<claim> at <site>\")",
+  "entries": [
+    { "value": "travellers vanish without trace" },
+    { "value": "the unwary do not return" },
+    { "value": "men have died screaming" },
+    { "value": "a killing thing lairs" },
+    { "value": "a curse takes the careless" },
+    { "value": "something hunts by night" },
+    { "value": "the locals will not go near" }
+  ]
+}

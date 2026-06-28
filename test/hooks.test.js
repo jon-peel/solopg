@@ -10,6 +10,7 @@ import {
   chooseDistantTarget,
   startChain,
   buildChainStep,
+  buildLocalHook,
   HOOK_BUILD,
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
@@ -17,7 +18,12 @@ import { mulberry32 } from "../js/core/rng.js";
 import { axialDistance, axialLine } from "../js/core/hexgeo.js";
 
 function tables() {
-  const ids = ["hook-pattern", "hook-verb", "hook-source", "hook-accuracy", "hook-explore", "hook-threat", "hook-clue", "hook-payoff"];
+  const ids = [
+    "hook-pattern", "hook-verb", "hook-source", "hook-accuracy",
+    "hook-explore", "hook-threat", "hook-rescue", "hook-warning",
+    "hook-opportunity", "hook-commodity", "hook-event",
+    "hook-clue", "hook-payoff",
+  ];
   return new Map(
     ids.map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
   );
@@ -140,10 +146,10 @@ test("rollHookPattern never yields known without subjects (only known needs one)
     // only Known needs an existing POI, and it must fall back when there is none.
     assert.notEqual(rollHookPattern(t, mulberry32(s), false), "known");
   }
-  // With subjects, all patterns appear over many seeds.
+  // With subjects, all kinds appear over many seeds.
   const seen = new Set();
-  for (let s = 0; s < 300; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
-  assert.deepEqual([...seen].sort(), ["chain", "distant", "known", "map"]);
+  for (let s = 0; s < 400; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
+  assert.deepEqual([...seen].sort(), ["chain", "distant", "event", "known", "map", "opportunity"]);
 });
 
 test("chooseDistantTarget lands a free cell at the requested straight-line distance", () => {
@@ -228,6 +234,76 @@ test("a non-map hook has no path field", () => {
   const subject = { poiId: "poi:0", name: "Ruin", type: "dungeon", q: 0, r: 3, occupant: { kind: "none" } };
   const h = generateHook(tables(), mulberry32(2), { subjects: [subject], origin: { q: 0, r: 0 }, index: 0 });
   assert.equal("path" in h, false);
+});
+
+// --- 6.5: verb & flavour breadth --------------------------------------------
+
+test("site verbs (explore/threat/rescue/warning) each draw a claim from their table", () => {
+  const t = tables();
+  const verbs = ["explore", "threat", "rescue", "warning"];
+  const subs = subjects();
+  for (const verb of verbs) {
+    const claims = valuesOf(t.get(`hook-${verb}`));
+    let saw = false;
+    for (let s = 0; s < 20; s++) {
+      const h = generateHook(t, mulberry32(s * 7 + 1), { subjects: subs, origin: ORIGIN, index: 0, verb });
+      assert.equal(h.verb, verb);
+      assert.ok(claims.has(h.claim), `${verb} claim ${h.claim} from its table`);
+      saw = true;
+    }
+    assert.ok(saw);
+  }
+});
+
+test("threats/warnings cluster on dangerous (occupied/lair) subjects", () => {
+  const t = tables();
+  const hostile = { poiId: "poi:h", name: "Den", type: "dungeon", q: 6, r: 0, occupant: { kind: "lair", creature: "Ogre" } };
+  const calm = { poiId: "poi:c", name: "Well", type: "landmark", q: 1, r: 0, occupant: { kind: "none" } };
+  // The hostile site is FARther, so without the bias proximity would favour `calm`.
+  let hostileWarn = 0, hostileExplore = 0;
+  for (let s = 0; s < 200; s++) {
+    const w = generateHook(t, mulberry32(s), { subjects: [hostile, calm], origin: ORIGIN, index: 0, verb: "warning" });
+    if (w.subject.poiId === "poi:h") hostileWarn++;
+    const e = generateHook(t, mulberry32(s), { subjects: [hostile, calm], origin: ORIGIN, index: 0, verb: "explore" });
+    if (e.subject.poiId === "poi:h") hostileExplore++;
+  }
+  assert.ok(hostileWarn > hostileExplore, `warnings favour the den (${hostileWarn} vs explore ${hostileExplore})`);
+});
+
+test("buildLocalHook(opportunity) names a commodity at the origin", () => {
+  const t = tables();
+  const offers = valuesOf(t.get("hook-opportunity"));
+  const goods = valuesOf(t.get("hook-commodity"));
+  for (let s = 0; s < 50; s++) {
+    const h = buildLocalHook(t, mulberry32(s), { kind: "opportunity", origin: { q: 2, r: -1 }, index: 0 });
+    assert.equal(h.pattern, "opportunity");
+    assert.equal(h.verb, "opportunity");
+    assert.ok(offers.has(h.claim));
+    assert.ok(goods.has(h.subject.name));
+    // Local: target and origin coincide, no bearing.
+    assert.deepEqual(h.target, { q: 2, r: -1 });
+    assert.deepEqual(h.origin, { q: 2, r: -1 });
+    assert.equal(h.bearing, null);
+    const lines = hookDescription(h);
+    assert.equal(lines[0], `${h.source}: a buyer here ${h.claim} ${h.subject.name}.`);
+    assert.match(lines[lines.length - 1], /genuine|false lead/);
+  }
+});
+
+test("buildLocalHook(event) reads as a happening here", () => {
+  const t = tables();
+  const events = valuesOf(t.get("hook-event"));
+  const h = buildLocalHook(t, mulberry32(5), { kind: "event", origin: { q: 0, r: 0 }, index: 1 });
+  assert.equal(h.pattern, "event");
+  assert.ok(events.has(h.claim));
+  assert.equal(hookName(h), `Event: ${h.subject.name}`);
+  assert.match(hookDescription(h)[0], / here\.$/);
+});
+
+test("buildLocalHook is deterministic for a given seed", () => {
+  const a = buildLocalHook(tables(), mulberry32(9), { kind: "opportunity", origin: { q: 0, r: 0 }, index: 0 });
+  const b = buildLocalHook(tables(), mulberry32(9), { kind: "opportunity", origin: { q: 0, r: 0 }, index: 0 });
+  assert.deepEqual(a, b);
 });
 
 // --- 6.4: breadcrumb chains -------------------------------------------------

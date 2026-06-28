@@ -1,0 +1,15 @@
+{
+  "id": "hook-commodity",
+  "title": "Goods a buyer wants",
+  "entries": [
+    { "value": "ancient relics" },
+    { "value": "old tomb-paintings" },
+    { "value": "prime deer hides" },
+    { "value": "rare pelts and furs" },
+    { "value": "dwarf-work silver" },
+    { "value": "salvaged armour and blades" },
+    { "value": "curios from the deep places" },
+    { "value": "medicinal herbs" },
+    { "value": "monster trophies" }
+  ]
+}

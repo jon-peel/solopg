@@ -1,0 +1,12 @@
+{
+  "id": "hook-opportunity",
+  "title": "Opportunity / buyer offer (reads \"a buyer here <claim> <commodity>\")",
+  "entries": [
+    { "value": "pays a fine price for" },
+    { "value": "is quietly buying" },
+    { "value": "will trade dear for" },
+    { "value": "offers good coin for" },
+    { "value": "seeks a steady supply of" },
+    { "value": "has put out word for" }
+  ]
+}

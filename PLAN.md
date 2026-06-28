@@ -24,10 +24,11 @@ local adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)). **6
 **v6** + the **Known** pattern + a settlement Hooks panel), **6.2** (the **Distant** pattern — lazy
 target-tile generation: a hook points *n* hexes away and spawns just that one tile), **6.3** (the **Map**
 pattern — a treasure map that also reveals a corridor of hexes to the target, plus a "Read map" trigger)
-and **6.4** (the **Chain** pattern — a breadcrumb hunt that winds clue-by-clue to a payoff, each step
-generated lazily by "Follow the clue") are built and node-tested. A global always-visible open-hooks
-list (→ Target / ↩ Origin jumps) ties them together. **Schema v6. 172 `node --test` passing.** Work
-merges to **`main`** via PR.
+**6.4** (the **Chain** pattern — a breadcrumb hunt that winds clue-by-clue to a named-prize payoff via
+"Follow the clue") and **6.5** (verb breadth — **rescue**, **warning**, plus *local* **opportunity** and
+**event** hooks) are built and node-tested; escort (two-endpoint) is the remaining **6.5b**. A global
+always-visible open-hooks list (→ Target / ↩ Origin jumps) ties them together. **Schema v6. 177
+`node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 

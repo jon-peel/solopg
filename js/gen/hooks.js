@@ -79,11 +79,15 @@ export function chooseDistantTarget(rng, origin, isOccupied, opts = {}) {
 }
 
 // Proximity-weighted subject pick: nearer POIs are likelier gossip (weight
-// 1/(1+distance)), but distant ones stay possible. Consumes exactly one rng().
-function pickSubject(rng, subjects, origin) {
+// 1/(1+distance)), but distant ones stay possible. Threats/warnings additionally
+// cluster on dangerous (occupied/lair) sites. Consumes exactly one rng().
+function pickSubject(rng, subjects, origin, verb) {
+  const wantsHostile = verb === "warning" || verb === "threat";
   let total = 0;
   const weights = subjects.map((s) => {
-    const w = 1 / (1 + axialDistance(origin.q, origin.r, s.q, s.r));
+    let w = 1 / (1 + axialDistance(origin.q, origin.r, s.q, s.r));
+    const hostile = s.occupant && (s.occupant.kind === "lair" || s.occupant.kind === "occupied");
+    if (wantsHostile && hostile) w *= 4;
     total += w;
     return w;
   });
@@ -112,10 +116,11 @@ export function generateHook(tables, rng, ctx) {
   const origin = { q: ctx.origin.q, r: ctx.origin.r };
   const pattern = ctx.pattern || "known";
 
-  const subject = pickSubject(rng, subjects, origin);
+  // Verb first, so a threat/warning can bias which subject it lands on.
+  const verb = ctx.verb || rollTable(tables.get("hook-verb"), rng).value;
+  const subject = pickSubject(rng, subjects, origin, verb);
   const target = { q: subject.q, r: subject.r, poiId: subject.poiId };
 
-  const verb = ctx.verb || rollTable(tables.get("hook-verb"), rng).value;
   const claim = rollTable(tables.get(`hook-${verb}`), rng).value;
   const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
   const accuracy = ctx.accuracy || rollTable(tables.get("hook-accuracy"), rng).value;
@@ -144,6 +149,44 @@ export function generateHook(tables, rng, ctx) {
     status: "open",
     // The revealed corridor (Map pattern) — the run of hexes from origin to target.
     ...(ctx.path ? { path: ctx.path } : {}),
+  };
+}
+
+/**
+ * Build a LOCAL hook — one that happens at the origin itself, with no separate
+ * target tile: an `opportunity` (a buyer in town wants goods) or an `event` (a
+ * festival/market here). target/indicated = origin, so → Target and ↩ Origin both
+ * land in town.
+ * @param {{ kind:"opportunity"|"event", origin:{q,r}, index?:number, source?:string, accuracy?:string }} ctx
+ */
+export function buildLocalHook(tables, rng, ctx) {
+  const origin = { q: ctx.origin.q, r: ctx.origin.r };
+  const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
+  let subjectName;
+  let claim;
+  if (ctx.kind === "opportunity") {
+    claim = rollTable(tables.get("hook-opportunity"), rng).value;
+    subjectName = rollTable(tables.get("hook-commodity"), rng).value;
+  } else {
+    claim = rollTable(tables.get("hook-event"), rng).value;
+    subjectName = claim;
+  }
+  const accuracy = ctx.accuracy || rollTable(tables.get("hook-accuracy"), rng).value;
+  return {
+    id: ctx.index != null ? `hook:${ctx.index}` : undefined,
+    build: HOOK_BUILD,
+    pattern: ctx.kind,
+    verb: ctx.kind,
+    subject: { name: subjectName, type: ctx.kind },
+    origin,
+    indicated: { q: origin.q, r: origin.r },
+    target: { q: origin.q, r: origin.r },
+    bearing: null,
+    distance: 0,
+    accuracy,
+    claim,
+    source,
+    status: "open",
   };
 }
 
@@ -238,6 +281,10 @@ export function hookDescription(hook) {
     // Always show the goal explicitly, at every step, so the prize is never a guess.
     prizeLine = `Prize: ${prize || "GM's choice"}.`;
     progress = `Clue ${step} of ${total}${final ? " — you've reached it" : ""}.`;
+  } else if (hook.pattern === "opportunity") {
+    line0 = `${hook.source}: a buyer here ${hook.claim} ${hook.subject.name}.`;
+  } else if (hook.pattern === "event") {
+    line0 = `${hook.source}: ${cap(hook.claim)} here.`;
   } else if (hook.pattern === "map") {
     line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "distant") {
@@ -249,7 +296,12 @@ export function hookDescription(hook) {
   const lines = [line0];
   if (prizeLine) lines.push(prizeLine);
   if (progress) lines.push(progress);
-  if (hook.accuracy === "off-by-one") {
+  // Local hooks (opportunity/event) have no directions, so their GM line is just
+  // genuine-vs-false; the rest report positional accuracy.
+  const isLocal = hook.pattern === "opportunity" || hook.pattern === "event";
+  if (isLocal) {
+    lines.push(hook.accuracy === "false" ? "GM: a false lead — it comes to nothing." : "GM: genuine.");
+  } else if (hook.accuracy === "off-by-one") {
     lines.push(`GM: the directions are a hex off — the real site is at (${hook.target.q}, ${hook.target.r}).`);
   } else if (hook.accuracy === "false") {
     lines.push("GM: a false lead — there is nothing in it.");

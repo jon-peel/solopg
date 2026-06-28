@@ -11,6 +11,7 @@ import {
   chooseDistantTarget,
   startChain,
   buildChainStep,
+  buildLocalHook,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -93,6 +94,11 @@ const HOOK_TABLE_IDS = [
   "hook-accuracy",
   "hook-explore",
   "hook-threat",
+  "hook-rescue",
+  "hook-warning",
+  "hook-opportunity",
+  "hook-commodity",
+  "hook-event",
   "hook-clue",
   "hook-payoff",
 ];
@@ -789,6 +795,8 @@ const HOOK_NOTE = {
   distant: " (distant — a new site appeared on the map)",
   map: " (map — a route was revealed to a new site)",
   chain: " (chain — follow the clues to the prize)",
+  opportunity: " (a standing offer in town)",
+  event: " (a local happening)",
   known: "",
 };
 
@@ -811,7 +819,10 @@ async function onGenerateHook(opts = {}) {
     const pattern = opts.forcePattern || rollHookPattern(tables, rng, subjects.length > 0);
 
     let hook;
-    if (pattern === "chain") {
+    if (pattern === "opportunity" || pattern === "event") {
+      // Local hooks happen in town — no target tile, no pattern geometry.
+      hook = buildLocalHook(tables, rng, { kind: pattern, origin, index: n, source: opts.source });
+    } else if (pattern === "chain") {
       const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
       if (!spot) return logLine("No open ground nearby to lay a trail.");
       const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
