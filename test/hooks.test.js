@@ -11,6 +11,7 @@ import {
   startChain,
   buildChainStep,
   buildLocalHook,
+  buildEscortHook,
   HOOK_BUILD,
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
@@ -22,6 +23,7 @@ function tables() {
     "hook-pattern", "hook-verb", "hook-source", "hook-accuracy",
     "hook-explore", "hook-threat", "hook-rescue", "hook-warning",
     "hook-opportunity", "hook-commodity", "hook-event",
+    "hook-cargo", "hook-recipient",
     "hook-clue", "hook-payoff",
   ];
   return new Map(
@@ -149,7 +151,7 @@ test("rollHookPattern never yields known without subjects (only known needs one)
   // With subjects, all kinds appear over many seeds.
   const seen = new Set();
   for (let s = 0; s < 400; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
-  assert.deepEqual([...seen].sort(), ["chain", "distant", "event", "known", "map", "opportunity"]);
+  assert.deepEqual([...seen].sort(), ["chain", "distant", "escort", "event", "known", "map", "opportunity"]);
 });
 
 test("chooseDistantTarget lands a free cell at the requested straight-line distance", () => {
@@ -304,6 +306,40 @@ test("buildLocalHook is deterministic for a given seed", () => {
   const a = buildLocalHook(tables(), mulberry32(9), { kind: "opportunity", origin: { q: 0, r: 0 }, index: 0 });
   const b = buildLocalHook(tables(), mulberry32(9), { kind: "opportunity", origin: { q: 0, r: 0 }, index: 0 });
   assert.deepEqual(a, b);
+});
+
+test("buildEscortHook is a two-endpoint errand with cargo + recipient + a real target", () => {
+  const t = tables();
+  const cargos = valuesOf(t.get("hook-cargo"));
+  const recipients = valuesOf(t.get("hook-recipient"));
+  const origin = { q: 0, r: 0 };
+  const destination = { q: 5, r: 0 };
+  for (let s = 0; s < 80; s++) {
+    const h = buildEscortHook(t, mulberry32(s), { origin, destination, index: 0 });
+    assert.equal(h.pattern, "escort");
+    assert.equal(h.verb, "escort");
+    assert.ok(cargos.has(h.cargo));
+    assert.ok(recipients.has(h.subject.name));
+    assert.deepEqual(h.origin, origin);
+    assert.equal(h.target.q, 5);
+    assert.equal(h.distance, 5);
+    assert.ok(h.bearing); // a real destination → a bearing
+    // off-by-one (when it lands) keeps the indicated cell adjacent to the true target.
+    if (h.accuracy === "off-by-one") {
+      assert.equal(axialDistance(h.indicated.q, h.indicated.r, h.target.q, h.target.r), 1);
+    }
+    const cargo = h.cargo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const recipient = h.subject.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(
+      hookDescription(h)[0],
+      new RegExp(`^${h.source}: carry ${cargo} to ${recipient}, 5 hexes to the [a-z-]+\\.$`),
+    );
+  }
+});
+
+test("buildEscortHook is deterministic for a given seed", () => {
+  const args = { origin: { q: 0, r: 0 }, destination: { q: 3, r: -3 }, index: 0 };
+  assert.deepEqual(buildEscortHook(tables(), mulberry32(2), args), buildEscortHook(tables(), mulberry32(2), args));
 });
 
 // --- 6.4: breadcrumb chains -------------------------------------------------

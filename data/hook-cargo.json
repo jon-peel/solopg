@@ -1,0 +1,15 @@
+{
+  "id": "hook-cargo",
+  "title": "Escort cargo (what to carry — reads \"carry <cargo> to …\")",
+  "entries": [
+    { "value": "a sealed message" },
+    { "value": "urgent dispatches" },
+    { "value": "a fragile parcel" },
+    { "value": "a holy relic" },
+    { "value": "a chest of silver" },
+    { "value": "a sick traveller" },
+    { "value": "a noble's wayward child" },
+    { "value": "a war-ransom" },
+    { "value": "a caged messenger-bird" }
+  ]
+}

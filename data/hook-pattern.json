@@ -7,6 +7,7 @@
     { "weight": 2, "value": "map" },
     { "weight": 1, "value": "chain" },
     { "weight": 2, "value": "opportunity" },
-    { "weight": 1, "value": "event" }
+    { "weight": 1, "value": "event" },
+    { "weight": 2, "value": "escort" }
   ]
 }

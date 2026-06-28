@@ -1,0 +1,14 @@
+{
+  "id": "hook-recipient",
+  "title": "Escort recipient (who to deliver to — reads \"… to <recipient>\")",
+  "entries": [
+    { "value": "the lord there" },
+    { "value": "a hermit" },
+    { "value": "an old comrade" },
+    { "value": "the temple" },
+    { "value": "a reclusive scholar" },
+    { "value": "the garrison commander" },
+    { "value": "a waiting buyer" },
+    { "value": "kin of the sender" }
+  ]
+}

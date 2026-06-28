@@ -26,9 +26,10 @@ target-tile generation: a hook points *n* hexes away and spawns just that one ti
 pattern — a treasure map that also reveals a corridor of hexes to the target, plus a "Read map" trigger)
 **6.4** (the **Chain** pattern — a breadcrumb hunt that winds clue-by-clue to a named-prize payoff via
 "Follow the clue") and **6.5** (verb breadth — **rescue**, **warning**, plus *local* **opportunity** and
-**event** hooks) are built and node-tested; escort (two-endpoint) is the remaining **6.5b**. A global
-always-visible open-hooks list (→ Target / ↩ Origin jumps) ties them together. **Schema v6. 177
-`node --test` passing.** Work merges to **`main`** via PR.
+**event** hooks) and **6.5b** (**escort** — a two-endpoint delivery to a generated destination) are
+built and node-tested. A global always-visible open-hooks list (→ Target / ↩ Origin jumps) ties them
+together. Only **6.6** (return trips + lifecycle/map polish) remains. **Schema v6. 179 `node --test`
+passing.** Work merges to **`main`** via PR.
 
 ---
 

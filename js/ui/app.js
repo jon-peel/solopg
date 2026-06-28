@@ -12,6 +12,7 @@ import {
   startChain,
   buildChainStep,
   buildLocalHook,
+  buildEscortHook,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -99,6 +100,8 @@ const HOOK_TABLE_IDS = [
   "hook-opportunity",
   "hook-commodity",
   "hook-event",
+  "hook-cargo",
+  "hook-recipient",
   "hook-clue",
   "hook-payoff",
 ];
@@ -797,6 +800,7 @@ const HOOK_NOTE = {
   chain: " (chain — follow the clues to the prize)",
   opportunity: " (a standing offer in town)",
   event: " (a local happening)",
+  escort: " (a delivery — a destination appeared on the map)",
   known: "",
 };
 
@@ -822,6 +826,18 @@ async function onGenerateHook(opts = {}) {
     if (pattern === "opportunity" || pattern === "event") {
       // Local hooks happen in town — no target tile, no pattern geometry.
       hook = buildLocalHook(tables, rng, { kind: pattern, origin, index: n, source: opts.source });
+    } else if (pattern === "escort") {
+      // A delivery to a generated destination (a place to deliver to, left blank
+      // of any forced contents — the recipient is the flavour).
+      const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
+      if (!spot) return logLine("No open ground nearby for an errand.");
+      const destHex = buildRandomHex(tables, spot.q, spot.r, 0);
+      destHex.explored = false;
+      addHex(current, destHex);
+      hook = buildEscortHook(tables, rng, {
+        origin, index: n, source: opts.source,
+        destination: { q: spot.q, r: spot.r },
+      });
     } else if (pattern === "chain") {
       const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
       if (!spot) return logLine("No open ground nearby to lay a trail.");
