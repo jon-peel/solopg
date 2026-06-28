@@ -92,7 +92,6 @@ const HOOK_TABLE_IDS = [
   "hook-pattern",
   "hook-verb",
   "hook-source",
-  "hook-accuracy",
   "hook-explore",
   "hook-threat",
   "hook-rescue",
@@ -708,6 +707,7 @@ async function onRemovePoi(id) {
 function refreshGlobalHooks() {
   renderGlobalHooks({
     hooks: (current && current.hooks) || [],
+    hexScale: (current && current.hexScale) || 6,
     onGoToHook,
     onGoToHookOrigin,
     onFollowClue,
@@ -727,6 +727,14 @@ function nextHookId(world) {
   return max + 1;
 }
 
+// A hook names a POI by its BASE name (the place), not its "— occupant" display
+// suffix: "Flooded cistern", not "Flooded cistern — Cultists". The occupant still
+// shows in the POI list / dungeon view; hooks just want the place.
+function poiBaseName(poi) {
+  if (poi.type === "dungeon" && poi.detail && poi.detail.theme) return poi.detail.theme;
+  return (poi.name || "").split(" — ")[0] || poi.name;
+}
+
 // Candidate subjects for a Known hook: every POI already placed on the map.
 function hookSubjects(world) {
   const subs = [];
@@ -734,10 +742,11 @@ function hookSubjects(world) {
     for (const poi of hex.pois || []) {
       subs.push({
         poiId: poi.id,
-        name: poi.name,
+        name: poiBaseName(poi),
         type: poi.type,
         q: hex.coords.q,
         r: hex.coords.r,
+        terrain: hex.terrain,
         occupant: poi.occupant,
       });
     }
@@ -773,8 +782,8 @@ function buildDistantTargetHex(tables, q, r) {
 // A subject descriptor for the hook generator, from a placed hex's first POI.
 function subjectFromHex(hex, poi) {
   return {
-    poiId: poi.id, name: poi.name, type: poi.type,
-    q: hex.coords.q, r: hex.coords.r, occupant: poi.occupant,
+    poiId: poi.id, name: poiBaseName(poi), type: poi.type,
+    q: hex.coords.q, r: hex.coords.r, terrain: hex.terrain, occupant: poi.occupant,
   };
 }
 
@@ -837,6 +846,7 @@ async function onGenerateHook(opts = {}) {
       hook = buildEscortHook(tables, rng, {
         origin, index: n, source: opts.source,
         destination: { q: spot.q, r: spot.r },
+        terrain: destHex.terrain,
       });
     } else if (pattern === "chain") {
       const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
@@ -848,6 +858,7 @@ async function onGenerateHook(opts = {}) {
         origin, index: n,
         target: { q: spot.q, r: spot.r, poiId: subject.poiId },
         subject: { poiId: subject.poiId, name: subject.name, type: subject.type },
+        terrain: subject.terrain,
         source: opts.source,
       });
     } else if (pattern === "map" || pattern === "distant") {
@@ -939,7 +950,7 @@ async function onFollowClue(id) {
     const subj = subjectFromHex(targetHex, targetHex.pois[0]);
     const fields = buildChainStep(tables, rng, {
       legOrigin, target: { q: spot.q, r: spot.r, poiId: subj.poiId },
-      step: nextStep, total: hook.chain.total,
+      terrain: subj.terrain,
     });
     Object.assign(hook, fields, {
       subject: { poiId: subj.poiId, name: subj.name, type: subj.type },

@@ -27,9 +27,11 @@ pattern — a treasure map that also reveals a corridor of hexes to the target, 
 **6.4** (the **Chain** pattern — a breadcrumb hunt that winds clue-by-clue to a named-prize payoff via
 "Follow the clue") and **6.5** (verb breadth — **rescue**, **warning**, plus *local* **opportunity** and
 **event** hooks) and **6.5b** (**escort** — a two-endpoint delivery to a generated destination) are
-built and node-tested. A global always-visible open-hooks list (→ Target / ↩ Origin jumps) ties them
-together. Only **6.6** (return trips + lifecycle/map polish) remains. **Schema v6. 179 `node --test`
-passing.** Work merges to **`main`** via PR.
+built and node-tested. **6.5.1** sharpened the hook target line — POI **base name** (occupant split
+off), distance in **miles**, target **terrain** — and **removed the accuracy/"GM:" line** (off-ness is
+left to GM judgement + future travel rules). A global always-visible open-hooks list (→ Target / ↩ Origin
+jumps) ties them together. Remaining: **6.5.2** (threat reframing + reward axis) and **6.6** (return
+trips + lifecycle/map polish). **Schema v6. 177 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 

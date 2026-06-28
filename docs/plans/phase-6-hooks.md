@@ -46,16 +46,15 @@ skins) give effectively endless combinations — the same approach as `feature-d
 Not every verb fits every pattern; a small **compatibility map** gates the sensible combos (e.g.
 *event* → Known/Distant, *escort* → Distant/Map with two endpoints, *return* → threat/opportunity).
 
-### Accuracy & source — GM-visible (this is a GM-only tool)
-Everything is **always open and visible**; there is **no hidden-truth toggle**. Rather than
-true/false, a hook carries an **accuracy**, weighted so most hooks are reliable and "wrong" usually
-means a *map error*, not a lie:
-- **`accurate`** *(most common)* — the target is exactly where indicated.
-- **`off-by-n`** *(uncommon)* — the real target sits a hex or two from where the hook points; the GM
-  is shown the **true** hex (e.g. "the map is one tile off — it's actually the next hex NE").
-- **`false`** *(rare)* — no real target (empty/old/trapped site, or a plain mistake).
-- **Source** — where it was heard / found (tavern talk, a traveller, a dying man, a **found map**);
-  flavour plus a nudge to plausibility.
+### Target line & source
+A hook **points truly** at its target — there is **no accuracy / "directions are off" mechanic**
+(removed after review). Whether a clue is mistaken is left to **GM judgement + future travel rules**
+(getting lost off-road); false *rumours* belong to a future rumour mechanic. A targeted hook reads
+with the target's **base name** (the place, not its "— occupant" display suffix), the distance in
+**miles** (hex distance × `hexScale`), and the tile's **terrain** — e.g. *"… at Flooded cistern,
+18 miles to the south-east (Swamp)."*
+- **Source** — where it was heard / found (tavern talk, a traveller, a dying man, a **found map**).
+  *Local* hooks (opportunity/event) carry **no source** — they're town facts, framed by the GM.
 
 ## How a hook is generated — the trigger
 
@@ -138,7 +137,9 @@ Each sub-step is a usable vertical slice; later steps add patterns/verbs as most
 | **6.3** | **Treasure maps** — Map pattern: target **plus a revealed corridor**; a **"Read map" trigger** (available from **any** selected cell, not just towns) that forces a Map hook; "found map" source flavour. | ✅ done |
 | **6.4** | **Breadcrumb chains** — Chain pattern: multi-step clue→clue→payoff, each step generated lazily; a **"Follow the clue" trigger** advances the chain; per-step resolve. Chains name a **prize** up front (shown every step) and can be **started from any site** ("Follow a trail"). | ✅ done |
 | **6.5** | **Verb & flavour library** — the breadth pass: **rescue**, **warning** (site verbs; warning biases toward dangerous occupied/lair subjects), **opportunity** (a buyer in town wants goods) and **event** (a festival/market here) — the last two are *local* hooks (target = origin). Mostly JSON rows + biases. | 🔨 built — awaiting manual test |
-| **6.5b** | **Escort / delivery** — a two-endpoint errand (deliver a person/parcel/message from here to a destination). Structurally distinct (origin **and** destination), so split out. | 🔨 built — awaiting manual test |
+| **6.5b** | **Escort / delivery** — a two-endpoint errand (deliver a person/parcel/message from here to a destination). Structurally distinct (origin **and** destination), so split out. | ✅ done |
+| **6.5.1** | **Target-line readability + drop accuracy** — hooks use the POI **base name** (occupant split off), show distance in **miles** and the target **terrain**; the whole **accuracy/"GM:" line is removed** (off-ness → GM + future travel rules). | 🔨 built — awaiting manual test |
+| **6.5.2** | **Threat reframing + reward axis** — a threat *is* its occupant (to be tracked down, not a danger "at" a known place); add an optional **reward** (mayor / merchant guild / glory). | ◻ next |
 | **6.6** | **Return trips + lifecycle & map polish** — Return pattern; hook lifecycle (open/resolved/ignored, optional expiry); **map indicators** on hook targets; verification + back-compat sweep. *(A global always-visible open-hooks list — with **→ Target** / **↩ Origin** jumps — landed early, alongside 6.3.)* | ◻ |
 
 Foundation first (cheapest, proves persistence + the Known slice). Distant second — it's the new

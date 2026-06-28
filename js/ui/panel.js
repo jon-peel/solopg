@@ -292,7 +292,7 @@ function hookCard(hook, model) {
   title.textContent = hookName(hook) + (status !== "open" ? ` (${status})` : "");
   box.appendChild(title);
 
-  for (const line of hookDescription(hook)) {
+  for (const line of hookDescription(hook, { hexScale: model.hexScale })) {
     const div = document.createElement("div");
     div.className = "log-line";
     div.textContent = line;

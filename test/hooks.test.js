@@ -20,7 +20,7 @@ import { axialDistance, axialLine } from "../js/core/hexgeo.js";
 
 function tables() {
   const ids = [
-    "hook-pattern", "hook-verb", "hook-source", "hook-accuracy",
+    "hook-pattern", "hook-verb", "hook-source",
     "hook-explore", "hook-threat", "hook-rescue", "hook-warning",
     "hook-opportunity", "hook-commodity", "hook-event",
     "hook-cargo", "hook-recipient",
@@ -47,7 +47,6 @@ test("generateHook returns a well-formed Known hook drawn from the tables", () =
   const t = tables();
   const verbs = valuesOf(t.get("hook-verb"));
   const sources = valuesOf(t.get("hook-source"));
-  const accuracies = valuesOf(t.get("hook-accuracy"));
   const subs = subjects();
   const byId = new Map(subs.map((s) => [s.poiId, s]));
   for (let s = 0; s < 100; s++) {
@@ -56,10 +55,11 @@ test("generateHook returns a well-formed Known hook drawn from the tables", () =
     assert.equal(h.pattern, "known");
     assert.equal(h.id, `hook:${s}`);
     assert.equal(h.status, "open");
+    assert.equal("accuracy" in h, false); // accuracy mechanic removed
+    assert.equal("indicated" in h, false);
     assert.ok(verbs.has(h.verb));
     assert.ok(sources.has(h.source));
-    assert.ok(accuracies.has(h.accuracy));
-    // Subject is one of ours, and the true target is that subject's hex.
+    // Subject is one of ours, and the target is that subject's hex.
     const subj = byId.get(h.subject.poiId);
     assert.ok(subj, "subject is a provided POI");
     assert.equal(h.target.q, subj.q);
@@ -70,50 +70,18 @@ test("generateHook returns a well-formed Known hook drawn from the tables", () =
   }
 });
 
-test("accuracy controls indicated vs target: off-by-one points at a neighbour", () => {
-  const t = tables();
-  const subs = subjects();
-  let sawAccurate = false, sawOff = false, sawFalse = false;
-  for (let s = 0; s < 400; s++) {
-    const h = generateHook(t, mulberry32(s), { subjects: subs, origin: ORIGIN, index: s });
-    const d = axialDistance(h.indicated.q, h.indicated.r, h.target.q, h.target.r);
-    if (h.accuracy === "off-by-one") {
-      sawOff = true;
-      assert.equal(d, 1, "off-by-one indicated is exactly one hex from the true target");
-    } else {
-      assert.equal(d, 0, "accurate/false point straight at the true target");
-      if (h.accuracy === "accurate") sawAccurate = true;
-      else sawFalse = true;
-    }
-  }
-  assert.ok(sawAccurate && sawOff && sawFalse, "all three accuracies appear over many seeds");
-});
-
-test("accuracy distribution leans reliable (accurate > off-by-one > false)", () => {
-  const t = tables();
-  const subs = subjects();
-  const count = { accurate: 0, "off-by-one": 0, false: 0 };
-  for (let s = 0; s < 600; s++) {
-    const h = generateHook(t, mulberry32(s), { subjects: subs, origin: ORIGIN, index: s });
-    count[h.accuracy]++;
-  }
-  assert.ok(count.accurate > count["off-by-one"], "more accurate than off-by-one");
-  assert.ok(count["off-by-one"] > count.false, "more off-by-one than false");
-});
-
 test("generateHook is deterministic for a given seed + context", () => {
   const a = generateHook(tables(), mulberry32(13), { subjects: subjects(), origin: ORIGIN, index: 0 });
   const b = generateHook(tables(), mulberry32(13), { subjects: subjects(), origin: ORIGIN, index: 0 });
   assert.deepEqual(a, b);
 });
 
-test("forced verb + accuracy are honoured", () => {
+test("a forced verb is honoured", () => {
   const t = tables();
   const h = generateHook(t, mulberry32(1), {
-    subjects: subjects(), origin: ORIGIN, index: 0, verb: "threat", accuracy: "accurate",
+    subjects: subjects(), origin: ORIGIN, index: 0, verb: "threat",
   });
   assert.equal(h.verb, "threat");
-  assert.equal(h.accuracy, "accurate");
   assert.ok(valuesOf(t.get("hook-threat")).has(h.claim));
 });
 
@@ -190,8 +158,8 @@ test("a distant hook carries pattern + distance and points at its lone subject",
   assert.equal(h.subject.poiId, "poi:0");
   assert.equal(h.target.q, 4);
   assert.equal(h.target.r, -4);
-  const lines = hookDescription(h);
-  assert.match(lines[0], /Tomb, 4 hexes to the /);
+  const lines = hookDescription(h); // default hexScale 6 → 4 hexes = 24 miles
+  assert.match(lines[0], /Tomb, 24 miles to the /);
 });
 
 test("a known hook's distance is derived from the geometry", () => {
@@ -229,7 +197,7 @@ test("a map hook carries pattern, a path, and a charted-route description", () =
   assert.deepEqual(h.path, path);
   assert.equal(h.source, "A map found below"); // ctx.source override honoured
   const lines = hookDescription(h);
-  assert.match(lines[0], /^A map found below: a map marks Tomb, 4 hexes to the /);
+  assert.match(lines[0], /^A map found below: a map marks Tomb, 24 miles to the /);
 });
 
 test("a non-map hook has no path field", () => {
@@ -288,8 +256,7 @@ test("buildLocalHook(opportunity) names a commodity at the origin", () => {
     assert.equal(h.bearing, null);
     assert.equal(h.source, null); // local hooks carry no "who said it"
     const lines = hookDescription(h);
-    assert.equal(lines[0], `A buyer here ${h.claim} ${h.subject.name}.`);
-    assert.match(lines[lines.length - 1], /genuine|false lead/);
+    assert.deepEqual(lines, [`A buyer here ${h.claim} ${h.subject.name}.`]); // single line, no GM line
   }
 });
 
@@ -325,15 +292,11 @@ test("buildEscortHook is a two-endpoint errand with cargo + recipient + a real t
     assert.equal(h.target.q, 5);
     assert.equal(h.distance, 5);
     assert.ok(h.bearing); // a real destination → a bearing
-    // off-by-one (when it lands) keeps the indicated cell adjacent to the true target.
-    if (h.accuracy === "off-by-one") {
-      assert.equal(axialDistance(h.indicated.q, h.indicated.r, h.target.q, h.target.r), 1);
-    }
     const cargo = h.cargo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const recipient = h.subject.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     assert.match(
-      hookDescription(h)[0],
-      new RegExp(`^${h.source}: carry ${cargo} to ${recipient}, 5 hexes to the [a-z-]+\\.$`),
+      hookDescription(h)[0], // distance 5 hexes × 6 = 30 miles
+      new RegExp(`^${h.source}: carry ${cargo} to ${recipient}, 30 miles to the [a-z-]+\\.$`),
     );
   }
 });
@@ -370,12 +333,11 @@ test("buildChainStep carries an onward clue + this leg's bearing/distance", () =
   const clues = valuesOf(t.get("hook-clue"));
   const legOrigin = { q: 0, r: 0 };
   const target = { q: 0, r: 4, poiId: "poi:1" };
-  const step = buildChainStep(t, mulberry32(1), { legOrigin, target });
+  const step = buildChainStep(t, mulberry32(1), { legOrigin, target, terrain: "Swamp" });
   assert.ok(clues.has(step.claim));
   assert.equal(step.distance, 4);
-  // off-by-one nudges the indicated cell off the true target.
-  const off = buildChainStep(t, mulberry32(1), { legOrigin, target, accuracy: "off-by-one" });
-  assert.equal(axialDistance(off.indicated.q, off.indicated.r, target.q, target.r), 1);
+  assert.equal(step.targetTerrain, "Swamp");
+  assert.equal("indicated" in step, false); // accuracy mechanic removed
 });
 
 test("startChain is deterministic for a given seed", () => {
@@ -407,11 +369,11 @@ test("chain prose: a lure names the prize up front and the payoff names it again
   // The final step names the prize on its own line and marks arrival.
   const finalHook = {
     pattern: "chain", verb: "explore", subject: { name: "Vault" }, source: "An old map-seller",
-    target: { q: 0, r: 5 }, bearing: "S", distance: 2, accuracy: "accurate",
+    target: { q: 0, r: 5 }, bearing: "S", distance: 2,
     claim: "ignored at the end", chain: { total: 3, step: 3, prize: "a dragon's hoard" },
   };
-  const fl = hookDescription(finalHook);
-  assert.match(fl[0], /the trail ends at Vault, 2 hexes to the south\./);
+  const fl = hookDescription(finalHook); // distance 2 × 6 = 12 miles
+  assert.match(fl[0], /the trail ends at Vault, 12 miles to the south\./);
   assert.equal(fl[1], "Prize: a dragon's hoard.");
   assert.match(fl[2], /Clue 3 of 3 — you've reached it\./);
 
@@ -420,25 +382,19 @@ test("chain prose: a lure names the prize up front and the payoff names it again
   assert.equal(legacy[1], "Prize: GM's choice.");
 });
 
-test("hookName + hookDescription compose prose from the picks", () => {
+test("hookName + hookDescription compose prose from the picks (miles + terrain, no GM line)", () => {
   const base = {
     build: HOOK_BUILD, pattern: "known", verb: "explore",
     subject: { poiId: "poi:0", name: "Old shrine", type: "shrine" },
-    origin: { q: 0, r: 0 }, indicated: { q: 0, r: 3 }, target: { q: 0, r: 3, poiId: "poi:0" },
-    bearing: "S", accuracy: "accurate", claim: "a lost relic is said to lie hidden",
-    source: "Tavern talk", status: "open",
+    origin: { q: 0, r: 0 }, target: { q: 0, r: 3, poiId: "poi:0" },
+    bearing: "S", distance: 3, targetTerrain: "Hills",
+    claim: "a lost relic is said to lie hidden", source: "Tavern talk", status: "open",
   };
   assert.equal(hookName(base), "Explore: Old shrine");
-  const lines = hookDescription(base);
-  assert.equal(lines[0], "Tavern talk: A lost relic is said to lie hidden at Old shrine to the south.");
-  assert.match(lines[1], /directions hold true/);
-
-  // off-by-one reveals the true target to the GM.
-  const off = hookDescription({ ...base, accuracy: "off-by-one", indicated: { q: 1, r: 2 } });
-  assert.match(off[1], /a hex off/);
-  assert.match(off[1], /\(0, 3\)/);
-
-  // false reads as a dead end.
-  const bad = hookDescription({ ...base, accuracy: "false" });
-  assert.match(bad[1], /false lead/);
+  // distance 3 × default hexScale 6 = 18 miles; terrain appended; single line.
+  assert.deepEqual(hookDescription(base), [
+    "Tavern talk: A lost relic is said to lie hidden at Old shrine, 18 miles to the south (Hills).",
+  ]);
+  // hexScale flows through to the mileage.
+  assert.match(hookDescription(base, { hexScale: 10 })[0], /30 miles to the south \(Hills\)/);
 });
