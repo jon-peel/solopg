@@ -282,21 +282,29 @@ test("chain prose: a lure names the prize up front and the payoff names it again
   const sl = hookDescription(start);
   // Step 1 is the lure: it states the prize and points at the first site.
   assert.match(sl[0], new RegExp(`^An old map-seller: word of ${start.chain.prize.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} sets a trail — the first clue lies at Tomb,`));
-  assert.match(sl[1], /^Clue 1 of [345]\.$/);
+  // The prize is always shown explicitly, at every step.
+  assert.equal(sl[1], `Prize: ${start.chain.prize}.`);
+  assert.match(sl[2], /^Clue 1 of [345]\.$/);
 
-  // A mid-trail step shows the onward clue.
+  // A mid-trail step shows the onward clue and still names the prize.
   const mid = hookDescription({ ...start, chain: { ...start.chain, step: 2 }, claim: "a worn inscription points onward" });
   assert.match(mid[0], /A worn inscription points onward — the trail leads on to Tomb,/);
+  assert.equal(mid[1], `Prize: ${start.chain.prize}.`);
 
-  // The final step names the prize again.
+  // The final step names the prize on its own line and marks arrival.
   const finalHook = {
     pattern: "chain", verb: "explore", subject: { name: "Vault" }, source: "An old map-seller",
     target: { q: 0, r: 5 }, bearing: "S", distance: 2, accuracy: "accurate",
     claim: "ignored at the end", chain: { total: 3, step: 3, prize: "a dragon's hoard" },
   };
   const fl = hookDescription(finalHook);
-  assert.match(fl[0], /the trail ends at Vault, .* — and a dragon's hoard with it\./);
-  assert.match(fl[1], /Clue 3 of 3 — the prize\./);
+  assert.match(fl[0], /the trail ends at Vault, 2 hexes to the south\./);
+  assert.equal(fl[1], "Prize: a dragon's hoard.");
+  assert.match(fl[2], /Clue 3 of 3 — you've reached it\./);
+
+  // A pre-prize (legacy) chain degrades gracefully to "GM's choice".
+  const legacy = hookDescription({ ...finalHook, chain: { total: 3, step: 3 } });
+  assert.equal(legacy[1], "Prize: GM's choice.");
 });
 
 test("hookName + hookDescription compose prose from the picks", () => {

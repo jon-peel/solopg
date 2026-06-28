@@ -221,18 +221,23 @@ export function hookDescription(hook) {
   // clues, Map names a charted route, Distant a travel distance, Known a bearing.
   let line0;
   let progress = null;
+  let prizeLine = null;
   if (hook.pattern === "chain") {
     const { step, total } = hook.chain;
-    const prize = hook.chain.prize || "a great prize";
+    const prize = hook.chain.prize; // absent on pre-6.5 chains → "GM's choice"
     const final = step >= total;
     if (final) {
-      line0 = `${hook.source}: the trail ends at ${hook.subject.name}, ${whither} — and ${prize} with it.`;
+      line0 = `${hook.source}: the trail ends at ${hook.subject.name}, ${whither}.`;
     } else if (step === 1) {
-      line0 = `${hook.source}: word of ${prize} sets a trail — the first clue lies at ${hook.subject.name}, ${whither}.`;
+      line0 = prize
+        ? `${hook.source}: word of ${prize} sets a trail — the first clue lies at ${hook.subject.name}, ${whither}.`
+        : `${hook.source}: the first clue lies at ${hook.subject.name}, ${whither}.`;
     } else {
       line0 = `${hook.source}: ${cap(hook.claim)} — the trail leads on to ${hook.subject.name}, ${whither}.`;
     }
-    progress = `Clue ${step} of ${total}${final ? " — the prize" : ""}.`;
+    // Always show the goal explicitly, at every step, so the prize is never a guess.
+    prizeLine = `Prize: ${prize || "GM's choice"}.`;
+    progress = `Clue ${step} of ${total}${final ? " — you've reached it" : ""}.`;
   } else if (hook.pattern === "map") {
     line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "distant") {
@@ -242,6 +247,7 @@ export function hookDescription(hook) {
     line0 = `${hook.source}: ${cap(hook.claim)} at ${hook.subject.name}${dir}.`;
   }
   const lines = [line0];
+  if (prizeLine) lines.push(prizeLine);
   if (progress) lines.push(progress);
   if (hook.accuracy === "off-by-one") {
     lines.push(`GM: the directions are a hex off — the real site is at (${hook.target.q}, ${hook.target.r}).`);
