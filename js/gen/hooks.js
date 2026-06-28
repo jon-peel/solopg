@@ -161,7 +161,9 @@ export function generateHook(tables, rng, ctx) {
  */
 export function buildLocalHook(tables, rng, ctx) {
   const origin = { q: ctx.origin.q, r: ctx.origin.r };
-  const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
+  // Local hooks are facts about the town, not something heard from a person, so
+  // they carry no source — the prose omits the "Who said it" prefix.
+  const source = ctx.source || null;
   let subjectName;
   let claim;
   if (ctx.kind === "opportunity") {
@@ -317,9 +319,9 @@ export function hookDescription(hook) {
     prizeLine = `Prize: ${prize || "GM's choice"}.`;
     progress = `Clue ${step} of ${total}${final ? " — you've reached it" : ""}.`;
   } else if (hook.pattern === "opportunity") {
-    line0 = `${hook.source}: a buyer here ${hook.claim} ${hook.subject.name}.`;
+    line0 = `A buyer here ${hook.claim} ${hook.subject.name}.`;
   } else if (hook.pattern === "event") {
-    line0 = `${hook.source}: ${cap(hook.claim)} here.`;
+    line0 = `${cap(hook.claim)} here.`;
   } else if (hook.pattern === "escort") {
     line0 = `${hook.source}: carry ${hook.cargo} to ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "map") {

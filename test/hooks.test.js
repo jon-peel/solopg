@@ -286,8 +286,9 @@ test("buildLocalHook(opportunity) names a commodity at the origin", () => {
     assert.deepEqual(h.target, { q: 2, r: -1 });
     assert.deepEqual(h.origin, { q: 2, r: -1 });
     assert.equal(h.bearing, null);
+    assert.equal(h.source, null); // local hooks carry no "who said it"
     const lines = hookDescription(h);
-    assert.equal(lines[0], `${h.source}: a buyer here ${h.claim} ${h.subject.name}.`);
+    assert.equal(lines[0], `A buyer here ${h.claim} ${h.subject.name}.`);
     assert.match(lines[lines.length - 1], /genuine|false lead/);
   }
 });
