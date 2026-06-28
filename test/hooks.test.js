@@ -25,7 +25,7 @@ function tables() {
     "hook-opportunity", "hook-commodity", "hook-event",
     "hook-cargo", "hook-recipient",
     "hook-clue", "hook-payoff",
-    "hook-patron", "hook-reward", "creatures",
+    "hook-patron", "hook-reward", "hook-return", "creatures",
   ];
   return new Map(
     ids.map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
@@ -119,8 +119,10 @@ test("rollHookPattern never yields known without subjects (only known needs one)
   }
   // With subjects, all kinds appear over many seeds.
   const seen = new Set();
-  for (let s = 0; s < 400; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
-  assert.deepEqual([...seen].sort(), ["chain", "distant", "escort", "event", "known", "map", "opportunity"]);
+  for (let s = 0; s < 500; s++) seen.add(rollHookPattern(t, mulberry32(s), true));
+  assert.deepEqual([...seen].sort(), ["chain", "distant", "escort", "event", "known", "map", "opportunity", "return"]);
+  // Return needs an existing POI, so with none it falls back like known.
+  for (let s = 0; s < 100; s++) assert.notEqual(rollHookPattern(t, mulberry32(s), false), "return");
 });
 
 test("chooseDistantTarget lands a free cell at the requested straight-line distance", () => {
@@ -205,6 +207,21 @@ test("a non-map hook has no path field", () => {
   const subject = { poiId: "poi:0", name: "Ruin", type: "dungeon", q: 0, r: 3, occupant: { kind: "none" } };
   const h = generateHook(tables(), mulberry32(2), { subjects: [subject], origin: { q: 0, r: 0 }, index: 0 });
   assert.equal("path" in h, false);
+});
+
+// --- 6.6: return pattern ----------------------------------------------------
+
+test("a return hook reports a fresh development at an existing place", () => {
+  const t = tables();
+  const developments = valuesOf(t.get("hook-return"));
+  const subj = { poiId: "poi:0", name: "Old mine", type: "dungeon", q: 0, r: 3, terrain: "Hills", occupant: { kind: "none" } };
+  const h = generateHook(t, mulberry32(1), { subjects: [subj], origin: ORIGIN, index: 0, pattern: "return", verb: "return" });
+  assert.equal(h.pattern, "return");
+  assert.equal(h.subject.name, "Old mine"); // names the place, not a menace
+  assert.equal(hookName(h), "Return: Old mine");
+  assert.ok(developments.has(h.claim));
+  assert.equal("reward" in h, false); // not a bounty
+  assert.match(hookDescription(h)[0], /^.*: Old mine .+, \d+ miles to the /);
 });
 
 // --- 6.5: verb & flavour breadth --------------------------------------------

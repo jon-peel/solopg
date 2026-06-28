@@ -19,20 +19,18 @@ signatures). **Phase 5 detailed the other POI types** (see
 description engine** for **shrine / camp / landmark** (`js/gen/feature-detail.js`), and **towers** as
 a **Tier-2 mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View with an `orientation:"up"`
 flag — floors that climb, a garrison from the POI's occupant, and the master on top. The standalone
-`lair` POI type was retired (folded into dungeon den themes). **In progress: Phase 6 — Hooks** (Type-1
-local adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)). **6.1** (foundation: schema
-**v6** + the **Known** pattern + a settlement Hooks panel), **6.2** (the **Distant** pattern — lazy
-target-tile generation: a hook points *n* hexes away and spawns just that one tile), **6.3** (the **Map**
-pattern — a treasure map that also reveals a corridor of hexes to the target, plus a "Read map" trigger)
-**6.4** (the **Chain** pattern — a breadcrumb hunt that winds clue-by-clue to a named-prize payoff via
-"Follow the clue") and **6.5** (verb breadth — **rescue**, **warning**, plus *local* **opportunity** and
-**event** hooks) and **6.5b** (**escort** — a two-endpoint delivery to a generated destination) are
-built and node-tested. **6.5.1** sharpened the hook target line — POI **base name** (occupant split
-off), distance in **miles**, target **terrain** — and **removed the accuracy/"GM:" line** (off-ness is
-left to GM judgement + future travel rules). A global always-visible open-hooks list (→ Target / ↩ Origin
-jumps) ties them together. **6.5.2** reframed threats (the menace *is* the occupant — "Threat: Bandits",
-tracked to "their lair") and added a **reward axis** (a patron + coin, or glory) to threat/rescue/escort.
-Remaining: **6.6** (return trips + lifecycle/map polish). **Schema v6. 181 `node --test` passing.** Work
+`lair` POI type was retired (folded into dungeon den themes). **Phase 6 — Hooks complete** (Type-1 local
+adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)): a manual **"Generate hook"** at a
+town (plus **"Read map"** / **"Follow a trail"** anywhere) produces a hook of one of several **kinds** —
+**known**, **distant** (lazy target-tile generation), **map** (a revealed corridor), **chain**
+(a breadcrumb hunt to a named prize), local **opportunity** / **event**, two-endpoint **escort**, and
+**return** (a development at a known place) — across the verbs explore / threat / rescue / warning. A
+threat names its **menace** ("Threat: Bandits", tracked to its lair); threat/rescue/escort carry a
+**reward** (a patron + coin, or glory). Each hook reads with the target's base name, distance in **miles**,
+and tile **terrain** (no accuracy mechanic). A global always-visible **open-hooks list** (→ Target /
+↩ Origin / Follow-the-clue) and **amber map markers** on every open target tie it together. New `world.hooks`
+(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — additional small oracles** (see the
+[catalog](#small-oracle-catalog-for-phase-7-selection)). **Schema v6. 182 `node --test` passing.** Work
 merges to **`main`** via PR.
 
 ---
@@ -175,8 +173,8 @@ graph TD
 | 3 — POIs + terrain-aware gen (+3.1–3.5 POIs/art/LOD) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
-| **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | 🔨 in progress (6.1) | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
-| 7 — Additional small oracles | ◻ later | see catalog below |
+| **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
+| 7 — Additional small oracles | ▶ **next** | see catalog below |
 | 8 — QoL & customization (editable tables, notes, themes) | ◻ later | — |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/7 need only the map + POIs; 8 is polish. **Factions were
@@ -199,16 +197,18 @@ engine with an `orientation:"up"` flag: a stack of narrow floors that climb (ind
 master on top), garrisoned by the POI's occupant (held = lit, empty = dark). `lair` retired (a creature
 lair is now a dungeon den). See [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md).
 
-**Phase 6 (in progress) — Hooks** (renamed from "Rumors"): Type-1 **local adventure hooks** — a
-**resolution pattern** (Known / Distant / Map / Chain / Return) × a **verb** (explore, threat,
-opportunity, rescue, warning, escort, event), pointing at an existing or freshly-generated hex/POI. The
+**Phase 6 (done) — Hooks** (renamed from "Rumors"): Type-1 **local adventure hooks** — a **kind**
+(Known / Distant / Map / Chain / Return, plus local Opportunity / Event and two-endpoint Escort) × a
+**verb** (explore / threat / rescue / warning), pointing at an existing or freshly-generated hex/POI. The
 signature mechanic is **lazy target-tile generation** (point at a tile that doesn't exist yet → generate
-just that tile). It's a **GM-only tool**, so a hook's reliability is a **GM-visible `accuracy`**
-(accurate / off-by-one / false) — weighted reliable, "wrong" is usually a positional error, not a lie.
-Generation is a **manual "Generate hook" button** (context-sensitive: settlement gossip vs camp/dungeon
-"Read map"); auto-generation waits on a future Travel feature. Type-2 "distant powers" (roaming/region/
-news-propagation) is deferred to the Factions phase. Sub-steps **6.1–6.6**; **6.1 (foundation) built**.
-See [phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
+just that tile; Map also reveals a corridor). A **threat** names its menace (tracked to its lair) and
+threat/rescue/escort carry a **reward** (patron + coin, or glory). A hook reads with the target's base
+name, distance in **miles**, and tile **terrain** — **no accuracy mechanic** (off-ness is GM judgement +
+future travel rules). Generation is a **manual "Generate hook"** at a town, plus **"Read map"** /
+**"Follow a trail"** anywhere; auto-generation waits on a future Travel feature. A global **open-hooks
+list** (→ Target / ↩ Origin / Follow-the-clue) and **amber map markers** tie it together. Type-2 "distant
+powers" (roaming/region/news-propagation) stays deferred to the Factions phase. See
+[phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
 [small-oracle catalog](#small-oracle-catalog-for-phase-7-selection).
 
 ---

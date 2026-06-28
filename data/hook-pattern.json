@@ -4,10 +4,11 @@
   "entries": [
     { "weight": 3, "value": "known" },
     { "weight": 2, "value": "distant" },
-    { "weight": 2, "value": "map" },
+    { "weight": 1, "value": "map" },
     { "weight": 1, "value": "chain" },
     { "weight": 2, "value": "opportunity" },
     { "weight": 1, "value": "event" },
-    { "weight": 4, "value": "escort" }
+    { "weight": 2, "value": "escort" },
+    { "weight": 1, "value": "return" }
   ]
 }

@@ -46,6 +46,7 @@ import {
   setSelected,
   recenterOn,
   setIconsEnabled,
+  setHookMarks,
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
@@ -105,6 +106,7 @@ const HOOK_TABLE_IDS = [
   "hook-payoff",
   "hook-patron",
   "hook-reward",
+  "hook-return",
   "creatures",
 ];
 
@@ -179,6 +181,7 @@ async function setCurrent(world) {
   }
   renderSelection();
   refreshGlobalHooks();
+  refreshHookMarks();
   await refreshWorldList();
 }
 
@@ -706,6 +709,18 @@ async function onRemovePoi(id) {
 
 // --- hooks (Phase 6) -------------------------------------------------------
 
+// Mark every OPEN hook's target on the map (skip local opportunity/event, whose
+// target is the town itself). Lets the GM find destinations at a glance.
+function refreshHookMarks() {
+  const keys = [];
+  for (const h of (current && current.hooks) || []) {
+    if ((h.status || "open") !== "open") continue;
+    if (h.pattern === "opportunity" || h.pattern === "event") continue;
+    if (h.target) keys.push(axialKey(h.target.q, h.target.r));
+  }
+  setHookMarks(keys);
+}
+
 // Refresh the always-visible global hooks list (open hooks reachable anywhere).
 function refreshGlobalHooks() {
   renderGlobalHooks({
@@ -813,6 +828,7 @@ const HOOK_NOTE = {
   opportunity: " (a standing offer in town)",
   event: " (a local happening)",
   escort: " (a delivery — a destination appeared on the map)",
+  return: " (a development at a known site)",
   known: "",
 };
 
@@ -881,6 +897,9 @@ async function onGenerateHook(opts = {}) {
           origin, index: n, pattern: "distant", distance: spot.distance,
         });
       }
+    } else if (pattern === "return") {
+      // A development at an existing on-map POI (rollHookPattern guarantees subjects).
+      hook = generateHook(tables, rng, { subjects, origin, index: n, pattern: "return", verb: "return" });
     } else {
       hook = generateHook(tables, rng, { subjects, origin, index: n });
     }
@@ -973,6 +992,7 @@ async function onFollowClue(id) {
 async function persistAndRefresh() {
   current = await saveWorld(current);
   setWorld(current);
+  refreshHookMarks();
   renderSelection();
   refreshGlobalHooks();
 }

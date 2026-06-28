@@ -46,9 +46,11 @@ export function bearingTo(from, to) {
  * @param {boolean} hasSubjects whether any on-map POI exists to be a Known subject
  * @returns {"known"|"distant"}
  */
+// Kinds that point at an EXISTING on-map POI; with none, fall back to distant.
+const NEEDS_SUBJECTS = new Set(["known", "return"]);
 export function rollHookPattern(tables, rng, hasSubjects) {
   const pattern = rollTable(tables.get("hook-pattern"), rng).value;
-  return pattern === "known" && !hasSubjects ? "distant" : pattern;
+  return NEEDS_SUBJECTS.has(pattern) && !hasSubjects ? "distant" : pattern;
 }
 
 /**
@@ -338,6 +340,9 @@ export function hookDescription(hook, opts = {}) {
     line0 = `${hook.source}: carry ${hook.cargo} to ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "map") {
     line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
+  } else if (hook.pattern === "return") {
+    // A place the party knows, with a new development.
+    line0 = `${hook.source}: ${hook.subject.name} ${hook.claim}, ${whither}.`;
   } else if (hook.verb === "threat") {
     // The menace is the subject; the place it lairs is where to track it down.
     line0 = `${hook.source}: ${cap(hook.subject.name)} ${hook.claim}. Their lair: ${hook.lair}, ${whither}.`;

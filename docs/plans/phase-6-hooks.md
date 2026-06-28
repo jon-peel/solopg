@@ -140,7 +140,7 @@ Each sub-step is a usable vertical slice; later steps add patterns/verbs as most
 | **6.5b** | **Escort / delivery** — a two-endpoint errand (deliver a person/parcel/message from here to a destination). Structurally distinct (origin **and** destination), so split out. | ✅ done |
 | **6.5.1** | **Target-line readability + drop accuracy** — hooks use the POI **base name** (occupant split off), show distance in **miles** and the target **terrain**; the whole **accuracy/"GM:" line is removed** (off-ness → GM + future travel rules). | 🔨 built — awaiting manual test |
 | **6.5.2** | **Threat reframing + reward axis** — a threat *is* its occupant ("Threat: Bandits"; "Their lair: <place>, N miles …"), to be tracked down; threat/rescue/escort carry a **reward** (a patron + coin, or glory only). | 🔨 built — awaiting manual test |
-| **6.6** | **Return trips + lifecycle & map polish** — Return pattern; hook lifecycle (open/resolved/ignored, optional expiry); **map indicators** on hook targets; verification + back-compat sweep. *(A global always-visible open-hooks list — with **→ Target** / **↩ Origin** jumps — landed early, alongside 6.3.)* | ◻ |
+| **6.6** | **Return trips + lifecycle & map polish** — **Return** pattern (a development at a known POI); kind-weight **rebalance**; **on-map markers** (an amber ring + ⚑ flag) on every open hook's target. Lifecycle (open/resolved/ignored/remove) shipped with the global list; auto-**expiry** waits on a travel/turn loop. | ✅ done |
 
 Foundation first (cheapest, proves persistence + the Known slice). Distant second — it's the new
 mechanic everything else leans on. Breadth (6.5) deliberately late, when the structure is stable.
