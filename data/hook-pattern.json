@@ -5,6 +5,6 @@
     { "weight": 3, "value": "known" },
     { "weight": 2, "value": "distant" },
     { "weight": 2, "value": "map" },
-    { "weight": 3, "value": "chain" }
+    { "weight": 1, "value": "chain" }
   ]
 }
