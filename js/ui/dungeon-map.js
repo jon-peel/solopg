@@ -81,6 +81,34 @@ export function setSelectedRoom(n) {
   render();
 }
 
+/**
+ * Pan the camera so room `n` is in view, keeping the current zoom. No-op if the
+ * room is already fully visible, so clicking a room you can see won't yank the
+ * view — this is for stair-travel / level-switch landing off-screen.
+ */
+export function centerOnRoom(n) {
+  if (!canvas) return;
+  const hr = hitRects.find((r) => r.n === n);
+  if (!hr) return;
+  const rect = canvas.getBoundingClientRect();
+  // Room's screen-space rect under the current camera (hitRects are pre-camera).
+  const sx = camera.x + hr.x * camera.scale;
+  const sy = camera.y + hr.y * camera.scale;
+  const sw = hr.w * camera.scale;
+  const sh = hr.h * camera.scale;
+  const margin = 8;
+  const visible =
+    sx >= margin && sy >= margin &&
+    sx + sw <= rect.width - margin && sy + sh <= rect.height - margin;
+  if (visible) return;
+  // Center the room's middle, keeping scale.
+  const fx = hr.x + hr.w / 2;
+  const fy = hr.y + hr.h / 2;
+  camera.x = rect.width / 2 - fx * camera.scale;
+  camera.y = rect.height / 2 - fy * camera.scale;
+  render();
+}
+
 function resize() {
   if (!canvas) return;
   dpr = window.devicePixelRatio || 1;

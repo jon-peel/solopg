@@ -39,7 +39,7 @@ import {
   getLastWorldId,
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks } from "./panel.js";
-import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView } from "./dungeon-map.js";
+import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
   setWorld,
@@ -645,7 +645,28 @@ function onRoomClick(n) {
   if (!dungeonPoi) return;
   dungeonRoomN = n;
   setSelectedRoom(n);
+  centerOnRoom(n); // bring it into view if it landed off-screen (e.g. via stairs)
   renderRoomPanel(n);
+}
+
+// Keyboard for the Dungeon View: Esc leaves; [ / ] (and PageUp/PageDown) switch
+// levels. Ignored while typing in the room-note field, and inert outside the view.
+function onDungeonKey(e) {
+  if (!dungeonPoi) return;
+  const t = e.target;
+  if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+  if (e.key === "Escape") {
+    closeDungeonView();
+    return;
+  }
+  const last = dungeonPoi.detail.dungeon.levels.length - 1;
+  if (e.key === "]" || e.key === "PageDown") {
+    e.preventDefault();
+    if (dungeonLevelIndex < last) showDungeonLevel(dungeonLevelIndex + 1);
+  } else if (e.key === "[" || e.key === "PageUp") {
+    e.preventDefault();
+    if (dungeonLevelIndex > 0) showDungeonLevel(dungeonLevelIndex - 1);
+  }
 }
 
 // Take a stair: switch to the connected level and select the connected room.
@@ -1133,6 +1154,7 @@ function wire() {
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
   $("btn-dungeon-legend").addEventListener("click", onToggleLegend);
+  window.addEventListener("keydown", onDungeonKey);
 }
 
 let iconsOn = true;
