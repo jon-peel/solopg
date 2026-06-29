@@ -14,15 +14,13 @@ export function occupantSummary(occupant) {
   return "empty";
 }
 
-/** Append a timestamped-ish log line to the panel. */
+/**
+ * Record an app event. The on-screen event log was removed — events now go to
+ * the browser console only, keeping the panel uncluttered. Kept as a named
+ * export so every call site stays unchanged.
+ */
 export function logLine(text) {
-  const el = panel();
-  if (!el) return;
-  const line = document.createElement("div");
-  line.className = "log-line";
-  line.textContent = text;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
+  console.log(text);
 }
 
 /**
@@ -520,7 +518,10 @@ export function showWorld(world, opts = {}) {
   if (!el) return;
   el.innerHTML = "";
   if (!world) {
-    logLine("No world loaded. Create one to begin.");
+    const msg = document.createElement("div");
+    msg.className = "panel-empty";
+    msg.textContent = "No world loaded. Create one to begin.";
+    el.appendChild(msg);
     return;
   }
   const name = document.createElement("input");
@@ -539,7 +540,7 @@ export function showWorld(world, opts = {}) {
     });
   }
   el.appendChild(name);
-  // Fixed region for the selected-hex details (above the scrolling log).
+  // Fixed region for the selected-hex details.
   const sel = document.createElement("div");
   sel.id = "selection";
   el.appendChild(sel);
@@ -548,7 +549,14 @@ export function showWorld(world, opts = {}) {
   const gh = document.createElement("div");
   gh.id = "global-hooks";
   el.appendChild(gh);
-  logLine(`seed: ${world.seed}`);
-  logLine(`hex scale: ${world.hexScale} miles`);
-  logLine(`hexes: ${Object.keys(world.hexes).length}`);
+  // Static world-metadata footer (seed & scale are immutable per world, so it
+  // never goes stale). The old growing event log moved to the browser console.
+  const meta = document.createElement("div");
+  meta.className = "world-meta";
+  for (const line of [`Seed: ${world.seed}`, `Hex scale: ${world.hexScale} miles`]) {
+    const div = document.createElement("div");
+    div.textContent = line;
+    meta.appendChild(div);
+  }
+  el.appendChild(meta);
 }

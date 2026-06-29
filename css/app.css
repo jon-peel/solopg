@@ -443,6 +443,20 @@ button:hover {
   color: var(--muted);
 }
 
+/* Static world-metadata footer (replaces the old on-UI event log). */
+.world-meta {
+  margin-top: 0.6rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* Empty-state hint shown when no world is loaded. */
+.panel-empty {
+  color: var(--muted);
+}
+
 /* --- Right-click radial menu (Phase 7.1) ------------------------------- */
 #ring {
   position: absolute;
