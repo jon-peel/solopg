@@ -45,7 +45,7 @@ sunken idol. Same mechanism, new consts.
 ### Storage & back-compat (decided)
 - **Store the structured axis picks** on `poi.detail` (not the composed sentence); **compose prose at
   render** in `panel.js`. Matches the "render-time derived, not stored" rule used for art, and keeps
-  the data clean for later editing (Phase 8).
+  the data clean for later editing (Phase 7).
 - **No world-schema bump.** Stamp a `detailBuild` constant on generated detail and **self-heal on
   panel open** when missing/stale — exactly how dungeons self-heal via `DUNGEON_BUILD`. New POIs get
   detail at creation (`generatePoi`); pre-existing saved shrines/camps/landmarks backfill the first

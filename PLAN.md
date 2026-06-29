@@ -29,8 +29,8 @@ threat names its **menace** ("Threat: Bandits", tracked to its lair); threat/res
 **reward** (a patron + coin, or glory). Each hook reads with the target's base name, distance in **miles**,
 and tile **terrain** (no accuracy mechanic). A global always-visible **open-hooks list** (→ Target /
 ↩ Origin / Follow-the-clue) and **amber map markers** on every open target tie it together. New `world.hooks`
-(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — additional small oracles** (see the
-[catalog](#small-oracle-catalog-for-phase-7-selection)). **Schema v6. 182 `node --test` passing.** Work
+(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — QoL & customization** (editable/custom
+tables, map notes, themes). **Schema v6. 182 `node --test` passing.** Work
 merges to **`main`** via PR.
 
 ---
@@ -43,7 +43,7 @@ merges to **`main`** via PR.
 | **Persistence** | Browser **IndexedDB** (+ `localStorage` for prefs). **JSON export/import**. Fully offline. |
 | **Ruleset** | **System-agnostic OSR** — generic terms, no system-specific stat blocks. |
 | **Group play** | **Single GM screen**; solo uses the same screen. No backend/networking. |
-| **Tables** | **Data-driven** — content in JSON tables rolled by a generic engine. In-app editing is Phase 8. |
+| **Tables** | **Data-driven** — content in JSON tables rolled by a generic engine. In-app editing is Phase 7. |
 | **Dependencies** | **No npm runtime deps.** Node is **dev-only** (test runner + static server). |
 
 **Guiding principles:** vertical slices (each step is usable); engine vs. content separation;
@@ -127,10 +127,10 @@ graph TD
     P0[0 Foundation] --> P1[1 Single hex] --> P2[2 Hex map] --> P3[3 POIs + terrain rules]
     P3 --> P4[4 Dungeons] --> P5[5 Other POI detail]
     P2 --> P6[6 Hooks]
-    P3 --> P7[7 Small oracles]
-    P5 --> P8[8 QoL & customization]
-    P6 --> P8
-    P7 --> P8
+    P3 --> P8[8 Small oracles]
+    P5 --> P7[7 QoL & customization]
+    P6 --> P7
+    P8 --> P7
 ```
 
 ---
@@ -183,10 +183,10 @@ graph TD
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
-| 7 — Additional small oracles | ▶ **next** | see catalog below |
-| 8 — QoL & customization (editable tables, notes, themes) | ◻ later | — |
+| 7 — QoL & customization (editable tables, notes, themes) | ▶ **next** | — |
+| 8 — Additional small oracles | ◻ later | see catalog below |
 
-Phases 0→1→2→3→4→5 are a hard chain; 6/7 need only the map + POIs; 8 is polish. **Factions were
+Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. **Factions were
 deliberately deferred** out of Phase 3 (see backlog).
 
 **Phase 4 (done) — Dungeons:** a dungeon POI carries a terrain-biased theme (map glyph) and opens
@@ -218,11 +218,11 @@ future travel rules). Generation is a **manual "Generate hook"** at a town, plus
 list** (→ Target / ↩ Origin / Follow-the-clue) and **amber map markers** tie it together. Type-2 "distant
 powers" (roaming/region/news-propagation) stays deferred to the Factions phase. See
 [phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
-[small-oracle catalog](#small-oracle-catalog-for-phase-7-selection).
+[small-oracle catalog](#small-oracle-catalog-for-phase-8-selection).
 
 ---
 
-## Small-oracle catalog (for Phase 7 selection)
+## Small-oracle catalog (for Phase 8 selection)
 
 - **Solo core:** Yes/No fate oracle; random event / inspiration; plot/quest hook.
 - **World & travel:** weather; wilderness encounter; travel/journey events; region/realm;
@@ -246,7 +246,7 @@ powers" (roaming/region/news-propagation) stays deferred to the Factions phase. 
   refinement of tiles; optional 3rd terrain variant; an `svg-tile` authoring skill for consistency.
 - **POI indicator polish** — make the zoomed-out red dot a count, or recolour it.
 - **Misc** — allow a manual settlement on Water (currently disallowed); more terrain types.
-- **Phase 8 items** — user-editable/custom tables, map labels/notes, search, undo, themes,
+- **Phase 7 items** — user-editable/custom tables, map labels/notes, search, undo, themes,
   print/GM-screen view.
 
 ---

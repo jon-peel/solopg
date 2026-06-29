@@ -9,7 +9,7 @@ model, and the per-step sub-plans in [`docs/plans/`](./docs/plans).
 **Status:** Phases 0–6 complete — seeded hex map with terrain/settlements/POIs, multi-level
 **dungeons** (+ towers), terrain-aware **shrine/camp/landmark** detail, and **adventure hooks**
 (known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return). Next: Phase 7
-small oracles.
+QoL & customization.
 
 ## Running
 
