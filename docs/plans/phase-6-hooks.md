@@ -30,8 +30,9 @@ skins) give effectively endless combinations — the same approach as `feature-d
 > - **`hook-pattern` is now 8 kinds** (`data/hook-pattern.json`): the 5 patterns below **plus**
 >   opportunity / event / escort.
 > - **`hook-verb` shrank to 4 "site verbs"** (`data/hook-verb.json`): explore / threat / rescue /
->   warning. It is **rolled only for `known` and `distant`** hooks; `map` forces *explore*, `return`
->   forces *return*, and the local/escort kinds use the kind as their own verb.
+>   warning. It is **rolled for `known`, `distant` and `map`** hooks (a map's verb colours why you'd
+>   follow it — treasure to dig, a lair to clear, someone lost, a place to shun); `return` / `chain` /
+>   `escort` and the local kinds fix their own verb.
 > - **`verb` doubles as the claim-table selector** — every kind resolves a `hook-<verb>` flavour
 >   table (`hooks.js` `generateHook`), which is why `hook-return` / `hook-opportunity` / `hook-event`
 >   exist alongside the four site-verb tables.

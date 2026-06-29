@@ -17,9 +17,6 @@ import { axialToPixel, axialDistance, NEIGHBOR_DIRS } from "../core/hexgeo.js";
 // shape change.
 export const HOOK_BUILD = 1;
 
-// Verbs that carry a claim sub-table (hook-<verb>). Grows in 6.5.
-export const HOOK_VERBS = new Set(["explore", "threat"]);
-
 const COMPASS = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"];
 const BEARING_WORDS = {
   N: "north", S: "south", E: "east", W: "west",
@@ -339,7 +336,17 @@ export function hookDescription(hook, opts = {}) {
   } else if (hook.pattern === "escort") {
     line0 = `${hook.source}: carry ${hook.cargo} to ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "map") {
-    line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
+    // A found map charts a route to a place; the verb colours why you'd go. For a
+    // threat the subject is the menace and the place is its lair, so name the lair.
+    if (hook.verb === "threat") {
+      line0 = `${hook.source}: a map marks the lair of ${hook.subject.name} at ${hook.lair}, ${whither}.`;
+    } else if (hook.verb === "rescue") {
+      line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither} — where ${hook.claim}.`;
+    } else if (hook.verb === "warning") {
+      line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither} — but ${hook.claim}.`;
+    } else {
+      line0 = `${hook.source}: a map marks ${hook.subject.name}, ${whither}.`;
+    }
   } else if (hook.pattern === "return") {
     // A place the party knows, with a new development.
     line0 = `${hook.source}: ${hook.subject.name} ${hook.claim}, ${whither}.`;
