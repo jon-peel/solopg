@@ -21,6 +21,23 @@ distance) belong to the future Factions phase — see [Forward hooks](#forward-h
 A hook is a **resolution pattern** × a **verb**. Two small axes multiplied (plus terrain/subject
 skins) give effectively endless combinations — the same approach as `feature-detail.js`.
 
+> **As built (the design below didn't survive contact).** The two axes weren't truly orthogonal:
+> *opportunity*, *event* and *escort* each need their own structure (local target = origin; a
+> two-endpoint errand; a revealed corridor) rather than being a verb laid over any pattern. So they
+> were **promoted from verbs to kinds**, the axes collapsed, and the **compatibility map was never
+> built** — `app.js` just dispatches on kind, so an illegal combo can't arise.
+>
+> - **`hook-pattern` is now 8 kinds** (`data/hook-pattern.json`): the 5 patterns below **plus**
+>   opportunity / event / escort.
+> - **`hook-verb` shrank to 4 "site verbs"** (`data/hook-verb.json`): explore / threat / rescue /
+>   warning. It is **rolled only for `known` and `distant`** hooks; `map` forces *explore*, `return`
+>   forces *return*, and the local/escort kinds use the kind as their own verb.
+> - **`verb` doubles as the claim-table selector** — every kind resolves a `hook-<verb>` flavour
+>   table (`hooks.js` `generateHook`), which is why `hook-return` / `hook-opportunity` / `hook-event`
+>   exist alongside the four site-verb tables.
+>
+> The sections below are the original design intent, kept as the planning record.
+
 ### Axis A — resolution pattern (how the target tile comes to exist)
 | Pattern | Target | New tiles generated | Example |
 |---|---|---|---|
@@ -165,8 +182,8 @@ mechanic everything else leans on. Breadth (6.5) deliberately late, when the str
 bearing/distance and the Map corridor; `buildMenu`/panel patterns.
 
 ## Tests (`node --test`, pure logic only)
-- `generateHook` returns a well-formed hook for each pattern; values come from the loaded tables;
-  the **verb×pattern compatibility map** never emits an illegal combo.
+- `generateHook` returns a well-formed hook for each pattern; values come from the loaded tables; a
+  site verb draws its claim from the matching `hook-<verb>` table.
 - **Determinism** — same world+seed → identical hook (target, picks).
 - **Forced trigger** — a specific trigger is honoured (`Read map` → Map pattern).
 - **Lazy target generation** — Distant/Map place exactly **one** target hex (Map: + corridor),
