@@ -1,7 +1,7 @@
 {
   "id": "landmark-hook",
   "title": "Landmark hook",
-  "_note": "An optional rumour/secret seed (appears ~half the time) — a light bridge toward Phases 6 (rumors) and 7 (oracles). Full sentences with their own terminal punctuation.",
+  "_note": "An optional rumour/secret seed (appears ~half the time) — a light bridge toward the Hooks and small-oracle phases. Full sentences with their own terminal punctuation.",
   "entries": [
     { "weight": 1, "value": "Locals leave offerings at its foot and won't say why." },
     { "weight": 1, "value": "They say it marks where something lies buried." },

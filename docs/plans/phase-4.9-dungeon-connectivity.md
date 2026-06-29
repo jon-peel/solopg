@@ -113,28 +113,18 @@ dungeon = {
 
 ---
 
-## Story / backstory — DEFERRED to Phase 6 (Rumors)
-A dungeon's **why** (history, resident villain/patron, goal) and **hooks** belong with rumors.
-**Confirmed:** keep all of this for Phase 6; 4.9 does structure + contents + record-keeping only.
-Factions-inside ties to the deferred **Factions** phase — keep occupants as families/labels for now.
-
-## Out of scope for 4.9 (backlog)
-Dungeon art/tiles; restocking-over-time; full faction machinery inside dungeons; printable PDF export.
-
 ## Status
-- 4.9.1 ✅ · 4.9.2 ✅ · 4.9.3 ✅ · 4.9.4 ✅ · 4.9.5 ✅ · 4.9.6 ✅ · 4.9.7 ✅ · 4.9.8 ✅
-  *(each step has its own `phase-4.9.N-*.md` sub-plan)*
-- **Planned follow-ups:**
-  - **4.9.9 — Cave doors + "Vast" size:** theme-aware door weights (caves lean to open passages,
-    few crafted doors; a stuck door in a cave reads as a cave-in); add a rare **Vast** size (5–6
-    levels) — very low roll-weight, always pickable from the Add-dungeon menu.
-  - **4.9.10 — Lighting (Tier A):** per-room `light`, almost always dark; small chance lit with a
-    theme-biased source + reason (candle, embers, torches, magical glow).
-  - **4.9.11 — Lighting (Tier B, occupied frontier):** a chance the dungeon is occupied — first few
-    rooms from an entrance are held + lit, a locked/secret door seals the dark monster-filled depths.
-  - **4.9.14 — Named-den signature bias ✅:** eponymous dens (Goblin warren, Kobold tunnels,
-    Ghoul warren, Ogre lair, Spider nest, Troglodyte caves) carry a `signature` member that gets a
-    depth-decaying weight boost (×4 level 1, ×2 level 2, ×1 deeper), so a named den opens with its
-    namesake while deeper levels keep the emergent spread + escalation. Generic dens (Ruin, tombs,
-    caves…) are untouched.
-- **Deferred:** monster stat detail (out of scope — system-agnostic).
+**4.9.1 – 4.9.14 ✅ done** — each step has its own `phase-4.9.N-*.md` sub-plan. Highlights of the
+later steps:
+- **4.9.9 — Cave doors + "Vast" size:** theme-aware door weights (caves lean to open passages, few
+  crafted doors; a stuck door in a cave reads as a cave-in); a rare **Vast** size (5–6 levels), very
+  low roll-weight but always pickable from the Add-dungeon menu.
+- **4.9.10 — Lighting (Tier A):** per-room `light`, almost always dark; small chance lit with a
+  theme-biased source + reason (candle, embers, torches, magical glow).
+- **4.9.11 — Lighting (Tier B, occupied frontier):** an occupied dungeon — the first few rooms from
+  an entrance are held + lit, a locked/secret door sealing the dark monster-filled depths.
+- **4.9.12 — Tiered monster roster + dens** and **4.9.13 — depth/difficulty scaling.**
+- **4.9.14 — Named-den signature bias:** eponymous dens (Goblin warren, Kobold tunnels, Ghoul warren,
+  Ogre lair, Spider nest, Troglodyte caves) carry a `signature` member with a depth-decaying weight
+  boost (×4 level 1, ×2 level 2, ×1 deeper), so a named den opens with its namesake while deeper
+  levels keep the emergent spread + escalation. Generic dens (Ruin, tombs, caves…) are untouched.

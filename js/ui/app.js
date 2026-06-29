@@ -884,10 +884,12 @@ async function onGenerateHook(opts = {}) {
       const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
       if (!spot) return logLine("No open ground nearby for that hook.");
       if (pattern === "map") {
+        // The map charts a route to a place; the verb (rolled) colours why you'd
+        // go — treasure to dig, a lair to clear, someone lost, a place to shun.
         const { subject, path } = buildMapTargetAndPath(tables, origin, spot);
         hook = generateHook(tables, rng, {
           subjects: [subject], origin, index: n, pattern: "map",
-          distance: spot.distance, verb: "explore", path, source: opts.source,
+          distance: spot.distance, path, source: opts.source,
         });
       } else {
         const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);

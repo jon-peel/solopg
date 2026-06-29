@@ -203,6 +203,63 @@ test("a map hook carries pattern, a path, and a charted-route description", () =
   assert.match(lines[0], /^A map found below: a map marks Tomb, 24 miles to the /);
 });
 
+test("a map hook rolls a site verb (not always explore) and stays place-named", () => {
+  const t = tables();
+  const verbs = valuesOf(t.get("hook-verb"));
+  const origin = { q: 0, r: 0 };
+  const seen = new Set();
+  for (let s = 0; s < 60; s++) {
+    const subject = { poiId: "poi:0", name: "Forgotten tomb", type: "dungeon", q: 0, r: 4, occupant: { kind: "none" } };
+    const path = axialLine(origin.q, origin.r, subject.q, subject.r);
+    const h = generateHook(t, mulberry32(s), {
+      subjects: [subject], origin, index: 0, pattern: "map", distance: 4, path,
+      source: "A map found below",
+    });
+    assert.equal(h.pattern, "map");
+    assert.ok(verbs.has(h.verb), `rolled verb ${h.verb} is a site verb`);
+    seen.add(h.verb);
+    // Whatever the verb, the prose still opens by marking a place on the map.
+    assert.ok(hookDescription(h)[0].startsWith("A map found below: a map marks "));
+  }
+  assert.ok(seen.size > 1, `map verb actually varies (saw ${[...seen].join(", ")})`);
+});
+
+test("a map-to-a-threat names the lair (the place), not the menace", () => {
+  const t = tables();
+  const origin = { q: 0, r: 0 };
+  const subject = { poiId: "poi:0", name: "Beast den", type: "dungeon", q: 0, r: 4, occupant: { kind: "lair", creature: "Goblins" } };
+  const path = axialLine(origin.q, origin.r, subject.q, subject.r);
+  const h = generateHook(t, mulberry32(3), {
+    subjects: [subject], origin, index: 0, pattern: "map", distance: 4, verb: "threat", path,
+    source: "A map found below",
+  });
+  assert.equal(h.verb, "threat");
+  assert.equal(h.subject.name, "Goblins"); // the menace
+  assert.equal(h.lair, "Beast den"); // the place it lairs
+  assert.match(hookDescription(h)[0], /^A map found below: a map marks the lair of Goblins at Beast den, 24 miles to the /);
+});
+
+test("a map-to-a-rescue/warning adds a why-clause from the verb's table", () => {
+  const t = tables();
+  const origin = { q: 0, r: 0 };
+  const subject = { poiId: "poi:0", name: "Sunken hall", type: "dungeon", q: 0, r: 4, occupant: { kind: "none" } };
+  const path = axialLine(origin.q, origin.r, subject.q, subject.r);
+  for (const [verb, joiner, tableId] of [
+    ["rescue", " — where ", "hook-rescue"],
+    ["warning", " — but ", "hook-warning"],
+  ]) {
+    const h = generateHook(t, mulberry32(5), {
+      subjects: [subject], origin, index: 0, pattern: "map", distance: 4, verb, path,
+      source: "A map found below",
+    });
+    assert.equal(h.verb, verb);
+    const line = hookDescription(h)[0];
+    assert.ok(line.includes("a map marks Sunken hall, "), line); // place still named
+    assert.ok(line.endsWith(`${joiner}${h.claim}.`), `${verb}: ${line}`);
+    assert.ok(valuesOf(t.get(tableId)).has(h.claim));
+  }
+});
+
 test("a non-map hook has no path field", () => {
   const subject = { poiId: "poi:0", name: "Ruin", type: "dungeon", q: 0, r: 3, occupant: { kind: "none" } };
   const h = generateHook(tables(), mulberry32(2), { subjects: [subject], origin: { q: 0, r: 0 }, index: 0 });

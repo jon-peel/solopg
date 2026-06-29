@@ -280,7 +280,7 @@ function renderHooksSection(sel, model) {
   sel.appendChild(actions);
 }
 
-// One hook's card: name + status, its prose (rumour + GM accuracy), and a row of
+// One hook's card: name + status, its prose, and a row of
 // actions including jumps to the target and back to the origin.
 function hookCard(hook, model) {
   const status = hook.status || "open";

@@ -9,7 +9,7 @@ remembers the evolving map.
 > [Roadmap & status](#roadmap--status)). Completed work is recorded in
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
-**Status (current):** Phases 0–5 complete. Phase 4 delivered the full dungeon arc (base interiors +
+**Status (current):** Phases 0–6 complete. Phase 4 delivered the full dungeon arc (base interiors +
 Dungeon View; themed/explorable 4.5–4.8 arc; the 4.9.1–4.9.14 depth-&-connectivity sub-project —
 sizes, room-graphs + loops, doors/secret doors, inter-level + vertical stairs, multiple
 entrances/exits, rich room contents, exploration state + GM notes, lighting + occupied frontier,
@@ -18,8 +18,7 @@ signatures). **Phase 5 detailed the other POI types** (see
 [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md)): a shared, terrain-aware **Tier-1
 description engine** for **shrine / camp / landmark** (`js/gen/feature-detail.js`), and **towers** as
 a **Tier-2 mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View with an `orientation:"up"`
-flag — floors that climb, a garrison from the POI's occupant, and the master on top. The standalone
-`lair` POI type was retired (folded into dungeon den themes). **Phase 6 — Hooks complete** (Type-1 local
+flag — floors that climb, a garrison from the POI's occupant, and the master on top. **Phase 6 — Hooks complete** (Type-1 local
 adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)): a manual **"Generate hook"** at a
 town (plus **"Read map"** / **"Follow a trail"** anywhere) produces a hook of one of several **kinds** —
 **known**, **distant** (lazy target-tile generation), **map** (a revealed corridor), **chain**
@@ -27,10 +26,10 @@ town (plus **"Read map"** / **"Follow a trail"** anywhere) produces a hook of on
 **return** (a development at a known place) — across the verbs explore / threat / rescue / warning. A
 threat names its **menace** ("Threat: Bandits", tracked to its lair); threat/rescue/escort carry a
 **reward** (a patron + coin, or glory). Each hook reads with the target's base name, distance in **miles**,
-and tile **terrain** (no accuracy mechanic). A global always-visible **open-hooks list** (→ Target /
+and tile **terrain**. A global always-visible **open-hooks list** (→ Target /
 ↩ Origin / Follow-the-clue) and **amber map markers** on every open target tie it together. New `world.hooks`
-(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — additional small oracles** (see the
-[catalog](#small-oracle-catalog-for-phase-7-selection)). **Schema v6. 182 `node --test` passing.** Work
+(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — QoL & customization** (editable/custom
+tables, map notes, themes). **Schema v6. 185 `node --test` passing.** Work
 merges to **`main`** via PR.
 
 ---
@@ -43,7 +42,7 @@ merges to **`main`** via PR.
 | **Persistence** | Browser **IndexedDB** (+ `localStorage` for prefs). **JSON export/import**. Fully offline. |
 | **Ruleset** | **System-agnostic OSR** — generic terms, no system-specific stat blocks. |
 | **Group play** | **Single GM screen**; solo uses the same screen. No backend/networking. |
-| **Tables** | **Data-driven** — content in JSON tables rolled by a generic engine. In-app editing is Phase 8. |
+| **Tables** | **Data-driven** — content in JSON tables rolled by a generic engine. In-app editing is Phase 7. |
 | **Dependencies** | **No npm runtime deps.** Node is **dev-only** (test runner + static server). |
 
 **Guiding principles:** vertical slices (each step is usable); engine vs. content separation;
@@ -64,7 +63,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **5**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **6**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
@@ -127,10 +126,10 @@ graph TD
     P0[0 Foundation] --> P1[1 Single hex] --> P2[2 Hex map] --> P3[3 POIs + terrain rules]
     P3 --> P4[4 Dungeons] --> P5[5 Other POI detail]
     P2 --> P6[6 Hooks]
-    P3 --> P7[7 Small oracles]
-    P5 --> P8[8 QoL & customization]
-    P6 --> P8
-    P7 --> P8
+    P3 --> P8[8 Small oracles]
+    P5 --> P7[7 QoL & customization]
+    P6 --> P7
+    P8 --> P7
 ```
 
 ---
@@ -144,7 +143,7 @@ graph TD
   bearing, distance, targetTerrain, claim, source, status }` plus per-kind fields — `chain:{total,step,prize}`,
   `path:[{q,r}]` (map corridor), `lair` (threat), `cargo` + `reward:{patron,amount}|{glory}` (escort/bounty).
   `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
-  Prose composed at render (`hookName`/`hookDescription`); no accuracy/"directions off" mechanic.
+  Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
   `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen }`.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
@@ -158,9 +157,8 @@ graph TD
   composed at render. All interiors/features self-heal from a build stamp (no schema bump). Auto-gen
   places ≤1 POI; users add/remove more.
 - **Terrains:** Forest, Plains, Hills, Mountains, Swamp, Desert, Water. **POI types:** dungeon,
-  shrine, camp, landmark, tower. The explorable types **ruin/cave/mine — and creature lairs —
-  merged into `dungeon` as themes** (Ruin, Cave complex, Abandoned mine, Beast den, Ogre lair, …).
-  The standalone `lair` POI type was retired in Phase 5.1 (a creature lair is now a dungeon den).
+  shrine, camp, landmark, tower. The explorable types **ruin/cave/mine — and creature lairs — are
+  `dungeon` themes** (Ruin, Cave complex, Abandoned mine, Beast den, Ogre lair, …).
 
 ### Canonical table schema
 ```json
@@ -183,11 +181,11 @@ graph TD
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
-| 7 — Additional small oracles | ▶ **next** | see catalog below |
-| 8 — QoL & customization (editable tables, notes, themes) | ◻ later | — |
+| 7 — QoL & customization (editable tables, notes, themes) | ▶ **next** | — |
+| 8 — Additional small oracles | ◻ later | see catalog below |
 
-Phases 0→1→2→3→4→5 are a hard chain; 6/7 need only the map + POIs; 8 is polish. **Factions were
-deliberately deferred** out of Phase 3 (see backlog).
+Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a
+dedicated future phase (see backlog).
 
 **Phase 4 (done) — Dungeons:** a dungeon POI carries a terrain-biased theme (map glyph) and opens
 into a multi-level **Dungeon View** — per-level room-graph maps with loops, doors/secret doors,
@@ -203,8 +201,8 @@ pure engine (`js/gen/feature-detail.js`); picks are stored on `poi.detail.featur
 at render, and a `FEATURE_BUILD` stamp self-heals older saves on open (no schema bump). **Tier 2** —
 `tower` opens into a **mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View and layout
 engine with an `orientation:"up"` flag: a stack of narrow floors that climb (index 0 = ground/entrance,
-master on top), garrisoned by the POI's occupant (held = lit, empty = dark). `lair` retired (a creature
-lair is now a dungeon den). See [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md).
+master on top), garrisoned by the POI's occupant (held = lit, empty = dark). See
+[phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md).
 
 **Phase 6 (done) — Hooks** (renamed from "Rumors"): Type-1 **local adventure hooks** — a **kind**
 (Known / Distant / Map / Chain / Return, plus local Opportunity / Event and two-endpoint Escort) × a
@@ -212,17 +210,16 @@ lair is now a dungeon den). See [phase-5-poi-detail.md](docs/plans/phase-5-poi-d
 signature mechanic is **lazy target-tile generation** (point at a tile that doesn't exist yet → generate
 just that tile; Map also reveals a corridor). A **threat** names its menace (tracked to its lair) and
 threat/rescue/escort carry a **reward** (patron + coin, or glory). A hook reads with the target's base
-name, distance in **miles**, and tile **terrain** — **no accuracy mechanic** (off-ness is GM judgement +
-future travel rules). Generation is a **manual "Generate hook"** at a town, plus **"Read map"** /
+name, distance in **miles**, and tile **terrain**. Generation is a **manual "Generate hook"** at a town, plus **"Read map"** /
 **"Follow a trail"** anywhere; auto-generation waits on a future Travel feature. A global **open-hooks
 list** (→ Target / ↩ Origin / Follow-the-clue) and **amber map markers** tie it together. Type-2 "distant
-powers" (roaming/region/news-propagation) stays deferred to the Factions phase. See
+powers" (roaming/region/news-propagation) belong to the future Factions phase. See
 [phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
-[small-oracle catalog](#small-oracle-catalog-for-phase-7-selection).
+[small-oracle catalog](#small-oracle-catalog-for-phase-8-selection).
 
 ---
 
-## Small-oracle catalog (for Phase 7 selection)
+## Small-oracle catalog (for Phase 8 selection)
 
 - **Solo core:** Yes/No fate oracle; random event / inspiration; plot/quest hook.
 - **World & travel:** weather; wilderness encounter; travel/journey events; region/realm;
@@ -246,7 +243,7 @@ powers" (roaming/region/news-propagation) stays deferred to the Factions phase. 
   refinement of tiles; optional 3rd terrain variant; an `svg-tile` authoring skill for consistency.
 - **POI indicator polish** — make the zoomed-out red dot a count, or recolour it.
 - **Misc** — allow a manual settlement on Water (currently disallowed); more terrain types.
-- **Phase 8 items** — user-editable/custom tables, map labels/notes, search, undo, themes,
+- **Phase 7 items** — user-editable/custom tables, map labels/notes, search, undo, themes,
   print/GM-screen view.
 
 ---

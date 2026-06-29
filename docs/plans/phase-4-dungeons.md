@@ -114,7 +114,7 @@ attached to each level by `generateDungeon`. Tests: deterministic, one rect/room
 overlaps, every room reachable from the entrance (flood fill), single-room/empty edge cases. **101
 passing.** (4.8's renderer crops to the cell bounding box.)
 
-### 4.8 — Dungeon View UI ✅ built; ◻ pending manual browser verification
+### 4.8 — Dungeon View UI ✅ built
 `js/ui/dungeon-map.js`: fit-to-view canvas renderer (crops to the cell bounding box; rooms tinted by
 content, corridors, room numbers, entrance/selected highlight, click hit-testing). `index.html`:
 `#stage` wraps the hex `#map` + an overlay `#dungeon-view` (back button, title, level switcher,
@@ -123,6 +123,5 @@ POI generates the interior (lazy) then `openDungeonView`; level switcher; `onRoo
 `renderDungeonPanel` (panel.js) shows the room's contents; back-to-world; world-switch closes it.
 Headless smoke-tested (render + click hit-testing); browser checklist handed to the user.
 
-## Deferred / backlog
-- Choose-theme on manual add; per-level reroll; richer room dressing; dungeon-specific art; tower as
-  a dungeon theme; merging shrine.
+> Phase 4 was extended by the **4.9 depth-&-connectivity sub-project** — see
+> [phase-4.9-dungeon-connectivity.md](phase-4.9-dungeon-connectivity.md).
