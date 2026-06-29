@@ -19,9 +19,19 @@ signatures). **Phase 5 detailed the other POI types** (see
 description engine** for **shrine / camp / landmark** (`js/gen/feature-detail.js`), and **towers** as
 a **Tier-2 mapped interior** (`js/gen/tower.js`) that reuses the Dungeon View with an `orientation:"up"`
 flag — floors that climb, a garrison from the POI's occupant, and the master on top. The standalone
-`lair` POI type was retired (folded into dungeon den themes). **Schema v5. 149 `node --test` passing.**
-**Next: Phase 6 — Rumors** (needs only the map + POIs; see [Roadmap & status](#roadmap--status) and the
-[small-oracle catalog](#small-oracle-catalog-for-phase-7-selection)). Work merges to **`main`** via PR.
+`lair` POI type was retired (folded into dungeon den themes). **Phase 6 — Hooks complete** (Type-1 local
+adventure hooks; see [phase-6-hooks.md](docs/plans/phase-6-hooks.md)): a manual **"Generate hook"** at a
+town (plus **"Read map"** / **"Follow a trail"** anywhere) produces a hook of one of several **kinds** —
+**known**, **distant** (lazy target-tile generation), **map** (a revealed corridor), **chain**
+(a breadcrumb hunt to a named prize), local **opportunity** / **event**, two-endpoint **escort**, and
+**return** (a development at a known place) — across the verbs explore / threat / rescue / warning. A
+threat names its **menace** ("Threat: Bandits", tracked to its lair); threat/rescue/escort carry a
+**reward** (a patron + coin, or glory). Each hook reads with the target's base name, distance in **miles**,
+and tile **terrain** (no accuracy mechanic). A global always-visible **open-hooks list** (→ Target /
+↩ Origin / Follow-the-clue) and **amber map markers** on every open target tie it together. New `world.hooks`
+(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — additional small oracles** (see the
+[catalog](#small-oracle-catalog-for-phase-7-selection)). **Schema v6. 182 `node --test` passing.** Work
+merges to **`main`** via PR.
 
 ---
 
@@ -65,7 +75,7 @@ YAGNI; everything persists.
   `assets/`; the renderer falls back to emoji until an image loads / if one is missing. POIs are
   emoji.
 - **Design / approval loop:** brainstorm → plan → **approve** → build → `node --test` → commit +
-  push to the branch (updates PR #1) → **present a manual test checklist for the user to run via
+  push to the branch (updates its PR) → **present a manual test checklist for the user to run via
   `./run-local.sh`** (see [How to run & test](#how-to-run--test)). **Visual changes are reviewed
   as files first** (a preview is sent for sign-off before art is wired in). One coherent step per
   commit.
@@ -82,27 +92,30 @@ package.json                    dev-only: "type":"module", scripts: test / serve
 /js
   /core   rng.js (mulberry32, hashString, makeRng, subRng, randInt, pick)
           dice.js (rollDice)   table.js (validateTable, rollTable)   loader.js (loadTables, makeResolver)
-          hexgeo.js (axial<->pixel, cube rounding, neighbors, axialKey/parseKey)
+          hexgeo.js (axial<->pixel, cube rounding, neighbors, axialDistance, axialLine, axialKey/parseKey)
   /gen    hex.js (generateHex, weightedTerrainTable)   poi.js (generatePoi)
           terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
           terrain-affinity.js (adjacency)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
-  /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex)
+          hooks.js (generateHook/startChain/buildChainStep/buildLocalHook/buildEscortHook, rollHookPattern,
+                    chooseDistantTarget, hookName/hookDescription, HOOK_BUILD — Phase 6 adventure hooks)
+  /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex; world.hooks)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
-  /ui     app.js (bootstrap/wiring; dungeon view toggle + lazy build)   map.js (canvas renderer + LOD)
-          panel.js (selection UI + dungeon/room view)   dungeon-map.js (dungeon canvas: camera, grid)
+  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks)   map.js (canvas renderer + LOD + hook markers)
+          panel.js (selection UI + dungeon/room view + global hooks list)   dungeon-map.js (dungeon canvas: camera, grid)
           terrain-style.js / terrain-art.js / poi-style.js (+ THEME_GLYPHS) / settlement-art.js
 /data     terrain, swamp-feature, settlement-size, poi-types, poi-occupant, creatures, occupiers,
           dungeon-{size,theme,room,trap,special,dressing,treasure,treasure-guard,monster-status,light},
           monster-families, dungeon-family,
           shrine-{form,dedication,condition,detail}, camp-{scale,reaction},
-          landmark-{feature,trait,hook}, tower-{kind,master} (JSON)
+          landmark-{feature,trait,hook}, tower-{kind,master},
+          hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites (rng, dice, table, world, hexgeo, hex, terrain-weight,
           terrain-profile, terrain-art, settlement-art, poi, migration, dungeon, dungeon-layout,
-          feature-detail, tower)
+          feature-detail, tower, hooks)
 /docs/plans  per-step sub-plans (this overview links them)
 ```
 
@@ -113,7 +126,7 @@ written into the World (`js/world`) → persisted to IndexedDB → rendered to c
 graph TD
     P0[0 Foundation] --> P1[1 Single hex] --> P2[2 Hex map] --> P3[3 POIs + terrain rules]
     P3 --> P4[4 Dungeons] --> P5[5 Other POI detail]
-    P2 --> P6[6 Rumors]
+    P2 --> P6[6 Hooks]
     P3 --> P7[7 Small oracles]
     P5 --> P8[8 QoL & customization]
     P6 --> P8
@@ -122,10 +135,16 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v5)
+## Current data model (as built, schema v6)
 
-- **World:** `{ schemaVersion:5, id, name, seed, hexScale, hexes:{}, createdAt, updatedAt }`
+- **World:** `{ schemaVersion:6, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
+- **Hook** (Phase 6; top-level `world.hooks[]`):
+  `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
+  bearing, distance, targetTerrain, claim, source, status }` plus per-kind fields — `chain:{total,step,prize}`,
+  `path:[{q,r}]` (map corridor), `lair` (threat), `cargo` + `reward:{patron,amount}|{glory}` (escort/bounty).
+  `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
+  Prose composed at render (`hookName`/`hookDescription`); no accuracy/"directions off" mechanic.
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
   `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen }`.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
@@ -163,8 +182,8 @@ graph TD
 | 3 — POIs + terrain-aware gen (+3.1–3.5 POIs/art/LOD) | ✅ done | [phases-0-3.md](docs/plans/phases-0-3.md) |
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
-| **6 — Rumors** | ▶ **next** | — |
-| 7 — Additional small oracles | ◻ later | see catalog below |
+| **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
+| 7 — Additional small oracles | ▶ **next** | see catalog below |
 | 8 — QoL & customization (editable tables, notes, themes) | ◻ later | — |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/7 need only the map + POIs; 8 is polish. **Factions were
@@ -187,11 +206,19 @@ engine with an `orientation:"up"` flag: a stack of narrow floors that climb (ind
 master on top), garrisoned by the POI's occupant (held = lit, empty = dark). `lair` retired (a creature
 lair is now a dungeon den). See [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md).
 
-**Phase 6 (next) — Rumors:** not yet planned. Needs only the map + POIs (no Phase 5 dependency). Follow
-the design loop (brainstorm → plan → **approve** → build): write `docs/plans/phase-6-rumors.md` first.
-A natural fit with what's already generated — settlements, POIs (incl. the new shrine/camp/landmark
-hooks and dungeon contents) — as the subjects rumors point at. The landmark `hook` axis already seeds
-this. See the [small-oracle catalog](#small-oracle-catalog-for-phase-7-selection) for adjacent oracles.
+**Phase 6 (done) — Hooks** (renamed from "Rumors"): Type-1 **local adventure hooks** — a **kind**
+(Known / Distant / Map / Chain / Return, plus local Opportunity / Event and two-endpoint Escort) × a
+**verb** (explore / threat / rescue / warning), pointing at an existing or freshly-generated hex/POI. The
+signature mechanic is **lazy target-tile generation** (point at a tile that doesn't exist yet → generate
+just that tile; Map also reveals a corridor). A **threat** names its menace (tracked to its lair) and
+threat/rescue/escort carry a **reward** (patron + coin, or glory). A hook reads with the target's base
+name, distance in **miles**, and tile **terrain** — **no accuracy mechanic** (off-ness is GM judgement +
+future travel rules). Generation is a **manual "Generate hook"** at a town, plus **"Read map"** /
+**"Follow a trail"** anywhere; auto-generation waits on a future Travel feature. A global **open-hooks
+list** (→ Target / ↩ Origin / Follow-the-clue) and **amber map markers** tie it together. Type-2 "distant
+powers" (roaming/region/news-propagation) stays deferred to the Factions phase. See
+[phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
+[small-oracle catalog](#small-oracle-catalog-for-phase-7-selection).
 
 ---
 

@@ -1,0 +1,13 @@
+{
+  "id": "hook-rescue",
+  "title": "Rescue / missing claim (reads \"<claim> at <site>\")",
+  "entries": [
+    { "value": "a traveller went missing" },
+    { "value": "kin were lost and never found" },
+    { "value": "a whole patrol vanished" },
+    { "value": "a child wandered off and didn't return" },
+    { "value": "a scholar disappeared while poking about" },
+    { "value": "a merchant and their guards never came back" },
+    { "value": "captives are said to be held" }
+  ]
+}

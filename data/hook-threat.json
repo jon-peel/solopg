@@ -1,0 +1,13 @@
+{
+  "id": "hook-threat",
+  "title": "Threat claim (reads \"<menace> <claim>\")",
+  "entries": [
+    { "value": "have been raiding the roads" },
+    { "value": "prey on travellers who pass" },
+    { "value": "demand tribute from passing trade" },
+    { "value": "raid the outlying farms by night" },
+    { "value": "have grown bold and bloody-handed" },
+    { "value": "have been carrying folk off" },
+    { "value": "choke the trade road with fear" }
+  ]
+}

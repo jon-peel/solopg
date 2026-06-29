@@ -1,0 +1,12 @@
+{
+  "id": "hook-reward",
+  "title": "Reward on offer (reads \"<reward> from <patron>\")",
+  "entries": [
+    { "value": "a purse of silver" },
+    { "value": "a fair bounty in coin" },
+    { "value": "a heavy purse of gold" },
+    { "value": "a small fortune" },
+    { "value": "a modest reward" },
+    { "value": "land and title, if it's done" }
+  ]
+}

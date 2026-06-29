@@ -1,0 +1,10 @@
+{
+  "id": "hook-verb",
+  "title": "Site-hook verb (what a known/distant hook is about)",
+  "entries": [
+    { "weight": 3, "value": "explore" },
+    { "weight": 3, "value": "threat" },
+    { "weight": 2, "value": "rescue" },
+    { "weight": 2, "value": "warning" }
+  ]
+}

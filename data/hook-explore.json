@@ -1,0 +1,13 @@
+{
+  "id": "hook-explore",
+  "title": "Explore / treasure claim (reads after \"… where\")",
+  "entries": [
+    { "value": "a lost relic is said to lie hidden" },
+    { "value": "old coin and plate were buried and never recovered" },
+    { "value": "a sealed chamber has never been looted" },
+    { "value": "an ancient tomb has never been opened" },
+    { "value": "something valuable was left behind in a hasty flight" },
+    { "value": "a forgotten cache waits for a bold hand" },
+    { "value": "the last owner hid a fortune before they vanished" }
+  ]
+}

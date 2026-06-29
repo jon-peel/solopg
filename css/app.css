@@ -246,6 +246,41 @@ button:hover {
   margin-bottom: 0.25rem;
 }
 
+/* Hooks: one boxed rumour each; a resolved/ignored hook dims. */
+.hook {
+  margin-top: 0.3rem;
+  border: 1px solid var(--border, #2b3140);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+}
+
+.hook.resolved,
+.hook.ignored {
+  opacity: 0.55;
+  border-left-color: var(--muted);
+}
+
+.hook-status {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* Always-visible global hooks list. */
+.global-hooks {
+  margin: 0.5rem 0;
+  border-top: 1px solid var(--border, #2b3140);
+  padding-top: 0.4rem;
+}
+
+.global-hooks > summary {
+  cursor: pointer;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* Dungeon interior: stacked, expandable per-level disclosures. */
 .dungeon-level {
   margin-top: 0.3rem;

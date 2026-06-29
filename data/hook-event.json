@@ -1,0 +1,14 @@
+{
+  "id": "hook-event",
+  "title": "Local event (reads \"<claim> here\")",
+  "entries": [
+    { "value": "a travelling market sets up" },
+    { "value": "a harvest festival is held" },
+    { "value": "a holy day draws pilgrims" },
+    { "value": "a horse fair fills the square" },
+    { "value": "a wandering troupe performs" },
+    { "value": "the wedding of a local house is celebrated" },
+    { "value": "a public hanging draws a crowd" },
+    { "value": "a relic is paraded through the streets" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "hook-patron",
+  "title": "Who offers the reward",
+  "entries": [
+    { "value": "the town reeve" },
+    { "value": "the merchant guild" },
+    { "value": "the local lord" },
+    { "value": "a grieving family" },
+    { "value": "the temple" },
+    { "value": "a frightened landowner" },
+    { "value": "the village elders" },
+    { "value": "a wealthy victim" }
+  ]
+}

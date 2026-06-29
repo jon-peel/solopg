@@ -38,6 +38,7 @@ let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
 let iconsEnabled = true;
+let hookTargets = new Set(); // axial keys "q,r" of open-hook destinations
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -146,6 +147,8 @@ export function render() {
     } else if (simplified) {
       drawSimplifiedMarkers(c.x, c.y, hex);
     }
+    // Hook destinations get an amber ring (all zooms) + a flag in the detail tier.
+    if (hookTargets.has(axialKey(q, r))) drawHookMark(c.x, c.y, detail);
   }
 
   // 3. Selection highlight on top (works for empty or filled cells).
@@ -158,6 +161,12 @@ export function render() {
 /** Toggle terrain icons; re-renders. */
 export function setIconsEnabled(on) {
   iconsEnabled = !!on;
+  render();
+}
+
+/** Mark these axial keys ("q,r") as hook destinations; re-renders. */
+export function setHookMarks(keys) {
+  hookTargets = new Set(keys);
   render();
 }
 
@@ -247,6 +256,20 @@ function drawSimplifiedMarkers(cx, cy, hex) {
     ctx.lineWidth = HEX_SIZE * 0.05;
     ctx.strokeStyle = "rgba(255,255,255,0.9)";
     ctx.stroke();
+  }
+}
+
+// Hook destination: an amber hex ring (visible at every zoom) and, in the detail
+// tier, a flag badge in the free top-left corner.
+function drawHookMark(cx, cy, detail) {
+  strokeHex(cx, cy, "rgba(245,196,90,0.95)", 2.5);
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.44;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx - off, cy - off, "⚑", size, "#f5c45a");
   }
 }
 

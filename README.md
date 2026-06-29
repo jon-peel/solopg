@@ -3,22 +3,30 @@
 A browser-based **World Oracle** for OSR solo and small-group play — a procedural
 generation + record-keeping tool for hex-crawl worlds.
 
-See **[PLAN.md](./PLAN.md)** for the master plan: architecture, phased build order, and the
-catalog of oracle generators.
+See **[PLAN.md](./PLAN.md)** for the master plan: architecture, phased build order, the data
+model, and the per-step sub-plans in [`docs/plans/`](./docs/plans).
 
-## Running (Phase 0)
+**Status:** Phases 0–6 complete — seeded hex map with terrain/settlements/POIs, multi-level
+**dungeons** (+ towers), terrain-aware **shrine/camp/landmark** detail, and **adventure hooks**
+(known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return). Next: Phase 7
+small oracles.
 
-The app is vanilla ES modules with **no build step**, but it must be served over HTTP — it
-cannot run from `file://` (ES modules, `fetch`, and IndexedDB all need a real origin).
+## Running
+
+Vanilla ES modules, **no build step**, but it must be served over HTTP — it cannot run from
+`file://` (ES modules, `fetch` of `/data/*.json`, and IndexedDB all need a real origin).
 
 ```sh
-python3 -m http.server 8000   # or: npm run serve
-# then open http://localhost:8000
+./run-local.sh                # fetches the branch, runs node --test, serves on :8000
+# or, to just serve the working tree:
+python3 -m http.server 8000   # or: npm run serve  → open http://localhost:8000
 ```
 
-From the app: **New World** (names + saves it), **Roll test table** (rolls the sample terrain
-table), **Save**, **Export**/**Import** (JSON backup), **Delete**. Reload to confirm the world
-persists in IndexedDB.
+From the app: **New World**, click a hex to **place terrain / generate** it, add
+**settlements** and **POIs**, open a **dungeon/tower** to explore its mapped interior, and
+**Generate hook** / **Read map** / **Follow a trail** at a town to spin up adventure hooks
+(shown in the always-visible Hooks list). **Export/Import** is JSON backup; reload confirms the
+world persists in IndexedDB.
 
 ## Tests
 

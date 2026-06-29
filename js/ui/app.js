@@ -3,7 +3,17 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, neighbors } from "../core/hexgeo.js";
+import { axialKey, neighbors, axialLine } from "../core/hexgeo.js";
+import {
+  generateHook,
+  hookName,
+  rollHookPattern,
+  chooseDistantTarget,
+  startChain,
+  buildChainStep,
+  buildLocalHook,
+  buildEscortHook,
+} from "../gen/hooks.js";
 import {
   createWorld,
   addHex,
@@ -28,7 +38,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks } from "./panel.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView } from "./dungeon-map.js";
 import {
   attachMap,
@@ -36,6 +46,7 @@ import {
   setSelected,
   recenterOn,
   setIconsEnabled,
+  setHookMarks,
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
@@ -73,6 +84,30 @@ const HEX_TABLE_IDS = [
   "landmark-hook",
   "tower-kind",
   "tower-master",
+];
+
+// Tables the hook generator rolls on (loaded on demand when a hook is generated).
+// A Distant hook also needs the hex/POI tables to build its target tile, so
+// onGenerateHook loads HEX_TABLE_IDS alongside these.
+const HOOK_TABLE_IDS = [
+  "hook-pattern",
+  "hook-verb",
+  "hook-source",
+  "hook-explore",
+  "hook-threat",
+  "hook-rescue",
+  "hook-warning",
+  "hook-opportunity",
+  "hook-commodity",
+  "hook-event",
+  "hook-cargo",
+  "hook-recipient",
+  "hook-clue",
+  "hook-payoff",
+  "hook-patron",
+  "hook-reward",
+  "hook-return",
+  "creatures",
 ];
 
 let current = null; // the in-memory current world
@@ -145,6 +180,8 @@ async function setCurrent(world) {
     if (focus) recenterOn(focus.q, focus.r);
   }
   renderSelection();
+  refreshGlobalHooks();
+  refreshHookMarks();
   await refreshWorldList();
 }
 
@@ -266,6 +303,7 @@ function renderSelection() {
   if (!current || !selected) return renderSelectionPanel(null);
   const { q, r } = selected;
   const hex = getHex(current, q, r);
+  const settled = !!(hex && hex.placed && hex.settlement && hex.settlement.present);
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
@@ -274,6 +312,17 @@ function renderSelection() {
     selectedPoiId,
     poiTypes: Object.keys(POI_GLYPHS),
     dungeonSizes,
+    // The per-cell section is just the create buttons; the hook LIST is global
+    // (renderGlobalHooks). Town gossip ("Generate hook") is gated to a settlement.
+    hooksEnabled: true,
+    canGossip: settled,
+    onGenerateHook: () => onGenerateHook(),
+    onReadMap,
+    onStartChain,
+    onResolveHook,
+    onIgnoreHook,
+    onRemoveHook,
+    onGoToHook,
     onAddSettlement,
     onAddRandomSettlement,
     onRemoveSettlement,
@@ -658,10 +707,294 @@ async function onRemovePoi(id) {
   await persistAndRefresh();
 }
 
+// --- hooks (Phase 6) -------------------------------------------------------
+
+// Mark every OPEN hook's target on the map (skip local opportunity/event, whose
+// target is the town itself). Lets the GM find destinations at a glance.
+function refreshHookMarks() {
+  const keys = [];
+  for (const h of (current && current.hooks) || []) {
+    if ((h.status || "open") !== "open") continue;
+    if (h.pattern === "opportunity" || h.pattern === "event") continue;
+    if (h.target) keys.push(axialKey(h.target.q, h.target.r));
+  }
+  setHookMarks(keys);
+}
+
+// Refresh the always-visible global hooks list (open hooks reachable anywhere).
+function refreshGlobalHooks() {
+  renderGlobalHooks({
+    hooks: (current && current.hooks) || [],
+    hexScale: (current && current.hexScale) || 6,
+    onGoToHook,
+    onGoToHookOrigin,
+    onFollowClue,
+    onResolveHook,
+    onIgnoreHook,
+    onRemoveHook,
+  });
+}
+
+// Next free "hook:<n>" id across the whole world (hooks are world-level).
+function nextHookId(world) {
+  let max = -1;
+  for (const h of world.hooks || []) {
+    const m = /^hook:(\d+)$/.exec(h.id || "");
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+
+// A hook names a POI by its BASE name (the place), not its "— occupant" display
+// suffix: "Flooded cistern", not "Flooded cistern — Cultists". The occupant still
+// shows in the POI list / dungeon view; hooks just want the place.
+function poiBaseName(poi) {
+  if (poi.type === "dungeon" && poi.detail && poi.detail.theme) return poi.detail.theme;
+  return (poi.name || "").split(" — ")[0] || poi.name;
+}
+
+// Candidate subjects for a Known hook: every POI already placed on the map.
+function hookSubjects(world) {
+  const subs = [];
+  for (const hex of placedHexes(world)) {
+    for (const poi of hex.pois || []) {
+      subs.push({
+        poiId: poi.id,
+        name: poiBaseName(poi),
+        type: poi.type,
+        q: hex.coords.q,
+        r: hex.coords.r,
+        terrain: hex.terrain,
+        occupant: poi.occupant,
+      });
+    }
+  }
+  return subs;
+}
+
+// Build the lazily-generated target tile for a Distant hook: a normal placed hex
+// (random terrain; generated in isolation, so the route to it stays blank) that
+// carries a forced dungeon POI as the hook's subject. Marked unexplored.
+function buildDistantTargetHex(tables, q, r) {
+  const hexRng = subRng(current.seed, "hex", q, r, 0);
+  const hex = generateHex(tables, hexRng, {
+    key: axialKey(q, r),
+    coords: { q, r },
+    placed: true,
+    neighborTerrains: neighborTerrains(q, r),
+    seed: current.seed,
+    gen: 0,
+  });
+  hex.gen = 0;
+  hex.explored = false; // not yet visited; the intervening hexes are blank
+  hex.settlement = { present: false }; // a remote wilderness site
+  // Force the promised explorable (a dungeon) from its own sub-stream, replacing
+  // any auto-rolled POI so the hook reliably points at something.
+  const poiRng = subRng(current.seed, "hex", q, r, "poi", "hook");
+  const poi = generatePoi(tables, poiRng, { terrain: hex.terrain, index: 0, forceType: "dungeon" });
+  poi.id = "poi:0";
+  hex.pois = [poi];
+  return hex;
+}
+
+// A subject descriptor for the hook generator, from a placed hex's first POI.
+function subjectFromHex(hex, poi) {
+  return {
+    poiId: poi.id, name: poiBaseName(poi), type: poi.type,
+    q: hex.coords.q, r: hex.coords.r, terrain: hex.terrain, occupant: poi.occupant,
+  };
+}
+
+// Map pattern: place the target tile AND reveal the corridor of hexes from the
+// origin to it (the "found map" traces a route). Returns { subject, path }.
+function buildMapTargetAndPath(tables, origin, spot) {
+  const path = axialLine(origin.q, origin.r, spot.q, spot.r);
+  for (const cell of path) {
+    const isOrigin = cell.q === origin.q && cell.r === origin.r;
+    const isTarget = cell.q === spot.q && cell.r === spot.r;
+    if (isOrigin || isTarget) continue; // origin already exists; target built below
+    if (hasHexAt(current, cell.q, cell.r)) continue; // don't clobber existing terrain
+    addHex(current, buildRandomHex(tables, cell.q, cell.r, 0)); // a revealed route hex
+  }
+  const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+  addHex(current, targetHex);
+  return { subject: subjectFromHex(targetHex, targetHex.pois[0]), path };
+}
+
+const HOOK_NOTE = {
+  distant: " (distant — a new site appeared on the map)",
+  map: " (map — a route was revealed to a new site)",
+  chain: " (chain — follow the clues to the prize)",
+  opportunity: " (a standing offer in town)",
+  event: " (a local happening)",
+  escort: " (a delivery — a destination appeared on the map)",
+  return: " (a development at a known site)",
+  known: "",
+};
+
+// Generate a hook at the selected settlement. `opts.forcePattern` (e.g. the "Read
+// map" button forcing "map") skips the pattern roll; `opts.source` overrides the
+// rolled source for a triggered hook.
+async function onGenerateHook(opts = {}) {
+  // The origin is wherever the GM is looking. A hook — especially a read map —
+  // can be made from any selected cell, placed or not.
+  if (!current || !selected) return;
+  try {
+    // Distant/Map hooks build new tiles, so load the hex/POI tables too.
+    const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));
+    if (!Array.isArray(current.hooks)) current.hooks = [];
+    const n = nextHookId(current);
+    const origin = { q: selected.q, r: selected.r };
+    const rng = subRng(current.seed, "hook", origin.q, origin.r, n);
+
+    const subjects = hookSubjects(current);
+    const pattern = opts.forcePattern || rollHookPattern(tables, rng, subjects.length > 0);
+
+    let hook;
+    if (pattern === "opportunity" || pattern === "event") {
+      // Local hooks happen in town — no target tile, no pattern geometry.
+      hook = buildLocalHook(tables, rng, { kind: pattern, origin, index: n, source: opts.source });
+    } else if (pattern === "escort") {
+      // A delivery to a generated destination (a place to deliver to, left blank
+      // of any forced contents — the recipient is the flavour).
+      const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
+      if (!spot) return logLine("No open ground nearby for an errand.");
+      const destHex = buildRandomHex(tables, spot.q, spot.r, 0);
+      destHex.explored = false;
+      addHex(current, destHex);
+      hook = buildEscortHook(tables, rng, {
+        origin, index: n, source: opts.source,
+        destination: { q: spot.q, r: spot.r },
+        terrain: destHex.terrain,
+      });
+    } else if (pattern === "chain") {
+      const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
+      if (!spot) return logLine("No open ground nearby to lay a trail.");
+      const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+      addHex(current, targetHex);
+      const subject = subjectFromHex(targetHex, targetHex.pois[0]);
+      hook = startChain(tables, rng, {
+        origin, index: n,
+        target: { q: spot.q, r: spot.r, poiId: subject.poiId },
+        subject: { poiId: subject.poiId, name: subject.name, type: subject.type },
+        terrain: subject.terrain,
+        source: opts.source,
+      });
+    } else if (pattern === "map" || pattern === "distant") {
+      const spot = chooseDistantTarget(rng, origin, (q, r) => hasHexAt(current, q, r));
+      if (!spot) return logLine("No open ground nearby for that hook.");
+      if (pattern === "map") {
+        const { subject, path } = buildMapTargetAndPath(tables, origin, spot);
+        hook = generateHook(tables, rng, {
+          subjects: [subject], origin, index: n, pattern: "map",
+          distance: spot.distance, verb: "explore", path, source: opts.source,
+        });
+      } else {
+        const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+        addHex(current, targetHex);
+        hook = generateHook(tables, rng, {
+          subjects: [subjectFromHex(targetHex, targetHex.pois[0])],
+          origin, index: n, pattern: "distant", distance: spot.distance,
+        });
+      }
+    } else if (pattern === "return") {
+      // A development at an existing on-map POI (rollHookPattern guarantees subjects).
+      hook = generateHook(tables, rng, { subjects, origin, index: n, pattern: "return", verb: "return" });
+    } else {
+      hook = generateHook(tables, rng, { subjects, origin, index: n });
+    }
+
+    if (!hook) return logLine("Nothing to gossip about here.");
+    current.hooks.push(hook);
+    await persistAndRefresh();
+    logLine(`New hook — ${hookName(hook)}${HOOK_NOTE[hook.pattern] || ""}.`);
+  } catch (err) {
+    logLine(`Generate hook error: ${err.message}`);
+  }
+}
+
+// "Read map": the party reads a found map → a Map hook (from any selected cell).
+const onReadMap = () => onGenerateHook({ forcePattern: "map", source: "A map found below" });
+// "Follow a trail": the party finds a riddle/clue here → start a chain anywhere.
+const onStartChain = () => onGenerateHook({ forcePattern: "chain", source: "A riddle found here" });
+
+// Toggle a hook's status (clicking the same status again clears it back to open).
+async function setHookStatus(id, status) {
+  if (!current) return;
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h) return;
+  h.status = h.status === status ? "open" : status;
+  await persistAndRefresh();
+}
+const onResolveHook = (id) => setHookStatus(id, "resolved");
+const onIgnoreHook = (id) => setHookStatus(id, "ignored");
+
+async function onRemoveHook(id) {
+  if (!current) return;
+  current.hooks = (current.hooks || []).filter((x) => x.id !== id);
+  await persistAndRefresh();
+}
+
+// Jump the map to a hook's TRUE target (the GM sees through an off-by-one error).
+function onGoToHook(id) {
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h || !h.target) return;
+  selectCell(h.target.q, h.target.r);
+  recenterOn(h.target.q, h.target.r);
+}
+
+// Jump back to where a hook was heard / where the party reports in (its origin).
+function onGoToHookOrigin(id) {
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h || !h.origin) return;
+  selectCell(h.origin.q, h.origin.r);
+  recenterOn(h.origin.q, h.origin.r);
+}
+
+// Advance a breadcrumb chain: generate the next site (winding on from where the
+// current clue was found) and move the hook to it. The prior site stays on the map.
+async function onFollowClue(id) {
+  if (!current) return;
+  const hook = (current.hooks || []).find((x) => x.id === id);
+  if (!hook || hook.pattern !== "chain") return;
+  if (hook.chain.step >= hook.chain.total) return; // already at the prize
+  try {
+    const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));
+    const m = /^hook:(\d+)$/.exec(hook.id || "");
+    const hookN = m ? Number(m[1]) : 0;
+    const nextStep = hook.chain.step + 1;
+    const rng = subRng(current.seed, "hook", hookN, "chain", nextStep);
+    const legOrigin = { q: hook.target.q, r: hook.target.r };
+    const spot = chooseDistantTarget(rng, legOrigin, (q, r) => hasHexAt(current, q, r));
+    if (!spot) return logLine("The trail goes cold — no open ground for the next clue.");
+    const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
+    addHex(current, targetHex);
+    const subj = subjectFromHex(targetHex, targetHex.pois[0]);
+    const fields = buildChainStep(tables, rng, {
+      legOrigin, target: { q: spot.q, r: spot.r, poiId: subj.poiId },
+      terrain: subj.terrain,
+    });
+    Object.assign(hook, fields, {
+      subject: { poiId: subj.poiId, name: subj.name, type: subj.type },
+      chain: { ...hook.chain, step: nextStep }, // keep total + prize
+    });
+    await persistAndRefresh();
+    logLine(
+      nextStep >= hook.chain.total
+        ? `The trail ends — the prize lies at ${subj.name}.`
+        : `The clue leads on to ${subj.name}.`,
+    );
+  } catch (err) {
+    logLine(`Follow clue error: ${err.message}`);
+  }
+}
+
 async function persistAndRefresh() {
   current = await saveWorld(current);
   setWorld(current);
+  refreshHookMarks();
   renderSelection();
+  refreshGlobalHooks();
 }
 
 // Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.

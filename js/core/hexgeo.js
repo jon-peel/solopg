@@ -88,3 +88,23 @@ export function hexCorners(cx, cy, s) {
 export function neighbors(q, r) {
   return NEIGHBOR_DIRS.map(([dq, dr]) => ({ q: q + dq, r: r + dr }));
 }
+
+/** Hex distance (cube metric) between two axial cells — the number of steps. */
+export function axialDistance(aq, ar, bq, br) {
+  return (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
+}
+
+/**
+ * The straight hex line from (aq,ar) to (bq,br), inclusive of both ends. Axial is
+ * a linear projection of cube, so we lerp the axial coords and cube-round each
+ * step. Returns N+1 cells where N is the hex distance.
+ */
+export function axialLine(aq, ar, bq, br) {
+  const N = axialDistance(aq, ar, bq, br);
+  const out = [];
+  for (let i = 0; i <= N; i++) {
+    const t = N === 0 ? 0 : i / N;
+    out.push(roundAxial(aq + (bq - aq) * t, ar + (br - ar) * t));
+  }
+  return out;
+}
