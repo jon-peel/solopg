@@ -301,47 +301,22 @@ function selectCell(q, r) {
   renderSelection();
 }
 
+// The panel is read-only now: it shows the selected cell's info and lets you
+// drill into / open a POI. All mutation runs through the radial menu
+// (radialDispatch), and the hooks list renders separately (refreshGlobalHooks).
 function renderSelection() {
   if (!current || !selected) return renderSelectionPanel(null);
   const { q, r } = selected;
   const hex = getHex(current, q, r);
-  const settled = !!(hex && hex.placed && hex.settlement && hex.settlement.present);
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
-    terrains: Object.keys(TERRAIN_COLORS),
-    settlementSizes: hex && hex.placed ? allowedSizes(hex.terrain) : [],
     selectedPoiId,
-    poiTypes: Object.keys(POI_GLYPHS),
-    dungeonSizes,
-    // The per-cell section is just the create buttons; the hook LIST is global
-    // (renderGlobalHooks). Town gossip ("Generate hook") is gated to a settlement.
-    hooksEnabled: true,
-    canGossip: settled,
-    onGenerateHook: () => onGenerateHook(),
-    onReadMap,
-    onStartChain,
-    onResolveHook,
-    onIgnoreHook,
-    onRemoveHook,
-    onGoToHook,
-    onAddSettlement,
-    onAddRandomSettlement,
-    onRemoveSettlement,
     onSelectPoi,
     onClearPoi: () => {
       selectedPoiId = null;
       renderSelection();
     },
-    onAddRandomPoi,
-    onAddPoi,
-    onAddDungeon,
-    onRemovePoi,
-    onGenerateRandom,
-    onPlaceTerrain,
-    onGenerateNeighbors,
-    onRegenerate,
-    onDelete: onDeleteHex,
   });
 }
 
@@ -1046,6 +1021,7 @@ function onContextMenu({ q, r, clientX, clientY }) {
     emptyNeighbors,
     poiTypes: Object.keys(POI_GLYPHS),
     terrains: Object.keys(TERRAIN_COLORS),
+    pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -1058,6 +1034,7 @@ function radialDispatch(id, value) {
     case "placeTerrain": return onPlaceTerrain(value);
     case "addRandomPoi": return onAddRandomPoi();
     case "addPoi": return onAddPoi(value);
+    case "removePoi": return onRemovePoi(value);
     case "addRandomSettlement": return onAddRandomSettlement();
     case "addSettlement": return onAddSettlement(value);
     case "removeSettlement": return onRemoveSettlement();

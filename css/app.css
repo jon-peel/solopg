@@ -457,6 +457,30 @@ button:hover {
   color: var(--muted);
 }
 
+/* Muted hint pointing at the right-click menu (panel is read-only now). */
+.panel-hint {
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Text-link "Back" out of a POI's detail (navigation, not an action button). */
+.link-back {
+  margin-top: 0.4rem;
+  padding: 0.15rem 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.link-back:hover {
+  text-decoration: underline;
+}
+
 /* --- Right-click radial menu (Phase 7.1) ------------------------------- */
 #ring {
   position: absolute;

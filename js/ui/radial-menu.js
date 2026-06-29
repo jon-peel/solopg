@@ -79,15 +79,17 @@ function guide(x, y, radius) {
 
 function nodeEl(item, x, y, size, cls) {
   const n = document.createElement("div");
+  const danger = item.id === "deleteHex" || item.id === "removePoi";
   n.className =
     "ring-node " + (cls || "") +
     (item.kind === "submenu" ? " submenu" : "") +
-    (item.id === "deleteHex" ? " danger" : "") +
+    (danger ? " danger" : "") +
     (item.enabled === false ? " disabled" : "");
   n.style.left = x + "px";
   n.style.top = y + "px";
   n.style.width = n.style.height = size + "px";
   if (item.enabled === false && item.reason) n.title = item.reason;
+  else if (item.title) n.title = item.title;
   n.innerHTML = `<span class="glyph">${item.glyph}</span><span class="label">${item.label}</span>`;
   return n;
 }

@@ -47,19 +47,16 @@ function actionButton(label, onClick) {
   return b;
 }
 
-/**
- * Render the selected tile's details + context actions into #selection.
- * @param {object} model
- *   { coord:{q,r}, hex|null, terrains:string[],
- *     onGenerateRandom, onPlaceTerrain(t), onGenerateNeighbors, onRegenerate, onDelete }
- */
-// POI list + add controls, or the drill-in detail of the selected POI.
+// POIs as a read-only/navigable list, or the drill-in detail of one POI.
+// Creating and removing POIs live on the right-click radial menu, so there are
+// no add/remove buttons here — clicking a row just inspects (and, for a
+// dungeon/tower, opens its mapped interior).
 function renderPoiSection(sel, hex, model) {
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
   const selectedPoi =
     model.selectedPoiId && pois.find((p) => p.id === model.selectedPoiId);
 
-  // Drill-in detail of one POI (type, occupant, flavor) + Back / Remove.
+  // Drill-in detail of one POI (type, occupant, flavor) + a Back link.
   if (selectedPoi) {
     const box = document.createElement("div");
     box.className = "poi-detail";
@@ -97,11 +94,11 @@ function renderPoiSection(sel, hex, model) {
         box.appendChild(div);
       }
     }
-    const row = document.createElement("div");
-    row.className = "tile-actions";
-    row.appendChild(actionButton("← Back", model.onClearPoi));
-    row.appendChild(actionButton("Remove", () => model.onRemovePoi(selectedPoi.id)));
-    box.appendChild(row);
+    const back = document.createElement("button");
+    back.className = "link-back";
+    back.textContent = "← Back to hex";
+    back.addEventListener("click", model.onClearPoi);
+    box.appendChild(back);
     sel.appendChild(box);
     return;
   }
@@ -126,13 +123,6 @@ function renderPoiSection(sel, hex, model) {
     none.textContent = "none";
     sel.appendChild(none);
   }
-
-  // Add controls: dungeons (with size choice) get their own menu beside Add POI.
-  const adders = document.createElement("div");
-  adders.className = "tile-actions";
-  adders.appendChild(addDungeonMenu(model));
-  adders.appendChild(addPoiMenu(model));
-  sel.appendChild(adders);
 }
 
 // Render a dungeon's interior into the POI drill-in box: a size/levels header,
@@ -179,103 +169,6 @@ function sectionLabel(text) {
   el.className = "section-label";
   el.textContent = text;
   return el;
-}
-
-// A native disclosure dropdown. `items` = [{ label, onClick }]; first item
-// (e.g. "Random") is kept at the top, the rest are shown in given order.
-function buildMenu(summaryText, items) {
-  const menu = document.createElement("details");
-  menu.className = "menu";
-  const summary = document.createElement("summary");
-  summary.textContent = summaryText;
-  menu.appendChild(summary);
-
-  const list = document.createElement("div");
-  list.className = "menu-list";
-  for (const { label, onClick, title } of items) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    if (title) b.title = title;
-    b.addEventListener("click", () => {
-      menu.open = false;
-      onClick();
-    });
-    list.appendChild(b);
-  }
-  menu.appendChild(list);
-  return menu;
-}
-
-// "Add POI" dropdown: Random, then types alphabetically. Dungeons have their own
-// menu (size choice), so they're excluded here — a "Random" POI can still be one.
-function addPoiMenu(model) {
-  const types = [...(model.poiTypes || [])].filter((t) => t !== "dungeon").sort();
-  return buildMenu("Add POI ▾", [
-    { label: "Random", onClick: model.onAddRandomPoi },
-    ...types.map((t) => ({ label: t, onClick: () => model.onAddPoi(t) })),
-  ]);
-}
-
-// "Add dungeon" dropdown: random size, then each named size with its level/room
-// counts spelled out (so the sizes are clearly different) + a flavor tooltip.
-function addDungeonMenu(model) {
-  const sizes = model.dungeonSizes || [];
-  const range = (r) => (r && r[0] === r[1] ? `${r[0]}` : `${r[0]}–${r[1]}`);
-  return buildMenu("Add dungeon ▾", [
-    { label: "Random size", onClick: () => model.onAddDungeon() },
-    ...sizes.map((s) => ({
-      label: `${s.size} — ${range(s.levels)} lvl, ${range(s.rooms)} rooms`,
-      title: s.blurb || "",
-      onClick: () => model.onAddDungeon(s.size),
-    })),
-  ]);
-}
-
-// Settlement section: current settlement + Remove, or an "Add settlement"
-// dropdown offering only the sizes the terrain allows (none on open water).
-function renderSettlementSection(sel, hex, model) {
-  sel.appendChild(sectionLabel("Settlement"));
-  if (hex.settlement && hex.settlement.present) {
-    const line = document.createElement("div");
-    line.className = "log-line";
-    line.textContent = hex.settlement.size;
-    sel.appendChild(line);
-    const actions = document.createElement("div");
-    actions.className = "tile-actions";
-    actions.appendChild(actionButton("Remove settlement", model.onRemoveSettlement));
-    sel.appendChild(actions);
-  } else if (model.settlementSizes && model.settlementSizes.length) {
-    sel.appendChild(
-      buildMenu("Add settlement ▾", [
-        { label: "Random", onClick: model.onAddRandomSettlement },
-        ...model.settlementSizes.map((s) => ({
-          label: s,
-          onClick: () => model.onAddSettlement(s),
-        })),
-      ]),
-    );
-  } else {
-    const none = document.createElement("div");
-    none.className = "log-line";
-    none.textContent = "none (terrain allows none)";
-    sel.appendChild(none);
-  }
-}
-
-// Per-cell Hooks section (Phase 6): just the create affordances. Town gossip
-// ("Generate hook") is heard in town; a found map can be read anywhere. The list
-// of existing hooks lives in the always-visible global section (renderGlobalHooks).
-function renderHooksSection(sel, model) {
-  if (!model.hooksEnabled) return;
-  sel.appendChild(sectionLabel("Hooks"));
-  const actions = document.createElement("div");
-  actions.className = "tile-actions";
-  if (model.canGossip) actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
-  actions.appendChild(actionButton("Read map", model.onReadMap));
-  // A found riddle/clue starts a breadcrumb chain — from any site.
-  actions.appendChild(actionButton("Follow a trail", model.onStartChain));
-  sel.appendChild(actions);
 }
 
 // One hook's card: name + status, its prose, and a row of
@@ -342,15 +235,9 @@ export function renderGlobalHooks(model) {
   host.appendChild(details);
 }
 
-// "Place terrain" dropdown for an empty cell: Random, then terrains alphabetically.
-function placeTerrainMenu(model) {
-  const terrains = [...(model.terrains || [])].sort();
-  return buildMenu("Place terrain ▾", [
-    { label: "Random", onClick: model.onGenerateRandom },
-    ...terrains.map((t) => ({ label: t, onClick: () => model.onPlaceTerrain(t) })),
-  ]);
-}
-
+// Read-only info for the selected cell: terrain, settlement, and POIs. Every
+// action (place/generate/regenerate/delete, settlements, POIs, hooks) lives on
+// the right-click radial menu — the panel is just for seeing what's here.
 export function renderSelectionPanel(model) {
   const sel = document.getElementById("selection");
   if (!sel) return;
@@ -369,24 +256,23 @@ export function renderSelectionPanel(model) {
       div.textContent = line;
       sel.appendChild(div);
     }
-    renderSettlementSection(sel, hex, model);
+    // Settlement as a plain info line (controls are on the radial menu).
+    if (hex.settlement && hex.settlement.present) {
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.textContent = `Settlement: ${hex.settlement.size}`;
+      sel.appendChild(div);
+    }
     renderPoiSection(sel, hex, model);
   }
 
-  // Hooks (incl. "Read map") are available on any selected cell, placed or empty.
-  renderHooksSection(sel, model);
-
-  if (hex) {
-    sel.appendChild(sectionLabel("Hex"));
-    const actions = document.createElement("div");
-    actions.className = "tile-actions";
-    actions.appendChild(actionButton("Generate neighbors", model.onGenerateNeighbors));
-    actions.appendChild(actionButton("Regenerate", model.onRegenerate));
-    actions.appendChild(actionButton("Delete", model.onDelete));
-    sel.appendChild(actions);
-  } else {
-    sel.appendChild(placeTerrainMenu(model));
-  }
+  // Point at the radial menu now that the action buttons are gone.
+  const hint = document.createElement("div");
+  hint.className = "panel-hint";
+  hint.textContent = hex
+    ? "Right-click the hex for actions."
+    : "Right-click to place terrain or generate here.";
+  sel.appendChild(hint);
 }
 
 /**

@@ -28,7 +28,7 @@ there, with the reason on hover (`title`).
 | Slot | Submenu / leaf | Enabled when | Disabled reason shown |
 |---|---|---|---|
 | Terrain | Random + 7 terrains | always (place / replace) | — |
-| POI | Random + 5 types | placed | "Place terrain on this hex first" |
+| POI | Random + 5 types + Remove (per existing POI) | placed | "Place terrain on this hex first" |
 | Settlement | Random/Remove + allowed sizes | placed & terrain allows, **or** one present | "No settlement can sit on `<terrain>`" |
 | Hook | Generate hook / Read map / Follow a trail | always (gossip child gates on a settlement) | child: "Heard only in a settlement" |
 | Neighbours | leaf | placed & ≥1 empty neighbour | "All neighbours already filled" |
@@ -66,6 +66,30 @@ put and greys out instead of disappearing.
 - **Glyphs are emoji** (matching the prototype); the canvas keeps its own art.
 - Keyboard/touch parity (long-press, arrow-to-rotate) is out of scope here; the
   side panel remains the full accessible path.
+
+## Panel cleanup (follow-on)
+
+With the radial menu owning every mutation, the side panel was stripped to
+**read & navigate** only:
+
+- **Selection panel** (`renderSelectionPanel`) now shows just the cell's info —
+  terrain, a settlement line, and POIs as a clickable list (click to inspect, or
+  open a dungeon/tower interior). No add/remove/regenerate/delete/settlement/hook
+  buttons. A muted hint points at the right-click menu.
+- **POI removal** moved into the radial (POI submenu → 🗑 per existing POI), so
+  the panel has no action buttons at all. POI *creation* was already there.
+- **Open hooks** remain a separate, always-visible list
+  (`renderGlobalHooks`) that stays actionable (→ Target / ↩ Origin /
+  Follow-the-clue / Resolve / Ignore / Remove) — there's no radial home for hook
+  management.
+- The **Dungeon View** room panel keeps its stair-nav, exploration toggles, and
+  note (dungeon-only; the radial is world-map only).
+- The old growing **event log** was removed earlier in Phase 7 (events now go to
+  the browser console); a static Seed / Hex-scale footer remains.
+
+So the panel is now two things: **one place for current-cell (or room) info**,
+and **one place for the open-hooks list**. Removed dead panel code: the
+add-POI / add-dungeon / add-settlement / place-terrain dropdown builders.
 
 ## Manual test checklist
 
