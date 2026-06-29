@@ -100,10 +100,10 @@ function pickSubject(rng, subjects, origin, verb) {
 
 /**
  * Generate one KNOWN-pattern hook about an existing POI.
- * @param {Map<string,object>} tables incl. hook-verb, hook-source, hook-accuracy, hook-<verb>
+ * @param {Map<string,object>} tables incl. hook-verb, hook-source, hook-<verb>
  * @param {() => number} rng dedicated sub-stream for this hook
  * @param {{ subjects: object[], origin: {q,r}, index?: number, pattern?: string,
- *   distance?: number, verb?: string, accuracy?: string }} ctx
+ *   distance?: number, verb?: string }} ctx
  *   subjects: { poiId, name, type, q, r, occupant }[] — candidate POIs. For a
  *   DISTANT hook the app generates the target tile first and passes its POI as the
  *   sole subject (with ctx.pattern "distant" + the chosen distance).

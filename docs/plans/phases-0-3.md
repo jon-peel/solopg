@@ -55,8 +55,8 @@ overview.)
   (`js/gen/terrain-affinity.js`): self strongest, compatible terrains partial, incompatible none.
 
 ## Phase 3 — POIs + terrain-aware generation ✅
-**Goal:** meaningful POIs + fix "village in open water". **Factions deferred** (no operating
-rules yet) — occupants are flavor-only.
+**Goal:** meaningful POIs + fix "village in open water". Occupants are flavour-only labels (no
+faction objects).
 - **Typed POIs:** `hex.pois` became `POI[]` (`{id,type,name,occupant,detail}`); occupant =
   creature **lair** / generic **occupier** (label) / **none**. New data: `poi-types`,
   `poi-occupant`, `creatures`, `occupiers`; generator `js/gen/poi.js`.
@@ -92,9 +92,3 @@ rules yet) — occupants are flavor-only.
   appear/disappear together. Zoomed out → **no terrain icon**, settlement marker **centered**, and
   a **red dot** (white outline) at the bottom of any hex with a POI. `drawDetailMarkers` /
   `drawSimplifiedMarkers` in `map.js`.
-
----
-
-## What's deferred out of these phases
-- **Factions** (Phase 3 explicitly left them out — see overview backlog).
-- Hydrology / lakes-vs-seas; party marker; pencil POI art. (See overview backlog.)

@@ -3,13 +3,13 @@
 **Renamed:** *Rumors → Hooks.* These aren't just flavour the party overhears — they're actionable
 adventure seeds that **point at a place on the map** and reward travel/exploration. A hook is heard
 somewhere (a settlement, a traveller) and **points at a target** (an existing or freshly-generated
-hex/POI), with a GM-visible accuracy and a resolution lifecycle.
+hex/POI), with a resolution lifecycle.
 
 This phase delivers **Type-1 hooks only** — *local* seeds the party can act on now. The signature
 new mechanic is **lazy target-tile generation**: a hook can point at a tile that doesn't exist yet,
 and we generate **just that tile** (route in between stays blank) the way dungeons build lazily on
 open. **Type-2 "distant powers"** (moving threats, spreading influence, news propagation by
-distance) is explicitly **deferred to the Factions phase** — see [Forward hooks](#forward-hooks-to-type-2--factions).
+distance) belong to the future Factions phase — see [Forward hooks](#forward-hooks-to-type-2--factions).
 
 > Follows the project design loop: this doc is the **plan** → **approve** → build per sub-step →
 > `node --test` → commit/push → manual checklist. One coherent sub-step per commit.
@@ -47,12 +47,9 @@ Not every verb fits every pattern; a small **compatibility map** gates the sensi
 *event* → Known/Distant, *escort* → Distant/Map with two endpoints, *return* → threat/opportunity).
 
 ### Target line & source
-A hook **points truly** at its target — there is **no accuracy / "directions are off" mechanic**
-(removed after review). Whether a clue is mistaken is left to **GM judgement + future travel rules**
-(getting lost off-road); false *rumours* belong to a future rumour mechanic. A targeted hook reads
-with the target's **base name** (the place, not its "— occupant" display suffix), the distance in
-**miles** (hex distance × `hexScale`), and the tile's **terrain** — e.g. *"… at Flooded cistern,
-18 miles to the south-east (Swamp)."*
+A hook **points truly** at its target. A targeted hook reads with the target's **base name** (the
+place, not its "— occupant" display suffix), the distance in **miles** (hex distance × `hexScale`),
+and the tile's **terrain** — e.g. *"… at Flooded cistern, 18 miles to the south-east (Swamp)."*
 - **Source** — where it was heard / found (tavern talk, a traveller, a dying man, a **found map**).
   *Local* hooks (opportunity/event) carry **no source** — they're town facts, framed by the GM.
 
@@ -90,10 +87,8 @@ Hooks span tiles (origin ≠ target), so they live as a **top-level list on the 
     pattern: "known|distant|map|chain|return",
     verb:    "explore|threat|opportunity|rescue|warning|escort|event",
     origin:    { q, r },              // where it was heard
-    indicated: { q, r },              // where the hook *says* the target is
-    target:    { q, r, poiId? },      // the TRUE location (= indicated unless accuracy "off-by-n")
+    target:    { q, r, poiId? },      // where it points
     subject:   { … },                 // the thing (POI ref / creature / commodity / person)
-    accuracy:  "accurate|off-by-n|false",  // always GM-visible
     source:    "tavern|traveller|…",
     status:    "open|resolved|ignored",
     // pattern-specific:
@@ -132,14 +127,14 @@ Each sub-step is a usable vertical slice; later steps add patterns/verbs as most
 
 | Step | Scope | Status |
 |---|---|---|
-| **6.1** | **Foundation** — schema v6 + migration + portability; `js/gen/hooks.js`; tables; **Known** pattern with a starter verb set (explore + threat); a settlement **Hooks** panel: a **"Generate hook" button**, accuracy shown inline (GM-visible), resolve/ignore, click-to-select target. Node tests. | ✅ done |
+| **6.1** | **Foundation** — schema v6 + migration + portability; `js/gen/hooks.js`; tables; **Known** pattern with a starter verb set (explore + threat); a settlement **Hooks** panel: a **"Generate hook" button**, resolve/ignore, click-to-select target. Node tests. | ✅ done |
 | **6.2** | **Distant targets** — lazy target-tile generation (the signature mechanic): isolated target hex *n* away, bearing + distance, blank route, **click-to-jump** the map to the target. | ✅ done |
 | **6.3** | **Treasure maps** — Map pattern: target **plus a revealed corridor**; a **"Read map" trigger** (available from **any** selected cell, not just towns) that forces a Map hook; "found map" source flavour. | ✅ done |
 | **6.4** | **Breadcrumb chains** — Chain pattern: multi-step clue→clue→payoff, each step generated lazily; a **"Follow the clue" trigger** advances the chain; per-step resolve. Chains name a **prize** up front (shown every step) and can be **started from any site** ("Follow a trail"). | ✅ done |
-| **6.5** | **Verb & flavour library** — the breadth pass: **rescue**, **warning** (site verbs; warning biases toward dangerous occupied/lair subjects), **opportunity** (a buyer in town wants goods) and **event** (a festival/market here) — the last two are *local* hooks (target = origin). Mostly JSON rows + biases. | 🔨 built — awaiting manual test |
+| **6.5** | **Verb & flavour library** — the breadth pass: **rescue**, **warning** (site verbs; warning biases toward dangerous occupied/lair subjects), **opportunity** (a buyer in town wants goods) and **event** (a festival/market here) — the last two are *local* hooks (target = origin). Mostly JSON rows + biases. | ✅ done |
 | **6.5b** | **Escort / delivery** — a two-endpoint errand (deliver a person/parcel/message from here to a destination). Structurally distinct (origin **and** destination), so split out. | ✅ done |
-| **6.5.1** | **Target-line readability + drop accuracy** — hooks use the POI **base name** (occupant split off), show distance in **miles** and the target **terrain**; the whole **accuracy/"GM:" line is removed** (off-ness → GM + future travel rules). | 🔨 built — awaiting manual test |
-| **6.5.2** | **Threat reframing + reward axis** — a threat *is* its occupant ("Threat: Bandits"; "Their lair: <place>, N miles …"), to be tracked down; threat/rescue/escort carry a **reward** (a patron + coin, or glory only). | 🔨 built — awaiting manual test |
+| **6.5.1** | **Target-line readability** — hooks use the POI **base name** (occupant split off), show distance in **miles** and the target **terrain**. | ✅ done |
+| **6.5.2** | **Threat reframing + reward axis** — a threat *is* its occupant ("Threat: Bandits"; "Their lair: <place>, N miles …"), to be tracked down; threat/rescue/escort carry a **reward** (a patron + coin, or glory only). | ✅ done |
 | **6.6** | **Return trips + lifecycle & map polish** — **Return** pattern (a development at a known POI); kind-weight **rebalance**; **on-map markers** (an amber ring + ⚑ flag) on every open hook's target. Lifecycle (open/resolved/ignored/remove) shipped with the global list; auto-**expiry** waits on a travel/turn loop. | ✅ done |
 
 Foundation first (cheapest, proves persistence + the Known slice). Distant second — it's the new
@@ -150,14 +145,14 @@ mechanic everything else leans on. Breadth (6.5) deliberately late, when the str
 ## Files (anticipated)
 - **`js/gen/hooks.js`** *(new, pure)* — `generateHook(world, origin, rng, opts)`, the pattern/verb
   rollers, the **target-selection + lazy-tile** helper, `HOOK_BUILD`, prose-pick assembly.
-- **`/data`** *(new tables)* — `hook-pattern`, `hook-verb`, `hook-source`, `hook-accuracy`,
+- **`/data`** *(new tables)* — `hook-pattern`, `hook-verb`, `hook-source`,
   `hook-subject` (+ per-verb tables: `hook-threat`, `hook-opportunity` (commodities/buyers),
   `hook-escort`, `hook-event`, …). Terrain/subject biases as small consts in `terrain-profile.js`.
 - **`js/world/world.js`** — `SCHEMA_VERSION = 6`; `createWorld` seeds `hooks: []`; hook accessors
   (`addHook/removeHook/getHooks`).
 - **`js/data/portability.js`** — `migrateWorld` v5→v6 step; export/import carries `hooks`.
 - **`js/ui/panel.js`** — settlement **Hooks** section: a "Generate hook" button, list, compose prose,
-  accuracy shown inline (GM-visible), resolve/ignore, click-through to target.
+  resolve/ignore, click-through to target.
 - **`js/ui/app.js`** — register new tables in `HEX_TABLE_IDS`; wire generate/select/jump; lazy
   target-tile build seam (mirrors the dungeon lazy-build hook).
 - **`js/ui/map.js`** — hook-target indicator + (Map pattern) the revealed corridor.
@@ -172,10 +167,8 @@ bearing/distance and the Map corridor; `buildMenu`/panel patterns.
 ## Tests (`node --test`, pure logic only)
 - `generateHook` returns a well-formed hook for each pattern; values come from the loaded tables;
   the **verb×pattern compatibility map** never emits an illegal combo.
-- **Determinism** — same world+seed → identical hook (target, picks, accuracy).
-- **Accuracy model** — the distribution leans `accurate`; `off-by-n` puts the true `target` within a
-  hex or two of `indicated` (and `target` ≠ `indicated`); `false` is rare. A forced trigger is
-  honoured (`Read map` → Map pattern).
+- **Determinism** — same world+seed → identical hook (target, picks).
+- **Forced trigger** — a specific trigger is honoured (`Read map` → Map pattern).
 - **Lazy target generation** — Distant/Map place exactly **one** target hex (Map: + corridor),
   route hexes stay unplaced, the forced POI is present, `explored:false`.
 - **Migration/portability** — v5 world upgrades to v6 with `hooks: []`; export→import round-trips a
@@ -184,21 +177,20 @@ bearing/distance and the Map corridor; `buildMenu`/panel patterns.
 ## Verification (manual, per step, via `./run-local.sh`)
 ```
 6.1 [ ] At a settlement, click "Generate hook" → a hook pointing at a nearby POI; press again → another
-    [ ] Accuracy shows inline (GM-visible: accurate / off-by-one / false); resolve/ignore updates status
+    [ ] Resolve/ignore updates status
     [ ] Click a hook → selects its target hex; reload + export→import → identical (schema v6)
 6.2 [ ] A "Distant" hook generates ONE far tile (route blank); click jumps the map there
 6.3 [ ] "Read map" (camp / cleared dungeon) → a Map hook reveals a corridor of hexes to the target
 6.4 [ ] A "Chain" hook: "Follow the clue" reveals the next target; payoff at the end
 6.5 [ ] Verbs read distinctly: a buyer's offer, a rescue, a warning tied to a deadly lair, an escort
 6.6 [ ] A "Return" hook reuses an explored POI with a new development; targets show a map marker
-    [ ] An "off-by-one" hook: the indicated hex differs from the true target, and the GM sees both
 ```
 
 ---
 
 ## Forward hooks (to Type-2 / Factions)
 
-Deliberately **out of scope** here, recorded so 6.x data leaves room for them:
+Type-2 hooks, for the future Factions phase; the 6.x data leaves room for them:
 
 - **Auto-generation on travel** — once an **Exploration / Travel** feature exists (move *n* days; a
   day-progression button), hooks could fire **automatically** as time passes, wandering-monster style,
@@ -225,5 +217,3 @@ a faction can **emit** Type-1 hooks without reworking the schema.
 2. **How many** — not a concern yet (no travel/pacing loop): **one hook per button press**. A batch /
    "tavern board" refresh is a Travel-feature question, deferred.
 3. **Visibility** — it's a **GM-only tool: everything is always open.** No hidden-truth toggle.
-4. **Accuracy over lies** — hooks lean reliable; "wrong" is usually a **positional error (off by a
-   tile or two)** rather than a fabrication. Modelled as the `accuracy` field above.
