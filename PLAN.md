@@ -29,7 +29,7 @@ threat names its **menace** ("Threat: Bandits", tracked to its lair); threat/res
 and tile **terrain**. A global always-visible **open-hooks list** (→ Target /
 ↩ Origin / Follow-the-clue) and **amber map markers** on every open target tie it together. New `world.hooks`
 (schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — QoL & customization** (editable/custom
-tables, map notes, themes). **Schema v6. 182 `node --test` passing.** Work
+tables, map notes, themes). **Schema v6. 185 `node --test` passing.** Work
 merges to **`main`** via PR.
 
 ---
