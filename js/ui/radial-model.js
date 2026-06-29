@@ -23,8 +23,8 @@ export const POI_GLYPH = {
 
 const RANDOM = "__random__";
 
-const leaf = (id, glyph, label, { enabled = true, reason, value, anchor, title } = {}) =>
-  ({ kind: "leaf", id, glyph, label, enabled, reason, value, anchor, title });
+const leaf = (id, glyph, label, { enabled = true, reason, value, anchor, title, danger } = {}) =>
+  ({ kind: "leaf", id, glyph, label, enabled, reason, value, anchor, title, danger });
 
 const submenu = (id, glyph, label, { enabled = true, reason } = {}, children = []) =>
   ({ kind: "submenu", id, glyph, label, enabled, reason, children });
@@ -46,7 +46,7 @@ function poiChildren(poiTypes, pois) {
   return [
     leaf("addRandomPoi", "🎲", "Random", { anchor: true }),
     ...poiTypes.map((t) => leaf("addPoi", POI_GLYPH[t] || "⭐", t, { value: t })),
-    ...pois.map((p) => leaf("removePoi", "🗑️", shorten(p.name), { value: p.id, title: `Remove ${p.name}` })),
+    ...pois.map((p) => leaf("removePoi", "🗑️", shorten(p.name), { value: p.id, title: `Remove ${p.name}`, danger: true })),
   ];
 }
 
@@ -113,7 +113,7 @@ export function buildRadialModel(state) {
     submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
     leaf("neighbors", ACTION_GLYPH.neighbors, "Neighbours", neighborsState),
     leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
-    leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? {} : { enabled: false, reason: "Nothing here to delete" }),
+    leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
     leaf("generate", ACTION_GLYPH.generate, "Generate", placed ? { enabled: false, reason: "Already here — use Regenerate" } : {}),
   ];
 }

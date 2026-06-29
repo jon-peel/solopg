@@ -27,6 +27,7 @@ let marks = null; // { entrance, exit, down, up } : Sets of room numbers
 let frame = null; // shared {minX,minY,w,h} bounding box across all levels (or null)
 let selectedRoom = null;
 let onRoomClick = () => {};
+let onRoomContextMenu = () => {};
 let hitRects = []; // { n, x, y, w, h } in FITTED CSS px (pre-camera), for click testing
 let camera = { scale: 1, x: 0, y: 0 }; // user pan/zoom on top of the fit-to-view base
 let drag = null; // { x, y, moved } while a pointer is down
@@ -40,12 +41,14 @@ export function attachDungeon(canvasEl, cbs = {}) {
   canvas = canvasEl;
   ctx = canvas.getContext("2d");
   if (cbs.onRoomClick) onRoomClick = cbs.onRoomClick;
+  if (cbs.onRoomContextMenu) onRoomContextMenu = cbs.onRoomContextMenu;
   new ResizeObserver(() => resize()).observe(canvas);
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointerleave", onPointerUp);
   canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("contextmenu", onContextMenu);
   resize();
 }
 
@@ -86,7 +89,7 @@ export function setSelectedRoom(n) {
  * room is already fully visible, so clicking a room you can see won't yank the
  * view — this is for stair-travel / level-switch landing off-screen.
  */
-export function centerOnRoom(n) {
+export function centerOnRoom(n, force = false) {
   if (!canvas) return;
   const hr = hitRects.find((r) => r.n === n);
   if (!hr) return;
@@ -100,7 +103,7 @@ export function centerOnRoom(n) {
   const visible =
     sx >= margin && sy >= margin &&
     sx + sw <= rect.width - margin && sy + sh <= rect.height - margin;
-  if (visible) return;
+  if (visible && !force) return;
   // Center the room's middle, keeping scale.
   const fx = hr.x + hr.w / 2;
   const fy = hr.y + hr.h / 2;
@@ -343,9 +346,27 @@ function pointerPos(e) {
 }
 
 function onPointerDown(e) {
+  if (e.button !== 0) return; // primary button pans; right button opens the room ring
   const p = pointerPos(e);
   drag = { x: p.x, y: p.y, moved: false };
   canvas.setPointerCapture?.(e.pointerId);
+}
+
+// Room number under a client point (inverse-transform into fitted space), or null.
+function roomAtPointer(e) {
+  const p = pointerPos(e);
+  const fx = (p.x - camera.x) / camera.scale;
+  const fy = (p.y - camera.y) / camera.scale;
+  for (const r of hitRects) {
+    if (fx >= r.x && fx <= r.x + r.w && fy >= r.y && fy <= r.y + r.h) return r.n;
+  }
+  return null;
+}
+
+function onContextMenu(e) {
+  e.preventDefault();
+  const n = roomAtPointer(e);
+  if (n != null) onRoomContextMenu({ n, clientX: e.clientX, clientY: e.clientY });
 }
 
 function onPointerMove(e) {
@@ -367,16 +388,8 @@ function onPointerUp(e) {
   const wasDrag = drag.moved;
   drag = null;
   if (wasDrag) return; // a pan, not a click
-  // Click: inverse-transform into fitted space and hit-test.
-  const p = pointerPos(e);
-  const fx = (p.x - camera.x) / camera.scale;
-  const fy = (p.y - camera.y) / camera.scale;
-  for (const r of hitRects) {
-    if (fx >= r.x && fx <= r.x + r.w && fy >= r.y && fy <= r.y + r.h) {
-      onRoomClick(r.n);
-      return;
-    }
-  }
+  const n = roomAtPointer(e);
+  if (n != null) onRoomClick(n);
 }
 
 function onWheel(e) {

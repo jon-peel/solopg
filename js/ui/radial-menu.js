@@ -1,10 +1,15 @@
-// Right-click radial menu overlay (Phase 7.1) — browser-only, not unit-tested.
+// Reusable right-click radial menu overlay (Phase 7.1) — browser-only.
 //
-// Renders the fixed-slot model from radial-model.js as a ring over #stage and
-// reports picks via a dispatch(id, value) callback. Submenus open as a second
-// outer ring (the base ring dims, the chosen parent stays lit); a submenu's
-// "Random" option is anchored at the parent's angle so it lands nearest the
-// cursor. Disabled slots render greyed with their reason as a tooltip.
+// Context-agnostic: callers pass a `model` (array of slot nodes) + a
+// `dispatch(id, value)` and get a ring rendered over #stage. Used by the
+// world-map menu (radial-model.js) and the dungeon-room menu
+// (radial-room-model.js) alike. Node shape per slot:
+//   { kind:"leaf"|"submenu", id, glyph, label, enabled, reason, value,
+//     children, anchor, title, danger, on }
+// Submenus open as a second outer ring (base dims, chosen parent stays lit); an
+// `anchor` child is placed at the parent's angle (nearest the cursor). Disabled
+// slots render greyed (reason as tooltip); `danger` reddens; `on` marks an
+// active toggle. Only one ring is open at a time (isRadialOpen()).
 
 import { ringCenter } from "./radial-model.js";
 
@@ -64,6 +69,11 @@ export function closeRadial() {
   clearNodes();
 }
 
+/** Whether a ring is currently open (so callers can defer their own keys). */
+export function isRadialOpen() {
+  return !!state;
+}
+
 function clearNodes() {
   ringEl.querySelectorAll(".ring-node, .ring-hub, .ring-guide").forEach((n) => n.remove());
 }
@@ -79,11 +89,11 @@ function guide(x, y, radius) {
 
 function nodeEl(item, x, y, size, cls) {
   const n = document.createElement("div");
-  const danger = item.id === "deleteHex" || item.id === "removePoi";
   n.className =
     "ring-node " + (cls || "") +
     (item.kind === "submenu" ? " submenu" : "") +
-    (danger ? " danger" : "") +
+    (item.danger ? " danger" : "") +
+    (item.on ? " on" : "") +
     (item.enabled === false ? " disabled" : "");
   n.style.left = x + "px";
   n.style.top = y + "px";

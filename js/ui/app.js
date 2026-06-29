@@ -51,7 +51,8 @@ import {
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
-import { openRadial } from "./radial-menu.js";
+import { buildRoomRadialModel } from "./radial-room-model.js";
+import { openRadial, isRadialOpen } from "./radial-menu.js";
 
 // Tables the hex generator rolls on. Settlement/POI presence are now driven by
 // the terrain profile (not tables); settlement-size is still rolled (capped).
@@ -649,10 +650,34 @@ function onRoomClick(n) {
   renderRoomPanel(n);
 }
 
+// Right-click a room: select it, then open the room radial at the cursor. Reuses
+// the shared overlay (openRadial) with a room-specific model + dispatch.
+function onRoomContextMenu({ n, clientX, clientY }) {
+  if (!dungeonPoi) return;
+  onRoomClick(n);
+  const dungeon = dungeonPoi.detail.dungeon;
+  const i = dungeonLevelIndex;
+  const st = getRoomState(dungeonPoi.detail.dungeonState, i, n);
+  const model = buildRoomRadialModel({
+    explored: !!st.explored,
+    cleared: !!st.cleared,
+    looted: !!st.looted,
+    connections: roomConnections(dungeon, i, n),
+  });
+  openRadial({ clientX, clientY, model, dispatch: (id, value) => roomRadialDispatch(i, n, id, value) });
+}
+
+function roomRadialDispatch(level, n, id, value) {
+  if (id === "toggle") return toggleRoomState(level, n, value);
+  if (id === "goTo") return onGoTo(value.level, value.room);
+  if (id === "focus") return centerOnRoom(n, true);
+}
+
 // Keyboard for the Dungeon View: Esc leaves; [ / ] (and PageUp/PageDown) switch
 // levels. Ignored while typing in the room-note field, and inert outside the view.
 function onDungeonKey(e) {
   if (!dungeonPoi) return;
+  if (isRadialOpen()) return; // the room ring owns keys while open (Esc closes it)
   const t = e.target;
   if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
   if (e.key === "Escape") {
@@ -1167,7 +1192,7 @@ function onToggleIcons() {
 async function init() {
   wire();
   attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu });
-  attachDungeon($("dungeon-canvas"), { onRoomClick });
+  attachDungeon($("dungeon-canvas"), { onRoomClick, onRoomContextMenu: onRoomContextMenu });
   // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {
     const sizeT = await loadTables(["dungeon-size"]);

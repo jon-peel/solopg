@@ -547,6 +547,12 @@ button:hover {
   border-color: var(--accent);
   background: #1b2433;
 }
+/* Active toggle (e.g. an already-Explored/Cleared/Looted room). */
+.ring-node.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #1b2433;
+}
 /* Disabled slot: shown (never hidden) but greyed and inert; reason via title. */
 .ring-node.disabled {
   opacity: 0.32;
