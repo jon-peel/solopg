@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildRadialModel } from "../js/ui/radial-model.js";
+import { buildRadialModel, ringCenter } from "../js/ui/radial-model.js";
 
 const TERRAINS = ["Forest", "Plains", "Hills", "Mountains", "Swamp", "Desert", "Water"];
 const POI_TYPES = ["dungeon", "shrine", "camp", "landmark", "tower"];
@@ -87,4 +87,36 @@ test("Terrain and POI submenus anchor their Random child for nearest-cursor plac
   assert.equal(byId(m, "terrain").children.length, 1 + TERRAINS.length);
   const poiRandom = byId(m, "poi").children.find((c) => c.anchor);
   assert.equal(poiRandom.id, "addRandomPoi");
+});
+
+// Regression: the ring must center on the clicked point, translated into the
+// host (#stage) box — not collapse to a fixed corner.
+const PAD = 228; // OUTER_R(178) + SUB_NODE(50), matching radial-menu.js
+const RECT = { left: 100, top: 50, width: 1000, height: 800 };
+
+test("ringCenter centers on the click, relative to the host box", () => {
+  // A click well inside the box maps to (clientX-left, clientY-top), unclamped.
+  assert.deepEqual(ringCenter(600, 450, RECT, PAD), { x: 500, y: 400 });
+});
+
+test("ringCenter tracks the cursor — different clicks give different centers", () => {
+  const a = ringCenter(400, 300, RECT, PAD);
+  const b = ringCenter(700, 600, RECT, PAD);
+  assert.notDeepEqual(a, b);
+  assert.deepEqual(a, { x: 300, y: 250 });
+  assert.deepEqual(b, { x: 600, y: 550 });
+});
+
+test("ringCenter clamps near every edge so the ring stays fully on-screen", () => {
+  // Top-left corner click → pinned in by PAD on both axes.
+  assert.deepEqual(ringCenter(100, 50, RECT, PAD), { x: PAD, y: PAD });
+  // Bottom-right corner click → pinned to (width-PAD, height-PAD).
+  assert.deepEqual(ringCenter(1100, 850, RECT, PAD), { x: 1000 - PAD, y: 800 - PAD });
+});
+
+test("ringCenter falls back to raw client coords for a zero/hidden host box", () => {
+  // This is the exact failure mode of the original bug (measured while
+  // display:none → zero rect). It must NOT pin to a corner.
+  assert.deepEqual(ringCenter(640, 360, { left: 0, top: 0, width: 0, height: 0 }, PAD), { x: 640, y: 360 });
+  assert.deepEqual(ringCenter(640, 360, null, PAD), { x: 640, y: 360 });
 });

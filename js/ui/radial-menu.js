@@ -6,6 +6,8 @@
 // "Random" option is anchored at the parent's angle so it lands nearest the
 // cursor. Disabled slots render greyed with their reason as a tooltip.
 
+import { ringCenter } from "./radial-model.js";
+
 const BASE_R = 104; // base-ring radius (px)
 const OUTER_R = 178; // submenu-ring radius
 const BASE_NODE = 56;
@@ -45,11 +47,13 @@ export function openRadial({ clientX, clientY, model, dispatch: onPick }) {
   if (!el()) return;
   wireOnce();
   dispatch = onPick;
-  const rect = ringEl.getBoundingClientRect();
-  const x = Math.max(EDGE_PAD, Math.min(rect.width - EDGE_PAD, clientX - rect.left));
-  const y = Math.max(EDGE_PAD, Math.min(rect.height - EDGE_PAD, clientY - rect.top));
-  state = { x, y, model, stack: [{ items: model }] };
+  // Show first, then measure: a display:none element reports a zero rect, which
+  // would pin the ring to a corner. Measure the parent (#stage) — it's always
+  // laid out and the ring fills it (inset:0), so its box is the ring's box.
   ringEl.classList.add("open");
+  const host = ringEl.parentElement || ringEl;
+  const { x, y } = ringCenter(clientX, clientY, host.getBoundingClientRect(), EDGE_PAD);
+  state = { x, y, model, stack: [{ items: model }] };
   draw();
 }
 

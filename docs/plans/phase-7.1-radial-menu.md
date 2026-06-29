@@ -42,7 +42,9 @@ put and greys out instead of disappearing.
 ## Architecture
 
 - **`js/ui/radial-model.js`** — *pure*. `buildRadialModel(state)` → the fixed
-  slot tree with `enabled`/`reason`/`anchor` flags. No DOM, no app state →
+  slot tree with `enabled`/`reason`/`anchor` flags, plus `ringCenter(clientX,
+  clientY, rect, pad)` (centers the ring on the click, clamped to the host box;
+  falls back to raw coords for a zero/hidden box). No DOM, no app state →
   **node-tested** (`test/radial-model.test.js`).
 - **`js/ui/radial-menu.js`** — browser-only overlay. `openRadial({clientX,
   clientY, model, dispatch})` / `closeRadial()`. Lays the ring out with trig,

@@ -114,3 +114,35 @@ export function buildRadialModel(state) {
 }
 
 export const RANDOM_VALUE = RANDOM;
+
+// --- ring geometry (pure, so it's node-tested) ---------------------------
+
+// Clamp one axis so the ring's outer edge stays `pad` inside a box of `size`.
+// If the box is too small to honour the padding, fall back to its center.
+function clampAxis(v, size, pad) {
+  if (size <= pad * 2) return size / 2;
+  return Math.max(pad, Math.min(size - pad, v));
+}
+
+/**
+ * Local (host-relative) center for the ring: the click point translated into
+ * the host box and clamped so the outer ring stays fully on-screen.
+ *
+ * Defensive: a hidden or detached host measures as a zero-size box (this was the
+ * "ring always pinned top-left" bug — it was measured while still display:none).
+ * In that case fall back to the raw client coords so the ring still appears at
+ * the cursor rather than in a corner.
+ *
+ * @param {number} clientX  cursor X in client space
+ * @param {number} clientY  cursor Y in client space
+ * @param {{left:number,top:number,width:number,height:number}} rect host box
+ * @param {number} pad      outer-ring radius + node, kept inside the box
+ * @returns {{x:number,y:number}} center in host-local coordinates
+ */
+export function ringCenter(clientX, clientY, rect, pad) {
+  if (!rect || !rect.width || !rect.height) return { x: clientX, y: clientY };
+  return {
+    x: clampAxis(clientX - rect.left, rect.width, pad),
+    y: clampAxis(clientY - rect.top, rect.height, pad),
+  };
+}
