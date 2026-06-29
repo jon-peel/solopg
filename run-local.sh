@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BRANCH="claude/app-plan-overview-gidfpu"
+BRANCH="claude/project-overview-phases-9qf7gh"
 PORT="${1:-8000}"
 
 # Always operate on the repo this script lives in (so it serves index.html at root).
