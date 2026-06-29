@@ -75,7 +75,7 @@ YAGNI; everything persists.
   `assets/`; the renderer falls back to emoji until an image loads / if one is missing. POIs are
   emoji.
 - **Design / approval loop:** brainstorm → plan → **approve** → build → `node --test` → commit +
-  push to the branch (updates PR #1) → **present a manual test checklist for the user to run via
+  push to the branch (updates its PR) → **present a manual test checklist for the user to run via
   `./run-local.sh`** (see [How to run & test](#how-to-run--test)). **Visual changes are reviewed
   as files first** (a preview is sent for sign-off before art is wired in). One coherent step per
   commit.
@@ -92,27 +92,30 @@ package.json                    dev-only: "type":"module", scripts: test / serve
 /js
   /core   rng.js (mulberry32, hashString, makeRng, subRng, randInt, pick)
           dice.js (rollDice)   table.js (validateTable, rollTable)   loader.js (loadTables, makeResolver)
-          hexgeo.js (axial<->pixel, cube rounding, neighbors, axialKey/parseKey)
+          hexgeo.js (axial<->pixel, cube rounding, neighbors, axialDistance, axialLine, axialKey/parseKey)
   /gen    hex.js (generateHex, weightedTerrainTable)   poi.js (generatePoi)
           terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
           terrain-affinity.js (adjacency)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
-  /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex)
+          hooks.js (generateHook/startChain/buildChainStep/buildLocalHook/buildEscortHook, rollHookPattern,
+                    chooseDistantTarget, hookName/hookDescription, HOOK_BUILD — Phase 6 adventure hooks)
+  /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex; world.hooks)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
-  /ui     app.js (bootstrap/wiring; dungeon view toggle + lazy build)   map.js (canvas renderer + LOD)
-          panel.js (selection UI + dungeon/room view)   dungeon-map.js (dungeon canvas: camera, grid)
+  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks)   map.js (canvas renderer + LOD + hook markers)
+          panel.js (selection UI + dungeon/room view + global hooks list)   dungeon-map.js (dungeon canvas: camera, grid)
           terrain-style.js / terrain-art.js / poi-style.js (+ THEME_GLYPHS) / settlement-art.js
 /data     terrain, swamp-feature, settlement-size, poi-types, poi-occupant, creatures, occupiers,
           dungeon-{size,theme,room,trap,special,dressing,treasure,treasure-guard,monster-status,light},
           monster-families, dungeon-family,
           shrine-{form,dedication,condition,detail}, camp-{scale,reaction},
-          landmark-{feature,trait,hook}, tower-{kind,master} (JSON)
+          landmark-{feature,trait,hook}, tower-{kind,master},
+          hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites (rng, dice, table, world, hexgeo, hex, terrain-weight,
           terrain-profile, terrain-art, settlement-art, poi, migration, dungeon, dungeon-layout,
-          feature-detail, tower)
+          feature-detail, tower, hooks)
 /docs/plans  per-step sub-plans (this overview links them)
 ```
 
@@ -132,10 +135,16 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v5)
+## Current data model (as built, schema v6)
 
-- **World:** `{ schemaVersion:5, id, name, seed, hexScale, hexes:{}, createdAt, updatedAt }`
+- **World:** `{ schemaVersion:6, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
+- **Hook** (Phase 6; top-level `world.hooks[]`):
+  `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
+  bearing, distance, targetTerrain, claim, source, status }` plus per-kind fields — `chain:{total,step,prize}`,
+  `path:[{q,r}]` (map corridor), `lair` (threat), `cargo` + `reward:{patron,amount}|{glory}` (escort/bounty).
+  `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
+  Prose composed at render (`hookName`/`hookDescription`); no accuracy/"directions off" mechanic.
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
   `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen }`.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
