@@ -160,6 +160,7 @@ export function render() {
 
   const layout = level.layout;
   const litRooms = new Set((level.rooms || []).filter((r) => r.light).map((r) => r.n));
+  const treasureRooms = new Set((level.rooms || []).filter((r) => r.treasure).map((r) => r.n));
   // Use the shared dungeon-wide frame (so every level lines up) when given.
   const bb = frame || boundingBox(layout);
   const cell = Math.max(
@@ -320,6 +321,18 @@ export function render() {
         ctx.fillText(chr, bx, by);
         bx -= fs * 0.85;
       }
+    }
+  }
+
+  // Treasure marker (bottom-left) — rooms holding loot, matching the panel's 💰.
+  // The other three corners are taken (connectors TL, lamp TR, state BR).
+  if (treasureRooms.size) {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.font = `${Math.max(9, Math.floor(cell * 0.8))}px sans-serif`;
+    for (const r of layout.rooms) {
+      if (!treasureRooms.has(r.n)) continue;
+      ctx.fillText("💰", sx(r.x) + 2, sy(r.y) + r.h * cell - 2);
     }
   }
 }
