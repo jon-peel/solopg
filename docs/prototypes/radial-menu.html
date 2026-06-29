@@ -366,12 +366,18 @@
           ringEl.appendChild(n);
         });
 
-        // outer (submenu) ring
+        // outer (submenu) ring. If it has a "Random" option, anchor that option
+        // at the parent's angle — the outer slot nearest the cursor — so Random
+        // is always the least-travel pick. Otherwise lay out from the top as before.
         if (depth > 0) {
           const sub = stack[1].items;
+          const parentAng = (Math.PI * 2 * stack[1].parentIndex) / stack[0].items.length - Math.PI / 2;
+          const randIdx = sub.findIndex((it) => it.label === "Random");
+          const anchorIdx = randIdx >= 0 ? randIdx : 0;
+          const baseAng = randIdx >= 0 ? parentAng : -Math.PI / 2;
           ringEl.appendChild(guide(x, y, outerR));
           sub.forEach((item, i) => {
-            const ang = (Math.PI * 2 * i) / sub.length - Math.PI / 2;
+            const ang = baseAng + (Math.PI * 2 * (i - anchorIdx)) / sub.length;
             const nx = x + outerR * Math.cos(ang), ny = y + outerR * Math.sin(ang);
             const n = nodeEl(item, nx, ny, 50);
             n.addEventListener("click", (e) => { e.stopPropagation(); onPick(item, i); });
