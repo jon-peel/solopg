@@ -50,6 +50,8 @@ import {
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
+import { buildRadialModel } from "./radial-model.js";
+import { openRadial } from "./radial-menu.js";
 
 // Tables the hex generator rolls on. Settlement/POI presence are now driven by
 // the terrain profile (not tables); settlement-size is still rolled (capped).
@@ -1022,6 +1024,52 @@ function onEmptyCellClick({ q, r }) {
   selectCell(q, r);
 }
 
+// Right-click: select the cell, then open the radial menu over it. The model is
+// a fixed set of slots (radial-model.js); slots that don't apply to this cell
+// are shown disabled. Picks route through `radialDispatch` to existing handlers.
+function onContextMenu({ q, r, clientX, clientY }) {
+  if (!current) return;
+  selectCell(q, r);
+  const hex = getHex(current, q, r);
+  const placed = !!(hex && hex.placed);
+  const hasSettlement = !!(placed && hex.settlement && hex.settlement.present);
+  let emptyNeighbors = 0;
+  if (placed) {
+    for (const n of neighbors(q, r)) if (!hasHexAt(current, n.q, n.r)) emptyNeighbors++;
+  }
+  const model = buildRadialModel({
+    placed,
+    terrain: placed ? hex.terrain : null,
+    hasSettlement,
+    allowedSizes: placed ? allowedSizes(hex.terrain) : [],
+    canGossip: hasSettlement,
+    emptyNeighbors,
+    poiTypes: Object.keys(POI_GLYPHS),
+    terrains: Object.keys(TERRAIN_COLORS),
+  });
+  openRadial({ clientX, clientY, model, dispatch: radialDispatch });
+}
+
+// Map a radial pick (action id + optional value) to an existing handler. The
+// handlers act on the module-level `selected`, set by selectCell above.
+function radialDispatch(id, value) {
+  switch (id) {
+    case "generate": return onGenerateRandom();
+    case "placeTerrain": return onPlaceTerrain(value);
+    case "addRandomPoi": return onAddRandomPoi();
+    case "addPoi": return onAddPoi(value);
+    case "addRandomSettlement": return onAddRandomSettlement();
+    case "addSettlement": return onAddSettlement(value);
+    case "removeSettlement": return onRemoveSettlement();
+    case "neighbors": return onGenerateNeighbors();
+    case "regenerate": return onRegenerate();
+    case "deleteHex": return onDeleteHex();
+    case "genHook": return onGenerateHook();
+    case "readMap": return onReadMap();
+    case "followTrail": return onStartChain();
+  }
+}
+
 async function onGenerateRandom() {
   if (!current || !selected) return;
   try {
@@ -1119,7 +1167,7 @@ function onToggleIcons() {
 
 async function init() {
   wire();
-  attachMap($("map"), { onHexClick, onEmptyCellClick });
+  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu });
   attachDungeon($("dungeon-canvas"), { onRoomClick });
   // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {

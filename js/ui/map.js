@@ -55,6 +55,7 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointercancel", () => (drag = null));
   canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("contextmenu", onContextMenu);
 
   resize();
 }
@@ -336,6 +337,7 @@ function strokeHex(cx, cy, color, widthPx) {
 // --- input ---------------------------------------------------------------
 
 function onPointerDown(e) {
+  if (e.button !== 0) return; // primary button pans; the right button opens the ring
   drag = {
     startX: e.clientX,
     startY: e.clientY,
@@ -345,6 +347,15 @@ function onPointerDown(e) {
   };
   canvas.setPointerCapture?.(e.pointerId);
   canvas.classList.add("dragging");
+}
+
+// Right-click resolves the cell under the cursor and reports it (with the screen
+// position) so app.js can open the radial menu there.
+function onContextMenu(e) {
+  e.preventDefault();
+  const { x, y } = clientToWorld(e.clientX, e.clientY);
+  const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+  handlers.onContextMenu?.({ q, r, clientX: e.clientX, clientY: e.clientY });
 }
 
 function onPointerMove(e) {

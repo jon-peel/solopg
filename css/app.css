@@ -442,3 +442,116 @@ button:hover {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--muted);
 }
+
+/* --- Right-click radial menu (Phase 7.1) ------------------------------- */
+#ring {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: none;
+}
+#ring.open {
+  display: block;
+}
+#ring .scrim {
+  position: absolute;
+  inset: 0;
+}
+.ring-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+  background: #2b3140;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.09s ease, opacity 0.12s ease, border-color 0.09s ease,
+    background 0.09s ease;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.ring-node .glyph {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.ring-node .label {
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  max-width: 4.6rem;
+}
+.ring-node:hover {
+  border-color: var(--accent);
+  background: #344056;
+  transform: translate(-50%, -50%) scale(1.08);
+  z-index: 2;
+}
+.ring-node.submenu .label::after {
+  content: " ▸";
+  color: var(--accent);
+}
+.ring-node.danger:hover {
+  border-color: #c0524a;
+  background: #3a2622;
+}
+/* Open-submenu state: base ring dims, the chosen parent stays lit. */
+.ring-node.dim {
+  opacity: 0.28;
+  pointer-events: none;
+}
+.ring-node.parent {
+  opacity: 1;
+  border-color: var(--accent);
+  background: #1b2433;
+}
+/* Disabled slot: shown (never hidden) but greyed and inert; reason via title. */
+.ring-node.disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.ring-node.disabled:hover {
+  border-color: var(--border);
+  background: #2b3140;
+  transform: translate(-50%, -50%);
+}
+.ring-hub {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 15, 21, 0.95);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  z-index: 3;
+}
+.ring-hub:hover {
+  border-color: var(--accent);
+}
+.ring-hub .hub-top {
+  font-size: 0.9rem;
+}
+.ring-hub .hub-sub {
+  font-size: 0.58rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ring-guide {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  border: 1px dashed rgba(110, 168, 254, 0.22);
+  pointer-events: none;
+}

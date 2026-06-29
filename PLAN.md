@@ -28,9 +28,13 @@ threat names its **menace** ("Threat: Bandits", tracked to its lair); threat/res
 **reward** (a patron + coin, or glory). Each hook reads with the target's base name, distance in **miles**,
 and tile **terrain**. A global always-visible **open-hooks list** (→ Target /
 ↩ Origin / Follow-the-clue) and **amber map markers** on every open target tie it together. New `world.hooks`
-(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — QoL & customization** (editable/custom
-tables, map notes, themes). **Schema v6. 185 `node --test` passing.** Work
-merges to **`main`** via PR.
+(schema **v6**), pure `js/gen/hooks.js`. **Phase 7 — QoL & UX started: 7.1 right-click radial menu**
+is done (see [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md)) — right-click a tile for a
+**fixed-slot ring** of its actions (Terrain / POI / Settlement / Hook / Neighbours / Regenerate / Delete /
+Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, submenus open as a **second
+outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
+(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Next: more Phase 7** (editable/custom
+tables, map notes, themes). **Schema v6. 193 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 
@@ -102,8 +106,9 @@ package.json                    dev-only: "type":"module", scripts: test / serve
                     chooseDistantTarget, hookName/hookDescription, HOOK_BUILD — Phase 6 adventure hooks)
   /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex; world.hooks)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
-  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks)   map.js (canvas renderer + LOD + hook markers)
+  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks; radial dispatch)   map.js (canvas renderer + LOD + hook markers; right-click → radial)
           panel.js (selection UI + dungeon/room view + global hooks list)   dungeon-map.js (dungeon canvas: camera, grid)
+          radial-model.js (pure fixed-slot menu model — Phase 7.1)   radial-menu.js (right-click ring overlay)
           terrain-style.js / terrain-art.js / poi-style.js (+ THEME_GLYPHS) / settlement-art.js
 /data     terrain, swamp-feature, settlement-size, poi-types, poi-occupant, creatures, occupiers,
           dungeon-{size,theme,room,trap,special,dressing,treasure,treasure-guard,monster-status,light},
@@ -181,7 +186,7 @@ graph TD
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
-| 7 — QoL & customization (editable tables, notes, themes) | ▶ **next** | — |
+| 7 — QoL & customization (editable tables, notes, themes) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a
