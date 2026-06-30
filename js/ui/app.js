@@ -771,13 +771,16 @@ async function onRemovePoi(id) {
 // Mark every OPEN hook's target on the map (skip local opportunity/event, whose
 // target is the town itself). Lets the GM find destinations at a glance.
 function refreshHookMarks() {
-  const keys = [];
+  const open = [];
+  const pinned = [];
   for (const h of (current && current.hooks) || []) {
-    if ((h.status || "open") !== "open") continue;
-    if (h.pattern === "opportunity" || h.pattern === "event") continue;
-    if (h.target) keys.push(axialKey(h.target.q, h.target.r));
+    if ((h.status || "open") !== "open" || !h.target) continue;
+    const key = axialKey(h.target.q, h.target.r);
+    if (h.pinned) { pinned.push(key); continue; } // active leads always show
+    if (h.pattern === "opportunity" || h.pattern === "event") continue; // local; target is the town
+    open.push(key);
   }
-  setHookMarks(keys);
+  setHookMarks({ open, pinned });
 }
 
 // Refresh the hook tabs (unpinned list + pinned list, with badges).
@@ -811,6 +814,18 @@ function onSelectHook(id) {
   selectedHookId = selectedHookId === id ? null : id;
   refreshGlobalHooks();
   refreshHookFocus();
+}
+
+// Esc clears a hook highlight (takes priority over leaving the dungeon). Inert
+// while a ring is open (the ring owns Esc) or while typing in a field.
+function onWorldKey(e) {
+  if (e.key !== "Escape" || !selectedHookId || isRadialOpen()) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  selectedHookId = null;
+  refreshGlobalHooks();
+  refreshHookFocus();
+  e.stopImmediatePropagation(); // we handled Esc; don't also exit the dungeon
 }
 
 // Pin / unpin a hook — pinned hooks move to the Pinned tab (out of Hooks).
@@ -1013,6 +1028,8 @@ async function setHookStatus(id, status) {
   const h = (current.hooks || []).find((x) => x.id === id);
   if (!h) return;
   h.status = h.status === status ? "open" : status;
+  // Resolving a lead retires it from the Pinned tab automatically.
+  if (h.status === "resolved" && h.pinned) h.pinned = false;
   await persistAndRefresh();
 }
 const onResolveHook = (id) => setHookStatus(id, "resolved");
@@ -1236,6 +1253,7 @@ function wire() {
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
   $("btn-dungeon-legend").addEventListener("click", onToggleLegend);
+  window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
   window.addEventListener("keydown", onDungeonKey);
 }
 

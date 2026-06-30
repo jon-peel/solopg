@@ -41,10 +41,14 @@ Verified headless: 3 tabs; row = Pin/Resolve/Ignore (Target/Origin live in the
 kebab); Pin moves a hook Hooks→Pinned (badges update) and **persists across
 reload**; selecting a card sets `.selected` + legend. 202 `node --test` passing.
 
-## Offered follow-ups (not yet built)
+## Follow-ups (done)
 
-- Persistent distinct map marker on **pinned** targets (see active leads without
-  selecting).
-- A faint **origin → target line** when a hook is selected.
-- **Resolving a pinned hook auto-unpins** it.
-- **Esc** clears the hook highlight.
+- **Pinned targets get a persistent map marker** — a violet ring + 📌 (distinct
+  from the amber "open lead" ring), so active leads stand out without selecting.
+  `setHookMarks({open, pinned})`; `refreshHookMarks` splits the two sets.
+- **Origin → target line** when a hook is selected (faint dashed `drawHookLine`).
+- **Resolving a pinned hook auto-unpins** it (retires from the Pinned tab).
+- **Esc** clears the hook highlight (priority over leaving the dungeon).
+- **Draw order fix:** hook focus rings now draw *on top of* the blue selection
+  ring — a hook's origin is usually the selected cell, so the teal origin ring
+  was previously hidden under the selection highlight.

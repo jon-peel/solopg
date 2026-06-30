@@ -38,7 +38,8 @@ let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
 let iconsEnabled = true;
-let hookTargets = new Set(); // axial keys "q,r" of open-hook destinations
+let hookTargets = new Set(); // axial keys "q,r" of open, unpinned hook destinations
+let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destinations
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -148,20 +149,26 @@ export function render() {
     } else if (simplified) {
       drawSimplifiedMarkers(c.x, c.y, hex);
     }
-    // Hook destinations get an amber ring (all zooms) + a flag in the detail tier.
-    if (hookTargets.has(axialKey(q, r))) drawHookMark(c.x, c.y, detail);
+    // Hook destinations: pinned leads (a distinct pin) take precedence over the
+    // amber "a lead exists here" ring; both visible at all zooms.
+    const hk = axialKey(q, r);
+    if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
+    else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
   }
 
-  // 3. Selected hook's endpoints (distinct colours), drawn under the cell cursor.
-  if (hookFocus) {
-    if (hookFocus.origin) drawHookFocus(hookFocus.origin, FOCUS_ORIGIN);
-    if (hookFocus.target) drawHookFocus(hookFocus.target, FOCUS_TARGET);
-  }
-
-  // 4. Selection highlight on top (works for empty or filled cells).
+  // 3. Selection highlight (works for empty or filled cells).
   if (selected) {
     const c = axialToPixel(selected.q, selected.r, HEX_SIZE);
     strokeHex(c.x, c.y, SELECTED_STROKE, 3);
+  }
+
+  // 4. Selected hook's endpoints (distinct colours) ON TOP — a hook's origin is
+  //    usually the selected cell, so these must beat the blue selection ring.
+  if (hookFocus) {
+    const t = hookFocus.target, o = hookFocus.origin;
+    if (t && o && !(t.q === o.q && t.r === o.r)) drawHookLine(o, t); // under the rings
+    if (o) drawHookFocus(o, FOCUS_ORIGIN);
+    if (t) drawHookFocus(t, FOCUS_TARGET);
   }
 }
 
@@ -171,9 +178,13 @@ export function setIconsEnabled(on) {
   render();
 }
 
-/** Mark these axial keys ("q,r") as hook destinations; re-renders. */
-export function setHookMarks(keys) {
-  hookTargets = new Set(keys);
+/**
+ * Mark hook destinations; re-renders. `open` = amber rings (available leads),
+ * `pinned` = a distinct pin (the party's active leads).
+ */
+export function setHookMarks({ open = [], pinned = [] } = {}) {
+  hookTargets = new Set(open);
+  pinnedTargets = new Set(pinned);
   render();
 }
 
@@ -193,6 +204,21 @@ export function setHookFocus(focus) {
 function drawHookFocus(coord, color) {
   const c = axialToPixel(coord.q, coord.r, HEX_SIZE);
   strokeHex(c.x, c.y, color, 4);
+}
+
+// A faint dashed line between a selected hook's origin and target.
+function drawHookLine(a, b) {
+  const pa = axialToPixel(a.q, a.r, HEX_SIZE);
+  const pb = axialToPixel(b.q, b.r, HEX_SIZE);
+  ctx.save();
+  ctx.strokeStyle = "rgba(230,232,238,0.45)";
+  ctx.lineWidth = 2 / camera.scale;
+  ctx.setLineDash([6 / camera.scale, 5 / camera.scale]);
+  ctx.beginPath();
+  ctx.moveTo(pa.x, pa.y);
+  ctx.lineTo(pb.x, pb.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Cache of tile <img>s keyed by url; re-render once each finishes loading.
@@ -295,6 +321,19 @@ function drawHookMark(cx, cy, detail) {
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
     drawMarker(cx - off, cy - off, "⚑", size, "#f5c45a");
+  }
+}
+
+// Pinned (active-lead) destination: a violet ring + a pin badge in the detail tier.
+function drawPinnedMark(cx, cy, detail) {
+  strokeHex(cx, cy, "#b794f6", 3);
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.44;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx - off, cy - off, "📌", size, "#b794f6");
   }
 }
 
