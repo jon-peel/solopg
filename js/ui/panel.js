@@ -6,6 +6,29 @@ import { hookName, hookDescription } from "../gen/hooks.js";
 
 const panel = () => document.getElementById("panel");
 
+// --- panel tabs (Detail | Hooks) -----------------------------------------
+// The panel shows one of two tabs at a time; #selection (Detail) and
+// #global-hooks (Hooks) are both built once and toggled via a class on #panel.
+let activeTab = "detail";
+
+function applyPanelTab() {
+  const el = panel();
+  if (!el) return;
+  el.classList.toggle("show-hooks", activeTab === "hooks");
+  const tabs = el.querySelector(".panel-tabs");
+  if (tabs) {
+    for (const b of tabs.querySelectorAll("button")) {
+      b.classList.toggle("active", b.dataset.tab === activeTab);
+    }
+  }
+}
+
+/** Switch the side panel to a tab ("detail" | "hooks"). */
+export function setPanelTab(tab) {
+  activeTab = tab === "hooks" ? "hooks" : "detail";
+  applyPanelTab();
+}
+
 /** One-line summary of a POI's occupant. */
 export function occupantSummary(occupant) {
   if (!occupant) return "empty";
@@ -215,24 +238,35 @@ const hookStatusRank = (h) => ((h.status || "open") === "open" ? 0 : 1);
  *   onIgnoreHook, onRemoveHook }} model
  */
 export function renderGlobalHooks(model) {
+  const hooks = model.hooks || [];
+  const openCount = hooks.filter((h) => (h.status || "open") === "open").length;
+
+  // Keep the Hooks-tab badge in sync (shown only when there are open hooks).
+  const badge = document.getElementById("hooks-tab-badge");
+  if (badge) {
+    badge.textContent = String(openCount);
+    badge.hidden = openCount === 0;
+  }
+
   const host = document.getElementById("global-hooks");
   if (!host) return;
   host.innerHTML = "";
-  const hooks = model.hooks || [];
-  if (!hooks.length) return; // keep the panel uncluttered until there are hooks
+  if (!hooks.length) {
+    const empty = document.createElement("div");
+    empty.className = "panel-hint";
+    empty.textContent = "No hooks yet — generate one at a town (right-click → Hook).";
+    host.appendChild(empty);
+    return;
+  }
 
-  const openCount = hooks.filter((h) => (h.status || "open") === "open").length;
-  const details = document.createElement("details");
-  details.className = "global-hooks";
-  details.open = openCount > 0;
-  const summary = document.createElement("summary");
-  summary.textContent = `Hooks — ${openCount} open / ${hooks.length} total`;
-  details.appendChild(summary);
+  const head = document.createElement("div");
+  head.className = "hooks-head";
+  head.textContent = `${openCount} open / ${hooks.length} total`;
+  host.appendChild(head);
 
   for (const hook of [...hooks].sort((a, b) => hookStatusRank(a) - hookStatusRank(b))) {
-    details.appendChild(hookCard(hook, model));
+    host.appendChild(hookCard(hook, model));
   }
-  host.appendChild(details);
 }
 
 // Read-only info for the selected cell: terrain, settlement, and POIs. Every
@@ -426,15 +460,35 @@ export function showWorld(world, opts = {}) {
     });
   }
   el.appendChild(name);
-  // Fixed region for the selected-hex details.
+  // Tab bar: Detail (selected hex/room) | Hooks (world hook list, with an
+  // open-count badge). Switching just toggles which region shows.
+  const tabs = document.createElement("div");
+  tabs.className = "panel-tabs";
+  const mkTab = (key, label, withBadge) => {
+    const b = document.createElement("button");
+    b.dataset.tab = key;
+    b.append(label);
+    if (withBadge) {
+      const badge = document.createElement("span");
+      badge.id = "hooks-tab-badge";
+      badge.className = "badge";
+      badge.hidden = true;
+      b.append(" ", badge);
+    }
+    b.addEventListener("click", () => setPanelTab(key));
+    return b;
+  };
+  tabs.append(mkTab("detail", "Detail"), mkTab("hooks", "Hooks", true));
+  el.appendChild(tabs);
+  // Detail region: the selected hex (or dungeon room) details.
   const sel = document.createElement("div");
   sel.id = "selection";
   el.appendChild(sel);
-  // Always-visible global hooks list (filled by renderGlobalHooks), shown from
-  // any selection — even none — so open hooks are reachable anywhere.
+  // Hooks region: the world hook list (filled by renderGlobalHooks).
   const gh = document.createElement("div");
   gh.id = "global-hooks";
   el.appendChild(gh);
+  activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.
   const meta = document.createElement("div");
@@ -445,4 +499,5 @@ export function showWorld(world, opts = {}) {
     meta.appendChild(div);
   }
   el.appendChild(meta);
+  applyPanelTab(); // reflect the active tab (Detail) on the freshly built bar
 }

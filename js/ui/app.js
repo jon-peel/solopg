@@ -38,7 +38,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, setPanelTab } from "./panel.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -299,6 +299,7 @@ function selectCell(q, r) {
   selectedPoiId = null; // reset drill-in when changing cell
   saveSelected(current, selected);
   setSelected(selected);
+  setPanelTab("detail"); // selecting a cell shows its detail
   renderSelection();
 }
 
@@ -676,6 +677,7 @@ function onRoomClick(n) {
   dungeonRoomN = n;
   setSelectedRoom(n);
   centerOnRoom(n); // bring it into view if it landed off-screen (e.g. via stairs)
+  setPanelTab("detail"); // selecting a room shows its detail
   renderRoomPanel(n);
 }
 

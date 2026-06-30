@@ -421,6 +421,65 @@ button:hover {
   font-size: 1.1rem;
 }
 
+/* Side-panel tabs: Detail | Hooks (Phase 7). */
+.panel-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.panel-tabs button {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+.panel-tabs button:hover {
+  color: var(--fg);
+}
+.panel-tabs button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.panel-tabs .badge {
+  display: inline-block;
+  min-width: 1.1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  background: #2b3140;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.25rem;
+  color: var(--fg);
+}
+/* Respect the `hidden` attribute (our display rule above would override it). */
+.panel-tabs .badge[hidden] {
+  display: none;
+}
+
+/* One tab visible at a time: Detail by default, Hooks when #panel.show-hooks. */
+#panel #global-hooks {
+  display: none;
+}
+#panel.show-hooks #global-hooks {
+  display: block;
+}
+#panel.show-hooks #selection {
+  display: none;
+}
+
+.hooks-head {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
 /* Editable world name (replaces the old prompt()-based rename). */
 .world-name {
   width: 100%;
