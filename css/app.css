@@ -337,6 +337,23 @@ button:hover {
   background: #1b2433;
 }
 
+/* Editable hex name in the Detail tab (annotation; shows as a map label). */
+.hex-name {
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.25rem 0.4rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text, #e6e8ee);
+  background: #11131a;
+  border: 1px solid var(--border, #2b3140);
+  border-radius: 4px;
+}
+.hex-name:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .room-note {
   width: 100%;
   margin-top: 0.4rem;

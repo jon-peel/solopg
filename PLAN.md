@@ -34,7 +34,8 @@ is done (see [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md)) �
 Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, submenus open as a **second
 outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
 (node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Next: more Phase 7** (editable/custom
-tables, map notes, themes). **Schema v6. 193 `node --test` passing.** Work merges to **`main`** via PR.
+tables, themes). **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7.**
+**Schema v7. 204 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 
@@ -67,7 +68,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **6**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **7**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
@@ -139,9 +140,9 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v6)
+## Current data model (as built, schema v7)
 
-- **World:** `{ schemaVersion:6, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
+- **World:** `{ schemaVersion:7, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
 - **Hook** (Phase 6; top-level `world.hooks[]`):
   `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
@@ -150,7 +151,8 @@ graph TD
   `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
-  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen }`.
+  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen, name?, note? }`.
+  `name`/`note` (v7) are optional GM annotations — `name` shows as a map label.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
   `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Water).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
@@ -186,7 +188,7 @@ graph TD
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
-| 7 — QoL & customization (editable tables, notes, themes) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) |
+| 7 — QoL & customization (editable tables, notes, themes) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a

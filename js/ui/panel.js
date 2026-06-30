@@ -346,6 +346,32 @@ export function renderGlobalHooks(model) {
   );
 }
 
+// Editable GM annotations for a hex: a name (shown as a map label) + freeform
+// notes. Both commit on blur/Enter (change event) — the only editable bits left
+// in the otherwise read-only Detail tab.
+function renderHexNotes(sel, hex, model) {
+  sel.appendChild(sectionLabel("Notes"));
+
+  const name = document.createElement("input");
+  name.className = "hex-name";
+  name.placeholder = "Name this hex…";
+  name.value = hex.name || "";
+  name.setAttribute("aria-label", "Hex name");
+  if (model.onRenameHex) {
+    name.addEventListener("change", () => model.onRenameHex(name.value));
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter") name.blur(); });
+  }
+  sel.appendChild(name);
+
+  const note = document.createElement("textarea");
+  note.className = "room-note";
+  note.rows = 3;
+  note.placeholder = "Notes…";
+  note.value = hex.note || "";
+  if (model.onNoteHex) note.addEventListener("change", () => model.onNoteHex(note.value));
+  sel.appendChild(note);
+}
+
 // Read-only info for the selected cell: terrain, settlement, and POIs. Every
 // action (place/generate/regenerate/delete, settlements, POIs, hooks) lives on
 // the right-click radial menu — the panel is just for seeing what's here.
@@ -375,6 +401,7 @@ export function renderSelectionPanel(model) {
       sel.appendChild(div);
     }
     renderPoiSection(sel, hex, model);
+    renderHexNotes(sel, hex, model);
   }
 
   // Point at the radial menu now that the action buttons are gone.

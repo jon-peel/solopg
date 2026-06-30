@@ -131,6 +131,24 @@ test("migrateWorld preserves an existing hooks list", () => {
   assert.equal(w.hooks[0].id, "hook:0");
 });
 
+test("migrateWorld upgrades v6 -> v7: stamps the version, preserves hex annotations", () => {
+  const v6 = { ...v2World(), schemaVersion: 6, hooks: [] };
+  v6.hexes["0,0"].name = "Mirewatch Ford";
+  v6.hexes["0,0"].note = "Toll bridge; the reeve is a smuggler.";
+  const w = migrateWorld(v6);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION);
+  assert.equal(w.hexes["0,0"].name, "Mirewatch Ford");
+  assert.equal(w.hexes["0,0"].note, "Toll bridge; the reeve is a smuggler.");
+});
+
+test("hex name/note round-trip through export/import", () => {
+  const world = createWorld({ name: "Annotated", seed: 1 });
+  world.hexes["1,-2"] = { key: "1,-2", coords: { q: 1, r: -2 }, placed: true, terrain: "Hills", pois: [], name: "Greywatch", note: "lookout" };
+  const restored = importWorld(exportWorld(world));
+  assert.equal(restored.hexes["1,-2"].name, "Greywatch");
+  assert.equal(restored.hexes["1,-2"].note, "lookout");
+});
+
 test("importWorld migrates a v2 JSON up to the current version", () => {
   const restored = importWorld(JSON.stringify(v2World()));
   assert.equal(restored.schemaVersion, SCHEMA_VERSION);

@@ -285,6 +285,24 @@ function drawDetailMarkers(cx, cy, hex) {
     const label = pois.length === 1 ? glyphForPoi(pois[0]) : String(pois.length);
     drawMarker(cx + off, cy + off, label, size, pois.length === 1 ? undefined : "#fff");
   }
+
+  if (hex.name) drawHexLabel(cx, cy, hex.name);
+}
+
+// A user's hex name, as a small pill below the hex (legible over terrain art).
+function drawHexLabel(cx, cy, name) {
+  const fs = Math.max(8, HEX_SIZE * 0.34);
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const text = name.length > 18 ? name.slice(0, 17) + "…" : name;
+  const w = ctx.measureText(text).width;
+  const padX = fs * 0.4;
+  const y = cy + HEX_SIZE * 0.66;
+  ctx.fillStyle = "rgba(13,15,21,0.72)";
+  ctx.fillRect(cx - w / 2 - padX, y - fs * 0.7, w + padX * 2, fs * 1.4);
+  ctx.fillStyle = "#e6e8ee";
+  ctx.fillText(text, cx, y);
 }
 
 // Simplified tier (zoomed out): settlement size-marker centered on the tile +

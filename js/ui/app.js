@@ -323,7 +323,29 @@ function renderSelection() {
       selectedPoiId = null;
       renderSelection();
     },
+    onRenameHex,
+    onNoteHex,
   });
+}
+
+// GM annotations on the selected hex. A name shows as a map label, so renaming
+// re-renders; a note has no map presence, so it just persists (keeps focus).
+async function onRenameHex(name) {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const v = (name || "").trim();
+  if (v) hex.name = v; else delete hex.name;
+  await persistAndRefresh();
+}
+
+async function onNoteHex(text) {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const v = text || "";
+  if (v) hex.note = v; else delete hex.note;
+  current = await saveWorld(current);
 }
 
 // Settlement sizes the terrain permits (capped; empty for open water).
