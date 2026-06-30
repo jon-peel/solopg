@@ -474,14 +474,30 @@ button:hover {
 .hook .tile-actions {
   cursor: default;
 }
-/* Colour key tying the card to the map's target/origin rings. */
+/* Colour key tying the card to the map's target/origin rings; each is a link
+   that centres the map on that hex. */
 .hook-legend {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.3rem;
   font-size: 0.72rem;
-  color: var(--fg);
+}
+.legend-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.72rem;
+  color: var(--accent);
+  cursor: pointer;
+}
+.legend-link:hover {
+  text-decoration: underline;
 }
 .hook-legend .dot {
   width: 0.7rem;
@@ -490,7 +506,7 @@ button:hover {
   display: inline-block;
 }
 .hook-legend .dot.t { background: #e8493a; }
-.hook-legend .dot.o { background: #39c0c8; margin-left: 0.4rem; }
+.hook-legend .dot.o { background: #39c0c8; }
 .hook-legend .muted { color: var(--muted); }
 
 /* Per-card "…" overflow menu (reuses the .menu / .menu-list dropdown styles). */

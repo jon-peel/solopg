@@ -788,8 +788,7 @@ function refreshGlobalHooks() {
     selectedHookId,
     onSelectHook,
     onPinHook,
-    onGoToHook,
-    onGoToHookOrigin,
+    onCenterHook,
     onFollowClue,
     onResolveHook,
     onIgnoreHook,
@@ -1025,20 +1024,12 @@ async function onRemoveHook(id) {
   await persistAndRefresh();
 }
 
-// Jump the map to a hook's TRUE target (the GM sees through an off-by-one error).
-function onGoToHook(id) {
-  const h = (current.hooks || []).find((x) => x.id === id);
-  if (!h || !h.target) return;
-  selectCell(h.target.q, h.target.r);
-  recenterOn(h.target.q, h.target.r);
-}
-
-// Jump back to where a hook was heard / where the party reports in (its origin).
-function onGoToHookOrigin(id) {
-  const h = (current.hooks || []).find((x) => x.id === id);
-  if (!h || !h.origin) return;
-  selectCell(h.origin.q, h.origin.r);
-  recenterOn(h.origin.q, h.origin.r);
+// Centre the map on a hook's target/origin WITHOUT changing the selection — the
+// colour-dot links on a selected hook card use this (stay on the hook, just pan).
+function onCenterHook(id, which) {
+  const h = (current && current.hooks || []).find((x) => x.id === id);
+  const pt = h && (which === "origin" ? h.origin : h.target);
+  if (pt) recenterOn(pt.q, pt.r);
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the

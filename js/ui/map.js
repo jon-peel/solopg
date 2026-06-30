@@ -154,8 +154,8 @@ export function render() {
 
   // 3. Selected hook's endpoints (distinct colours), drawn under the cell cursor.
   if (hookFocus) {
-    if (hookFocus.origin) drawHookFocus(hookFocus.origin, FOCUS_ORIGIN, "O");
-    if (hookFocus.target) drawHookFocus(hookFocus.target, FOCUS_TARGET, "T");
+    if (hookFocus.origin) drawHookFocus(hookFocus.origin, FOCUS_ORIGIN);
+    if (hookFocus.target) drawHookFocus(hookFocus.target, FOCUS_TARGET);
   }
 
   // 4. Selection highlight on top (works for empty or filled cells).
@@ -188,16 +188,11 @@ export function setHookFocus(focus) {
   render();
 }
 
-// A bold ring + a corner letter badge for a focused hook endpoint.
-function drawHookFocus(coord, color, letter) {
+// A bold coloured ring for a focused hook endpoint (which is which is read from
+// the card's colour legend, so no letter badge here).
+function drawHookFocus(coord, color) {
   const c = axialToPixel(coord.q, coord.r, HEX_SIZE);
   strokeHex(c.x, c.y, color, 4);
-  const off = HEX_SIZE * 0.5;
-  const size = HEX_SIZE * 0.5;
-  ctx.font = `bold ${size}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  drawMarker(c.x + off, c.y - off, letter, size, color);
 }
 
 // Cache of tile <img>s keyed by url; re-render once each finishes loading.

@@ -216,8 +216,8 @@ function hookKebab(hook, model) {
     b.addEventListener("click", () => { menu.open = false; fn(); });
     list.appendChild(b);
   };
-  item("→ Go to target", () => model.onGoToHook(hook.id));
-  item("↩ Go to origin", () => model.onGoToHookOrigin(hook.id));
+  // Target/origin jumps now live on the card's colour-dot links; the menu keeps
+  // only the destructive action, tucked away.
   item("Remove hook", () => model.onRemoveHook(hook.id));
   menu.appendChild(list);
   return menu;
@@ -245,13 +245,29 @@ function hookCard(hook, model) {
     box.appendChild(div);
   }
 
-  // Selected: a tiny legend tying the card to the map's target/origin rings.
+  // Selected: the two coloured rings on the map are mirrored here as links —
+  // click one to centre the map on that hex (selection/tab stay put).
   if (selected) {
     const legend = document.createElement("div");
     legend.className = "hook-legend";
-    legend.innerHTML =
-      `<span class="dot t"></span>target <span class="dot o"></span>origin` +
-      `<span class="muted"> — highlighted on the map</span>`;
+    legend.addEventListener("click", (e) => e.stopPropagation()); // don't toggle the card
+    const link = (which, label, dotClass) => {
+      const a = document.createElement("button");
+      a.type = "button";
+      a.className = "legend-link";
+      a.title = `Centre the map on the ${which}`;
+      const dot = document.createElement("span");
+      dot.className = `dot ${dotClass}`;
+      a.append(dot, label);
+      a.addEventListener("click", () => model.onCenterHook(hook.id, which));
+      return a;
+    };
+    if (hook.target) legend.appendChild(link("target", "Target", "t"));
+    if (hook.origin) legend.appendChild(link("origin", "Origin", "o"));
+    const note = document.createElement("span");
+    note.className = "muted";
+    note.textContent = "— click to centre";
+    legend.appendChild(note);
     box.appendChild(legend);
   }
 
@@ -276,8 +292,8 @@ const hookStatusRank = (h) => ((h.status || "open") === "open" ? 0 : 1);
 /**
  * Render the always-visible global hooks list into #global-hooks. Open hooks
  * sort first (and undimmed); resolved/ignored dim below so nothing is lost.
- * @param {{ hooks: object[], onGoToHook, onGoToHookOrigin, onResolveHook,
- *   onIgnoreHook, onRemoveHook }} model
+ * @param {{ hooks: object[], selectedHookId, onSelectHook, onPinHook,
+ *   onCenterHook, onResolveHook, onIgnoreHook, onRemoveHook, onFollowClue }} model
  */
 function setTabBadge(id, n) {
   const badge = document.getElementById(id);

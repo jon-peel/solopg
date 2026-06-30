@@ -11,14 +11,17 @@ Extends the hooks panel (7.3). Browser-only; `hooks[].pinned` is additive (absen
   between the **Hooks** list (unpinned) and the **Pinned** list (the party's
   chosen leads). Pinned hooks are filtered *out* of the Hooks tab. Both tabs carry
   a count badge (Hooks = open-unpinned count; Pinned = pinned count).
-- **Kebab "…" menu per card.** *Go to target*, *Go to origin*, and *Remove* moved
-  into an overflow menu (reusing the `.menu`/`.menu-list` dropdown), so the visible
-  row stays tidy (Pin / Resolve / Ignore / Follow-the-clue). The jumps recenter the
-  map — handy when it's large.
+- **Kebab "…" menu per card.** Holds only the destructive *Remove hook*, tucked
+  away (reusing the `.menu`/`.menu-list` dropdown), so the visible row stays tidy
+  (Pin / Resolve / Ignore / Follow-the-clue).
 - **Select-to-highlight.** Clicking a hook card selects it (toggles); the map rings
-  its **target (red)** and **origin (teal)** with corner T/O badges, and the card
-  shows a small colour legend. Selection is UI-only (not persisted); cleared by
-  re-clicking, selecting another, switching worlds, or the hook being removed.
+  its **target (red)** and **origin (teal)** — **ring only, no letters**. Selection
+  is UI-only (not persisted); cleared by re-clicking, selecting another, switching
+  worlds, or the hook being removed.
+- **Colour-dot links.** When selected, the card shows **Target** / **Origin**
+  links (matching the ring colours). Clicking one **centres the map** on that hex
+  (`onCenterHook` → `recenterOn`) without changing the selection or tab — so they
+  double as the jump-to-hex controls.
 
 ## How it's built
 
