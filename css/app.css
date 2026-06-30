@@ -461,15 +461,48 @@ button:hover {
   display: none;
 }
 
-/* One tab visible at a time: Detail by default, Hooks when #panel.show-hooks. */
-#panel #global-hooks {
-  display: none;
+/* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
+
+/* Selected hook (its target/origin are ringed on the map). */
+.hook {
+  cursor: pointer;
 }
-#panel.show-hooks #global-hooks {
-  display: block;
+.hook.selected {
+  border-color: var(--accent);
+  background: #1b2433;
 }
-#panel.show-hooks #selection {
-  display: none;
+.hook .tile-actions {
+  cursor: default;
+}
+/* Colour key tying the card to the map's target/origin rings. */
+.hook-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--fg);
+}
+.hook-legend .dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+.hook-legend .dot.t { background: #e8493a; }
+.hook-legend .dot.o { background: #39c0c8; margin-left: 0.4rem; }
+.hook-legend .muted { color: var(--muted); }
+
+/* Per-card "…" overflow menu (reuses the .menu / .menu-list dropdown styles). */
+.menu.kebab {
+  margin-top: 0;
+}
+.menu.kebab > summary {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+}
+.menu.kebab .menu-list {
+  right: 0;
 }
 
 .hooks-head {

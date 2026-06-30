@@ -152,7 +152,13 @@ export function render() {
     if (hookTargets.has(axialKey(q, r))) drawHookMark(c.x, c.y, detail);
   }
 
-  // 3. Selection highlight on top (works for empty or filled cells).
+  // 3. Selected hook's endpoints (distinct colours), drawn under the cell cursor.
+  if (hookFocus) {
+    if (hookFocus.origin) drawHookFocus(hookFocus.origin, FOCUS_ORIGIN, "O");
+    if (hookFocus.target) drawHookFocus(hookFocus.target, FOCUS_TARGET, "T");
+  }
+
+  // 4. Selection highlight on top (works for empty or filled cells).
   if (selected) {
     const c = axialToPixel(selected.q, selected.r, HEX_SIZE);
     strokeHex(c.x, c.y, SELECTED_STROKE, 3);
@@ -169,6 +175,29 @@ export function setIconsEnabled(on) {
 export function setHookMarks(keys) {
   hookTargets = new Set(keys);
   render();
+}
+
+// The selected hook's endpoints, highlighted with distinct colours.
+let hookFocus = null; // { target:{q,r}|null, origin:{q,r}|null } | null
+const FOCUS_TARGET = "#e8493a"; // red — where the hook points
+const FOCUS_ORIGIN = "#39c0c8"; // teal — where it was heard / reported
+
+/** Highlight one hook's target/origin on the map, or null to clear. Re-renders. */
+export function setHookFocus(focus) {
+  hookFocus = focus && (focus.target || focus.origin) ? focus : null;
+  render();
+}
+
+// A bold ring + a corner letter badge for a focused hook endpoint.
+function drawHookFocus(coord, color, letter) {
+  const c = axialToPixel(coord.q, coord.r, HEX_SIZE);
+  strokeHex(c.x, c.y, color, 4);
+  const off = HEX_SIZE * 0.5;
+  const size = HEX_SIZE * 0.5;
+  ctx.font = `bold ${size}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  drawMarker(c.x + off, c.y - off, letter, size, color);
 }
 
 // Cache of tile <img>s keyed by url; re-render once each finishes loading.

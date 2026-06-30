@@ -47,6 +47,7 @@ import {
   recenterOn,
   setIconsEnabled,
   setHookMarks,
+  setHookFocus,
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
@@ -116,6 +117,7 @@ const HOOK_TABLE_IDS = [
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
+let selectedHookId = null; // hook whose target/origin are highlighted on the map
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -173,6 +175,7 @@ async function setCurrent(world) {
   if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
   selectedPoiId = null;
+  selectedHookId = null; // clear any hook highlight from the previous world
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -185,6 +188,7 @@ async function setCurrent(world) {
   renderSelection();
   refreshGlobalHooks();
   refreshHookMarks();
+  refreshHookFocus();
   await refreshWorldList();
 }
 
@@ -776,11 +780,14 @@ function refreshHookMarks() {
   setHookMarks(keys);
 }
 
-// Refresh the always-visible global hooks list (open hooks reachable anywhere).
+// Refresh the hook tabs (unpinned list + pinned list, with badges).
 function refreshGlobalHooks() {
   renderGlobalHooks({
     hooks: (current && current.hooks) || [],
     hexScale: (current && current.hexScale) || 6,
+    selectedHookId,
+    onSelectHook,
+    onPinHook,
     onGoToHook,
     onGoToHookOrigin,
     onFollowClue,
@@ -788,6 +795,32 @@ function refreshGlobalHooks() {
     onIgnoreHook,
     onRemoveHook,
   });
+}
+
+// Highlight the selected hook's target/origin on the map (clears if none/gone).
+function refreshHookFocus() {
+  const h = selectedHookId && (current && current.hooks || []).find((x) => x.id === selectedHookId);
+  if (!h) {
+    selectedHookId = null;
+    return setHookFocus(null);
+  }
+  setHookFocus({ target: h.target || null, origin: h.origin || null });
+}
+
+// Clicking a hook card selects it (toggles); selection rings its endpoints.
+function onSelectHook(id) {
+  selectedHookId = selectedHookId === id ? null : id;
+  refreshGlobalHooks();
+  refreshHookFocus();
+}
+
+// Pin / unpin a hook — pinned hooks move to the Pinned tab (out of Hooks).
+async function onPinHook(id) {
+  if (!current) return;
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h) return;
+  h.pinned = !h.pinned;
+  await persistAndRefresh();
 }
 
 // Next free "hook:<n>" id across the whole world (hooks are world-level).
@@ -1052,6 +1085,7 @@ async function persistAndRefresh() {
   refreshHookMarks();
   renderSelection();
   refreshGlobalHooks();
+  refreshHookFocus();
 }
 
 // Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.
