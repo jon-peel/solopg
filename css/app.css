@@ -131,6 +131,19 @@ button:hover {
   color: var(--accent);
 }
 
+/* A fully-explored level gets a ✓; levels without one still hold unexplored rooms. */
+#dungeon-levels button.done::after {
+  content: " ✓";
+  color: #5fbf77;
+}
+
+/* Whole-dungeon clear progress next to the title. */
+.dungeon-progress {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 #dungeon-canvas {
   flex: 1 1 auto;
   width: 100%;

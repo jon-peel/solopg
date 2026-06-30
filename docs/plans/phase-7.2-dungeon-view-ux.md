@@ -11,7 +11,7 @@ Stepwise, each its own commit + manual checklist:
 | 1 | Wayfinding: `Esc` exits; `[`/`]` (+ PgUp/PgDn) switch levels; auto-center a selected/target room that lands off-screen | ✅ done |
 | 2 | At-a-glance room markers: 💰 on rooms with treasure (content glyphs deferred) | ✅ done |
 | 3 | Room right-click radial (Explored/Cleared/Looted/Take-stairs/Center) — **reuses the config-driven radial overlay** so the world-map ring keeps working | ✅ done |
-| 4 | Progress & switcher polish: "Cleared X/Y", level theme on the switcher, mark levels with unexplored rooms | ◻ |
+| 4 | Progress & switcher polish: "Cleared X/Y", level theme on the switcher, mark fully-explored levels (✓) | ✅ done |
 
 ## Step 1 (done)
 
@@ -63,3 +63,19 @@ gate + `centerOnRoom(force)`), `js/ui/app.js` (room ctx-menu + dispatch + key
 deferral), `css/app.css` (`.ring-node.on`). Verified headless: **both** rings —
 world map (8 slots, dispatch, danger) and room (5 slots, Cleared toggle
 round-trips, Esc closes ring without leaving the dungeon).
+
+## Step 4 (done) — progress & switcher polish
+
+- **Toolbar `Cleared X/Y`** (`#dungeon-progress`) — whole-dungeon cleared-room
+  count, updates live as rooms are marked.
+- **Switcher tooltips** — each level button's `title` shows its theme/family and
+  `explored/total` + `cleared/total`.
+- **✓ on fully-explored levels** — a level button gains a green ✓ once every room
+  on it is explored; levels *without* a ✓ still hold unexplored rooms (so the
+  start state isn't all-marked).
+
+Driven by `dungeonTallies()` in `app.js`; `renderLevelSwitcher` also refreshes on
+`toggleRoomState`. Touches `app.js`, `index.html` (toolbar span), `css`. Verified
+headless: `Cleared 0/3` → `1/3` on a Cleared toggle; tooltip shows theme + counts.
+
+Phase 7.2 complete.

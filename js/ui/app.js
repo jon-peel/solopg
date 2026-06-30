@@ -549,16 +549,45 @@ function onToggleLegend() {
   $("dungeon-legend").hidden = !$("dungeon-legend").hidden;
 }
 
+// Per-level + whole-dungeon explored/cleared tallies (for the switcher chrome
+// and the toolbar progress). A level is "done" once every room is explored.
+function dungeonTallies() {
+  const dungeon = dungeonPoi.detail.dungeon;
+  const state = dungeonPoi.detail.dungeonState;
+  const perLevel = dungeon.levels.map((lvl, i) => {
+    const rooms = lvl.layout.rooms || [];
+    let explored = 0, cleared = 0;
+    for (const r of rooms) {
+      const st = getRoomState(state, i, r.n);
+      if (st.explored) explored++;
+      if (st.cleared) cleared++;
+    }
+    return { total: rooms.length, explored, cleared, fullyExplored: rooms.length > 0 && explored === rooms.length };
+  });
+  return {
+    perLevel,
+    total: perLevel.reduce((a, l) => a + l.total, 0),
+    cleared: perLevel.reduce((a, l) => a + l.cleared, 0),
+  };
+}
+
 function renderLevelSwitcher() {
   const bar = $("dungeon-levels");
   bar.innerHTML = "";
-  dungeonPoi.detail.dungeon.levels.forEach((lvl, i) => {
+  const dungeon = dungeonPoi.detail.dungeon;
+  const t = dungeonTallies();
+  dungeon.levels.forEach((lvl, i) => {
     const b = document.createElement("button");
     b.textContent = `L${lvl.depth}`;
     if (i === dungeonLevelIndex) b.className = "active";
+    if (t.perLevel[i].fullyExplored) b.classList.add("done");
+    const pl = t.perLevel[i];
+    b.title = `Level ${lvl.depth}: ${lvl.theme || lvl.family || "?"} — ${pl.explored}/${pl.total} explored, ${pl.cleared}/${pl.total} cleared`;
     b.addEventListener("click", () => showDungeonLevel(i));
     bar.appendChild(b);
   });
+  const prog = $("dungeon-progress");
+  if (prog) prog.textContent = t.total ? `Cleared ${t.cleared}/${t.total}` : "";
 }
 
 // Connector marks (entrance/exit/stairs) for one level, as Sets of room numbers.
@@ -712,6 +741,7 @@ async function toggleRoomState(level, n, field) {
   });
   current = await saveWorld(current);
   setMarks(marksFor(dungeonPoi.detail.dungeon, level)); // refresh map badges, keep selection
+  renderLevelSwitcher(); // refresh the "done" ✓ + Cleared X/Y progress
   renderRoomPanel(n); // refresh toggle states
 }
 
