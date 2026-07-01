@@ -401,7 +401,10 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   coherent region without breaking coastlines/rivers/roads (respect the `locked`/
   `manual` flag; re-stitch edges).
 - **Rendering pass** — rivers, roads (tiered), two waters, settlement tiers + Keep/Fort
-  icon, optional region labels; legend + LOD updates.
+  icon, optional region labels; legend + LOD updates. **Requested tweak:** recolour
+  Hills as a blend of Mountains' grey and Plains' green (`terrain-style.js`
+  `TERRAIN_COLORS`) so the Mountains→Hills→Plains elevation band reads as a visual
+  gradient, reinforcing the 3R.3 biome-coherence work.
 - **Migration/compat** for pre-3R worlds. **Performance** pass (large-area gen stays
   snappy). Final **tuning** against the 3R.2 metrics.
 
