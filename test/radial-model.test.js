@@ -17,7 +17,7 @@ const base = (over = {}) => ({
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "reserved", "regenerate", "deleteHex", "generate"];
+const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "reserved"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -137,7 +137,7 @@ test("POI's dungeon stays a leaf (random size) when no sizes are supplied", () =
 
 // Regression: the ring must center on the clicked point, translated into the
 // host (#stage) box — not collapse to a fixed corner.
-const PAD = 228; // OUTER_R(178) + SUB_NODE(50), matching radial-menu.js
+const PAD = 200; // OUTER_R(150) + SUB_NODE(50), matching radial-menu.js
 const RECT = { left: 100, top: 50, width: 1000, height: 800 };
 
 test("ringCenter centers on the click, relative to the host box", () => {

@@ -136,15 +136,17 @@ export function buildRadialModel(state) {
     submenu("poi", ACTION_GLYPH.poi, "POI", placed ? {} : needHex, poiChildren(poiTypes, pois, dungeonSizes)),
     submenu("settlement", ACTION_GLYPH.settlement, "Settlement", settlementState, settlementChildren(allowedSizes, hasSettlement)),
     submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
-    // Reserved — no action lives here yet (a future feature, e.g. travel,
-    // may claim it). Kept in place so the other 7 slots don't shift position.
-    leaf("reserved", ACTION_GLYPH.reserved, "—", { enabled: false, reason: "Reserved for a future feature" }),
-    leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
-    leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
     // Generate: Random (single hex, gated like before) + Small/Medium/Large
     // (3R.1 "Area" fill-empty, folded in here). The submenu itself is always
     // enabled — Area sizes work regardless of whether the center is placed.
+    // Placed at the bottom slot (nearest the cursor for a typical downward
+    // right-click) since it's the most-used action.
     submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
+    leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
+    leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
+    // Reserved — no action lives here yet (a future feature, e.g. travel,
+    // may claim it).
+    leaf("reserved", ACTION_GLYPH.reserved, "—", { enabled: false, reason: "Reserved for a future feature" }),
   ];
 }
 
