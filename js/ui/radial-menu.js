@@ -104,45 +104,42 @@ function nodeEl(item, x, y, size, cls) {
   return n;
 }
 
+// Render one ring of items at `radius`. `active` rings are clickable; inactive
+// (parent-context) rings dim, with the chosen parent lit. `anchorAngle` places
+// an `anchor` child (e.g. "Random") nearest the cursor.
+function drawRing(items, radius, nodeSize, { active, parentIndex, anchorAngle }) {
+  const { x, y } = state;
+  ringEl.appendChild(guide(x, y, radius));
+  const anchorIdx = active && anchorAngle != null ? items.findIndex((it) => it.anchor) : -1;
+  const baseAng = anchorIdx >= 0 ? anchorAngle : -Math.PI / 2;
+  const aIdx = anchorIdx >= 0 ? anchorIdx : 0;
+  items.forEach((item, i) => {
+    const ang = baseAng + (Math.PI * 2 * (i - aIdx)) / items.length;
+    const nx = x + radius * Math.cos(ang);
+    const ny = y + radius * Math.sin(ang);
+    const cls = active ? "" : i === parentIndex ? "parent" : "dim";
+    const n = nodeEl(item, nx, ny, nodeSize, cls);
+    if (active) n.addEventListener("click", (e) => { e.stopPropagation(); pick(item, i); });
+    ringEl.appendChild(n);
+  });
+}
+
+// Show the deepest two levels: the current (outer, clickable) and its parent
+// (inner, dimmed for breadcrumb). Supports arbitrary nesting (POI → dungeon →
+// size), always as two concentric rings.
 function draw() {
   clearNodes();
   const { x, y, stack } = state;
   const depth = stack.length - 1;
-  const base = stack[0].items;
 
-  // Base ring: always shown. When a submenu is open it dims, except the parent.
-  ringEl.appendChild(guide(x, y, BASE_R));
-  base.forEach((item, i) => {
-    const ang = (Math.PI * 2 * i) / base.length - Math.PI / 2;
-    const nx = x + BASE_R * Math.cos(ang);
-    const ny = y + BASE_R * Math.sin(ang);
-    const isParent = depth > 0 && stack[1].parentIndex === i;
-    const cls = depth > 0 ? (isParent ? "parent" : "dim") : "";
-    const n = nodeEl(item, nx, ny, BASE_NODE, cls);
-    if (depth === 0) n.addEventListener("click", (e) => { e.stopPropagation(); pick(item, i); });
-    ringEl.appendChild(n);
-  });
-
-  // Submenu ring. A "Random" (anchor) child is placed at the parent's angle —
-  // the outer slot nearest the cursor — so it's always the least-travel pick.
-  if (depth > 0) {
-    const sub = stack[1].items;
-    const parentAngle = stack[1].parentAngle;
-    const anchorIdx = sub.findIndex((it) => it.anchor);
-    const baseAng = anchorIdx >= 0 ? parentAngle : -Math.PI / 2;
-    const aIdx = anchorIdx >= 0 ? anchorIdx : 0;
-    ringEl.appendChild(guide(x, y, OUTER_R));
-    sub.forEach((item, i) => {
-      const ang = baseAng + (Math.PI * 2 * (i - aIdx)) / sub.length;
-      const nx = x + OUTER_R * Math.cos(ang);
-      const ny = y + OUTER_R * Math.sin(ang);
-      const n = nodeEl(item, nx, ny, SUB_NODE);
-      n.addEventListener("click", (e) => { e.stopPropagation(); pick(item, i); });
-      ringEl.appendChild(n);
-    });
+  if (depth === 0) {
+    drawRing(stack[0].items, BASE_R, BASE_NODE, { active: true, anchorAngle: null });
+  } else {
+    const level = stack[depth];
+    drawRing(stack[depth - 1].items, BASE_R, BASE_NODE, { active: false, parentIndex: level.parentIndex });
+    drawRing(level.items, OUTER_R, SUB_NODE, { active: true, anchorAngle: level.parentAngle });
   }
 
-  // Center hub: Back inside a submenu, Close at the top level.
   const hub = document.createElement("div");
   hub.className = "ring-hub";
   hub.style.left = x + "px";
@@ -157,8 +154,10 @@ function draw() {
 function pick(item, index) {
   if (item.enabled === false) return; // greyed-out: visible but inert
   if (item.kind === "submenu") {
-    const parentAngle = (Math.PI * 2 * index) / state.stack[0].items.length - Math.PI / 2;
-    state.stack[1] = { items: item.children, parentIndex: index, parentAngle };
+    // Anchor the child submenu at the picked item's angle within its own ring.
+    const current = state.stack[state.stack.length - 1].items;
+    const parentAngle = (Math.PI * 2 * index) / current.length - Math.PI / 2;
+    state.stack.push({ items: item.children, parentIndex: index, parentAngle });
     draw();
     return;
   }
@@ -168,6 +167,6 @@ function pick(item, index) {
 }
 
 function back() {
-  state.stack.length = 1;
+  state.stack.pop();
   draw();
 }

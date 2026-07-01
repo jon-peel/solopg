@@ -89,6 +89,30 @@ test("Terrain and POI submenus anchor their Random child for nearest-cursor plac
   assert.equal(poiRandom.id, "addRandomPoi");
 });
 
+test("POI's dungeon nests a size sub-ring (Random + each size) when sizes are supplied", () => {
+  const sizes = [
+    { label: "Cramped", value: "Cramped", title: "A den." },
+    { label: "Sizable", value: "Sizable", title: "A proper dungeon." },
+  ];
+  const poi = byId(buildRadialModel(base({ placed: true, terrain: "Forest", dungeonSizes: sizes })), "poi");
+  const dungeon = poi.children.find((c) => c.label === "dungeon");
+  assert.equal(dungeon.kind, "submenu");
+  assert.equal(dungeon.children[0].id, "addRandomDungeon");
+  assert.equal(dungeon.children[0].anchor, true);
+  const sized = dungeon.children.filter((c) => c.id === "addDungeon");
+  assert.deepEqual(sized.map((c) => c.value), ["Cramped", "Sizable"]);
+  // Other POI types remain plain leaves.
+  assert.equal(poi.children.find((c) => c.label === "shrine").kind, "leaf");
+});
+
+test("POI's dungeon stays a leaf (random size) when no sizes are supplied", () => {
+  const poi = byId(buildRadialModel(base({ placed: true, terrain: "Forest" })), "poi");
+  const dungeon = poi.children.find((c) => c.label === "dungeon");
+  assert.equal(dungeon.kind, "leaf");
+  assert.equal(dungeon.id, "addPoi");
+  assert.equal(dungeon.value, "dungeon");
+});
+
 // Regression: the ring must center on the clicked point, translated into the
 // host (#stage) box — not collapse to a fixed corner.
 const PAD = 228; // OUTER_R(178) + SUB_NODE(50), matching radial-menu.js

@@ -1289,6 +1289,7 @@ function onContextMenu({ q, r, clientX, clientY }) {
     poiTypes: Object.keys(POI_GLYPHS),
     terrains: Object.keys(TERRAIN_COLORS),
     pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
+    dungeonSizes: dungeonSizes.map((s) => ({ label: s.size, value: s.size, title: s.blurb || "" })),
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -1301,6 +1302,8 @@ function radialDispatch(id, value) {
     case "placeTerrain": return onPlaceTerrain(value);
     case "addRandomPoi": return onAddRandomPoi();
     case "addPoi": return onAddPoi(value);
+    case "addRandomDungeon": return onAddDungeon();
+    case "addDungeon": return onAddDungeon(value);
     case "removePoi": return onRemovePoi(value);
     case "addRandomSettlement": return onAddRandomSettlement();
     case "addSettlement": return onAddSettlement(value);

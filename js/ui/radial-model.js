@@ -39,13 +39,21 @@ function terrainChildren(terrains) {
 
 const shorten = (s, n = 16) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-// POI submenu: Random (anchored) + each type to add (dungeon adds a random-size
-// dungeon; size-specific dungeons stay in the side panel), then a Remove entry
-// per existing POI on this hex (deleting a POI lives here, not in the panel).
-function poiChildren(poiTypes, pois) {
+// POI submenu: Random (anchored) + each type to add, then a Remove entry per
+// existing POI on this hex (deleting a POI lives here, not in the panel).
+// "dungeon" nests a third ring of sizes (Random + each dungeon-size) when
+// `dungeonSizes` is supplied; with none it stays a leaf that adds a random one.
+function poiChildren(poiTypes, pois, dungeonSizes = []) {
   return [
     leaf("addRandomPoi", "🎲", "Random", { anchor: true }),
-    ...poiTypes.map((t) => leaf("addPoi", POI_GLYPH[t] || "⭐", t, { value: t })),
+    ...poiTypes.map((t) =>
+      t === "dungeon" && dungeonSizes.length
+        ? submenu("dungeon", POI_GLYPH.dungeon, "dungeon", {}, [
+            leaf("addRandomDungeon", "🎲", "Random", { anchor: true }),
+            ...dungeonSizes.map((s) => leaf("addDungeon", "🏰", s.label, { value: s.value, title: s.title })),
+          ])
+        : leaf("addPoi", POI_GLYPH[t] || "⭐", t, { value: t }),
+    ),
     ...pois.map((p) => leaf("removePoi", "🗑️", shorten(p.name), { value: p.id, title: `Remove ${p.name}`, danger: true })),
   ];
 }
@@ -80,13 +88,14 @@ function hookChildren(canGossip) {
  *   poiTypes       {string[]}
  *   terrains       {string[]}
  *   pois           {{id:string,name:string}[]} existing POIs on this hex (for Remove)
+ *   dungeonSizes   {{label:string,value:string,title?:string}[]} size options for the dungeon sub-ring
  * @returns {object[]} 8 slots, always in this order.
  */
 export function buildRadialModel(state) {
   const {
     placed = false, terrain = null, hasSettlement = false,
     allowedSizes = [], canGossip = false, emptyNeighbors = 0,
-    poiTypes = [], terrains = [], pois = [],
+    poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
   } = state || {};
 
   const needHex = { enabled: false, reason: "Place terrain on this hex first" };
@@ -108,7 +117,7 @@ export function buildRadialModel(state) {
 
   return [
     submenu("terrain", ACTION_GLYPH.terrain, placed ? "Terrain" : "Place", {}, terrainChildren(terrains)),
-    submenu("poi", ACTION_GLYPH.poi, "POI", placed ? {} : needHex, poiChildren(poiTypes, pois)),
+    submenu("poi", ACTION_GLYPH.poi, "POI", placed ? {} : needHex, poiChildren(poiTypes, pois, dungeonSizes)),
     submenu("settlement", ACTION_GLYPH.settlement, "Settlement", settlementState, settlementChildren(allowedSizes, hasSettlement)),
     submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
     leaf("neighbors", ACTION_GLYPH.neighbors, "Neighbours", neighborsState),
