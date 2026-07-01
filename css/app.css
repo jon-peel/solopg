@@ -89,6 +89,110 @@ button:hover {
   cursor: grabbing;
 }
 
+/* --- Map chrome (controls, readout, empty-state, help) --- */
+#map-empty {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  color: var(--muted);
+  font-size: 1rem;
+  pointer-events: none;
+  text-align: center;
+}
+#map-empty[hidden] {
+  display: none;
+}
+
+#map-readout {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: rgba(13, 15, 21, 0.65);
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  pointer-events: none;
+}
+#readout-cell {
+  color: var(--fg);
+  min-width: 1px;
+}
+
+#map-controls {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+#map-controls button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--fg);
+  background: rgba(35, 39, 50, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+#map-controls button:hover {
+  border-color: var(--accent);
+}
+
+#help-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+#help-overlay[hidden] {
+  display: none;
+}
+.help-card {
+  max-width: 24rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.help-card strong {
+  color: var(--accent);
+}
+.help-card ul {
+  margin: 0.6rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.help-card ul b {
+  color: var(--fg);
+}
+.help-card button {
+  font: inherit;
+  color: var(--fg);
+  background: #2b3140;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+.help-card button:hover {
+  border-color: var(--accent);
+}
+
 /* Dungeon View overlays the hex map within the stage. */
 #dungeon-view {
   position: absolute;

@@ -28,6 +28,20 @@
       <div id="stage">
         <!-- Hex grid (Phase 2). The Dungeon View overlays it when open. -->
         <canvas id="map"></canvas>
+        <!-- Empty-state prompt for a fresh world (hidden once a hex is placed). -->
+        <div id="map-empty" hidden>Right-click anywhere to begin</div>
+        <!-- Bottom-left readout: hovered hex + world scale. -->
+        <div id="map-readout">
+          <span id="readout-cell"></span>
+          <span id="readout-scale"></span>
+        </div>
+        <!-- Bottom-right map controls. -->
+        <div id="map-controls">
+          <button id="btn-zoom-in" title="Zoom in">＋</button>
+          <button id="btn-zoom-out" title="Zoom out">−</button>
+          <button id="btn-home" title="Recenter on the map">⌂</button>
+          <button id="btn-help" title="Shortcuts (?)">?</button>
+        </div>
         <section id="dungeon-view" hidden>
           <div id="dungeon-toolbar">
             <button id="btn-dungeon-back" title="Back to world map (Esc)">← World</button>
@@ -72,6 +86,22 @@
         </section>
         <!-- Right-click radial menu (Phase 7.1); overlays the hex map. -->
         <div id="ring"><div class="scrim"></div></div>
+        <!-- Keyboard/interaction cheat-sheet (toggle with ?). -->
+        <div id="help-overlay" hidden>
+          <div class="help-card">
+            <strong>Shortcuts</strong>
+            <ul>
+              <li><b>Right-click</b> a hex or room — actions menu</li>
+              <li><b>Left-click</b> select · <b>drag</b> pan · <b>wheel</b> zoom</li>
+              <li><b>＋ / − / ⌂</b> zoom · recenter on the map</li>
+              <li><b>Click a hook</b> — highlight its target (red) &amp; origin (teal)</li>
+              <li>Dungeon: <b>[</b> / <b>]</b> change level · <b>Esc</b> back</li>
+              <li><b>Esc</b> — close a menu / clear a hook highlight</li>
+              <li><b>?</b> — toggle this help</li>
+            </ul>
+            <button id="btn-help-close">Close</button>
+          </div>
+        </div>
       </div>
       <aside id="panel"></aside>
     </main>

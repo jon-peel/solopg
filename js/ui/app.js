@@ -48,6 +48,8 @@ import {
   setIconsEnabled,
   setHookMarks,
   setHookFocus,
+  zoomStep,
+  recenter,
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
@@ -189,6 +191,7 @@ async function setCurrent(world) {
   refreshGlobalHooks();
   refreshHookMarks();
   refreshHookFocus();
+  refreshMapChrome();
   await refreshWorldList();
 }
 
@@ -199,7 +202,52 @@ async function onNewWorld() {
   const worlds = await listWorlds();
   const world = await saveWorld(createWorld({ name: defaultWorldName(worlds) }));
   await setCurrent(world);
+  selectCell(0, 0); // land the GM on the origin, ready to right-click
+  recenterOn(0, 0);
   logLine("Created and saved.");
+}
+
+// --- map chrome (hover readout, scale, empty-state prompt, help) ---------
+
+// Update the hovered-hex readout (bottom-left of the map).
+function onHover(cell) {
+  const el = $("readout-cell");
+  if (!el) return;
+  if (!cell || !current) return void (el.textContent = "");
+  const hex = getHex(current, cell.q, cell.r);
+  const label = hex && hex.placed
+    ? (hex.name ? `${hex.name} · ${hex.terrain}` : hex.terrain)
+    : "empty";
+  el.textContent = `(${cell.q}, ${cell.r}) ${label}`;
+}
+
+// Show the empty-state prompt until the world has a hex; keep the scale label current.
+function refreshMapChrome() {
+  const empty = $("map-empty");
+  if (empty) empty.hidden = !current || placedHexes(current).length > 0;
+  const scale = $("readout-scale");
+  if (scale) scale.textContent = current ? `⬡ ${current.hexScale} mi` : "";
+}
+
+function toggleHelp(force) {
+  const el = $("help-overlay");
+  if (!el) return;
+  el.hidden = force === undefined ? !el.hidden : !force;
+}
+
+// `?` toggles the cheat-sheet; Esc closes it (ahead of other Esc handlers).
+function onHelpKey(e) {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  if (e.key === "?") {
+    toggleHelp();
+  } else if (e.key === "Escape") {
+    const el = $("help-overlay");
+    if (el && !el.hidden) {
+      toggleHelp(false);
+      e.stopImmediatePropagation();
+    }
+  }
 }
 
 // First free "New World" / "New World N" name among existing worlds.
@@ -1116,6 +1164,7 @@ async function persistAndRefresh() {
   renderSelection();
   refreshGlobalHooks();
   refreshHookFocus();
+  refreshMapChrome();
 }
 
 // Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.
@@ -1275,6 +1324,15 @@ function wire() {
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
   $("btn-dungeon-legend").addEventListener("click", onToggleLegend);
+  $("btn-zoom-in").addEventListener("click", () => zoomStep(1));
+  $("btn-zoom-out").addEventListener("click", () => zoomStep(-1));
+  $("btn-home").addEventListener("click", () => recenter());
+  $("btn-help").addEventListener("click", () => toggleHelp());
+  $("btn-help-close").addEventListener("click", () => toggleHelp(false));
+  $("help-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
+  });
+  window.addEventListener("keydown", onHelpKey); // Esc closes help before other handlers
   window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
   window.addEventListener("keydown", onDungeonKey);
 }
@@ -1288,7 +1346,7 @@ function onToggleIcons() {
 
 async function init() {
   wire();
-  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu });
+  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu, onHover });
   attachDungeon($("dungeon-canvas"), { onRoomClick, onRoomContextMenu: onRoomContextMenu });
   // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {

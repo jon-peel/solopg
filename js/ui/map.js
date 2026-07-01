@@ -38,6 +38,8 @@ let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
 let iconsEnabled = true;
+let hovered = null; // { q, r } under the cursor | null
+let hoverKey = null; // axialKey of `hovered`, to skip redundant re-renders
 let hookTargets = new Set(); // axial keys "q,r" of open, unpinned hook destinations
 let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destinations
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
@@ -55,6 +57,7 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointercancel", () => (drag = null));
+  canvas.addEventListener("pointerleave", onPointerLeave);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", onContextMenu);
 
@@ -71,7 +74,7 @@ export function setSelected(coordOrNull) {
   render();
 }
 
-/** Center the camera on axial cell (q, r). */
+/** Center the camera on axial cell (q, r). Fractional coords are fine. */
 export function recenterOn(q, r) {
   if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
@@ -79,6 +82,30 @@ export function recenterOn(q, r) {
   camera.offsetX = rect.width / 2 - p.x * camera.scale;
   camera.offsetY = rect.height / 2 - p.y * camera.scale;
   render();
+}
+
+/** Zoom a step in (dir>0) or out (dir<0), keeping the canvas center fixed. */
+export function zoomStep(dir) {
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = rect.left + rect.width / 2;
+  const py = rect.top + rect.height / 2;
+  const before = clientToWorld(px, py);
+  const factor = dir > 0 ? 1.2 : 1 / 1.2;
+  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * factor));
+  const after = clientToWorld(px, py);
+  camera.offsetX += (after.x - before.x) * camera.scale;
+  camera.offsetY += (after.y - before.y) * camera.scale;
+  render();
+}
+
+/** Recenter on placed content (its centroid), or the origin if the map is empty. */
+export function recenter() {
+  const hexes = world ? placedHexes(world) : [];
+  if (!hexes.length) return recenterOn(0, 0);
+  let sq = 0, sr = 0;
+  for (const h of hexes) { sq += h.coords.q; sr += h.coords.r; }
+  recenterOn(sq / hexes.length, sr / hexes.length);
 }
 
 function resize() {
@@ -154,6 +181,12 @@ export function render() {
     const hk = axialKey(q, r);
     if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
+  }
+
+  // Hover outline (under the selection ring; skipped on the selected cell).
+  if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
+    const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
+    strokeHex(c.x, c.y, "rgba(230,232,238,0.35)", 2);
   }
 
   // 3. Selection highlight (works for empty or filled cells).
@@ -284,6 +317,14 @@ function drawDetailMarkers(cx, cy, hex) {
     ctx.font = `${size}px sans-serif`;
     const label = pois.length === 1 ? glyphForPoi(pois[0]) : String(pois.length);
     drawMarker(cx + off, cy + off, label, size, pois.length === 1 ? undefined : "#fff");
+  }
+
+  // A note indicator (bottom-left) for hexes carrying GM notes.
+  if (hex.note) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx - off, cy + off, "🗒", size, "#fff");
   }
 
   if (hex.name) drawHexLabel(cx, cy, hex.name);
@@ -440,15 +481,38 @@ function onContextMenu(e) {
 }
 
 function onPointerMove(e) {
-  if (!drag) return;
-  const dx = e.clientX - drag.startX;
-  const dy = e.clientY - drag.startY;
-  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-    drag.moved = true;
+  if (drag) {
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+      drag.moved = true;
+    }
+    camera.offsetX = drag.startOffsetX + dx;
+    camera.offsetY = drag.startOffsetY + dy;
+    render();
+    return;
   }
-  camera.offsetX = drag.startOffsetX + dx;
-  camera.offsetY = drag.startOffsetY + dy;
-  render();
+  // Hover feedback: outline the hex under the cursor + report it (only when the
+  // hex changes, so we don't re-render on every pixel of movement).
+  const { x, y } = clientToWorld(e.clientX, e.clientY);
+  const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+  const key = axialKey(q, r);
+  if (key !== hoverKey) {
+    hoverKey = key;
+    hovered = { q, r };
+    render();
+    handlers.onHover?.({ q, r });
+  }
+}
+
+function onPointerLeave() {
+  drag = null;
+  if (hovered) {
+    hovered = null;
+    hoverKey = null;
+    render();
+    handlers.onHover?.(null);
+  }
 }
 
 function onPointerUp(e) {
