@@ -9,7 +9,7 @@ Stepwise, each its own commit + manual checklist:
 | Step | What | Status |
 |---|---|---|
 | 1 | Wayfinding: `Esc` exits; `[`/`]` (+ PgUp/PgDn) switch levels; auto-center a selected/target room that lands off-screen | ✅ done |
-| 2 | At-a-glance room markers: 💰 on rooms with treasure (content glyphs deferred) | ✅ done |
+| 2 | At-a-glance room markers: 💰 on rooms with treasure; content glyphs (👹/⚠️/✨) | ✅ done |
 | 3 | Room right-click radial (Explored/Cleared/Looted/Take-stairs/Center) — **reuses the config-driven radial overlay** so the world-map ring keeps working | ✅ done |
 | 4 | Progress & switcher polish: "Cleared X/Y", level theme on the switcher, mark fully-explored levels (✓) | ✅ done |
 
@@ -33,11 +33,13 @@ nav `]`→L1 `[`→L0, room click OK, Esc hides the view, no errors.
 - **💰 marker** on rooms with `room.treasure`, drawn in the room's **bottom-left**
   corner (the other three are taken: connectors TL, lamp TR, exploration state
   BR). Matches the panel's and hex-summary's 💰. Legend updated.
-- Content glyphs (monster/trap icons) **deferred** — content is already
-  colour-coded and the corners are busy; offered to revisit if wanted.
+- **Content glyphs** (👹 Monster / ⚠️ Trap / ✨ Special; Empty carries none) now
+  draw top-centre of each room, at legible cell sizes only (≥10px). A second
+  channel over the existing colour fill — also helps colour-blind GMs.
 
-Touches: `js/ui/dungeon-map.js` (treasure pass), `index.html` (legend). Verified
-headless: 6-level dungeon renders with treasure present and no errors.
+Touches: `js/ui/dungeon-map.js` (treasure + content-glyph passes), `index.html`
+(legend). Verified headless: 6-level dungeon renders with treasure present and no
+errors.
 
 ## Step 3 (done) — room radial via a shared overlay
 

@@ -52,5 +52,8 @@ prompt hides after placing a hex; no errors. 204 `node --test` passing.
 
 ## Deferred (from Theme 3, if wanted later)
 
-- A visual scale *bar* (currently a text label).
-- A Labels on/off toggle for the map name labels.
+- ~~A visual scale *bar* (currently a text label).~~ **Done:** graphic scale bar
+  with 6/12/18/24-mi travel divisions and hover rules.
+- ~~A Labels on/off toggle for the map name labels.~~ **Done:** "Labels: on/off"
+  command-bar button (`setLabelsEnabled`); gates placed-hex and annotated-cell
+  labels alike.

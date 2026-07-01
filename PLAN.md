@@ -35,7 +35,7 @@ Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, s
 outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
 (node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Next: more Phase 7** (editable/custom
 tables, themes). **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7.**
-**Schema v7. 204 `node --test` passing.** Work merges to **`main`** via PR.
+**Schema v7. 206 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 

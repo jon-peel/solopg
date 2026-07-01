@@ -37,7 +37,9 @@ empty cells), the name renders as a map label, and both persist across reload.
 
 ## Possible follow-ups
 
-- A **Labels on/off** toggle in the command bar (like Icons).
-- Allow naming/annotating an **empty** cell (would need a placeholder hex).
-- A 🗒 indicator on hexes that have a note (so notes are discoverable without
-  selecting).
+- ~~A **Labels on/off** toggle in the command bar (like Icons).~~ **Done (7.6).**
+- ~~Allow naming/annotating an **empty** cell (would need a placeholder hex).~~
+  **Done:** empty cells are annotated via a lazily-created `placed:false` hex
+  that's pruned again when name+note are both cleared.
+- ~~A 🗒 indicator on hexes that have a note.~~ **Done:** placed hexes and
+  annotated empty cells both show a 🗒 badge on the map.

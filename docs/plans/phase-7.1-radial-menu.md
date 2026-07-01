@@ -61,8 +61,10 @@ put and greys out instead of disappearing.
 
 ## Deliberate simplifications (refine later if wanted)
 
-- **Dungeon size** isn't a third ring; "POI → dungeon" adds a random-size
-  dungeon. Size-specific creation stays in the side panel.
+- ~~**Dungeon size** isn't a third ring; "POI → dungeon" adds a random-size
+  dungeon.~~ **Done:** "POI → dungeon" now opens a third ring of sizes (Random
+  + each size from the `dungeon-size` table); the overlay was generalised to
+  arbitrary nesting depth. Falls back to a random-size leaf if no sizes load.
 - **Glyphs are emoji** (matching the prototype); the canvas keeps its own art.
 - Keyboard/touch parity (long-press, arrow-to-rotate) is out of scope here; the
   side panel remains the full accessible path.
