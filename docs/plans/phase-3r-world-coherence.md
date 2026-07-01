@@ -320,19 +320,49 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   and per PLAN.md's relaxed backward-compat policy no regen affordance is needed for
   old worlds right now).
 
-### 3R.4 — Water v2: fresh vs salt, coastlines, continents & islands
-- Split **Water → Lake (fresh) + Sea (salt)**. *(Recommend "Lake"/"Sea" over
-  "Fresh"/"Salt" — reads better on a legend. To confirm.)* Terrain subtype vs two
-  terrains is an implementation choice (subtype keeps profile logic simple).
-- **Coastline/landmass logic — plan a few options (per request):**
-  1. **Edge-sea flood-fill** — sea enters from map edges / large basins; enclosed low
-     areas become lakes.
-  2. **Elevation threshold ("sea level")** — anything below the threshold connected to
-     the border is Sea; below-threshold-but-enclosed is Lake. *(Natural fit if 3R.3
-     gives elevation.)*
-  3. **Explicit landmass seeds** — grow continents/islands, surround with Sea.
-- Rendering: two water colours; legend update. Must land **before** rivers (they need
-  water sinks) and before coastal-city logic.
+### 3R.4 — Water v2: fresh vs salt, coastlines ✅ done
+- Split **Water → Lake (fresh) + Sea (salt)** as done — confirmed "Lake"/"Sea" over
+  "Fresh"/"Salt". Implemented as **two full terrain values**, not a `Water` + subtype
+  field: reading every consumer showed rendering (`terrain-style.js`, `terrain-art.js`)
+  needs zero signature changes with two values, vs. threading a second argument through
+  `map.js` for a subtype. The doc's original "subtype keeps profile logic simple" worry
+  is handled instead by a **shared alias** (`terrain-profile.js` `biasKey()`, mapping
+  `Lake`/`Sea` → `Water`) at the 7 terrain-keyed lookups (`profileFor`,
+  `dungeonThemeTable`, `shrineFormTable`, `landmarkFeatureTable`, and 3 `*_SETTING`
+  lookups in `feature-detail.js`) — so `TERRAIN_PROFILE.Water` and every bias/flavor
+  table stay keyed `Water`, unchanged and undoubled; Lake and Sea share its settlement
+  rule (none) and POI weights for now (no lake-vs-sea gameplay distinction yet — that's
+  3R.6's job for coastal/river boosts).
+- **Coastline logic: none of the 3 originally-listed options apply as-is.** Every
+  real-world reference (Red Blob's mapgen2, Azgaar's generator — see 3R.2's research)
+  flood-fills from a **fixed map edge**, assuming a bounded, one-shot-generated map.
+  This world is **infinite and generated incrementally** — there's no edge, and a
+  bounded flood-fill over just the currently-placed hexes would be **unstable** (a hex
+  classified Lake today could flip to Sea once more area is generated around it later,
+  breaking 3R.3's order-independence guarantee and silently changing already-shown
+  content). **Resolution:** a **third, much-coarser noise field** (`basin`, frequency
+  0.05 vs elevation's 0.2 — tuned by re-running `test/stats-harness.js` against the same
+  baseline seeds after an initial guess proved too coarse) sampled the same
+  deterministic way as elevation/moisture. Within the existing low-elevation "water"
+  band, `basin < 0.5` → Sea, else → Lake — a pure function of `(seed, q, r)`, so it's
+  order-independent by construction with **no flood-fill, no connectivity search, no
+  reclassification risk**. `hex.basin` is always computed and stored (mirrors
+  elevation/moisture's own precedent), available uniformly for 3R.6/3R.7 later.
+- **Measured result** (3 seeds, radius 25, ~1951 hexes): both Lake and Sea appear in
+  every sample without either degenerating toward ~0% (Sea's share of all water ranges
+  ~21–37% across seeds) — guarded by a dedicated coherence test, since an earlier,
+  coarser `basin` frequency (0.035) produced samples where Sea dropped to ~1% of the map
+  for 2 of 3 seeds.
+- Rendering: `Lake`/`Sea` get distinct colours (`terrain-style.js`) and emoji
+  (💧/🌊 split from Water's existing pair); **no new SVG art this pass** — both share the
+  old `water-*.svg` placeholder (art changes are reviewed as files first, per
+  convention); distinct pencil art is a follow-up.
+- Schema bumped to **v9** (stamp-only — old `terrain:"Water"` hexes keep rendering fine
+  via the same shared alias, no retrofit).
+- **Tests:** `test/biome.test.js` (Lake/Sea threshold boundaries, `basin` field),
+  `test/terrain-profile.test.js` (`biasKey` + shared-profile assertions),
+  `test/terrain-coherence.test.js` (both terrains present, neither near 0%, `basin`
+  included in the order-independence check). 236 `node --test test/*.test.js` passing.
 
 ### 3R.5 — Rivers
 - **Model (your rules, encoded):** rivers **start in mountains** and flow **downhill**
@@ -415,7 +445,8 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 - **World-building model: ✅ decided in 3R.2 — (c) two-layer elevation+moisture**
   (coordinate-hashed noise fields for elevation + moisture, Whittaker-style
   biome classification). See 3R.2's fork write-up for the full reasoning.
-- **Water naming:** Lake/Sea vs Fresh/Salt. *Leaning Lake/Sea.*
+- **Water naming:** ✅ decided in 3R.4 — Lake/Sea (as two full terrain values, not a
+  Water+subtype field — see 3R.4's write-up for why).
 - **Elevation/moisture:** ✅ adopted as first-class per-hex fields (3R.2) — the
   keystone that makes terrain coherence, sea level, and rivers all fall out.
 - **Keep/Fort:** new size tier vs martial overlay on an existing band. *Leaning overlay.*

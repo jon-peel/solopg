@@ -1,8 +1,9 @@
-// Terrain generation v2 (Phase 3R.3) — aggregate coherence assertions over a
-// real generated area. Distribution/adjacency checks, not exact-art
+// Terrain generation v2 (Phase 3R.3 + 3R.4) — aggregate coherence assertions
+// over a real generated area. Distribution/adjacency checks, not exact-art
 // snapshots, per the phase doc: lone-hex rate well below the pre-3R.3
-// baseline (23-25%, see docs/plans/phase-3r-world-coherence.md), and
-// Mountains forming real multi-hex runs rather than speckle. Also the
+// baseline (23-25%, see docs/plans/phase-3r-world-coherence.md), Mountains
+// forming real multi-hex runs rather than speckle, and (3R.4) both Lake and
+// Sea appearing without either degenerating to ~0% of a sample. Also the
 // concrete regression test for "determinism under area generation" — since
 // terrain is now a pure function of (seed, q, r), fill order must never
 // affect the result.
@@ -94,6 +95,21 @@ test("Mountains form multi-hex runs, not speckle", () => {
   assert.ok(Math.max(...mountainSizes) >= 8, "expected at least one Mountains run >= 8 hexes");
 });
 
+test("Lake and Sea (3R.4) both appear in a large sample, without either degenerating to ~0%", () => {
+  // Sea/Lake split via a coarse `basin` field (see js/gen/biome.js) rather
+  // than flood-fill (infeasible for an infinite, incrementally-generated
+  // world — see the phase doc). Too-low a basin frequency can make an entire
+  // sampled area land almost wholly on one side; this guards against that.
+  const world = generateArea(1, RADIUS, hexDisc(0, 0, RADIUS));
+  const hexes = placedHexes(world);
+  const lakeCount = hexes.filter((h) => h.terrain === "Lake").length;
+  const seaCount = hexes.filter((h) => h.terrain === "Sea").length;
+  assert.ok(lakeCount > 0, "expected some Lake hexes");
+  assert.ok(seaCount > 0, "expected some Sea hexes");
+  const seaShare = seaCount / (lakeCount + seaCount);
+  assert.ok(seaShare > 0.05 && seaShare < 0.95, `Sea share of water ${(seaShare * 100).toFixed(1)}% should not be near 0% or 100%`);
+});
+
 test("generation is deterministic: same seed -> identical terrain everywhere", () => {
   const a = generateArea(42, 10, hexDisc(0, 0, 10));
   const b = generateArea(42, 10, hexDisc(0, 0, 10));
@@ -111,5 +127,6 @@ test("order-independence: forward vs. reverse fill order give identical per-hex 
     assert.equal(getHex(forward, q, r).terrain, getHex(reverse, q, r).terrain);
     assert.equal(getHex(forward, q, r).elevation, getHex(reverse, q, r).elevation);
     assert.equal(getHex(forward, q, r).moisture, getHex(reverse, q, r).moisture);
+    assert.equal(getHex(forward, q, r).basin, getHex(reverse, q, r).basin);
   }
 });

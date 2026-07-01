@@ -23,6 +23,7 @@ import {
   landmarkFeatureTable,
   LANDMARK_SETTING,
   LANDMARK_SETTING_DEFAULT,
+  biasKey,
 } from "./terrain-profile.js";
 
 // Detail-shape version, stamped on every generated feature. app.js rebuilds a
@@ -50,7 +51,7 @@ function describeShrine(tables, rng, terrain) {
   const dedication = rollTable(tables.get("shrine-dedication"), rng).value;
   const condition = rollTable(tables.get("shrine-condition"), rng).value;
   const detail = rollTable(tables.get("shrine-detail"), rng).value;
-  const setting = pick(rng, SHRINE_SETTING[terrain] || SHRINE_SETTING_DEFAULT);
+  const setting = pick(rng, SHRINE_SETTING[biasKey(terrain)] || SHRINE_SETTING_DEFAULT);
   // Optional light watcher: a single creatures roll, only at a desecrated shrine.
   // The chance is rolled UNCONDITIONALLY so the rng stream stays stable whether
   // or not the condition qualifies.
@@ -68,7 +69,7 @@ function describeShrine(tables, rng, terrain) {
 // reaction); "none" → an abandoned, cold camp.
 function describeCamp(tables, rng, terrain, occupant) {
   const scale = rollTable(tables.get("camp-scale"), rng).value; // { size, signs, na }
-  const setting = pick(rng, CAMP_SETTING[terrain] || CAMP_SETTING_DEFAULT);
+  const setting = pick(rng, CAMP_SETTING[biasKey(terrain)] || CAMP_SETTING_DEFAULT);
   const who = occupant && occupant.kind === "occupied" ? occupant.by : null;
   // Manned camps get a concrete head-count + a reaction; cold camps get neither.
   // The branch turns on persisted data (occupant), so the eager build and the
@@ -84,7 +85,7 @@ function describeCamp(tables, rng, terrain, occupant) {
 function describeLandmark(tables, rng, terrain) {
   const feature = rollTable(landmarkFeatureTable(terrain), rng).value;
   const trait = rollTable(tables.get("landmark-trait"), rng).value;
-  const setting = pick(rng, LANDMARK_SETTING[terrain] || LANDMARK_SETTING_DEFAULT);
+  const setting = pick(rng, LANDMARK_SETTING[biasKey(terrain)] || LANDMARK_SETTING_DEFAULT);
   // Chance rolled unconditionally so the stream stays stable whether or not a
   // hook lands.
   const chance = rng();

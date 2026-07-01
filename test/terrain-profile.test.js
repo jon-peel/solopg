@@ -10,6 +10,7 @@ import {
   dungeonThemeTable,
   SIZE_ORDER,
   KNOWN_TERRAINS,
+  biasKey,
 } from "../js/gen/terrain-profile.js";
 import { THEME_GLYPHS } from "../js/ui/poi-style.js";
 
@@ -26,6 +27,18 @@ const sizeTable = {
 
 test("Water allows no settlement", () => {
   assert.equal(TERRAIN_PROFILE.Water.settlement, null);
+});
+
+test("biasKey: Lake/Sea alias to Water; other terrains pass through unchanged (3R.4)", () => {
+  assert.equal(biasKey("Lake"), "Water");
+  assert.equal(biasKey("Sea"), "Water");
+  assert.equal(biasKey("Forest"), "Forest");
+  assert.equal(biasKey("Water"), "Water");
+});
+
+test("profileFor(Lake)/profileFor(Sea) share Water's profile (no settlement, same POI weights)", () => {
+  assert.equal(profileFor("Lake"), TERRAIN_PROFILE.Water);
+  assert.equal(profileFor("Sea"), TERRAIN_PROFILE.Water);
 });
 
 test("every styled terrain has a profile", () => {

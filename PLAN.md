@@ -56,12 +56,18 @@ and 3R.5's downhill rivers with no rework). **3R.3 (terrain generation v2) is do
 neighbour-affinity roll (`weightedTerrainTable`/`TERRAIN_AFFINITY`/`terrainBias`, now deleted) outright.
 Measured result: **lone-hex rate 23–25% → 2–3%**, **Mountains mean clump size 2.1 → 7.6–13.6** (real
 ranges, not speckle) — see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) for the
-full before/after. **Next: 3R.4** (water v2 — fresh/salt split + coastlines, built on this elevation
-data) **or more Phase 7** (search, undo, print/GM view, themes — see
+full before/after. **3R.4 (water v2) is done**: Water split into **Lake (fresh) / Sea (salt)** — two
+full terrain values (rendering needs zero signature changes that way), sharing Water's settlement/POI
+rules via a new `biasKey()` alias in `terrain-profile.js` so no bias table had to be duplicated. Since
+this world is **infinite and generated incrementally** (unlike every reference generator, which
+flood-fills a fixed map edge), Lake vs Sea is decided by a **third, coarser noise field** (`basin`,
+`js/gen/biome.js`) rather than flood-fill — order-independent by construction, with no connectivity
+search or reclassification risk. **Next: 3R.5** (rivers — mountains to lakes/seas, downhill, built on
+this elevation/basin data) **or more Phase 7** (search, undo, print/GM view, themes — see
 [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
-`elevation`/`moisture` — schema v8.**
-**Schema v8. 231 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+`elevation`/`moisture` (v8); 3R.4 adds `basin` and splits Water into Lake/Sea (v9).**
+**Schema v9. 236 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -96,7 +102,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **8**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **9**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **No backward-compatibility burden right now.** Pre-release, with no real worlds worth
@@ -134,7 +140,7 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           noise.js (valueNoise2D, fbm2D — Phase 3R.3 deterministic coordinate-hashed value noise)
   /gen    hex.js (generateHex)   poi.js (generatePoi)
           terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
-          biome.js (biomeAt/classifyBiome — Phase 3R.3 elevation+moisture -> terrain classifier)
+          biome.js (biomeAt/classifyBiome — Phase 3R.3/3R.4 elevation+moisture+basin -> terrain classifier)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
@@ -179,9 +185,9 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v8)
+## Current data model (as built, schema v9)
 
-- **World:** `{ schemaVersion:8, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
+- **World:** `{ schemaVersion:9, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
 - **Hook** (Phase 6; top-level `world.hooks[]`):
   `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
@@ -190,12 +196,14 @@ graph TD
   `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
-  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, elevation, moisture, settlement, pois:[],
-  explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations — `name` shows as a map
-  label. `elevation`/`moisture` (v8, floats in `[0,1)`) are the Phase 3R.3 biome-classifier inputs — a
-  pure function of `(seed, q, r)`, always present regardless of how terrain was chosen.
+  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, elevation, moisture, basin, settlement,
+  pois:[], explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations — `name` shows
+  as a map label. `elevation`/`moisture` (v8) and `basin` (v9, floats in `[0,1)`) are the Phase 3R.3/3R.4
+  biome-classifier inputs — pure functions of `(seed, q, r)`, always present regardless of how terrain
+  was chosen; `basin` is the Lake-vs-Sea signal (a coarse noise field, not flood-fill — this world is
+  infinite/incrementally generated, so there's no map edge to flood-fill from).
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
-  `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Water).
+  `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Lake/Sea).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
   `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`. **Dungeon** POIs carry a
   terrain-biased `detail.theme` (drives the map glyph) and gain a generated interior at
@@ -204,9 +212,11 @@ graph TD
   carry structured **Tier-1 detail** at `detail.feature` (`{build, type, …axis picks…}`); prose is
   composed at render. All interiors/features self-heal from a build stamp (no schema bump). Auto-gen
   places ≤1 POI; users add/remove more.
-- **Terrains:** Forest, Plains, Hills, Mountains, Swamp, Desert, Water. **POI types:** dungeon,
-  shrine, camp, landmark, tower. The explorable types **ruin/cave/mine — and creature lairs — are
-  `dungeon` themes** (Ruin, Cave complex, Abandoned mine, Beast den, Ogre lair, …).
+- **Terrains:** Forest, Plains, Hills, Mountains, Swamp, Desert, Lake, Sea (Water split into Lake/Sea
+  in 3R.4; Lake and Sea share Water's settlement/POI rules via `terrain-profile.js`'s `biasKey()`
+  alias). **POI types:** dungeon, shrine, camp, landmark, tower. The explorable types **ruin/cave/mine
+  — and creature lairs — are `dungeon` themes** (Ruin, Cave complex, Abandoned mine, Beast den, Ogre
+  lair, …).
 
 ### Canonical table schema
 ```json
@@ -230,7 +240,7 @@ graph TD
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
-| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅ · 3R.3 terrain v2 ✅** (elevation+moisture noise fields, schema v8); next 3R.4 (water v2 — fresh/salt + coastlines). |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅** (Lake/Sea split via a coarse `basin` noise field, schema v9); next 3R.5 (rivers). |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a
@@ -291,7 +301,7 @@ powers" (roaming/region/news-propagation) belong to the future Factions phase. S
 - **Party position marker** — needs exploration/travel rules first.
 - **Art** — pencil sketches for POIs; optional "full painted hex"; eventual "pencil-drawn"
   refinement of tiles; optional 3rd terrain variant; an `svg-tile` authoring skill for consistency.
-- **Misc** — allow a manual settlement on Water (currently disallowed); more terrain types.
+- **Misc** — allow a manual settlement on Lake/Sea (currently disallowed); more terrain types.
 - **Phase 7 items** — search, undo, print/GM-screen view, themes, POI-dot polish, radial
   keyboard/touch parity (see [phase-7-backlog.md](docs/plans/phase-7-backlog.md)). In-app custom
   tables were **dropped**.

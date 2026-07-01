@@ -15,7 +15,7 @@ export const ACTION_GLYPH = {
 };
 export const TERRAIN_GLYPH = {
   Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️",
-  Swamp: "🐊", Desert: "🏜️", Water: "🌊",
+  Swamp: "🐊", Desert: "🏜️", Lake: "💧", Sea: "🌊",
 };
 export const POI_GLYPH = {
   dungeon: "🏰", shrine: "⛩️", camp: "⛺", landmark: "🗿", tower: "🗼",

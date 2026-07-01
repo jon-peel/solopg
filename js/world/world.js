@@ -23,7 +23,12 @@ import { axialKey } from "../core/hexgeo.js";
 // the biome classifier (js/gen/biome.js) in place of the retired neighbour-
 // affinity terrain roll. Additive; older hexes simply have neither field
 // until regenerated.
-export const SCHEMA_VERSION = 8;
+// v9: hexes gained a `basin` field, and generated Water hexes now come out as
+// `terrain:"Lake"` or `terrain:"Sea"` instead of `terrain:"Water"` (Phase
+// 3R.4) — Lake/Sea share Water's profile/bias tables via biasKey() in
+// terrain-profile.js, so old `Water` hexes keep rendering/behaving fine as-is
+// (no retrofit) until regenerated.
+export const SCHEMA_VERSION = 9;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
