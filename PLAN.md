@@ -102,7 +102,22 @@ now draws a pass-through hex's two edges as **one quadratic curve using the hex'
 control point** — bends smoothly on an actual turn, and degenerates to a perfectly straight line for
 opposite edges with no special-casing (the center sits exactly on that line for a regular hex). Verified
 visually — a continuous multi-hex river renders correctly from a mountain source downhill, and a
-synthetic 4-shape test (straight/bend/source/confluence) confirmed each renders as designed. **Next:
+synthetic 4-shape test (straight/bend/source/confluence) confirmed each renders as designed.
+**Third revision (real-play bug report): one-hex orphan stubs and rivers dead-ending in
+Plains/Hills instead of Lake/Sea.** Diagnosed against an actual exported world: every case
+traced back to a river's downhill edge pointing at a neighbour ALREADY PLACED (a separate
+earlier click, or the same click processed a moment earlier) before the river existed — its
+`incomingRiverEdges` look-back scan had already run and found nothing. Gets worse the more of
+a map is already explored in small increments. **Fix (confirmed with the user first, since it
+bends a previously-firm rule): `js/ui/app.js`'s `stitchRiverForward`** retroactively extends a
+river edge into an already-placed, still-river-free neighbour — purely cosmetic (never touches
+terrain/settlement/POIs, never overwrites another river's data), capped at 20 cascaded hops.
+This is a THIRD deliberate exception to position-purity, and the first that touches an
+already-placed hex at all (the other two only ever affect a hex at its own generation moment).
+Verified: scratchpad simulation of realistic scattered-click usage showed mean chain length
+1.68→4.46 hexes, one-hex orphans 27→7 (-74%), chains reaching real water 1→5 (5×); a real
+40-click browser session then confirmed 0 orphans, mean length 9.75, longest 15 hexes, no
+console errors. **Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).

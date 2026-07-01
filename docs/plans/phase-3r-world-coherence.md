@@ -508,6 +508,34 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   single obvious "through" pair, so those still fall back to straight center-to-midpoint
   spokes. Verified visually with a synthetic 4-hex test world covering all four shapes
   (straight-through, bend, source stub, confluence) — each rendered exactly as designed.
+- **Revision (real-play bug report): rivers dead-ending as one-hex orphans, or in
+  Plains/Hills instead of a Lake/Sea.** Diagnosed against an actual exported world: every
+  case traced back to the same cause — a river's downhill edge pointed at a neighbour
+  that was **already placed** (sometimes from a wholly separate, earlier "Generate Area"
+  click; sometimes from the very same click, just processed a moment earlier in that
+  fill's internal order) before the river existed to claim it. That neighbour's
+  `incomingRiverEdges` scan (a look-BACKWARD-only check, by design) had already run and
+  found nothing, and per the "never edit an already-placed hex" rule, nothing update it
+  afterward — so the edge just had nowhere to go, reading as a pointless stub or an
+  abrupt stop on dry land. This gets WORSE the more of a map is already explored in small
+  increments (exactly how the reporting user was playing), since less "fresh," not-yet-
+  placed territory remains for a newly-discovered river to grow into.
+  **Fix, confirmed with the user first (a genuine trade-off, not a pure bug fix):**
+  `js/ui/app.js`'s new `stitchRiverForward` — when a freshly-generated hex's river wants
+  to continue into an already-placed neighbour that has **no river data of its own yet**,
+  extend the river edge into it, purely as an overlay: that neighbour's terrain/
+  settlement/POIs are **never** touched, even if `riverStateAt` would otherwise force a
+  Lake there (it might already carry a settlement rolled for its original terrain;
+  retroactively flooding it would leave that inconsistent). This is a deliberate,
+  narrowly-scoped exception to "never edit an already-placed hex" — scoped to cosmetic
+  river-edge data only, never overwriting a neighbour that already carries its own river,
+  capped at `RIVER_STITCH_MAX_HOPS = 20` cascaded hops so one connection can't sweep
+  through an unbounded stretch of the map. **Verified via a scratchpad simulation of the
+  realistic "many scattered Generate-Area clicks" scenario** (the same one used to tune
+  density earlier): mean chain length 1.68 → 4.46 hexes, one-hex orphans 27 → 7 (-74%),
+  chains reaching a real Lake/Sea sink 1 → 5 (5×). Confirmed again via a real
+  browser-driven session (40 scattered "Large" clicks through the actual UI): 0 one-hex
+  orphans, mean chain length 9.75, longest chain 15 hexes, no console errors.
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
 - **Tests:** `test/river.test.js` (13 tests — `isRiverSource` gated on Mountains and
@@ -626,9 +654,18 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   responsiveness to a manual placement this time, but the ~28ms/hex cost of a fully
   analytical per-hex river query (measured too slow for interactive area generation) —
   `hex.riverEdges` grows forward from already-placed upstream neighbours instead, the
-  same propagation shape as sea contagion. Two deliberate exceptions now exist, each
-  independently justified and narrowly scoped; still watch for a third creeping in
-  without the same explicit trade-off being made consciously.
+  same propagation shape as sea contagion.
+  **A third, DIFFERENT kind of exception, in 3R.5's river-stitching follow-up**: the first
+  two exceptions only ever affect a hex's classification at the moment it's *generated* —
+  they never modify a hex that's already placed. River stitching (`stitchRiverForward`,
+  `js/ui/app.js`) is the first case that does: it retroactively adds a purely cosmetic
+  river edge to an already-placed hex, confirmed explicitly with the user first since it
+  bends a rule that had otherwise held everywhere. Scoped tightly (river-edge data only,
+  never terrain/settlement/POIs, never overwrites a hex that already carries its own
+  river, capped at 20 cascaded hops) specifically because it's a different *kind* of
+  exception from the other two. Three deliberate exceptions now exist, each independently
+  justified, narrowly scoped, and explicitly reasoned through; watch for a fourth creeping
+  in without the same rigor.
 - **Migration churn** — several schema bumps; keep every step additive and old-world-safe.
 - **Perceptual vs real** — 3R.2's baseline decides how much terrain rework is truly
   warranted before we over-engineer.

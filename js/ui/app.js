@@ -23,6 +23,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
+import { downhillDirection, riverStateAt } from "../gen/river.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -1037,6 +1038,46 @@ function incomingRiverEdges(q, r) {
   return dirs;
 }
 
+// River stitching (3R.5 follow-up): a river's downhill edge sometimes points
+// at a neighbour that was ALREADY placed in an earlier "Generate Area" click
+// (or even earlier in the same one) — that neighbour never had a chance to
+// see the edge via incomingRiverEdges above, since it's a pure look-BACKWARD
+// scan at generation time. Left alone, this produces a visible one-hex river
+// stub with nowhere to go, or a river that just stops mid-field, even though
+// it "should" keep flowing to a lake/sea (reported after real play: rivers
+// that dead-end at another Mountains hex, or in Plains, for exactly this
+// reason).
+//
+// Fix: when a freshly-generated hex's river wants to continue into an
+// ALREADY-PLACED, still river-free neighbour, extend the river into it —
+// but PURELY as a river-edge overlay: that neighbour's terrain/settlement/
+// POIs are never touched, even if riverStateAt would otherwise force a Lake
+// (the neighbour might already carry a settlement rolled for its original
+// terrain; flooding it retroactively would leave that inconsistent). This is
+// a deliberate, narrow exception to "never edit an already-placed hex" —
+// scoped to cosmetic river-edge data only, and only onto hexes with no river
+// data of their own yet (never overwrites another river's edges). Cascades
+// forward a bounded number of hops so a whole already-explored stretch can
+// light up in one go.
+const RIVER_STITCH_MAX_HOPS = 20;
+function stitchRiverForward(hex) {
+  let cur = hex;
+  for (let hop = 0; hop < RIVER_STITCH_MAX_HOPS; hop++) {
+    if (!cur.riverEdges || !cur.riverEdges.length) return;
+    if (cur.terrain === "Sea" || cur.terrain === "Lake") return; // reached a real sink
+    const outDir = downhillDirection(current.seed, cur.coords.q, cur.coords.r);
+    if (outDir === -1 || !cur.riverEdges.includes(outDir)) return; // no genuine outgoing edge
+    const n = neighbors(cur.coords.q, cur.coords.r)[outDir];
+    const nh = getHex(current, n.q, n.r);
+    if (!nh || !nh.placed) return; // not yet placed — ordinary forward propagation covers it
+    if (nh.riverEdges && nh.riverEdges.length) return; // already carries its own river — don't touch
+    const incomingDir = (outDir + 3) % 6;
+    const { riverEdges } = riverStateAt(current.seed, n.q, n.r, nh.terrain, nh.elevation, [incomingDir]);
+    nh.riverEdges = riverEdges; // cosmetic only — terrain/settlement/pois stay exactly as generated
+    cur = nh;
+  }
+}
+
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
 // carries a forced dungeon POI as the hook's subject. Marked unexplored.
@@ -1060,6 +1101,7 @@ function buildDistantTargetHex(tables, q, r) {
   const poi = generatePoi(tables, poiRng, { terrain: hex.terrain, index: 0, forceType: "dungeon" });
   poi.id = "poi:0";
   hex.pois = [poi];
+  stitchRiverForward(hex);
   return hex;
 }
 
@@ -1276,6 +1318,7 @@ function buildRandomHex(tables, q, r, gen) {
     incomingRiverEdges: incomingRiverEdges(q, r),
   });
   hex.gen = gen;
+  stitchRiverForward(hex);
   return hex;
 }
 
