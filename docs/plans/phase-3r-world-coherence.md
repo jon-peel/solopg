@@ -119,8 +119,35 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 ### 3R.2 — Audit + research + world-model decision
 *Design/analysis; minimal code (harness + docs).*
 
-- **Step — audit:** write up exactly how terrain/settlement generation works today
-  (this doc's "Current behaviour" is the seed) and *why* it reads as haphazard.
+- **Step — audit ✅ done:** confirmed the "Current behaviour" table above against
+  the actual code (`js/gen/hex.js`, `terrain-affinity.js`, `terrain-profile.js`,
+  `data/terrain.json`, `data/settlement-size.json`) — no corrections needed, plus
+  one new finding:
+  - **`terrainBias` (the neighbour-affinity multiplier) is dead in practice.** It
+    defaults to `1` in `weightedTerrainTable` and **no caller anywhere in `app.js`
+    ever passes a different value** — so every hex gets exactly the *weakest*
+    documented affinity bonus (self +3, compatible +1/+2, additive across
+    neighbours), with no way for a GM to dial coherence up or down today. Worth
+    fixing as part of 3R.3 regardless of which world-model wins the fork below.
+  - Worked example: a lone Forest hex surrounded by 6 Plains gets weight
+    `4 + 1×6 = 10` for staying Forest vs. `4 + 3×6 = 22` pulling toward Plains on
+    a reroll — confirms a single hex genuinely can and does drop in as a visible
+    anomaly under today's weights.
+  - Settlements: confirmed zero neighbour/spacing code path exists (`rng() <
+    profile.settlement.chance` only) — chances Forest .30 / Plains .45 / Hills
+    .35 / Desert .20 / Mountains+Swamp .15 / Water none; only 5 sizes exist
+    anywhere in the data (no Keep/Fort); no `name` field.
+  - Rivers/roads: confirmed genuinely absent — the only "road" hits in the
+    codebase are flavor strings (shrine/landmark setting phrases) and a static
+    B/X travel-tooltip (`app.js` `travelTipHTML`) describing a rule for the GM
+    to apply by hand, not backed by any generated road data.
+  - **Why it reads as haphazard, in one line:** the only coherence mechanism
+    (neighbour affinity) is real but stuck at its weakest setting and only sees
+    immediate neighbours (no region-scale structure); settlements/water/rivers/
+    roads have no coherence mechanism at all — every hex is an independent roll.
+  - *(Execution note: this pass does research next, then the stats harness
+    together with the world-model decision — the harness's numbers feed that
+    decision directly — rather than harness-before-research as listed below.)*
 - **Step — stats harness:** a `node` script that generates large areas and reports
   terrain histogram, biome clump-size distribution, mean nearest-settlement spacing,
   etc. Establishes a **baseline** to tune against.
