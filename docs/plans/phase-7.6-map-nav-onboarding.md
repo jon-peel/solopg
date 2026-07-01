@@ -16,8 +16,9 @@ Browser-only; no schema change.
 - **Readout** (bottom-left, shown only while hovering) — the hovered hex's
   `(q, r)` + its name/terrain (or "empty").
 - **Scale bar** (top-left) — a zoom-aware graphic scale marking a **day's march**
-  at the **B/X / OSE travel tiers** (12 / 18 / 24 mi): solid 0–12, hollow to 18
-  and 24. Redrawn when the zoom changes (`map.onView` / `pixelsPerMile()`).
+  at the **B/X / OSE travel tiers**: four 6-mile blocks (= 1 hex each) alternating
+  solid/hollow, marked 0 / 6 / 12 / 18 / 24 mi. Redrawn when the zoom changes
+  (`map.onView` / `pixelsPerMile()`).
   **Hovering it shows the travel rules** — miles/day by encumbrance (with the
   distance in *this world's* hexes), terrain modifiers, and forced march.
 - **Screen changes dismiss the ring** — opening/closing the Dungeon View or

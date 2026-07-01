@@ -246,8 +246,10 @@ function refreshMapChrome() {
 function drawScaleBar(ppm) {
   const host = $("map-scale");
   if (!host || !current) return;
-  const segs = [[12, "solid"], [6, "hollow"], [6, "hollow"]];
-  const marks = [0, 12, 18, 24];
+  // Four 6-mile blocks (= 1 hex each), alternating solid/hollow so every
+  // division is visible; marks land on the travel tiers 6/12/18/24.
+  const segs = [[6, "solid"], [6, "hollow"], [6, "solid"], [6, "hollow"]];
+  const marks = [0, 6, 12, 18, 24];
   const w = ppm * 24;
   const bar = segs
     .map(([mi, cls]) => `<div class="scale-seg ${cls}" style="width:${ppm * mi}px"></div>`)
