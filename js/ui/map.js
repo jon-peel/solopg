@@ -38,7 +38,12 @@ let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
 let iconsEnabled = true;
-let hookTargets = new Set(); // axial keys "q,r" of open-hook destinations
+let labelsEnabled = true; // show hex name labels on the map
+let hovered = null; // { q, r } under the cursor | null
+let hoverKey = null; // axialKey of `hovered`, to skip redundant re-renders
+let lastPpm = null; // last pixels-per-mile emitted to onView (fire only on change)
+let hookTargets = new Set(); // axial keys "q,r" of open, unpinned hook destinations
+let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destinations
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -54,7 +59,9 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointercancel", () => (drag = null));
+  canvas.addEventListener("pointerleave", onPointerLeave);
   canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("contextmenu", onContextMenu);
 
   resize();
 }
@@ -69,7 +76,7 @@ export function setSelected(coordOrNull) {
   render();
 }
 
-/** Center the camera on axial cell (q, r). */
+/** Center the camera on axial cell (q, r). Fractional coords are fine. */
 export function recenterOn(q, r) {
   if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
@@ -77,6 +84,37 @@ export function recenterOn(q, r) {
   camera.offsetX = rect.width / 2 - p.x * camera.scale;
   camera.offsetY = rect.height / 2 - p.y * camera.scale;
   render();
+}
+
+/** Screen pixels per mile at the current zoom (for the scale bar). */
+export function pixelsPerMile() {
+  const milesPerHex = (world && world.hexScale) || 6;
+  // Adjacent hex centres are sqrt(3)*HEX_SIZE world px apart = one hex = N miles.
+  return (Math.sqrt(3) * HEX_SIZE / milesPerHex) * camera.scale;
+}
+
+/** Zoom a step in (dir>0) or out (dir<0), keeping the canvas center fixed. */
+export function zoomStep(dir) {
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = rect.left + rect.width / 2;
+  const py = rect.top + rect.height / 2;
+  const before = clientToWorld(px, py);
+  const factor = dir > 0 ? 1.2 : 1 / 1.2;
+  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * factor));
+  const after = clientToWorld(px, py);
+  camera.offsetX += (after.x - before.x) * camera.scale;
+  camera.offsetY += (after.y - before.y) * camera.scale;
+  render();
+}
+
+/** Recenter on placed content (its centroid), or the origin if the map is empty. */
+export function recenter() {
+  const hexes = world ? placedHexes(world) : [];
+  if (!hexes.length) return recenterOn(0, 0);
+  let sq = 0, sr = 0;
+  for (const h of hexes) { sq += h.coords.q; sr += h.coords.r; }
+  recenterOn(sq / hexes.length, sr / hexes.length);
 }
 
 function resize() {
@@ -147,14 +185,58 @@ export function render() {
     } else if (simplified) {
       drawSimplifiedMarkers(c.x, c.y, hex);
     }
-    // Hook destinations get an amber ring (all zooms) + a flag in the detail tier.
-    if (hookTargets.has(axialKey(q, r))) drawHookMark(c.x, c.y, detail);
+    // Hook destinations: pinned leads (a distinct pin) take precedence over the
+    // amber "a lead exists here" ring; both visible at all zooms.
+    const hk = axialKey(q, r);
+    if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
+    else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
   }
 
-  // 3. Selection highlight on top (works for empty or filled cells).
+  // 2b. Annotations on un-generated cells: a name label / note badge float on
+  //     the empty grid (detail tier only, to avoid clutter when zoomed out).
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.44;
+    for (const hex of Object.values(world.hexes)) {
+      if (hex.placed || !hex.coords || (!hex.name && !hex.note)) continue;
+      const c = axialToPixel(hex.coords.q, hex.coords.r, HEX_SIZE);
+      if (c.x < minX - margin || c.x > maxX + margin || c.y < minY - margin || c.y > maxY + margin) continue;
+      if (hex.note) {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `${size}px sans-serif`;
+        drawMarker(c.x - off, c.y + off, "🗒", size, "#fff");
+      }
+      if (hex.name && labelsEnabled) drawHexLabel(c.x, c.y, hex.name);
+    }
+  }
+
+  // Hover outline (under the selection ring; skipped on the selected cell).
+  if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
+    const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
+    strokeHex(c.x, c.y, "rgba(230,232,238,0.35)", 2);
+  }
+
+  // 3. Selection highlight (works for empty or filled cells).
   if (selected) {
     const c = axialToPixel(selected.q, selected.r, HEX_SIZE);
     strokeHex(c.x, c.y, SELECTED_STROKE, 3);
+  }
+
+  // 4. Selected hook's endpoints (distinct colours) ON TOP — a hook's origin is
+  //    usually the selected cell, so these must beat the blue selection ring.
+  if (hookFocus) {
+    const t = hookFocus.target, o = hookFocus.origin;
+    if (t && o && !(t.q === o.q && t.r === o.r)) drawHookLine(o, t); // under the rings
+    if (o) drawHookFocus(o, FOCUS_ORIGIN);
+    if (t) drawHookFocus(t, FOCUS_TARGET);
+  }
+
+  // Notify the scale bar only when the zoom (px-per-mile) actually changes.
+  const ppm = pixelsPerMile();
+  if (ppm !== lastPpm) {
+    lastPpm = ppm;
+    handlers.onView?.(ppm);
   }
 }
 
@@ -164,10 +246,53 @@ export function setIconsEnabled(on) {
   render();
 }
 
-/** Mark these axial keys ("q,r") as hook destinations; re-renders. */
-export function setHookMarks(keys) {
-  hookTargets = new Set(keys);
+/** Toggle hex name labels; re-renders. */
+export function setLabelsEnabled(on) {
+  labelsEnabled = !!on;
   render();
+}
+
+/**
+ * Mark hook destinations; re-renders. `open` = amber rings (available leads),
+ * `pinned` = a distinct pin (the party's active leads).
+ */
+export function setHookMarks({ open = [], pinned = [] } = {}) {
+  hookTargets = new Set(open);
+  pinnedTargets = new Set(pinned);
+  render();
+}
+
+// The selected hook's endpoints, highlighted with distinct colours.
+let hookFocus = null; // { target:{q,r}|null, origin:{q,r}|null } | null
+const FOCUS_TARGET = "#e8493a"; // red — where the hook points
+const FOCUS_ORIGIN = "#39c0c8"; // teal — where it was heard / reported
+
+/** Highlight one hook's target/origin on the map, or null to clear. Re-renders. */
+export function setHookFocus(focus) {
+  hookFocus = focus && (focus.target || focus.origin) ? focus : null;
+  render();
+}
+
+// A bold coloured ring for a focused hook endpoint (which is which is read from
+// the card's colour legend, so no letter badge here).
+function drawHookFocus(coord, color) {
+  const c = axialToPixel(coord.q, coord.r, HEX_SIZE);
+  strokeHex(c.x, c.y, color, 4);
+}
+
+// A faint dashed line between a selected hook's origin and target.
+function drawHookLine(a, b) {
+  const pa = axialToPixel(a.q, a.r, HEX_SIZE);
+  const pb = axialToPixel(b.q, b.r, HEX_SIZE);
+  ctx.save();
+  ctx.strokeStyle = "rgba(230,232,238,0.45)";
+  ctx.lineWidth = 2 / camera.scale;
+  ctx.setLineDash([6 / camera.scale, 5 / camera.scale]);
+  ctx.beginPath();
+  ctx.moveTo(pa.x, pa.y);
+  ctx.lineTo(pb.x, pb.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Cache of tile <img>s keyed by url; re-render once each finishes loading.
@@ -234,6 +359,32 @@ function drawDetailMarkers(cx, cy, hex) {
     const label = pois.length === 1 ? glyphForPoi(pois[0]) : String(pois.length);
     drawMarker(cx + off, cy + off, label, size, pois.length === 1 ? undefined : "#fff");
   }
+
+  // A note indicator (bottom-left) for hexes carrying GM notes.
+  if (hex.note) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx - off, cy + off, "🗒", size, "#fff");
+  }
+
+  if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
+}
+
+// A user's hex name, as a small pill below the hex (legible over terrain art).
+function drawHexLabel(cx, cy, name) {
+  const fs = Math.max(8, HEX_SIZE * 0.34);
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const text = name.length > 18 ? name.slice(0, 17) + "…" : name;
+  const w = ctx.measureText(text).width;
+  const padX = fs * 0.4;
+  const y = cy + HEX_SIZE * 0.66;
+  ctx.fillStyle = "rgba(13,15,21,0.72)";
+  ctx.fillRect(cx - w / 2 - padX, y - fs * 0.7, w + padX * 2, fs * 1.4);
+  ctx.fillStyle = "#e6e8ee";
+  ctx.fillText(text, cx, y);
 }
 
 // Simplified tier (zoomed out): settlement size-marker centered on the tile +
@@ -270,6 +421,19 @@ function drawHookMark(cx, cy, detail) {
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
     drawMarker(cx - off, cy - off, "⚑", size, "#f5c45a");
+  }
+}
+
+// Pinned (active-lead) destination: a violet ring + a pin badge in the detail tier.
+function drawPinnedMark(cx, cy, detail) {
+  strokeHex(cx, cy, "#b794f6", 3);
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.44;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx - off, cy - off, "📌", size, "#b794f6");
   }
 }
 
@@ -336,6 +500,7 @@ function strokeHex(cx, cy, color, widthPx) {
 // --- input ---------------------------------------------------------------
 
 function onPointerDown(e) {
+  if (e.button !== 0) return; // primary button pans; the right button opens the ring
   drag = {
     startX: e.clientX,
     startY: e.clientY,
@@ -347,16 +512,48 @@ function onPointerDown(e) {
   canvas.classList.add("dragging");
 }
 
+// Right-click resolves the cell under the cursor and reports it (with the screen
+// position) so app.js can open the radial menu there.
+function onContextMenu(e) {
+  e.preventDefault();
+  const { x, y } = clientToWorld(e.clientX, e.clientY);
+  const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+  handlers.onContextMenu?.({ q, r, clientX: e.clientX, clientY: e.clientY });
+}
+
 function onPointerMove(e) {
-  if (!drag) return;
-  const dx = e.clientX - drag.startX;
-  const dy = e.clientY - drag.startY;
-  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-    drag.moved = true;
+  if (drag) {
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+      drag.moved = true;
+    }
+    camera.offsetX = drag.startOffsetX + dx;
+    camera.offsetY = drag.startOffsetY + dy;
+    render();
+    return;
   }
-  camera.offsetX = drag.startOffsetX + dx;
-  camera.offsetY = drag.startOffsetY + dy;
-  render();
+  // Hover feedback: outline the hex under the cursor + report it (only when the
+  // hex changes, so we don't re-render on every pixel of movement).
+  const { x, y } = clientToWorld(e.clientX, e.clientY);
+  const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+  const key = axialKey(q, r);
+  if (key !== hoverKey) {
+    hoverKey = key;
+    hovered = { q, r };
+    render();
+    handlers.onHover?.({ q, r });
+  }
+}
+
+function onPointerLeave() {
+  drag = null;
+  if (hovered) {
+    hovered = null;
+    hoverKey = null;
+    render();
+    handlers.onHover?.(null);
+  }
 }
 
 function onPointerUp(e) {

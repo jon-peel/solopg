@@ -67,6 +67,9 @@ export function importWorld(json) {
  *   interior regenerates on next open.
  * - v5 -> v6: worlds gained a top-level `hooks` array (Phase 6). Older worlds
  *   never had one, so we just seed an empty list; hooks are created by the user.
+ * - v6 -> v7: hexes gained optional `name`/`note` annotations (Phase 7.5).
+ *   Additive — older hexes simply have none, so there's nothing to transform;
+ *   we just stamp the version.
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -109,6 +112,10 @@ export function migrateWorld(data) {
   if (data.schemaVersion < 6) {
     if (!Array.isArray(data.hooks)) data.hooks = [];
     data.schemaVersion = 6;
+  }
+  if (data.schemaVersion < 7) {
+    // hex `name`/`note` are additive and default to none — just stamp the version.
+    data.schemaVersion = 7;
   }
   return data;
 }

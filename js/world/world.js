@@ -16,7 +16,9 @@ import { axialKey } from "../core/hexgeo.js";
 // themes (Phase 4 arc) — such POIs become `type:"dungeon"` with `detail.theme`.
 // v6: worlds gained a top-level `hooks` array (Phase 6) — adventure hooks that
 // point at a hex/POI. Older worlds backfill `hooks: []`. See migrateWorld.
-export const SCHEMA_VERSION = 6;
+// v7: hexes gained optional GM annotations — `name` (a custom map label) and
+// `note` (freeform text). Additive; older hexes simply have none.
+export const SCHEMA_VERSION = 7;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

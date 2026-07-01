@@ -8,8 +8,9 @@ model, and the per-step sub-plans in [`docs/plans/`](./docs/plans).
 
 **Status:** Phases 0–6 complete — seeded hex map with terrain/settlements/POIs, multi-level
 **dungeons** (+ towers), terrain-aware **shrine/camp/landmark** detail, and **adventure hooks**
-(known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return). Next: Phase 7
-QoL & customization.
+(known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return). **Phase 7 (QoL & UX) in
+progress:** **7.1 right-click radial menu** — right-click a tile for a fixed-slot ring of its actions,
+with inapplicable options greyed-out rather than hidden.
 
 ## Running
 
@@ -22,8 +23,9 @@ Vanilla ES modules, **no build step**, but it must be served over HTTP — it ca
 python3 -m http.server 8000   # or: npm run serve  → open http://localhost:8000
 ```
 
-From the app: **New World**, click a hex to **place terrain / generate** it, add
-**settlements** and **POIs**, open a **dungeon/tower** to explore its mapped interior, and
+From the app: **New World**, then **right-click any tile** for a radial menu of its actions
+(place terrain / generate, add settlements & POIs, hooks, regenerate, delete) — or use the side panel.
+Left-click selects, left-drag pans. Open a **dungeon/tower** to explore its mapped interior, and
 **Generate hook** / **Read map** / **Follow a trail** at a town to spin up adventure hooks
 (shown in the always-visible Hooks list). **Export/Import** is JSON backup; reload confirms the
 world persists in IndexedDB.

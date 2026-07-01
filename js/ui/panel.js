@@ -6,6 +6,33 @@ import { hookName, hookDescription } from "../gen/hooks.js";
 
 const panel = () => document.getElementById("panel");
 
+// --- panel tabs (Detail | Hooks) -----------------------------------------
+// The panel shows one of two tabs at a time; #selection (Detail) and
+// #global-hooks (Hooks) are both built once and toggled via a class on #panel.
+let activeTab = "detail";
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks" };
+
+function applyPanelTab() {
+  const el = panel();
+  if (!el) return;
+  for (const [tab, id] of Object.entries(TAB_REGIONS)) {
+    const region = document.getElementById(id);
+    if (region) region.hidden = tab !== activeTab;
+  }
+  const tabs = el.querySelector(".panel-tabs");
+  if (tabs) {
+    for (const b of tabs.querySelectorAll("button")) {
+      b.classList.toggle("active", b.dataset.tab === activeTab);
+    }
+  }
+}
+
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned"). */
+export function setPanelTab(tab) {
+  activeTab = TAB_REGIONS[tab] ? tab : "detail";
+  applyPanelTab();
+}
+
 /** One-line summary of a POI's occupant. */
 export function occupantSummary(occupant) {
   if (!occupant) return "empty";
@@ -14,15 +41,13 @@ export function occupantSummary(occupant) {
   return "empty";
 }
 
-/** Append a timestamped-ish log line to the panel. */
+/**
+ * Record an app event. The on-screen event log was removed — events now go to
+ * the browser console only, keeping the panel uncluttered. Kept as a named
+ * export so every call site stays unchanged.
+ */
 export function logLine(text) {
-  const el = panel();
-  if (!el) return;
-  const line = document.createElement("div");
-  line.className = "log-line";
-  line.textContent = text;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
+  console.log(text);
 }
 
 /**
@@ -49,19 +74,16 @@ function actionButton(label, onClick) {
   return b;
 }
 
-/**
- * Render the selected tile's details + context actions into #selection.
- * @param {object} model
- *   { coord:{q,r}, hex|null, terrains:string[],
- *     onGenerateRandom, onPlaceTerrain(t), onGenerateNeighbors, onRegenerate, onDelete }
- */
-// POI list + add controls, or the drill-in detail of the selected POI.
+// POIs as a read-only/navigable list, or the drill-in detail of one POI.
+// Creating and removing POIs live on the right-click radial menu, so there are
+// no add/remove buttons here — clicking a row just inspects (and, for a
+// dungeon/tower, opens its mapped interior).
 function renderPoiSection(sel, hex, model) {
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
   const selectedPoi =
     model.selectedPoiId && pois.find((p) => p.id === model.selectedPoiId);
 
-  // Drill-in detail of one POI (type, occupant, flavor) + Back / Remove.
+  // Drill-in detail of one POI (type, occupant, flavor) + a Back link.
   if (selectedPoi) {
     const box = document.createElement("div");
     box.className = "poi-detail";
@@ -99,11 +121,11 @@ function renderPoiSection(sel, hex, model) {
         box.appendChild(div);
       }
     }
-    const row = document.createElement("div");
-    row.className = "tile-actions";
-    row.appendChild(actionButton("← Back", model.onClearPoi));
-    row.appendChild(actionButton("Remove", () => model.onRemovePoi(selectedPoi.id)));
-    box.appendChild(row);
+    const back = document.createElement("button");
+    back.className = "link-back";
+    back.textContent = "← Back to hex";
+    back.addEventListener("click", model.onClearPoi);
+    box.appendChild(back);
     sel.appendChild(box);
     return;
   }
@@ -128,13 +150,6 @@ function renderPoiSection(sel, hex, model) {
     none.textContent = "none";
     sel.appendChild(none);
   }
-
-  // Add controls: dungeons (with size choice) get their own menu beside Add POI.
-  const adders = document.createElement("div");
-  adders.className = "tile-actions";
-  adders.appendChild(addDungeonMenu(model));
-  adders.appendChild(addPoiMenu(model));
-  sel.appendChild(adders);
 }
 
 // Render a dungeon's interior into the POI drill-in box: a size/levels header,
@@ -183,109 +198,40 @@ function sectionLabel(text) {
   return el;
 }
 
-// A native disclosure dropdown. `items` = [{ label, onClick }]; first item
-// (e.g. "Random") is kept at the top, the rest are shown in given order.
-function buildMenu(summaryText, items) {
+// Overflow "…" menu for the wayfinding/destructive actions, so the card stays
+// tidy even when the map is large and you just need to find a hex.
+function hookKebab(hook, model) {
   const menu = document.createElement("details");
-  menu.className = "menu";
+  menu.className = "menu kebab";
   const summary = document.createElement("summary");
-  summary.textContent = summaryText;
+  summary.textContent = "⋯";
+  summary.title = "More";
   menu.appendChild(summary);
-
   const list = document.createElement("div");
   list.className = "menu-list";
-  for (const { label, onClick, title } of items) {
+  const item = (label, fn) => {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
-    if (title) b.title = title;
-    b.addEventListener("click", () => {
-      menu.open = false;
-      onClick();
-    });
+    b.addEventListener("click", () => { menu.open = false; fn(); });
     list.appendChild(b);
-  }
+  };
+  // Target/origin jumps now live on the card's colour-dot links; the menu keeps
+  // only the destructive action, tucked away.
+  item("Remove hook", () => model.onRemoveHook(hook.id));
   menu.appendChild(list);
   return menu;
 }
 
-// "Add POI" dropdown: Random, then types alphabetically. Dungeons have their own
-// menu (size choice), so they're excluded here — a "Random" POI can still be one.
-function addPoiMenu(model) {
-  const types = [...(model.poiTypes || [])].filter((t) => t !== "dungeon").sort();
-  return buildMenu("Add POI ▾", [
-    { label: "Random", onClick: model.onAddRandomPoi },
-    ...types.map((t) => ({ label: t, onClick: () => model.onAddPoi(t) })),
-  ]);
-}
-
-// "Add dungeon" dropdown: random size, then each named size with its level/room
-// counts spelled out (so the sizes are clearly different) + a flavor tooltip.
-function addDungeonMenu(model) {
-  const sizes = model.dungeonSizes || [];
-  const range = (r) => (r && r[0] === r[1] ? `${r[0]}` : `${r[0]}–${r[1]}`);
-  return buildMenu("Add dungeon ▾", [
-    { label: "Random size", onClick: () => model.onAddDungeon() },
-    ...sizes.map((s) => ({
-      label: `${s.size} — ${range(s.levels)} lvl, ${range(s.rooms)} rooms`,
-      title: s.blurb || "",
-      onClick: () => model.onAddDungeon(s.size),
-    })),
-  ]);
-}
-
-// Settlement section: current settlement + Remove, or an "Add settlement"
-// dropdown offering only the sizes the terrain allows (none on open water).
-function renderSettlementSection(sel, hex, model) {
-  sel.appendChild(sectionLabel("Settlement"));
-  if (hex.settlement && hex.settlement.present) {
-    const line = document.createElement("div");
-    line.className = "log-line";
-    line.textContent = hex.settlement.size;
-    sel.appendChild(line);
-    const actions = document.createElement("div");
-    actions.className = "tile-actions";
-    actions.appendChild(actionButton("Remove settlement", model.onRemoveSettlement));
-    sel.appendChild(actions);
-  } else if (model.settlementSizes && model.settlementSizes.length) {
-    sel.appendChild(
-      buildMenu("Add settlement ▾", [
-        { label: "Random", onClick: model.onAddRandomSettlement },
-        ...model.settlementSizes.map((s) => ({
-          label: s,
-          onClick: () => model.onAddSettlement(s),
-        })),
-      ]),
-    );
-  } else {
-    const none = document.createElement("div");
-    none.className = "log-line";
-    none.textContent = "none (terrain allows none)";
-    sel.appendChild(none);
-  }
-}
-
-// Per-cell Hooks section (Phase 6): just the create affordances. Town gossip
-// ("Generate hook") is heard in town; a found map can be read anywhere. The list
-// of existing hooks lives in the always-visible global section (renderGlobalHooks).
-function renderHooksSection(sel, model) {
-  if (!model.hooksEnabled) return;
-  sel.appendChild(sectionLabel("Hooks"));
-  const actions = document.createElement("div");
-  actions.className = "tile-actions";
-  if (model.canGossip) actions.appendChild(actionButton("Generate hook", model.onGenerateHook));
-  actions.appendChild(actionButton("Read map", model.onReadMap));
-  // A found riddle/clue starts a breadcrumb chain — from any site.
-  actions.appendChild(actionButton("Follow a trail", model.onStartChain));
-  sel.appendChild(actions);
-}
-
-// One hook's card: name + status, its prose, and a row of
-// actions including jumps to the target and back to the origin.
+// One hook's card: name + status + prose, and a row of actions. Clicking the
+// card body selects the hook (rings its target/origin on the map); wayfinding
+// jumps + remove live in the "…" menu.
 function hookCard(hook, model) {
   const status = hook.status || "open";
+  const selected = hook.id === model.selectedHookId;
   const box = document.createElement("div");
-  box.className = "hook" + (status !== "open" ? ` ${status}` : "");
+  box.className = "hook" + (status !== "open" ? ` ${status}` : "") + (selected ? " selected" : "");
+  if (model.onSelectHook) box.addEventListener("click", () => model.onSelectHook(hook.id));
 
   const title = document.createElement("div");
   title.className = "poi-detail-title";
@@ -299,17 +245,43 @@ function hookCard(hook, model) {
     box.appendChild(div);
   }
 
+  // Selected: the two coloured rings on the map are mirrored here as links —
+  // click one to centre the map on that hex (selection/tab stay put).
+  if (selected) {
+    const legend = document.createElement("div");
+    legend.className = "hook-legend";
+    legend.addEventListener("click", (e) => e.stopPropagation()); // don't toggle the card
+    const link = (which, label, dotClass) => {
+      const a = document.createElement("button");
+      a.type = "button";
+      a.className = "legend-link";
+      a.title = `Centre the map on the ${which}`;
+      const dot = document.createElement("span");
+      dot.className = `dot ${dotClass}`;
+      a.append(dot, label);
+      a.addEventListener("click", () => model.onCenterHook(hook.id, which));
+      return a;
+    };
+    if (hook.target) legend.appendChild(link("target", "Target", "t"));
+    if (hook.origin) legend.appendChild(link("origin", "Origin", "o"));
+    const note = document.createElement("span");
+    note.className = "muted";
+    note.textContent = "— click to centre";
+    legend.appendChild(note);
+    box.appendChild(legend);
+  }
+
   const row = document.createElement("div");
   row.className = "tile-actions";
-  row.appendChild(actionButton("→ Target", () => model.onGoToHook(hook.id)));
-  row.appendChild(actionButton("↩ Origin", () => model.onGoToHookOrigin(hook.id)));
+  row.addEventListener("click", (e) => e.stopPropagation()); // actions don't toggle selection
+  row.appendChild(actionButton(hook.pinned ? "Unpin" : "Pin", () => model.onPinHook(hook.id)));
+  row.appendChild(actionButton(status === "resolved" ? "Reopen" : "Resolve", () => model.onResolveHook(hook.id)));
+  row.appendChild(actionButton(status === "ignored" ? "Reopen" : "Ignore", () => model.onIgnoreHook(hook.id)));
   // A chain advances clue-by-clue until the final site (the prize).
   if (hook.pattern === "chain" && hook.chain && hook.chain.step < hook.chain.total && model.onFollowClue) {
     row.appendChild(actionButton("Follow the clue", () => model.onFollowClue(hook.id)));
   }
-  row.appendChild(actionButton(status === "resolved" ? "Reopen" : "Resolve", () => model.onResolveHook(hook.id)));
-  row.appendChild(actionButton(status === "ignored" ? "Reopen" : "Ignore", () => model.onIgnoreHook(hook.id)));
-  row.appendChild(actionButton("Remove", () => model.onRemoveHook(hook.id)));
+  row.appendChild(hookKebab(hook, model));
   box.appendChild(row);
   return box;
 }
@@ -320,39 +292,90 @@ const hookStatusRank = (h) => ((h.status || "open") === "open" ? 0 : 1);
 /**
  * Render the always-visible global hooks list into #global-hooks. Open hooks
  * sort first (and undimmed); resolved/ignored dim below so nothing is lost.
- * @param {{ hooks: object[], onGoToHook, onGoToHookOrigin, onResolveHook,
- *   onIgnoreHook, onRemoveHook }} model
+ * @param {{ hooks: object[], selectedHookId, onSelectHook, onPinHook,
+ *   onCenterHook, onResolveHook, onIgnoreHook, onRemoveHook, onFollowClue }} model
  */
-export function renderGlobalHooks(model) {
-  const host = document.getElementById("global-hooks");
+function setTabBadge(id, n) {
+  const badge = document.getElementById(id);
+  if (!badge) return;
+  badge.textContent = String(n);
+  badge.hidden = n === 0;
+}
+
+// Render one hook list (with a header, or an empty-state hint) into a host.
+function renderHookList(host, hooks, model, emptyMsg) {
   if (!host) return;
   host.innerHTML = "";
-  const hooks = model.hooks || [];
-  if (!hooks.length) return; // keep the panel uncluttered until there are hooks
-
-  const openCount = hooks.filter((h) => (h.status || "open") === "open").length;
-  const details = document.createElement("details");
-  details.className = "global-hooks";
-  details.open = openCount > 0;
-  const summary = document.createElement("summary");
-  summary.textContent = `Hooks — ${openCount} open / ${hooks.length} total`;
-  details.appendChild(summary);
-
-  for (const hook of [...hooks].sort((a, b) => hookStatusRank(a) - hookStatusRank(b))) {
-    details.appendChild(hookCard(hook, model));
+  if (!hooks.length) {
+    const empty = document.createElement("div");
+    empty.className = "panel-hint";
+    empty.textContent = emptyMsg;
+    host.appendChild(empty);
+    return;
   }
-  host.appendChild(details);
+  const openCount = hooks.filter((h) => (h.status || "open") === "open").length;
+  const head = document.createElement("div");
+  head.className = "hooks-head";
+  head.textContent = `${openCount} open / ${hooks.length} total`;
+  host.appendChild(head);
+  for (const hook of [...hooks].sort((a, b) => hookStatusRank(a) - hookStatusRank(b))) {
+    host.appendChild(hookCard(hook, model));
+  }
 }
 
-// "Place terrain" dropdown for an empty cell: Random, then terrains alphabetically.
-function placeTerrainMenu(model) {
-  const terrains = [...(model.terrains || [])].sort();
-  return buildMenu("Place terrain ▾", [
-    { label: "Random", onClick: model.onGenerateRandom },
-    ...terrains.map((t) => ({ label: t, onClick: () => model.onPlaceTerrain(t) })),
-  ]);
+/**
+ * Render the world hooks into two tabs: pinned hooks (the party's chosen leads)
+ * in #pinned-hooks, the rest in #global-hooks. Tab badges show the open
+ * (unpinned) count and the pinned count.
+ */
+export function renderGlobalHooks(model) {
+  const all = model.hooks || [];
+  const pinned = all.filter((h) => h.pinned);
+  const unpinned = all.filter((h) => !h.pinned);
+
+  setTabBadge("hooks-tab-badge", unpinned.filter((h) => (h.status || "open") === "open").length);
+  setTabBadge("pinned-tab-badge", pinned.length);
+
+  renderHookList(
+    document.getElementById("global-hooks"), unpinned, model,
+    "No hooks yet — generate one at a town (right-click → Hook).",
+  );
+  renderHookList(
+    document.getElementById("pinned-hooks"), pinned, model,
+    "No pinned hooks yet — press Pin on a hook in the Hooks tab to track your active leads here.",
+  );
 }
 
+// Editable GM annotations for a hex: a name (shown as a map label) + freeform
+// notes. Both commit on blur/Enter (change event) — the only editable bits left
+// in the otherwise read-only Detail tab.
+function renderHexNotes(sel, model) {
+  const a = model.annotation || { name: "", note: "" };
+  sel.appendChild(sectionLabel("Notes"));
+
+  const name = document.createElement("input");
+  name.className = "hex-name";
+  name.placeholder = "Name this hex…";
+  name.value = a.name || "";
+  name.setAttribute("aria-label", "Hex name");
+  if (model.onRenameHex) {
+    name.addEventListener("change", () => model.onRenameHex(name.value));
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter") name.blur(); });
+  }
+  sel.appendChild(name);
+
+  const note = document.createElement("textarea");
+  note.className = "room-note";
+  note.rows = 3;
+  note.placeholder = "Notes…";
+  note.value = a.note || "";
+  if (model.onNoteHex) note.addEventListener("change", () => model.onNoteHex(note.value));
+  sel.appendChild(note);
+}
+
+// Read-only info for the selected cell: terrain, settlement, and POIs. Every
+// action (place/generate/regenerate/delete, settlements, POIs, hooks) lives on
+// the right-click radial menu — the panel is just for seeing what's here.
 export function renderSelectionPanel(model) {
   const sel = document.getElementById("selection");
   if (!sel) return;
@@ -371,24 +394,27 @@ export function renderSelectionPanel(model) {
       div.textContent = line;
       sel.appendChild(div);
     }
-    renderSettlementSection(sel, hex, model);
+    // Settlement as a plain info line (controls are on the radial menu).
+    if (hex.settlement && hex.settlement.present) {
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.textContent = `Settlement: ${hex.settlement.size}`;
+      sel.appendChild(div);
+    }
     renderPoiSection(sel, hex, model);
   }
 
-  // Hooks (incl. "Read map") are available on any selected cell, placed or empty.
-  renderHooksSection(sel, model);
+  // Annotations (name + notes) work for any selected cell — even an ungenerated
+  // one — so the GM can label a spot before placing terrain there.
+  renderHexNotes(sel, model);
 
-  if (hex) {
-    sel.appendChild(sectionLabel("Hex"));
-    const actions = document.createElement("div");
-    actions.className = "tile-actions";
-    actions.appendChild(actionButton("Generate neighbors", model.onGenerateNeighbors));
-    actions.appendChild(actionButton("Regenerate", model.onRegenerate));
-    actions.appendChild(actionButton("Delete", model.onDelete));
-    sel.appendChild(actions);
-  } else {
-    sel.appendChild(placeTerrainMenu(model));
-  }
+  // Point at the radial menu now that the action buttons are gone.
+  const hint = document.createElement("div");
+  hint.className = "panel-hint";
+  hint.textContent = hex
+    ? "Right-click the hex for actions."
+    : "Right-click to place terrain or generate here.";
+  sel.appendChild(hint);
 }
 
 /**
@@ -520,7 +546,10 @@ export function showWorld(world, opts = {}) {
   if (!el) return;
   el.innerHTML = "";
   if (!world) {
-    logLine("No world loaded. Create one to begin.");
+    const msg = document.createElement("div");
+    msg.className = "panel-empty";
+    msg.textContent = "No world loaded. Create one to begin.";
+    el.appendChild(msg);
     return;
   }
   const name = document.createElement("input");
@@ -539,16 +568,54 @@ export function showWorld(world, opts = {}) {
     });
   }
   el.appendChild(name);
-  // Fixed region for the selected-hex details (above the scrolling log).
+  // Tab bar: Detail (selected hex/room) | Hooks (world hook list, with an
+  // open-count badge). Switching just toggles which region shows.
+  const tabs = document.createElement("div");
+  tabs.className = "panel-tabs";
+  const mkTab = (key, label, badgeId) => {
+    const b = document.createElement("button");
+    b.dataset.tab = key;
+    b.append(label);
+    if (badgeId) {
+      const badge = document.createElement("span");
+      badge.id = badgeId;
+      badge.className = "badge";
+      badge.hidden = true;
+      b.append(" ", badge);
+    }
+    b.addEventListener("click", () => setPanelTab(key));
+    return b;
+  };
+  tabs.append(
+    mkTab("detail", "Detail"),
+    mkTab("hooks", "Hooks", "hooks-tab-badge"),
+    mkTab("pinned", "Pinned", "pinned-tab-badge"),
+  );
+  el.appendChild(tabs);
+  // Detail region: the selected hex (or dungeon room) details.
   const sel = document.createElement("div");
   sel.id = "selection";
   el.appendChild(sel);
-  // Always-visible global hooks list (filled by renderGlobalHooks), shown from
-  // any selection — even none — so open hooks are reachable anywhere.
+  // Hooks region: unpinned world hooks (filled by renderGlobalHooks).
   const gh = document.createElement("div");
   gh.id = "global-hooks";
+  gh.hidden = true;
   el.appendChild(gh);
-  logLine(`seed: ${world.seed}`);
-  logLine(`hex scale: ${world.hexScale} miles`);
-  logLine(`hexes: ${Object.keys(world.hexes).length}`);
+  // Pinned region: the party's chosen leads (filled by renderGlobalHooks).
+  const pinned = document.createElement("div");
+  pinned.id = "pinned-hooks";
+  pinned.hidden = true;
+  el.appendChild(pinned);
+  activeTab = "detail"; // a freshly loaded world starts on Detail
+  // Static world-metadata footer (seed & scale are immutable per world, so it
+  // never goes stale). The old growing event log moved to the browser console.
+  const meta = document.createElement("div");
+  meta.className = "world-meta";
+  for (const line of [`Seed: ${world.seed}`, `Hex scale: ${world.hexScale} miles`]) {
+    const div = document.createElement("div");
+    div.textContent = line;
+    meta.appendChild(div);
+  }
+  el.appendChild(meta);
+  applyPanelTab(); // reflect the active tab (Detail) on the freshly built bar
 }

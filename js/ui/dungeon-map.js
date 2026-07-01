@@ -1,9 +1,10 @@
 // Dungeon level renderer (Phase 4 arc) — browser-only, not unit-tested.
 //
 // Draws one level's layout (from js/gen/dungeon-layout.js) on its own canvas:
-// corridors as muted cells, rooms tinted by stocked content, room numbers, and
-// the entrance highlighted. Fit-to-view (no pan/zoom). Reports room clicks via a
-// callback. The layout math lives in the (tested) generator; this just paints.
+// corridors as muted cells, rooms tinted by stocked content, and room numbers.
+// Entrances are flagged by an "E" connector badge, not a border. Fit-to-view (no
+// pan/zoom). Reports room clicks via a callback. The layout math lives in the
+// (tested) generator; this just paints.
 
 const CONTENT_FILL = {
   Monster: "#7c3b32",
@@ -11,11 +12,11 @@ const CONTENT_FILL = {
   Empty: "#2f3542",
   Special: "#3b4b7c",
 };
+const CONTENT_GLYPH = { Monster: "👹", Trap: "⚠️", Special: "✨" }; // Empty: none
 const CORRIDOR_FILL = "#262b36";
 const DOOR_FILL = { door: "#caa46a", locked: "#c0524a", stuck: "#c98a3a", secret: "#9a6fd0" };
 const DOOR_SYMBOL = { locked: "L", stuck: "J", secret: "S" }; // plain door: no letter
 const ROOM_STROKE = "#11131a";
-const ENTRANCE_STROKE = "#5fbf77";
 const SELECTED_STROKE = "#6ea8fe";
 const PAD = 16; // px border inside the canvas
 
@@ -27,6 +28,7 @@ let marks = null; // { entrance, exit, down, up } : Sets of room numbers
 let frame = null; // shared {minX,minY,w,h} bounding box across all levels (or null)
 let selectedRoom = null;
 let onRoomClick = () => {};
+let onRoomContextMenu = () => {};
 let hitRects = []; // { n, x, y, w, h } in FITTED CSS px (pre-camera), for click testing
 let camera = { scale: 1, x: 0, y: 0 }; // user pan/zoom on top of the fit-to-view base
 let drag = null; // { x, y, moved } while a pointer is down
@@ -40,12 +42,14 @@ export function attachDungeon(canvasEl, cbs = {}) {
   canvas = canvasEl;
   ctx = canvas.getContext("2d");
   if (cbs.onRoomClick) onRoomClick = cbs.onRoomClick;
+  if (cbs.onRoomContextMenu) onRoomContextMenu = cbs.onRoomContextMenu;
   new ResizeObserver(() => resize()).observe(canvas);
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointerleave", onPointerUp);
   canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("contextmenu", onContextMenu);
   resize();
 }
 
@@ -78,6 +82,34 @@ export function setMarks(m) {
 
 export function setSelectedRoom(n) {
   selectedRoom = n;
+  render();
+}
+
+/**
+ * Pan the camera so room `n` is in view, keeping the current zoom. No-op if the
+ * room is already fully visible, so clicking a room you can see won't yank the
+ * view — this is for stair-travel / level-switch landing off-screen.
+ */
+export function centerOnRoom(n, force = false) {
+  if (!canvas) return;
+  const hr = hitRects.find((r) => r.n === n);
+  if (!hr) return;
+  const rect = canvas.getBoundingClientRect();
+  // Room's screen-space rect under the current camera (hitRects are pre-camera).
+  const sx = camera.x + hr.x * camera.scale;
+  const sy = camera.y + hr.y * camera.scale;
+  const sw = hr.w * camera.scale;
+  const sh = hr.h * camera.scale;
+  const margin = 8;
+  const visible =
+    sx >= margin && sy >= margin &&
+    sx + sw <= rect.width - margin && sy + sh <= rect.height - margin;
+  if (visible && !force) return;
+  // Center the room's middle, keeping scale.
+  const fx = hr.x + hr.w / 2;
+  const fy = hr.y + hr.h / 2;
+  camera.x = rect.width / 2 - fx * camera.scale;
+  camera.y = rect.height / 2 - fy * camera.scale;
   render();
 }
 
@@ -132,6 +164,7 @@ export function render() {
 
   const layout = level.layout;
   const litRooms = new Set((level.rooms || []).filter((r) => r.light).map((r) => r.n));
+  const treasureRooms = new Set((level.rooms || []).filter((r) => r.treasure).map((r) => r.n));
   // Use the shared dungeon-wide frame (so every level lines up) when given.
   const bb = frame || boundingBox(layout);
   const cell = Math.max(
@@ -189,10 +222,10 @@ export function render() {
       ctx.fillRect(x, y, w, h);
     }
 
-    const entrance = r.n === layout.entrance;
-    ctx.strokeStyle =
-      r.n === selectedRoom ? SELECTED_STROKE : entrance ? ENTRANCE_STROKE : ROOM_STROKE;
-    ctx.lineWidth = r.n === selectedRoom || entrance ? 3 : 2;
+    // Entrances are shown by the "E" connector badge (which handles multiple
+    // entrances); the room border only reflects selection.
+    ctx.strokeStyle = r.n === selectedRoom ? SELECTED_STROKE : ROOM_STROKE;
+    ctx.lineWidth = r.n === selectedRoom ? 3 : 2;
     ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
 
     ctx.fillStyle = "#e6e8ee";
@@ -294,6 +327,30 @@ export function render() {
       }
     }
   }
+
+  // Treasure marker (bottom-left) — rooms holding loot, matching the panel's 💰.
+  // The other three corners are taken (connectors TL, lamp TR, state BR).
+  if (treasureRooms.size) {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.font = `${Math.max(9, Math.floor(cell * 0.8))}px sans-serif`;
+    for (const r of layout.rooms) {
+      if (!treasureRooms.has(r.n)) continue;
+      ctx.fillText("💰", sx(r.x) + 2, sy(r.y) + r.h * cell - 2);
+    }
+  }
+
+  // Content glyph (top-centre) — read a level at a glance without clicking. The
+  // colour fill already encodes this; the glyph helps (and aids colour-blind GMs).
+  if (cell >= 10) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.font = `${Math.floor(cell * 0.7)}px sans-serif`;
+    for (const r of layout.rooms) {
+      const g = CONTENT_GLYPH[contentFor(r.n)];
+      if (g) ctx.fillText(g, sx(r.x) + (r.w * cell) / 2, sy(r.y) + 2);
+    }
+  }
 }
 
 function pointerPos(e) {
@@ -302,9 +359,27 @@ function pointerPos(e) {
 }
 
 function onPointerDown(e) {
+  if (e.button !== 0) return; // primary button pans; right button opens the room ring
   const p = pointerPos(e);
   drag = { x: p.x, y: p.y, moved: false };
   canvas.setPointerCapture?.(e.pointerId);
+}
+
+// Room number under a client point (inverse-transform into fitted space), or null.
+function roomAtPointer(e) {
+  const p = pointerPos(e);
+  const fx = (p.x - camera.x) / camera.scale;
+  const fy = (p.y - camera.y) / camera.scale;
+  for (const r of hitRects) {
+    if (fx >= r.x && fx <= r.x + r.w && fy >= r.y && fy <= r.y + r.h) return r.n;
+  }
+  return null;
+}
+
+function onContextMenu(e) {
+  e.preventDefault();
+  const n = roomAtPointer(e);
+  if (n != null) onRoomContextMenu({ n, clientX: e.clientX, clientY: e.clientY });
 }
 
 function onPointerMove(e) {
@@ -326,16 +401,8 @@ function onPointerUp(e) {
   const wasDrag = drag.moved;
   drag = null;
   if (wasDrag) return; // a pan, not a click
-  // Click: inverse-transform into fitted space and hit-test.
-  const p = pointerPos(e);
-  const fx = (p.x - camera.x) / camera.scale;
-  const fy = (p.y - camera.y) / camera.scale;
-  for (const r of hitRects) {
-    if (fx >= r.x && fx <= r.x + r.w && fy >= r.y && fy <= r.y + r.h) {
-      onRoomClick(r.n);
-      return;
-    }
-  }
+  const n = roomAtPointer(e);
+  if (n != null) onRoomClick(n);
 }
 
 function onWheel(e) {

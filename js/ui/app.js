@@ -38,18 +38,26 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks } from "./panel.js";
-import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView } from "./dungeon-map.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, setPanelTab } from "./panel.js";
+import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
   setWorld,
   setSelected,
   recenterOn,
   setIconsEnabled,
+  setLabelsEnabled,
   setHookMarks,
+  setHookFocus,
+  zoomStep,
+  recenter,
+  pixelsPerMile,
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
+import { buildRadialModel } from "./radial-model.js";
+import { buildRoomRadialModel } from "./radial-room-model.js";
+import { openRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
 
 // Tables the hex generator rolls on. Settlement/POI presence are now driven by
 // the terrain profile (not tables); settlement-size is still rolled (capped).
@@ -113,6 +121,7 @@ const HOOK_TABLE_IDS = [
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
+let selectedHookId = null; // hook whose target/origin are highlighted on the map
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -166,10 +175,12 @@ async function refreshWorldList() {
 }
 
 async function setCurrent(world) {
+  closeRadial(); // switching worlds dismisses any open radial menu
   if (dungeonPoi) closeDungeonView(); // leave any open dungeon when switching worlds
   if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
   selectedPoiId = null;
+  selectedHookId = null; // clear any hook highlight from the previous world
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -182,6 +193,8 @@ async function setCurrent(world) {
   renderSelection();
   refreshGlobalHooks();
   refreshHookMarks();
+  refreshHookFocus();
+  refreshMapChrome();
   await refreshWorldList();
 }
 
@@ -192,7 +205,103 @@ async function onNewWorld() {
   const worlds = await listWorlds();
   const world = await saveWorld(createWorld({ name: defaultWorldName(worlds) }));
   await setCurrent(world);
+  selectCell(0, 0); // land the GM on the origin, ready to right-click
+  recenterOn(0, 0);
   logLine("Created and saved.");
+}
+
+// --- map chrome (hover readout, scale, empty-state prompt, help) ---------
+
+// Update the hovered-hex readout (bottom-left), shown only while hovering.
+function onHover(cell) {
+  const box = $("map-readout");
+  const el = $("readout-cell");
+  if (!box || !el) return;
+  if (!cell || !current) {
+    el.textContent = "";
+    box.hidden = true;
+    return;
+  }
+  const hex = getHex(current, cell.q, cell.r);
+  const label = hex && hex.placed
+    ? (hex.name ? `${hex.name} · ${hex.terrain}` : hex.terrain)
+    : (hex && hex.name ? hex.name : "empty");
+  el.textContent = `(${cell.q}, ${cell.r}) ${label}`;
+  box.hidden = false;
+}
+
+// Show the empty-state prompt until the world has a hex; keep the scale bar +
+// travel tip current.
+function refreshMapChrome() {
+  const empty = $("map-empty");
+  if (empty) empty.hidden = !current || placedHexes(current).length > 0;
+  const scale = $("map-scale");
+  if (scale) scale.hidden = !current;
+  const tip = $("travel-tip");
+  if (tip && current) tip.innerHTML = travelTipHTML(current.hexScale);
+  if (current) drawScaleBar(pixelsPerMile());
+}
+
+// Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
+// (the B/X / OSE travel tiers), solid 0–12 then hollow to 18 and 24.
+function drawScaleBar(ppm) {
+  const host = $("map-scale");
+  if (!host || !current) return;
+  // Four 6-mile blocks (= 1 hex each), alternating solid/hollow so every
+  // division is visible; marks land on the travel tiers 6/12/18/24.
+  const segs = [[6, "solid"], [6, "hollow"], [6, "solid"], [6, "hollow"]];
+  const marks = [0, 6, 12, 18, 24];
+  const w = ppm * 24;
+  const bar = segs
+    .map(([mi, cls]) => `<div class="scale-seg ${cls}" style="width:${ppm * mi}px"></div>`)
+    .join("");
+  const ticks = marks.map((m) => `<span style="left:${ppm * m}px">${m}</span>`).join("");
+  host.innerHTML =
+    `<div class="scale-bar" style="width:${w}px">${bar}</div>` +
+    `<div class="scale-ticks" style="width:${w}px">${ticks}</div>` +
+    `<div class="scale-cap">miles</div>`;
+}
+
+// Travel-rules popover content, with per-tier distance in this world's hexes.
+function travelTipHTML(milesPerHex) {
+  const hx = (mi) => Math.round(mi / milesPerHex);
+  const row = (label, mi) => {
+    const h = hx(mi);
+    return `<tr><td>${label}</td><td>${mi} mi</td><td>${h} hex${h === 1 ? "" : "es"}</td></tr>`;
+  };
+  return (
+    `<strong>Overland travel — B/X &amp; OSE</strong>` +
+    `<table>${row("Unencumbered", 24)}${row("Lightly loaded", 18)}` +
+    `${row("Encumbered", 12)}${row("Heavily loaded", 6)}</table>` +
+    `<div class="tt-terrain">Terrain: road ×1½ · hills/forest/desert ×⅔ · mountains/jungle/swamp ×½</div>` +
+    `<div class="tt-terrain">Forced march +½ (then rest a day)</div>`
+  );
+}
+
+function toggleTravelTip(show) {
+  const tip = $("travel-tip");
+  if (tip) tip.hidden = !show;
+}
+
+function toggleHelp(force) {
+  const el = $("help-overlay");
+  if (!el) return;
+  el.hidden = force === undefined ? !el.hidden : !force;
+}
+
+// `?` toggles the cheat-sheet; Esc closes it (ahead of other Esc handlers).
+function onHelpKey(e) {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  if (e.key === "?") {
+    toggleHelp();
+  } else if (e.key === "Escape") {
+    const el = $("help-overlay");
+    if (el && !el.hidden) {
+      toggleHelp(false);
+      e.stopImmediatePropagation();
+    }
+  }
 }
 
 // First free "New World" / "New World N" name among existing worlds.
@@ -296,51 +405,69 @@ function selectCell(q, r) {
   selectedPoiId = null; // reset drill-in when changing cell
   saveSelected(current, selected);
   setSelected(selected);
+  setPanelTab("detail"); // selecting a cell shows its detail
   renderSelection();
 }
 
+// The panel is read-only now: it shows the selected cell's info and lets you
+// drill into / open a POI. All mutation runs through the radial menu
+// (radialDispatch), and the hooks list renders separately (refreshGlobalHooks).
 function renderSelection() {
   if (!current || !selected) return renderSelectionPanel(null);
   const { q, r } = selected;
   const hex = getHex(current, q, r);
-  const settled = !!(hex && hex.placed && hex.settlement && hex.settlement.present);
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
-    terrains: Object.keys(TERRAIN_COLORS),
-    settlementSizes: hex && hex.placed ? allowedSizes(hex.terrain) : [],
+    annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
     selectedPoiId,
-    poiTypes: Object.keys(POI_GLYPHS),
-    dungeonSizes,
-    // The per-cell section is just the create buttons; the hook LIST is global
-    // (renderGlobalHooks). Town gossip ("Generate hook") is gated to a settlement.
-    hooksEnabled: true,
-    canGossip: settled,
-    onGenerateHook: () => onGenerateHook(),
-    onReadMap,
-    onStartChain,
-    onResolveHook,
-    onIgnoreHook,
-    onRemoveHook,
-    onGoToHook,
-    onAddSettlement,
-    onAddRandomSettlement,
-    onRemoveSettlement,
     onSelectPoi,
     onClearPoi: () => {
       selectedPoiId = null;
       renderSelection();
     },
-    onAddRandomPoi,
-    onAddPoi,
-    onAddDungeon,
-    onRemovePoi,
-    onGenerateRandom,
-    onPlaceTerrain,
-    onGenerateNeighbors,
-    onRegenerate,
-    onDelete: onDeleteHex,
+    onRenameHex,
+    onNoteHex,
   });
+}
+
+// GM annotations work on any selected cell. An empty cell is annotated by
+// creating a lightweight placed:false hex that carries just name/note; clearing
+// both removes it again (no orphan entries). Names show as map labels and notes
+// as a 🗒 badge, so both re-render the map.
+function annotationHex(q, r, create) {
+  let hex = getHex(current, q, r);
+  if (!hex && create) {
+    hex = { key: axialKey(q, r), coords: { q, r }, placed: false, pois: [] };
+    addHex(current, hex);
+  }
+  return hex;
+}
+
+function pruneIfEmpty(hex, q, r) {
+  if (hex && !hex.placed && !hex.name && !hex.note) removeHex(current, q, r);
+}
+
+async function onRenameHex(name) {
+  if (!current || !selected) return;
+  const { q, r } = selected;
+  const v = (name || "").trim();
+  const hex = annotationHex(q, r, !!v);
+  if (!hex) return;
+  if (v) hex.name = v; else delete hex.name;
+  pruneIfEmpty(hex, q, r);
+  await persistAndRefresh();
+}
+
+async function onNoteHex(text) {
+  if (!current || !selected) return;
+  const { q, r } = selected;
+  const v = text || "";
+  const hex = annotationHex(q, r, !!v);
+  if (!hex) return;
+  if (v) hex.note = v; else delete hex.note;
+  pruneIfEmpty(hex, q, r);
+  await persistAndRefresh();
 }
 
 // Settlement sizes the terrain permits (capped; empty for open water).
@@ -547,6 +674,7 @@ function dungeonFrame(dungeon) {
 function openDungeonView(poi) {
   const dungeon = poi.detail && poi.detail.dungeon;
   if (!dungeon) return; // nothing to show (build failed); stay on the hex map
+  closeRadial(); // changing screens dismisses any open radial menu
   dungeonPoi = poi;
   dungeonFrameBB = dungeonFrame(dungeon);
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
@@ -558,6 +686,7 @@ function openDungeonView(poi) {
 }
 
 function closeDungeonView() {
+  closeRadial(); // changing screens dismisses any open radial menu
   dungeonPoi = null;
   dungeonRoomN = null;
   $("dungeon-view").hidden = true;
@@ -571,16 +700,45 @@ function onToggleLegend() {
   $("dungeon-legend").hidden = !$("dungeon-legend").hidden;
 }
 
+// Per-level + whole-dungeon explored/cleared tallies (for the switcher chrome
+// and the toolbar progress). A level is "done" once every room is explored.
+function dungeonTallies() {
+  const dungeon = dungeonPoi.detail.dungeon;
+  const state = dungeonPoi.detail.dungeonState;
+  const perLevel = dungeon.levels.map((lvl, i) => {
+    const rooms = lvl.layout.rooms || [];
+    let explored = 0, cleared = 0;
+    for (const r of rooms) {
+      const st = getRoomState(state, i, r.n);
+      if (st.explored) explored++;
+      if (st.cleared) cleared++;
+    }
+    return { total: rooms.length, explored, cleared, fullyExplored: rooms.length > 0 && explored === rooms.length };
+  });
+  return {
+    perLevel,
+    total: perLevel.reduce((a, l) => a + l.total, 0),
+    cleared: perLevel.reduce((a, l) => a + l.cleared, 0),
+  };
+}
+
 function renderLevelSwitcher() {
   const bar = $("dungeon-levels");
   bar.innerHTML = "";
-  dungeonPoi.detail.dungeon.levels.forEach((lvl, i) => {
+  const dungeon = dungeonPoi.detail.dungeon;
+  const t = dungeonTallies();
+  dungeon.levels.forEach((lvl, i) => {
     const b = document.createElement("button");
     b.textContent = `L${lvl.depth}`;
     if (i === dungeonLevelIndex) b.className = "active";
+    if (t.perLevel[i].fullyExplored) b.classList.add("done");
+    const pl = t.perLevel[i];
+    b.title = `Level ${lvl.depth}: ${lvl.theme || lvl.family || "?"} — ${pl.explored}/${pl.total} explored, ${pl.cleared}/${pl.total} cleared`;
     b.addEventListener("click", () => showDungeonLevel(i));
     bar.appendChild(b);
   });
+  const prog = $("dungeon-progress");
+  if (prog) prog.textContent = t.total ? `Cleared ${t.cleared}/${t.total}` : "";
 }
 
 // Connector marks (entrance/exit/stairs) for one level, as Sets of room numbers.
@@ -668,7 +826,53 @@ function onRoomClick(n) {
   if (!dungeonPoi) return;
   dungeonRoomN = n;
   setSelectedRoom(n);
+  centerOnRoom(n); // bring it into view if it landed off-screen (e.g. via stairs)
+  setPanelTab("detail"); // selecting a room shows its detail
   renderRoomPanel(n);
+}
+
+// Right-click a room: select it, then open the room radial at the cursor. Reuses
+// the shared overlay (openRadial) with a room-specific model + dispatch.
+function onRoomContextMenu({ n, clientX, clientY }) {
+  if (!dungeonPoi) return;
+  onRoomClick(n);
+  const dungeon = dungeonPoi.detail.dungeon;
+  const i = dungeonLevelIndex;
+  const st = getRoomState(dungeonPoi.detail.dungeonState, i, n);
+  const model = buildRoomRadialModel({
+    explored: !!st.explored,
+    cleared: !!st.cleared,
+    looted: !!st.looted,
+    connections: roomConnections(dungeon, i, n),
+  });
+  openRadial({ clientX, clientY, model, dispatch: (id, value) => roomRadialDispatch(i, n, id, value) });
+}
+
+function roomRadialDispatch(level, n, id, value) {
+  if (id === "toggle") return toggleRoomState(level, n, value);
+  if (id === "goTo") return onGoTo(value.level, value.room);
+  if (id === "focus") return centerOnRoom(n, true);
+}
+
+// Keyboard for the Dungeon View: Esc leaves; [ / ] (and PageUp/PageDown) switch
+// levels. Ignored while typing in the room-note field, and inert outside the view.
+function onDungeonKey(e) {
+  if (!dungeonPoi) return;
+  if (isRadialOpen()) return; // the room ring owns keys while open (Esc closes it)
+  const t = e.target;
+  if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+  if (e.key === "Escape") {
+    closeDungeonView();
+    return;
+  }
+  const last = dungeonPoi.detail.dungeon.levels.length - 1;
+  if (e.key === "]" || e.key === "PageDown") {
+    e.preventDefault();
+    if (dungeonLevelIndex < last) showDungeonLevel(dungeonLevelIndex + 1);
+  } else if (e.key === "[" || e.key === "PageUp") {
+    e.preventDefault();
+    if (dungeonLevelIndex > 0) showDungeonLevel(dungeonLevelIndex - 1);
+  }
 }
 
 // Take a stair: switch to the connected level and select the connected room.
@@ -689,6 +893,7 @@ async function toggleRoomState(level, n, field) {
   });
   current = await saveWorld(current);
   setMarks(marksFor(dungeonPoi.detail.dungeon, level)); // refresh map badges, keep selection
+  renderLevelSwitcher(); // refresh the "done" ✓ + Cleared X/Y progress
   renderRoomPanel(n); // refresh toggle states
 }
 
@@ -712,27 +917,70 @@ async function onRemovePoi(id) {
 // Mark every OPEN hook's target on the map (skip local opportunity/event, whose
 // target is the town itself). Lets the GM find destinations at a glance.
 function refreshHookMarks() {
-  const keys = [];
+  const open = [];
+  const pinned = [];
   for (const h of (current && current.hooks) || []) {
-    if ((h.status || "open") !== "open") continue;
-    if (h.pattern === "opportunity" || h.pattern === "event") continue;
-    if (h.target) keys.push(axialKey(h.target.q, h.target.r));
+    if ((h.status || "open") !== "open" || !h.target) continue;
+    const key = axialKey(h.target.q, h.target.r);
+    if (h.pinned) { pinned.push(key); continue; } // active leads always show
+    if (h.pattern === "opportunity" || h.pattern === "event") continue; // local; target is the town
+    open.push(key);
   }
-  setHookMarks(keys);
+  setHookMarks({ open, pinned });
 }
 
-// Refresh the always-visible global hooks list (open hooks reachable anywhere).
+// Refresh the hook tabs (unpinned list + pinned list, with badges).
 function refreshGlobalHooks() {
   renderGlobalHooks({
     hooks: (current && current.hooks) || [],
     hexScale: (current && current.hexScale) || 6,
-    onGoToHook,
-    onGoToHookOrigin,
+    selectedHookId,
+    onSelectHook,
+    onPinHook,
+    onCenterHook,
     onFollowClue,
     onResolveHook,
     onIgnoreHook,
     onRemoveHook,
   });
+}
+
+// Highlight the selected hook's target/origin on the map (clears if none/gone).
+function refreshHookFocus() {
+  const h = selectedHookId && (current && current.hooks || []).find((x) => x.id === selectedHookId);
+  if (!h) {
+    selectedHookId = null;
+    return setHookFocus(null);
+  }
+  setHookFocus({ target: h.target || null, origin: h.origin || null });
+}
+
+// Clicking a hook card selects it (toggles); selection rings its endpoints.
+function onSelectHook(id) {
+  selectedHookId = selectedHookId === id ? null : id;
+  refreshGlobalHooks();
+  refreshHookFocus();
+}
+
+// Esc clears a hook highlight (takes priority over leaving the dungeon). Inert
+// while a ring is open (the ring owns Esc) or while typing in a field.
+function onWorldKey(e) {
+  if (e.key !== "Escape" || !selectedHookId || isRadialOpen()) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  selectedHookId = null;
+  refreshGlobalHooks();
+  refreshHookFocus();
+  e.stopImmediatePropagation(); // we handled Esc; don't also exit the dungeon
+}
+
+// Pin / unpin a hook — pinned hooks move to the Pinned tab (out of Hooks).
+async function onPinHook(id) {
+  if (!current) return;
+  const h = (current.hooks || []).find((x) => x.id === id);
+  if (!h) return;
+  h.pinned = !h.pinned;
+  await persistAndRefresh();
 }
 
 // Next free "hook:<n>" id across the whole world (hooks are world-level).
@@ -926,6 +1174,8 @@ async function setHookStatus(id, status) {
   const h = (current.hooks || []).find((x) => x.id === id);
   if (!h) return;
   h.status = h.status === status ? "open" : status;
+  // Resolving a lead retires it from the Pinned tab automatically.
+  if (h.status === "resolved" && h.pinned) h.pinned = false;
   await persistAndRefresh();
 }
 const onResolveHook = (id) => setHookStatus(id, "resolved");
@@ -937,20 +1187,12 @@ async function onRemoveHook(id) {
   await persistAndRefresh();
 }
 
-// Jump the map to a hook's TRUE target (the GM sees through an off-by-one error).
-function onGoToHook(id) {
-  const h = (current.hooks || []).find((x) => x.id === id);
-  if (!h || !h.target) return;
-  selectCell(h.target.q, h.target.r);
-  recenterOn(h.target.q, h.target.r);
-}
-
-// Jump back to where a hook was heard / where the party reports in (its origin).
-function onGoToHookOrigin(id) {
-  const h = (current.hooks || []).find((x) => x.id === id);
-  if (!h || !h.origin) return;
-  selectCell(h.origin.q, h.origin.r);
-  recenterOn(h.origin.q, h.origin.r);
+// Centre the map on a hook's target/origin WITHOUT changing the selection — the
+// colour-dot links on a selected hook card use this (stay on the hook, just pan).
+function onCenterHook(id, which) {
+  const h = (current && current.hooks || []).find((x) => x.id === id);
+  const pt = h && (which === "origin" ? h.origin : h.target);
+  if (pt) recenterOn(pt.q, pt.r);
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the
@@ -997,6 +1239,8 @@ async function persistAndRefresh() {
   refreshHookMarks();
   renderSelection();
   refreshGlobalHooks();
+  refreshHookFocus();
+  refreshMapChrome();
 }
 
 // Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.
@@ -1020,6 +1264,57 @@ function onHexClick({ q, r }) {
 
 function onEmptyCellClick({ q, r }) {
   selectCell(q, r);
+}
+
+// Right-click: select the cell, then open the radial menu over it. The model is
+// a fixed set of slots (radial-model.js); slots that don't apply to this cell
+// are shown disabled. Picks route through `radialDispatch` to existing handlers.
+function onContextMenu({ q, r, clientX, clientY }) {
+  if (!current) return;
+  selectCell(q, r);
+  const hex = getHex(current, q, r);
+  const placed = !!(hex && hex.placed);
+  const hasSettlement = !!(placed && hex.settlement && hex.settlement.present);
+  let emptyNeighbors = 0;
+  if (placed) {
+    for (const n of neighbors(q, r)) if (!hasHexAt(current, n.q, n.r)) emptyNeighbors++;
+  }
+  const model = buildRadialModel({
+    placed,
+    terrain: placed ? hex.terrain : null,
+    hasSettlement,
+    allowedSizes: placed ? allowedSizes(hex.terrain) : [],
+    canGossip: hasSettlement,
+    emptyNeighbors,
+    poiTypes: Object.keys(POI_GLYPHS),
+    terrains: Object.keys(TERRAIN_COLORS),
+    pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
+    dungeonSizes: dungeonSizes.map((s) => ({ label: s.size, value: s.size, title: s.blurb || "" })),
+  });
+  openRadial({ clientX, clientY, model, dispatch: radialDispatch });
+}
+
+// Map a radial pick (action id + optional value) to an existing handler. The
+// handlers act on the module-level `selected`, set by selectCell above.
+function radialDispatch(id, value) {
+  switch (id) {
+    case "generate": return onGenerateRandom();
+    case "placeTerrain": return onPlaceTerrain(value);
+    case "addRandomPoi": return onAddRandomPoi();
+    case "addPoi": return onAddPoi(value);
+    case "addRandomDungeon": return onAddDungeon();
+    case "addDungeon": return onAddDungeon(value);
+    case "removePoi": return onRemovePoi(value);
+    case "addRandomSettlement": return onAddRandomSettlement();
+    case "addSettlement": return onAddSettlement(value);
+    case "removeSettlement": return onRemoveSettlement();
+    case "neighbors": return onGenerateNeighbors();
+    case "regenerate": return onRegenerate();
+    case "deleteHex": return onDeleteHex();
+    case "genHook": return onGenerateHook();
+    case "readMap": return onReadMap();
+    case "followTrail": return onStartChain();
+  }
 }
 
 async function onGenerateRandom() {
@@ -1104,10 +1399,24 @@ function wire() {
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
   $("btn-icons").addEventListener("click", onToggleIcons);
+  $("btn-labels").addEventListener("click", onToggleLabels);
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
   $("btn-dungeon-legend").addEventListener("click", onToggleLegend);
+  $("btn-zoom-in").addEventListener("click", () => zoomStep(1));
+  $("btn-zoom-out").addEventListener("click", () => zoomStep(-1));
+  $("btn-home").addEventListener("click", () => recenter());
+  $("btn-help").addEventListener("click", () => toggleHelp());
+  $("btn-help-close").addEventListener("click", () => toggleHelp(false));
+  $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
+  $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
+  $("help-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
+  });
+  window.addEventListener("keydown", onHelpKey); // Esc closes help before other handlers
+  window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
+  window.addEventListener("keydown", onDungeonKey);
 }
 
 let iconsOn = true;
@@ -1117,10 +1426,17 @@ function onToggleIcons() {
   $("btn-icons").textContent = `Icons: ${iconsOn ? "on" : "off"}`;
 }
 
+let labelsOn = true;
+function onToggleLabels() {
+  labelsOn = !labelsOn;
+  setLabelsEnabled(labelsOn);
+  $("btn-labels").textContent = `Labels: ${labelsOn ? "on" : "off"}`;
+}
+
 async function init() {
   wire();
-  attachMap($("map"), { onHexClick, onEmptyCellClick });
-  attachDungeon($("dungeon-canvas"), { onRoomClick });
+  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu, onHover, onView: drawScaleBar });
+  attachDungeon($("dungeon-canvas"), { onRoomClick, onRoomContextMenu: onRoomContextMenu });
   // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {
     const sizeT = await loadTables(["dungeon-size"]);

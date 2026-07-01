@@ -21,6 +21,7 @@
       <button id="btn-import">Import</button>
       <span class="bar-divider"></span>
       <button id="btn-icons">Icons: on</button>
+      <button id="btn-labels">Labels: on</button>
       <input id="import-file" type="file" accept="application/json,.json" hidden />
     </header>
 
@@ -28,23 +29,38 @@
       <div id="stage">
         <!-- Hex grid (Phase 2). The Dungeon View overlays it when open. -->
         <canvas id="map"></canvas>
+        <!-- Empty-state prompt for a fresh world (hidden once a hex is placed). -->
+        <div id="map-empty" hidden>Right-click anywhere to begin</div>
+        <!-- Bottom-left readout: hovered hex (shown only while hovering). -->
+        <div id="map-readout" hidden><span id="readout-cell"></span></div>
+        <!-- Top-left: scale bar (a day's march, 12/18/24 mi); hover for rules. -->
+        <div id="map-scale" hidden></div>
+        <div id="travel-tip" hidden></div>
+        <!-- Bottom-right map controls. -->
+        <div id="map-controls">
+          <button id="btn-zoom-in" title="Zoom in">＋</button>
+          <button id="btn-zoom-out" title="Zoom out">−</button>
+          <button id="btn-home" title="Recenter on the map">⌂</button>
+          <button id="btn-help" title="Shortcuts (?)">?</button>
+        </div>
         <section id="dungeon-view" hidden>
           <div id="dungeon-toolbar">
-            <button id="btn-dungeon-back">← World</button>
+            <button id="btn-dungeon-back" title="Back to world map (Esc)">← World</button>
             <strong id="dungeon-title"></strong>
+            <span id="dungeon-progress" class="dungeon-progress"></span>
             <span class="spacer"></span>
-            <div id="dungeon-levels"></div>
-            <button id="btn-dungeon-fit">Fit</button>
+            <div id="dungeon-levels" title="Switch level ([ and ])"></div>
+            <button id="btn-dungeon-fit" title="Fit level to view">Fit</button>
             <button id="btn-dungeon-legend">Legend</button>
           </div>
           <canvas id="dungeon-canvas"></canvas>
           <div id="dungeon-legend" hidden>
             <strong>Legend</strong>
             <div class="legend-group">
-              <span><i class="sw" style="background:#7c3b32"></i>Monster</span>
-              <span><i class="sw" style="background:#7c6b32"></i>Trap</span>
+              <span><i class="sw" style="background:#7c3b32"></i>👹 Monster</span>
+              <span><i class="sw" style="background:#7c6b32"></i>⚠️ Trap</span>
               <span><i class="sw" style="background:#2f3542"></i>Empty</span>
-              <span><i class="sw" style="background:#3b4b7c"></i>Special</span>
+              <span><i class="sw" style="background:#3b4b7c"></i>✨ Special</span>
             </div>
             <div class="legend-group">
               <span><i class="sw" style="background:#caa46a"></i>Door</span>
@@ -61,6 +77,7 @@
               <span><b style="color:#6ec6d6">•</b> explored</span>
               <span><b style="color:#5fbf77">✓</b> cleared</span>
               <span><b style="color:#d8b24a">$</b> looted</span>
+              <span>💰 treasure here</span>
             </div>
             <div class="legend-group">
               <span>▦ grid square = 10 ft</span>
@@ -68,6 +85,24 @@
             </div>
           </div>
         </section>
+        <!-- Right-click radial menu (Phase 7.1); overlays the hex map. -->
+        <div id="ring"><div class="scrim"></div></div>
+        <!-- Keyboard/interaction cheat-sheet (toggle with ?). -->
+        <div id="help-overlay" hidden>
+          <div class="help-card">
+            <strong>Shortcuts</strong>
+            <ul>
+              <li><b>Right-click</b> a hex or room — actions menu</li>
+              <li><b>Left-click</b> select · <b>drag</b> pan · <b>wheel</b> zoom</li>
+              <li><b>＋ / − / ⌂</b> zoom · recenter on the map</li>
+              <li><b>Click a hook</b> — highlight its target (red) &amp; origin (teal)</li>
+              <li>Dungeon: <b>[</b> / <b>]</b> change level · <b>Esc</b> back</li>
+              <li><b>Esc</b> — close a menu / clear a hook highlight</li>
+              <li><b>?</b> — toggle this help</li>
+            </ul>
+            <button id="btn-help-close">Close</button>
+          </div>
+        </div>
       </div>
       <aside id="panel"></aside>
     </main>

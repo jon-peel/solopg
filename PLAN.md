@@ -28,9 +28,17 @@ threat names its **menace** ("Threat: Bandits", tracked to its lair); threat/res
 **reward** (a patron + coin, or glory). Each hook reads with the target's base name, distance in **miles**,
 and tile **terrain**. A global always-visible **open-hooks list** (→ Target /
 ↩ Origin / Follow-the-clue) and **amber map markers** on every open target tie it together. New `world.hooks`
-(schema **v6**), pure `js/gen/hooks.js`. **Next: Phase 7 — QoL & customization** (editable/custom
-tables, map notes, themes). **Schema v6. 185 `node --test` passing.** Work
-merges to **`main`** via PR.
+(schema **v6**), pure `js/gen/hooks.js`. **Phase 7 — QoL & UX started: 7.1 right-click radial menu**
+is done (see [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md)) — right-click a tile for a
+**fixed-slot ring** of its actions (Terrain / POI / Settlement / Hook / Neighbours / Regenerate / Delete /
+Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, submenus open as a **second
+outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
+(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Next: more Phase 7** (search, undo,
+print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables
+were dropped) **and Phase 3R — world coherence** ([phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md):
+terrain v2, fresh/salt water & coastlines, rivers, roads, richer settlements).
+**Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7.**
+**Schema v7. 206 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 
@@ -63,7 +71,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **6**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **7**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
@@ -102,8 +110,9 @@ package.json                    dev-only: "type":"module", scripts: test / serve
                     chooseDistantTarget, hookName/hookDescription, HOOK_BUILD — Phase 6 adventure hooks)
   /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex; world.hooks)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
-  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks)   map.js (canvas renderer + LOD + hook markers)
+  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks; radial dispatch)   map.js (canvas renderer + LOD + hook markers; right-click → radial)
           panel.js (selection UI + dungeon/room view + global hooks list)   dungeon-map.js (dungeon canvas: camera, grid)
+          radial-model.js (pure fixed-slot menu model — Phase 7.1)   radial-menu.js (right-click ring overlay)
           terrain-style.js / terrain-art.js / poi-style.js (+ THEME_GLYPHS) / settlement-art.js
 /data     terrain, swamp-feature, settlement-size, poi-types, poi-occupant, creatures, occupiers,
           dungeon-{size,theme,room,trap,special,dressing,treasure,treasure-guard,monster-status,light},
@@ -134,9 +143,9 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v6)
+## Current data model (as built, schema v7)
 
-- **World:** `{ schemaVersion:6, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
+- **World:** `{ schemaVersion:7, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
 - **Hook** (Phase 6; top-level `world.hooks[]`):
   `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
@@ -145,7 +154,8 @@ graph TD
   `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
-  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen }`.
+  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen, name?, note? }`.
+  `name`/`note` (v7) are optional GM annotations — `name` shows as a map label.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
   `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Water).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
@@ -181,7 +191,8 @@ graph TD
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
-| 7 — QoL & customization (editable tables, notes, themes) | ▶ **next** | — |
+| 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | 📋 **planning** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a
@@ -236,15 +247,16 @@ powers" (roaming/region/news-propagation) belong to the future Factions phase. S
 - **Factions** — a dedicated phase: generation **plus operating rules** (goals advancing,
   disposition, holdings, faction turns/doom clock, reuse of one faction across the map). POIs
   currently use generic occupier labels only; no faction objects exist.
-- **Hydrology** — lakes vs seas by size, salt/fresh, coastlines / contiguous water (Water is a
-  single flat terrain today).
+- **Hydrology, terrain coherence, rivers, roads, richer settlements** — now planned as
+  **Phase 3R** ([phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)): fresh/salt
+  water & coastlines, terrain v2, rivers, roads, settlement spacing/names/Keep-Fort/clusters.
 - **Party position marker** — needs exploration/travel rules first.
 - **Art** — pencil sketches for POIs; optional "full painted hex"; eventual "pencil-drawn"
   refinement of tiles; optional 3rd terrain variant; an `svg-tile` authoring skill for consistency.
-- **POI indicator polish** — make the zoomed-out red dot a count, or recolour it.
 - **Misc** — allow a manual settlement on Water (currently disallowed); more terrain types.
-- **Phase 7 items** — user-editable/custom tables, map labels/notes, search, undo, themes,
-  print/GM-screen view.
+- **Phase 7 items** — search, undo, print/GM-screen view, themes, POI-dot polish, radial
+  keyboard/touch parity (see [phase-7-backlog.md](docs/plans/phase-7-backlog.md)). In-app custom
+  tables were **dropped**.
 
 ---
 

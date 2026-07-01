@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World Oracle — Radial menu prototype</title>
+    <style>
+      /* Pulled from css/app.css so this previews in the app's palette. */
+      :root {
+        --bg: #1c1f26;
+        --panel-bg: #232732;
+        --bar-bg: #14161c;
+        --fg: #e6e8ee;
+        --muted: #9aa3b2;
+        --accent: #6ea8fe;
+        --border: #343a47;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; flex-direction: column;
+        font: 14px/1.5 system-ui, sans-serif;
+        background: var(--bg); color: var(--fg);
+        overflow: hidden;
+      }
+      header {
+        display: flex; align-items: center; gap: .6rem;
+        padding: .5rem .75rem; background: var(--bar-bg);
+        border-bottom: 1px solid var(--border);
+      }
+      header .brand { color: var(--accent); font-weight: 700; }
+      header .hint { color: var(--muted); font-size: .8rem; }
+      header .spacer { flex: 1; }
+      header button {
+        font: inherit; color: var(--fg); background: #2b3140;
+        border: 1px solid var(--border); border-radius: 6px;
+        padding: .3rem .6rem; cursor: pointer;
+      }
+      header button:hover { border-color: var(--accent); }
+      #workspace { flex: 1; display: grid; grid-template-columns: 1fr 280px; min-height: 0; }
+      #stage { position: relative; min-width: 0; min-height: 0; }
+      #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #11131a; cursor: grab; }
+      #map.dragging { cursor: grabbing; }
+      #side {
+        background: var(--panel-bg); border-left: 1px solid var(--border);
+        padding: .75rem; overflow-y: auto;
+      }
+      #side h2 { margin: 0 0 .25rem; font-size: 1rem; }
+      #side .sub { color: var(--muted); font-size: .78rem; margin-bottom: .6rem; }
+      .log-line { padding: .15rem 0; border-bottom: 1px solid rgba(255,255,255,.05); color: var(--muted); font-size: .82rem; }
+      .log-line b { color: var(--fg); font-weight: 600; }
+
+      /* --- radial menu --- */
+      #ring { position: absolute; inset: 0; z-index: 30; display: none; }
+      #ring.open { display: block; }
+      #ring .scrim { position: absolute; inset: 0; }
+      .ring-node {
+        position: absolute; transform: translate(-50%, -50%);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 1px; text-align: center;
+        background: #2b3140; color: var(--fg);
+        border: 1px solid var(--border); border-radius: 999px;
+        cursor: pointer; user-select: none;
+        transition: transform .09s ease, opacity .12s ease, border-color .09s ease, background .09s ease;
+        box-shadow: 0 6px 18px rgba(0,0,0,.45);
+      }
+      .ring-node .glyph { font-size: 1.15rem; line-height: 1; }
+      .ring-node .label { font-size: .62rem; letter-spacing: .02em; max-width: 4.6rem; }
+      .ring-node:hover { border-color: var(--accent); background: #344056; transform: translate(-50%, -50%) scale(1.08); z-index: 2; }
+      .ring-node.submenu .label::after { content: " ▸"; color: var(--accent); }
+      .ring-node.danger:hover { border-color: #c0524a; background: #3a2622; }
+      .ring-node.dim { opacity: .28; pointer-events: none; }
+      .ring-node.parent { opacity: 1; border-color: var(--accent); background: #1b2433; }
+
+      /* center hub: shows context + acts as Back / Close */
+      .ring-hub {
+        position: absolute; transform: translate(-50%, -50%);
+        width: 72px; height: 72px; border-radius: 999px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: rgba(13,15,21,.95); border: 1px solid var(--border);
+        cursor: pointer; user-select: none; z-index: 3;
+      }
+      .ring-hub:hover { border-color: var(--accent); }
+      .ring-hub .hub-top { font-size: .9rem; }
+      .ring-hub .hub-sub { font-size: .58rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+      /* faint guide circle connecting a ring */
+      .ring-guide {
+        position: absolute; transform: translate(-50%, -50%);
+        border-radius: 999px; border: 1px dashed rgba(110,168,254,.22);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="brand">World Oracle</span>
+      <span class="hint">prototype — <b>right-click a tile</b> to open the ring · left-drag to pan · Esc/center to close</span>
+      <span class="spacer"></span>
+      <button id="btn-seed">Seed sample world</button>
+      <button id="btn-clear">Clear</button>
+    </header>
+    <div id="workspace">
+      <div id="stage">
+        <canvas id="map"></canvas>
+        <div id="ring"><div class="scrim"></div></div>
+      </div>
+      <aside id="side">
+        <h2>Action log</h2>
+        <div class="sub">Everything the ring fires shows here. Nothing is saved — it's a feel test.</div>
+        <div id="log"></div>
+      </aside>
+    </div>
+
+    <script>
+      // ---------------------------------------------------------------------
+      // Minimal hex grid (pointy-top axial) — just enough to feel like the app.
+      // No persistence, no fetch, no modules: opens straight from file://.
+      // ---------------------------------------------------------------------
+      const HEX = 42; // center-to-corner radius (px)
+      const canvas = document.getElementById("map");
+      const ctx = canvas.getContext("2d");
+      const ringEl = document.getElementById("ring");
+      const logEl = document.getElementById("log");
+
+      const camera = { x: 0, y: 0 }; // world px offset added to canvas center
+      const cells = new Map(); // "q,r" -> { terrain, settlement, pois:[] }
+      let selected = null;      // {q,r}
+
+      const TERRAINS = ["Forest", "Plains", "Hills", "Mountains", "Swamp", "Desert", "Water"];
+      const TERRAIN_COLOR = {
+        Forest: "#2f5d3a", Plains: "#7c8a3f", Hills: "#7a6438", Mountains: "#5b5f6b",
+        Swamp: "#3d4f3a", Desert: "#9b8246", Water: "#2f4d7c",
+      };
+      const TERRAIN_GLYPH = {
+        Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️", Swamp: "🐊", Desert: "🏜️", Water: "🌊",
+      };
+      const POI_GLYPH = { dungeon: "🏰", shrine: "⛩️", camp: "⛺", landmark: "🗿", tower: "🗼" };
+      const SETTLEMENT_SIZES = ["Thorp", "Hamlet", "Village", "Town", "City"];
+
+      const key = (q, r) => q + "," + r;
+      const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+      function axialToPixel(q, r) {
+        return { x: HEX * Math.sqrt(3) * (q + r / 2), y: HEX * 1.5 * r };
+      }
+      function pixelToAxial(x, y) {
+        const qf = (Math.sqrt(3) / 3 * x - 1 / 3 * y) / HEX;
+        const rf = (2 / 3 * y) / HEX;
+        return cubeRound(qf, rf);
+      }
+      function cubeRound(qf, rf) {
+        let x = qf, z = rf, y = -x - z;
+        let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+        const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+        if (dx > dy && dx > dz) rx = -ry - rz;
+        else if (dy > dz) ry = -rx - rz;
+        else rz = -rx - ry;
+        return { q: rx, r: rz };
+      }
+      const NEIGHBORS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+
+      function resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        render();
+      }
+      function center() {
+        const rect = canvas.getBoundingClientRect();
+        return { cx: rect.width / 2 + camera.x, cy: rect.height / 2 + camera.y };
+      }
+      function clientToWorld(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const { cx, cy } = center();
+        return { x: clientX - rect.left - cx, y: clientY - rect.top - cy };
+      }
+
+      function hexPath(px, py) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = Math.PI / 180 * (60 * i - 90);
+          const x = px + HEX * Math.cos(a), y = py + HEX * Math.sin(a);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath();
+      }
+
+      function render() {
+        const rect = canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        const { cx, cy } = center();
+
+        // visible axial range (rough, padded)
+        const cols = Math.ceil(rect.width / (HEX * 1.5)) + 4;
+        const rows = Math.ceil(rect.height / (HEX * 1.3)) + 4;
+        const tl = pixelToAxial(-cx - HEX, -cy - HEX);
+        for (let dr = -2; dr < rows; dr++) {
+          for (let dq = -2; dq < cols; dq++) {
+            const q = tl.q + dq - Math.floor(dr / 2);
+            const r = tl.r + dr;
+            const p = axialToPixel(q, r);
+            const px = cx + p.x, py = cy + p.y;
+            if (px < -HEX || px > rect.width + HEX || py < -HEX || py > rect.height + HEX) continue;
+            drawHex(q, r, px, py);
+          }
+        }
+      }
+
+      function drawHex(q, r, px, py) {
+        const cell = cells.get(key(q, r));
+        hexPath(px, py);
+        if (cell) {
+          ctx.fillStyle = TERRAIN_COLOR[cell.terrain] || "#2a2f3a";
+          ctx.fill();
+        }
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = cell ? "rgba(0,0,0,.35)" : "rgba(255,255,255,.06)";
+        ctx.stroke();
+
+        if (selected && selected.q === q && selected.r === r) {
+          hexPath(px, py);
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#6ea8fe";
+          ctx.stroke();
+        }
+        if (!cell) return;
+
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "20px system-ui";
+        ctx.fillText(TERRAIN_GLYPH[cell.terrain] || "", px, py - 6);
+        const marks = [];
+        if (cell.settlement) marks.push("🏠");
+        for (const p of cell.pois) marks.push(POI_GLYPH[p] || "⭐");
+        if (marks.length) {
+          ctx.font = "14px system-ui";
+          ctx.fillText(marks.join(" "), px, py + 16);
+        }
+      }
+
+      function log(html) {
+        const d = document.createElement("div");
+        d.className = "log-line";
+        d.innerHTML = html;
+        logEl.prepend(d);
+      }
+
+      // --- actions (stand-ins; the real app calls its existing handlers) -----
+      function placeTerrain(q, r, terrain) {
+        const c = cells.get(key(q, r)) || { pois: [] };
+        c.terrain = terrain; c.pois = c.pois || [];
+        cells.set(key(q, r), c);
+        log(`Placed <b>${terrain}</b> at (${q}, ${r})`);
+      }
+      function generate(q, r) { placeTerrain(q, r, rand(TERRAINS)); log(`🎲 Generated (${q}, ${r})`); }
+      function addSettlement(q, r, size) {
+        const c = cells.get(key(q, r)); if (!c) return;
+        c.settlement = size; log(`Added settlement <b>${size}</b> at (${q}, ${r})`);
+      }
+      function addPoi(q, r, type) {
+        const c = cells.get(key(q, r)); if (!c) return;
+        c.pois.push(type); log(`Added POI <b>${type}</b> at (${q}, ${r})`);
+      }
+      function regenerate(q, r) { placeTerrain(q, r, rand(TERRAINS)); log(`🔄 Regenerated (${q}, ${r})`); }
+      function neighbors(q, r) {
+        for (const [dq, dr] of NEIGHBORS) if (!cells.get(key(q + dq, r + dr))) placeTerrain(q + dq, r + dr, rand(TERRAINS));
+        log(`🧭 Generated neighbors of (${q}, ${r})`);
+      }
+      function makeHook(q, r) { log(`🎣 Hook generated at (${q}, ${r})`); }
+      function del(q, r) { cells.delete(key(q, r)); log(`🗑️ Deleted (${q}, ${r})`); }
+
+      // --- menu definitions -------------------------------------------------
+      // kind: 'leaf' (run action) | 'submenu' (open a second outer ring)
+      function menuFor(q, r) {
+        const placed = cells.has(key(q, r));
+        const terrainChildren = TERRAINS.map((t) => ({
+          glyph: TERRAIN_GLYPH[t], label: t, kind: "leaf", run: () => placeTerrain(q, r, t),
+        }));
+        const settlementChildren = [
+          { glyph: "🎲", label: "Random", kind: "leaf", run: () => addSettlement(q, r, rand(SETTLEMENT_SIZES)) },
+          ...SETTLEMENT_SIZES.map((s) => ({ glyph: "🏠", label: s, kind: "leaf", run: () => addSettlement(q, r, s) })),
+        ];
+        const poiChildren = [
+          { glyph: "🎲", label: "Random", kind: "leaf", run: () => addPoi(q, r, rand(Object.keys(POI_GLYPH))) },
+          ...Object.keys(POI_GLYPH).map((t) => ({ glyph: POI_GLYPH[t], label: t, kind: "leaf", run: () => addPoi(q, r, t) })),
+        ];
+
+        if (!placed) {
+          return {
+            title: "Empty", sub: `${q}, ${r}`,
+            items: [
+              { glyph: "🎲", label: "Generate", kind: "leaf", run: () => generate(q, r) },
+              { glyph: "🗺️", label: "Terrain", kind: "submenu", children: terrainChildren },
+              { glyph: "🏠", label: "Settlement", kind: "submenu", children: settlementChildren },
+              { glyph: "⭐", label: "POI", kind: "submenu", children: poiChildren },
+            ],
+          };
+        }
+        return {
+          title: cells.get(key(q, r)).terrain, sub: `${q}, ${r}`,
+          items: [
+            { glyph: "⭐", label: "Add POI", kind: "submenu", children: poiChildren },
+            { glyph: "🏠", label: "Settlement", kind: "submenu", children: settlementChildren },
+            { glyph: "🔄", label: "Regenerate", kind: "leaf", run: () => regenerate(q, r) },
+            { glyph: "🧭", label: "Neighbors", kind: "leaf", run: () => neighbors(q, r) },
+            { glyph: "🎣", label: "Hook", kind: "leaf", run: () => makeHook(q, r) },
+            { glyph: "🗑️", label: "Delete", kind: "leaf", danger: true, run: () => del(q, r) },
+          ],
+        };
+      }
+
+      // --- ring rendering ---------------------------------------------------
+      let ringState = null; // { x, y, root, stack:[ {items,parentLabel?} ] }
+
+      function openRing(clientX, clientY, q, r) {
+        const rect = canvas.getBoundingClientRect();
+        const menu = menuFor(q, r);
+        // clamp so the outer ring stays on-screen
+        const pad = 185;
+        const x = Math.max(pad, Math.min(rect.width - pad, clientX - rect.left));
+        const y = Math.max(pad, Math.min(rect.height - pad, clientY - rect.top));
+        ringState = { x, y, menu, stack: [{ items: menu.items }] };
+        ringEl.classList.add("open");
+        drawRing();
+      }
+      function closeRing() {
+        ringState = null;
+        ringEl.classList.remove("open");
+        ringEl.querySelectorAll(".ring-node, .ring-hub, .ring-guide").forEach((n) => n.remove());
+      }
+
+      function nodeEl(item, x, y, size, cls) {
+        const n = document.createElement("div");
+        n.className = "ring-node " + (cls || "") + (item.kind === "submenu" ? " submenu" : "") + (item.danger ? " danger" : "");
+        n.style.left = x + "px"; n.style.top = y + "px";
+        n.style.width = n.style.height = size + "px";
+        n.innerHTML = `<span class="glyph">${item.glyph}</span><span class="label">${item.label}</span>`;
+        return n;
+      }
+      function guide(x, y, radius) {
+        const g = document.createElement("div");
+        g.className = "ring-guide";
+        g.style.left = x + "px"; g.style.top = y + "px";
+        g.style.width = g.style.height = radius * 2 + "px";
+        return g;
+      }
+
+      function drawRing() {
+        ringEl.querySelectorAll(".ring-node, .ring-hub, .ring-guide").forEach((n) => n.remove());
+        const { x, y, stack } = ringState;
+        const depth = stack.length - 1;
+        const baseR = 96, outerR = 168;
+
+        // base ring (always shown; dimmed + parent highlighted when a submenu is open)
+        ringEl.appendChild(guide(x, y, baseR));
+        const base = stack[0].items;
+        base.forEach((item, i) => {
+          const ang = (Math.PI * 2 * i) / base.length - Math.PI / 2;
+          const nx = x + baseR * Math.cos(ang), ny = y + baseR * Math.sin(ang);
+          const isParent = depth > 0 && stack[1].parentIndex === i;
+          const n = nodeEl(item, nx, ny, 56, depth > 0 ? (isParent ? "parent" : "dim") : "");
+          if (depth === 0) n.addEventListener("click", (e) => { e.stopPropagation(); onPick(item, i); });
+          ringEl.appendChild(n);
+        });
+
+        // outer (submenu) ring. If it has a "Random" option, anchor that option
+        // at the parent's angle — the outer slot nearest the cursor — so Random
+        // is always the least-travel pick. Otherwise lay out from the top as before.
+        if (depth > 0) {
+          const sub = stack[1].items;
+          const parentAng = (Math.PI * 2 * stack[1].parentIndex) / stack[0].items.length - Math.PI / 2;
+          const randIdx = sub.findIndex((it) => it.label === "Random");
+          const anchorIdx = randIdx >= 0 ? randIdx : 0;
+          const baseAng = randIdx >= 0 ? parentAng : -Math.PI / 2;
+          ringEl.appendChild(guide(x, y, outerR));
+          sub.forEach((item, i) => {
+            const ang = baseAng + (Math.PI * 2 * (i - anchorIdx)) / sub.length;
+            const nx = x + outerR * Math.cos(ang), ny = y + outerR * Math.sin(ang);
+            const n = nodeEl(item, nx, ny, 50);
+            n.addEventListener("click", (e) => { e.stopPropagation(); onPick(item, i); });
+            ringEl.appendChild(n);
+          });
+        }
+
+        // center hub: Back (when in submenu) or Close
+        const hub = document.createElement("div");
+        hub.className = "ring-hub";
+        hub.style.left = x + "px"; hub.style.top = y + "px";
+        hub.innerHTML = depth > 0
+          ? `<span class="hub-top">↩</span><span class="hub-sub">Back</span>`
+          : `<span class="hub-top">✕</span><span class="hub-sub">${ringState.menu.sub}</span>`;
+        hub.addEventListener("click", (e) => { e.stopPropagation(); depth > 0 ? back() : closeRing(); });
+        ringEl.appendChild(hub);
+      }
+
+      function onPick(item, index) {
+        if (item.kind === "submenu") {
+          ringState.stack[1] = { items: item.children, parentIndex: index };
+          drawRing();
+        } else {
+          item.run();
+          closeRing();
+          render();
+        }
+      }
+      function back() { ringState.stack.length = 1; drawRing(); }
+
+      // --- input ------------------------------------------------------------
+      let drag = null;
+      canvas.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        const { x, y } = clientToWorld(e.clientX, e.clientY);
+        const { q, r } = pixelToAxial(x, y);
+        selected = { q, r };
+        render();
+        openRing(e.clientX, e.clientY, q, r);
+      });
+      canvas.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return; // left-drag pans; right button is the ring
+        if (ringState) return;
+        drag = { sx: e.clientX, sy: e.clientY, ox: camera.x, oy: camera.y, moved: false };
+        canvas.classList.add("dragging");
+        canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+      });
+      canvas.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;
+        camera.x = drag.ox + dx; camera.y = drag.oy + dy;
+        render();
+      });
+      canvas.addEventListener("pointerup", (e) => {
+        canvas.classList.remove("dragging");
+        if (drag && !drag.moved) {
+          const { x, y } = clientToWorld(e.clientX, e.clientY);
+          selected = pixelToAxial(x, y);
+          render();
+        }
+        drag = null;
+      });
+      ringEl.querySelector(".scrim").addEventListener("pointerdown", () => closeRing());
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && ringState) (ringState.stack.length > 1 ? back() : closeRing());
+      });
+      window.addEventListener("resize", resize);
+
+      document.getElementById("btn-clear").addEventListener("click", () => { cells.clear(); selected = null; render(); log("Cleared."); });
+      document.getElementById("btn-seed").addEventListener("click", () => {
+        for (let i = 0; i < 24; i++) {
+          const q = Math.floor(Math.random() * 9) - 4, r = Math.floor(Math.random() * 7) - 3;
+          if (!cells.has(key(q, r))) placeTerrain(q, r, rand(TERRAINS));
+        }
+        const anchor = [...cells.keys()][0].split(",");
+        addSettlement(+anchor[0], +anchor[1], "Town");
+        render(); log("Seeded a sample world.");
+      });
+
+      resize();
+      log("Right-click any tile to begin.");
+    </script>
+  </body>
+</html>
