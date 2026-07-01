@@ -9,7 +9,9 @@
 import { subRng } from "./rng.js";
 
 // Smoothstep easing (C1-continuous) for interpolating between lattice corners.
-function smoothstep(t) {
+// Exported since callers outside this module use it too (e.g. biome.js's
+// origin-land-bias falloff).
+export function smoothstep(t) {
   return t * t * (3 - 2 * t);
 }
 

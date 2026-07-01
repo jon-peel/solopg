@@ -340,29 +340,52 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   bounded flood-fill over just the currently-placed hexes would be **unstable** (a hex
   classified Lake today could flip to Sea once more area is generated around it later,
   breaking 3R.3's order-independence guarantee and silently changing already-shown
-  content). **Resolution:** a **third, much-coarser noise field** (`basin`, frequency
-  0.05 vs elevation's 0.2 — tuned by re-running `test/stats-harness.js` against the same
-  baseline seeds after an initial guess proved too coarse) sampled the same
-  deterministic way as elevation/moisture. Within the existing low-elevation "water"
-  band, `basin < 0.5` → Sea, else → Lake — a pure function of `(seed, q, r)`, so it's
-  order-independent by construction with **no flood-fill, no connectivity search, no
-  reclassification risk**. `hex.basin` is always computed and stored (mirrors
-  elevation/moisture's own precedent), available uniformly for 3R.6/3R.7 later.
-- **Measured result** (3 seeds, radius 25, ~1951 hexes): both Lake and Sea appear in
-  every sample without either degenerating toward ~0% (Sea's share of all water ranges
-  ~21–37% across seeds) — guarded by a dedicated coherence test, since an earlier,
-  coarser `basin` frequency (0.035) produced samples where Sea dropped to ~1% of the map
-  for 2 of 3 seeds.
+  content).
+- **First pass (landed, then found broken):** a coarse independent noise field
+  (`basin`) decided Sea vs Lake per-hex with no relationship to elevation. This produced
+  "inland seas" — a Sea reads as an oversized lake, not a coastline, since nothing tied
+  it to the edge of an actual landmass. **Caught via manual testing after shipping**, not
+  by the (misleadingly passing) coherence tests, which only checked "both terrains
+  appear," not "Sea is topologically a coastline."
+- **Revised design (in place now):** a coarse `continent` field (frequency 0.015,
+  ~65-hex features — far coarser than elevation's ~5-hex texture) used purely as a
+  **land/ocean GATE**, never blended into elevation. Below `OCEAN_THRESHOLD` (0.45) →
+  always Sea; otherwise → run the **unchanged 3R.3 land classifier** verbatim, where its
+  own low-elevation band (previously "Water") now always means **Lake** (Sea isn't
+  reachable from the land classifier at all — it's decided upstream by the gate). Two
+  earlier attempts at *blending* a coarse continent signal into elevation itself (widen
+  elevation's own FBM to include very-low-frequency octaves; or a weighted
+  `continent*0.6 + detail*0.4` blend) both **broke Mountains almost entirely** (0 in some
+  samples) **and produced zero Lakes** — the coarse octaves dominated ~76% of the blended
+  sum's weight, starving local terrain variety everywhere and leaving no room for an
+  isolated low pocket to read as a lake. Keeping `continent` as a pure gate — decoupling
+  "is this the ocean" from "what's the local terrain" — avoided both failures; verified
+  at radius 70 (~14911 hexes, matching continent scale) across 3 seeds: **Sea forms
+  1–3 clumps of 797–3247 hexes** (a real, single contiguous ocean) while **Lake stays
+  pocket-sized** (mean 6.7–8.9 hexes, matching the original small-lake behaviour), with
+  Mountains/Hills/Forest/Plains/Desert/Swamp proportions stable and close to 3R.3's
+  original tuning (land classification is byte-for-byte unchanged).
+- **Second bug found during this fix, not in the original ask:** the world's spawn point
+  is always the fixed origin `(0,0)`. Some seeds place the origin deep in an ocean basin
+  — one tested seed gave **100% Sea at the origin itself**. **Fix:** a smooth
+  origin-centered land bias (`LAND_BOOST 0.7`, falloff over `FALLOFF_RADIUS 30` hexes via
+  `axialDistance`) boosts `continent` near `(0,0)` only, guaranteeing every new world
+  spawns on land — verified across 14 seeds (`biomeAt(seed, 0, 0)` is never `"Sea"`).
+- The renamed **`hex.continent`** field (was `basin`) is always computed and stored
+  (mirrors elevation/moisture's precedent), available uniformly for 3R.5+.
 - Rendering: `Lake`/`Sea` get distinct colours (`terrain-style.js`) and emoji
   (💧/🌊 split from Water's existing pair); **no new SVG art this pass** — both share the
   old `water-*.svg` placeholder (art changes are reviewed as files first, per
-  convention); distinct pencil art is a follow-up.
-- Schema bumped to **v9** (stamp-only — old `terrain:"Water"` hexes keep rendering fine
-  via the same shared alias, no retrofit).
-- **Tests:** `test/biome.test.js` (Lake/Sea threshold boundaries, `basin` field),
-  `test/terrain-profile.test.js` (`biasKey` + shared-profile assertions),
-  `test/terrain-coherence.test.js` (both terrains present, neither near 0%, `basin`
-  included in the order-independence check). 236 `node --test test/*.test.js` passing.
+  convention); distinct pencil art is a follow-up. **Islands** (a rare high hex poking
+  above the ocean threshold) are also a follow-up, not implemented this pass.
+- Schema bumped to **v10** (stamp-only — old `terrain:"Water"` hexes and the `basin`→
+  `continent` rename both need no retrofit).
+- **Tests:** `test/biome.test.js` (`classifyLand` boundary tests — Sea isn't reachable
+  from it; origin-never-Sea regression across 14 seeds), `test/terrain-profile.test.js`
+  (`biasKey` + shared-profile assertions), `test/terrain-coherence.test.js` (Lake/Sea
+  both appear at continent scale, Sea forms a large contiguous body dwarfing Lake by
+  10×+, origin is always land, `continent` included in the order-independence check).
+  240 `node --test test/*.test.js` passing.
 
 ### 3R.5 — Rivers
 - **Model (your rules, encoded):** rivers **start in mountains** and flow **downhill**
@@ -475,3 +498,9 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 - **Migration churn** — several schema bumps; keep every step additive and old-world-safe.
 - **Perceptual vs real** — 3R.2's baseline decides how much terrain rework is truly
   warranted before we over-engineer.
+- **Coherence tests can pass while the *topology* is still wrong** — 3R.4's first pass
+  had automated tests confirming "Lake and Sea both appear, neither near 0%", which all
+  passed, while the actual bug (Sea reading as an inland lake, not a coastline) was only
+  caught by manual/visual inspection. Distribution checks alone don't verify shape —
+  worth a manual eyeball pass on anything geometry-shaped (coastlines, later rivers/
+  roads), not just a green test suite.

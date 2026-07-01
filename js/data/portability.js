@@ -77,6 +77,10 @@ export function importWorld(json) {
  *   out as `terrain:"Lake"`/`"Sea"` instead of `"Water"` (Phase 3R.4). No
  *   transform — old `Water` hexes still render/behave correctly (shared
  *   profile/bias via biasKey()) — just stamp the version.
+ * - v9 -> v10: `basin` reworked into a real land/ocean gate, renamed
+ *   `continent` (3R.4 revision — real coastlines). No transform — old hexes'
+ *   `basin` field is simply unused going forward; `Lake`/`Sea` values are
+ *   unchanged — just stamp the version.
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -134,6 +138,11 @@ export function migrateWorld(data) {
     // hexes are left as-is — Lake/Sea's shared profile/bias alias covers them
     // too — just stamp the version.
     data.schemaVersion = 9;
+  }
+  if (data.schemaVersion < 10) {
+    // `basin` -> `continent` rename/rework; old hexes simply keep whatever
+    // `basin` value they had (unused going forward) — just stamp the version.
+    data.schemaVersion = 10;
   }
   return data;
 }

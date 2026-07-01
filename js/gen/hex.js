@@ -30,7 +30,7 @@ export function generateHex(tables, rng, opts = {}) {
   //    regardless of forced/rolled terrain or fill order. Terrain is forced
   //    (manual placement) or the classifier's pick from those fields.
   const coords = opts.coords || { q: 0, r: 0 };
-  const { elevation, moisture, basin, terrain: classified } = biomeAt(opts.seed ?? 0, coords.q, coords.r);
+  const { elevation, moisture, continent, terrain: classified } = biomeAt(opts.seed ?? 0, coords.q, coords.r);
   const terrain = opts.terrain || classified;
 
   // Nested terrain feature (e.g. Swamp's swamp-feature roll) stays
@@ -84,7 +84,7 @@ export function generateHex(tables, rng, opts = {}) {
     terrainFeature,
     elevation, // [0,1) — Phase 3R.3; feeds sea level and river sourcing (3R.5)
     moisture, // [0,1) — Phase 3R.3
-    basin, // [0,1) — Phase 3R.4; the Lake-vs-Sea signal (a coarse noise field, not flood-fill)
+    continent, // [0,1) — Phase 3R.4; the land/ocean gate behind the Lake-vs-Sea split (not flood-fill)
     settlement,
     pois, // typed POI[] (Phase 3); empty array when none
     explored: true,

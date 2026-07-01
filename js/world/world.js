@@ -28,7 +28,12 @@ import { axialKey } from "../core/hexgeo.js";
 // 3R.4) — Lake/Sea share Water's profile/bias tables via biasKey() in
 // terrain-profile.js, so old `Water` hexes keep rendering/behaving fine as-is
 // (no retrofit) until regenerated.
-export const SCHEMA_VERSION = 9;
+// v10: `basin` renamed to `continent` and reworked into a real land/ocean gate
+// (3R.4 revision — fixing "inland seas"): Sea now forms genuinely large,
+// contiguous coastal bodies correlated with a continent-scale field, instead
+// of an independent per-hex label. Old hexes' `basin` field is simply unused
+// going forward (no retrofit); `Lake`/`Sea` terrain values are unchanged.
+export const SCHEMA_VERSION = 10;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

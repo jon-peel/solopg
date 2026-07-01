@@ -2,8 +2,9 @@
 // over a real generated area. Distribution/adjacency checks, not exact-art
 // snapshots, per the phase doc: lone-hex rate well below the pre-3R.3
 // baseline (23-25%, see docs/plans/phase-3r-world-coherence.md), Mountains
-// forming real multi-hex runs rather than speckle, and (3R.4) both Lake and
-// Sea appearing without either degenerating to ~0% of a sample. Also the
+// forming real multi-hex runs rather than speckle, and (3R.4, revised) Sea
+// forming genuinely large contiguous coastal bodies — not an oversized inland
+// lake — with the world's fixed origin always landing on land. Also the
 // concrete regression test for "determinism under area generation" — since
 // terrain is now a pure function of (seed, q, r), fill order must never
 // affect the result.
@@ -95,19 +96,45 @@ test("Mountains form multi-hex runs, not speckle", () => {
   assert.ok(Math.max(...mountainSizes) >= 8, "expected at least one Mountains run >= 8 hexes");
 });
 
-test("Lake and Sea (3R.4) both appear in a large sample, without either degenerating to ~0%", () => {
-  // Sea/Lake split via a coarse `basin` field (see js/gen/biome.js) rather
-  // than flood-fill (infeasible for an infinite, incrementally-generated
-  // world — see the phase doc). Too-low a basin frequency can make an entire
-  // sampled area land almost wholly on one side; this guards against that.
-  const world = generateArea(1, RADIUS, hexDisc(0, 0, RADIUS));
+// Continent-scale features span ~65 hexes (js/gen/biome.js CONTINENT_OPTS),
+// far bigger than RADIUS=25's ~1951-hex sample — at that scale, a sample can
+// legitimately show zero Sea (verified: seed 1 does, at RADIUS=25). That's
+// correct now that Sea is a real coastline/ocean gate, not a per-hex label —
+// so the "both appear" and "Sea is a real ocean" checks use a bigger sample.
+const CONTINENT_RADIUS = 70; // ~14911 hexes
+
+test("Lake and Sea (3R.4) both appear at continent scale", () => {
+  const world = generateArea(1, CONTINENT_RADIUS, hexDisc(0, 0, CONTINENT_RADIUS));
   const hexes = placedHexes(world);
   const lakeCount = hexes.filter((h) => h.terrain === "Lake").length;
   const seaCount = hexes.filter((h) => h.terrain === "Sea").length;
   assert.ok(lakeCount > 0, "expected some Lake hexes");
   assert.ok(seaCount > 0, "expected some Sea hexes");
-  const seaShare = seaCount / (lakeCount + seaCount);
-  assert.ok(seaShare > 0.05 && seaShare < 0.95, `Sea share of water ${(seaShare * 100).toFixed(1)}% should not be near 0% or 100%`);
+});
+
+test("Sea forms a genuinely large, contiguous coastal body — not scattered inland pockets", () => {
+  // The bug this guards against: an earlier design decided Sea vs Lake from
+  // an independent noise field uncorrelated with elevation, so "Sea" read as
+  // an oversized inland lake rather than an ocean. Sea should now form very
+  // few, very large clumps — Lake stays pocket-sized by contrast.
+  const world = generateArea(1, CONTINENT_RADIUS, hexDisc(0, 0, CONTINENT_RADIUS));
+  const hexes = placedHexes(world);
+  const { sizesByTerrain } = clumps(hexes);
+  const seaSizes = sizesByTerrain.get("Sea") || [];
+  const lakeSizes = sizesByTerrain.get("Lake") || [];
+  assert.ok(seaSizes.length > 0 && seaSizes.length <= 5, `expected a handful of Sea clumps, got ${seaSizes.length}`);
+  const seaMean = seaSizes.reduce((s, v) => s + v, 0) / seaSizes.length;
+  const lakeMean = lakeSizes.reduce((s, v) => s + v, 0) / lakeSizes.length;
+  assert.ok(seaMean >= 500, `Sea mean clump size ${seaMean.toFixed(1)} should be >= 500 (a real ocean)`);
+  assert.ok(seaMean > lakeMean * 10, `Sea (${seaMean.toFixed(1)}) should dwarf Lake (${lakeMean.toFixed(1)}) in size`);
+});
+
+test("the world origin (0,0) is always land, never Sea", () => {
+  // The fixed spawn point (app.js onNewWorld) must never land in the ocean.
+  for (const seed of [1, 2, 3, "alpha", 999]) {
+    const world = generateArea(seed, 0, [{ q: 0, r: 0 }]);
+    assert.notEqual(getHex(world, 0, 0).terrain, "Sea", `seed ${seed} put Sea at the origin`);
+  }
 });
 
 test("generation is deterministic: same seed -> identical terrain everywhere", () => {
@@ -127,6 +154,6 @@ test("order-independence: forward vs. reverse fill order give identical per-hex 
     assert.equal(getHex(forward, q, r).terrain, getHex(reverse, q, r).terrain);
     assert.equal(getHex(forward, q, r).elevation, getHex(reverse, q, r).elevation);
     assert.equal(getHex(forward, q, r).moisture, getHex(reverse, q, r).moisture);
-    assert.equal(getHex(forward, q, r).basin, getHex(reverse, q, r).basin);
+    assert.equal(getHex(forward, q, r).continent, getHex(reverse, q, r).continent);
   }
 });
