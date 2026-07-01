@@ -151,13 +151,74 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 - **Step — stats harness:** a `node` script that generates large areas and reports
   terrain histogram, biome clump-size distribution, mean nearest-settlement spacing,
   etc. Establishes a **baseline** to tune against.
-- **Step — research (done here, not before):** survey external hex-generation
-  mechanics and capture what enforces coherence — e.g. **Shadowdark**'s hex
-  generator; **Welsh Piper** hex-terrain tables; **Worldographer/Hexographer**;
-  the **D&D Expert (B/X) / AD&D DMG** wilderness-stocking & terrain tables; OSR blogs
-  and the popular YouTube hexcrawl generators. Note their approaches to: dominant
-  terrain + per-neighbour transition tables, elevation/moisture (Whittaker-style)
-  biomes, and coastline handling.
+- **Step — research ✅ done:** surveyed external hex-generation mechanics (web
+  search; several primary sources — welshpiper.com, thealexandrian.net,
+  medium.com, azgaar.wordpress.com, necropraxis.com — blocked direct fetch
+  with bot-protection 403s, so findings below lean on search-result synthesis
+  plus two cleanly-fetched technical sources; citations below).
+  - **Dominant-terrain / transition tables (option a lineage):** the **AD&D DMG
+    Appendix B** (1979) already implements a genuine **transition matrix** — roll
+    d20, look up the column for the *current* hex's terrain, read off the *next*
+    hex's terrain, with baked-in special cases ("1 in 10 forests also include
+    hills," "1 in 20 mountains have a pass"). **Welsh Piper** uses a
+    **hierarchical dominant-terrain** scheme instead: a large "Atlas hex" gets one
+    Primary Terrain, then each sub-hex inside it rolls against *that terrain's own
+    table* (e.g. a Mountain Atlas hex's sub-hexes roll 20% peak / 10% pass / 5%
+    volcano) — coherence comes from scoping the sub-table to the parent, not from
+    checking literal neighbours. **Hexmancer / Wilderness Hexplore Revised** (a
+    modern OSR tool) is closest to our *current* code: odds shift by **how many
+    neighbours already share a terrain** — validates our approach isn't wrong in
+    kind, just too weak (per the audit, `terrainBias` stuck at 1×) and too local
+    (no larger structure beyond immediate neighbours).
+  - **Region/chunk (option b):** **The Alexandrian**'s hexcrawl-design method
+    drops per-hex terrain rolling for the top-level shape entirely — draw large
+    hand-placed terrain **regions** first ("that's the Old Forest"), then stock
+    individual hexes for local variation, with separate per-region encounter
+    tables. This is option (b) already a named, popular OSR technique, not a
+    hypothetical.
+  - **Two-layer elevation + moisture (option c):** **Amit Patel / Red Blob
+    Games' "Polygonal Map Generation for Games"** (2010, the seminal reference)
+    classifies biome from two independent fields — elevation and moisture
+    (distance to fresh water in his version) — combined via **Whittaker-diagram
+    bins** (high elevation → snow/rock/tundra; medium → forest/grassland/desert
+    by moisture; low → beach/grassland/rainforest by moisture). A from-scratch
+    implementation (GitHub `HextoryWorld/ProceduralHexTerrainGenerator`) confirms
+    the mechanism concretely: **two Simplex-noise fields** (elevation, moisture)
+    sampled per-hex, then a Whittaker lookup combines them. The structural
+    insight: **noise fields are spatially continuous by construction** — adjacent
+    hexes sample nearby noise-field points, so they naturally get similar
+    elevation/moisture (and thus the same biome) *without ever checking
+    neighbours* — this is what actually fixes "lone anomalous hex," rather than
+    approximating a fix via bonuses.
+  - **Coastlines/water:** two established, complementary techniques — **flood-fill
+    from the map edge** (water reachable from the border = sea; enclosed pockets
+    = lake) and **elevation threshold ("sea level")** (below cutoff = water, then
+    flood-fill still splits sea vs. lake). Real generators (Red Blob's mapgen2,
+    Azgaar's Fantasy Map Generator) combine both — matches the doc's own 3R.4
+    option 2 recommendation.
+  - **Bonus finds for later sub-phases (captured now, not re-researched later):**
+    Azgaar's Fantasy Map Generator drains each cell to its **lowest neighbour**
+    with a **depression-filling pass** (raise a landlocked low point until it can
+    drain) to guarantee every river reaches a sink — matches our 3R.5 sketch's
+    "carve onward or form a lake" rule already. For roads, Azgaar's own writeup
+    says **plain Dijkstra produced ugly tree/river-like branching** — they had to
+    add elevation cost, cheaper reuse of existing roads, region borders, and
+    rivers as combined path cost. Real-world confirmation that our 3R.7
+    gravity-model-plus-least-cost-path plan is the right complexity level, not
+    over-engineering.
+  - **Sources:** [Welsh Piper Part 1](https://welshpiper.com/hex-based-campaign-design-part-1/) ·
+    [AD&D DMG wilderness terrain discussion](https://www.cartographersguild.com/showthread.php?t=4550) ·
+    [The Alexandrian — Stocking Your Hexes](https://thealexandrian.net/wordpress/48054/roleplaying-games/designing-the-hexcrawl-part-2-stocking-your-hexes) ·
+    [Hexmancer](https://www.martinralya.com/tabletop-rpgs/hexmancer-procedural-hex-generation-system/) ·
+    [Polygonal Map Generation for Games — Amit Patel](http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation/) ·
+    [ProceduralHexTerrainGenerator (GitHub)](https://github.com/HextoryWorld/ProceduralHexTerrainGenerator) ·
+    [Azgaar — Coastline](https://azgaar.wordpress.com/2017/04/03/coastline/) ·
+    [Azgaar — River systems](https://azgaar.wordpress.com/2017/05/08/river-systems/) ·
+    [Azgaar — Settlements, Regions, Routes](https://azgaar.wordpress.com/2017/11/21/settlements/) ·
+    [Worldographer river generator notes](https://inkwellideas.com/2016/09/worldographerhexographer-2-programming-updates-river-generator-sample-better-child-maps-more/)
+  - *(The model fork below is intentionally kept open — the research surfaces (c)
+    as structurally the cleanest fix, but the actual pick waits on Step 3's
+    baseline stats rather than being pre-decided here.)*
 - **Step — the fork (world-building model), the key decision that gates 3R.4–3R.7:**
   - **(a) Incremental, stronger coherence** — keep hex-by-hex but make neighbour
     influence dominant (transition tables, not a mild additive nudge).
