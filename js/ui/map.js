@@ -10,6 +10,7 @@ import {
   pixelToAxialFractional,
   hexCorners,
   axialKey,
+  NEIGHBOR_DIRS,
 } from "../core/hexgeo.js";
 import { hashString } from "../core/rng.js";
 import { placedHexes } from "../world/world.js";
@@ -185,6 +186,9 @@ export function render() {
     } else if (simplified) {
       drawSimplifiedMarkers(c.x, c.y, hex);
     }
+    // Rivers (3R.5): drawn on top of terrain art/icons at every zoom, same as
+    // the hook rings below — a river is worth seeing even zoomed out.
+    drawRiverEdges(c.x, c.y, q, r, hex.riverEdges);
     // Hook destinations: pinned leads (a distinct pin) take precedence over the
     // amber "a lead exists here" ring; both visible at all zooms.
     const hk = axialKey(q, r);
@@ -292,6 +296,40 @@ function drawHookLine(a, b) {
   ctx.moveTo(pa.x, pa.y);
   ctx.lineTo(pb.x, pb.y);
   ctx.stroke();
+  ctx.restore();
+}
+
+// Rivers (3R.5): hex.riverEdges holds NEIGHBOR_DIRS indices for the sides
+// carrying a river segment. A shared hex edge's midpoint is exactly the
+// midpoint between the two hexes' centres (true for any regular hex grid),
+// so each hex draws hex-center -> edge-midpoint independently — no shared
+// geometry lookup needed, and it degrades gracefully to a short stub when
+// only one side of a boundary has registered the edge (the accepted
+// order-dependent gap documented in river.js).
+const RIVER_COLOR = "#6fd0f0";
+function drawRiverEdges(cx, cy, q, r, riverEdges) {
+  if (!riverEdges || !riverEdges.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const dir of riverEdges) {
+    const [dq, dr] = NEIGHBOR_DIRS[dir];
+    const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
+    const mx = (cx + n.x) / 2;
+    const my = (cy + n.y) / 2;
+    // A dark outline first so the river reads over any terrain fill colour.
+    ctx.strokeStyle = "rgba(8,16,26,0.6)";
+    ctx.lineWidth = 5 / camera.scale;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(mx, my);
+    ctx.stroke();
+    ctx.strokeStyle = RIVER_COLOR;
+    ctx.lineWidth = 2.4 / camera.scale;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(mx, my);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

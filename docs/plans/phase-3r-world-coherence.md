@@ -459,8 +459,21 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 - **Data shape:** `hex.riverEdges: number[]` — `NEIGHBOR_DIRS` indices (0-5) marking
   which hex-sides carry a river segment. No stream-order/tributary-width field yet
   (deferred; would fall out of the same incremental-propagation data if needed later).
-- **Rendering: deferred to 3R.8**, matching the doc's original schedule — this pass
-  ships `hex.riverEdges` + tests only; no map-canvas line art yet.
+- **Rendering: shipped in this pass, pulled forward from 3R.8** (on request — rivers
+  weren't observable/testable without it; the original schedule deferred all 3R map-art
+  to 3R.8 alongside roads/settlement tiers, but a river that's invisible on the map
+  wasn't a useful deliverable on its own). `js/ui/map.js`'s `drawRiverEdges`: for each
+  `riverEdges` direction, draws a line from the hex's own center to the **midpoint
+  between its center and that neighbour's center** — true for any regular hex grid, so
+  no shared-edge/corner-index lookup is needed, and each hex draws its own edges
+  independently. A hex whose edge points at a neighbour that never registered the
+  matching incoming edge (the accepted order-dependent gap) simply renders a shorter
+  stub rather than a missing segment — still visible, degrades gracefully. Drawn on top
+  of terrain art/icons, at every zoom tier (not gated behind the icons toggle), styled as
+  a bright cyan line (`#6fd0f0`) over a dark outline so it reads over every terrain
+  colour including Mountains' grey and Plains' green. Verified visually in the browser:
+  built a small world around a known river source and confirmed a continuous multi-hex
+  blue line renders correctly from the mountain peak downhill.
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
 - **Tests:** `test/river.test.js` (13 tests — `isRiverSource` gated on Mountains and
@@ -526,8 +539,9 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 - **Regeneration policy** — whole-region regenerate; single-hex re-roll inside a
   coherent region without breaking coastlines/rivers/roads (respect the `locked`/
   `manual` flag; re-stitch edges).
-- **Rendering pass** — rivers, roads (tiered), two waters, settlement tiers + Keep/Fort
-  icon, optional region labels; legend + LOD updates. **Requested tweak:** recolour
+- **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, optional
+  region labels; legend + LOD updates. (Rivers' line rendering already shipped in 3R.5,
+  pulled forward on request — see that section.) **Requested tweak:** recolour
   Hills as a blend of Mountains' grey and Plains' green (`terrain-style.js`
   `TERRAIN_COLORS`) so the Mountains→Hills→Plains elevation band reads as a visual
   gradient, reinforcing the 3R.3 biome-coherence work.

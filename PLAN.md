@@ -85,8 +85,13 @@ whether an already-placed neighbour already has a river edge pointing into it (O
 `hex.riverEdges` forward as hexes are generated rather than recomputing a path from scratch. Measured
 **0.037ms/hex** (~750× faster). This is a **second** deliberate exception to position-purity — for
 raw performance this time, not manual-placement responsiveness. Density tuned for "rare and dramatic"
-(`RIVER_SOURCE_CHANCE=0.06`, ~1 source per 1200–2000 hexes). Rendering deferred to 3R.8 (data + tests
-only this pass). **Next: 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
+(`RIVER_SOURCE_CHANCE=0.06`, ~1 source per 1200–2000 hexes). **Rendering pulled forward from 3R.8 on
+request** (a river you can't see isn't testable) — `map.js`'s `drawRiverEdges` draws a line per
+`riverEdges` direction from a hex's center to the midpoint between its center and that neighbour's
+(the true shared-edge midpoint on any regular hex grid, no corner lookup needed), styled cyan over a
+dark outline so it reads over any terrain colour; verified visually — a continuous multi-hex river
+renders correctly from a mountain source downhill. **Next: 3R.6** (settlements v2 — names, Keep/Fort,
+river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
@@ -176,7 +181,7 @@ package.json                    dev-only: "type":"module", scripts: test / serve
                     chooseDistantTarget, hookName/hookDescription, HOOK_BUILD — Phase 6 adventure hooks)
   /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex; world.hooks)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
-  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks; radial dispatch)   map.js (canvas renderer + LOD + hook markers; right-click → radial)
+  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks; radial dispatch)   map.js (canvas renderer + LOD + hook markers + river lines (3R.5); right-click → radial)
           panel.js (selection UI + dungeon/room view + global hooks list)   dungeon-map.js (dungeon canvas: camera, grid)
           radial-model.js (pure fixed-slot menu model — Phase 7.1)   radial-menu.js (right-click ring overlay)
           terrain-style.js / terrain-art.js / poi-style.js (+ THEME_GLYPHS) / settlement-art.js
