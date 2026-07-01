@@ -38,6 +38,7 @@ let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
 let iconsEnabled = true;
+let labelsEnabled = true; // show hex name labels on the map
 let hovered = null; // { q, r } under the cursor | null
 let hoverKey = null; // axialKey of `hovered`, to skip redundant re-renders
 let lastPpm = null; // last pixels-per-mile emitted to onView (fire only on change)
@@ -226,6 +227,12 @@ export function setIconsEnabled(on) {
   render();
 }
 
+/** Toggle hex name labels; re-renders. */
+export function setLabelsEnabled(on) {
+  labelsEnabled = !!on;
+  render();
+}
+
 /**
  * Mark hook destinations; re-renders. `open` = amber rings (available leads),
  * `pinned` = a distinct pin (the party's active leads).
@@ -342,7 +349,7 @@ function drawDetailMarkers(cx, cy, hex) {
     drawMarker(cx - off, cy + off, "🗒", size, "#fff");
   }
 
-  if (hex.name) drawHexLabel(cx, cy, hex.name);
+  if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
 }
 
 // A user's hex name, as a small pill below the hex (legible over terrain art).

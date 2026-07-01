@@ -46,6 +46,7 @@ import {
   setSelected,
   recenterOn,
   setIconsEnabled,
+  setLabelsEnabled,
   setHookMarks,
   setHookFocus,
   zoomStep,
@@ -1375,6 +1376,7 @@ function wire() {
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
   $("btn-icons").addEventListener("click", onToggleIcons);
+  $("btn-labels").addEventListener("click", onToggleLabels);
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
@@ -1399,6 +1401,13 @@ function onToggleIcons() {
   iconsOn = !iconsOn;
   setIconsEnabled(iconsOn);
   $("btn-icons").textContent = `Icons: ${iconsOn ? "on" : "off"}`;
+}
+
+let labelsOn = true;
+function onToggleLabels() {
+  labelsOn = !labelsOn;
+  setLabelsEnabled(labelsOn);
+  $("btn-labels").textContent = `Labels: ${labelsOn ? "on" : "off"}`;
 }
 
 async function init() {
