@@ -55,7 +55,7 @@ test("Reserved slot is always present and disabled, with a reason", () => {
   }
 });
 
-test("Generate submenu: Random (anchored) gates on placed; Small/Medium/Large always fill-empty", () => {
+test("Generate submenu: Random (anchored) gates on placed; Small/Medium/Large/Huge always fill-empty", () => {
   const empty = byId(buildRadialModel(base()), "generate");
   const emptyRandom = empty.children.find((c) => c.id === "generate");
   assert.equal(emptyRandom.enabled, true);
@@ -67,9 +67,9 @@ test("Generate submenu: Random (anchored) gates on placed; Small/Medium/Large al
   assert.ok(placedRandom.reason);
 
   const sizes = placed.children.filter((c) => c.id === "genArea");
-  assert.equal(sizes.length, 3);
-  assert.deepEqual(sizes.map((c) => c.label), ["Small", "Medium", "Large"]);
-  assert.deepEqual(sizes.map((c) => c.value), [1, 2, 3]);
+  assert.equal(sizes.length, 4);
+  assert.deepEqual(sizes.map((c) => c.label), ["Small", "Medium", "Large", "Huge"]);
+  assert.deepEqual(sizes.map((c) => c.value), [1, 2, 3, 15]);
   for (const size of sizes) {
     assert.equal(size.kind, "leaf");
     assert.equal(size.enabled, true);

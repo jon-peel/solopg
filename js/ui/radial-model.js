@@ -84,6 +84,7 @@ const AREA_SIZES = [
   { label: "Small", radius: 1 },
   { label: "Medium", radius: 2 },
   { label: "Large", radius: 3 },
+  { label: "Huge", radius: 15 }, // bulk-fill for testing/prep — up to 721 hexes in one go
 ];
 
 function generateChildren(placed) {

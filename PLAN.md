@@ -35,8 +35,9 @@ Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, s
 outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
 (node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Phase 3R — world coherence started:
 3R.1 "Generate Area" radial tool is done** (see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)) —
-folded into the existing **"Generate" slot** (Random + **Small/Medium/Large** hex-radius disc, radius
-1/2/3), always **fill-empty only**; new `hexRing`/`hexDisc` geometry in `js/core/hexgeo.js`; v1 rides
+folded into the existing **"Generate" slot** (Random + **Small/Medium/Large/Huge** hex-radius disc,
+radius 1/2/3/15 — Huge added later as a bulk-fill/testing aid, up to 721 hexes in one click, ~36ms
+measured), always **fill-empty only**; new `hexRing`/`hexDisc` geometry in `js/core/hexgeo.js`; v1 rides
 current per-hex generation unchanged — it's the testing aid for 3R.2+ (terrain v2, fresh/salt water &
 coastlines, rivers, roads, richer settlements). The freed-up former "Neighbours" slot is now a
 `reserved` placeholder (kept so the ring's other 7 slots don't shift) awaiting a future feature (e.g.

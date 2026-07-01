@@ -89,7 +89,12 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   than a separate "Area" slot: **Generate** is now a submenu — **Random**
   (anchored nearest the cursor, the original single-hex action, gates on
   `placed` as before) plus **Small (radius 1) / Medium (radius 2) / Large
-  (radius 3)**, a true hex-radius disc (not a rectangle).
+  (radius 3)**, a true hex-radius disc (not a rectangle). **Huge (radius 15,
+  up to 721 hexes) added later** (3R.5 follow-up, on request) as a bulk-fill
+  aid for testing/prep — manual verification of features like rivers across a
+  big enough sample was tedious one 49-hex Large click at a time. Measured
+  ~36ms for a full 721-hex fill (including river propagation) — no chunking/
+  progress UI needed at this size.
 - **Always fill-empty only** — the "Fill empty" vs "Regenerate all" choice from
   the first pass was **removed**: every size just fills whatever's empty in its
   disc (center included) and leaves already-placed hexes untouched. Simpler
