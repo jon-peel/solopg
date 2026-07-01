@@ -1347,24 +1347,20 @@ async function onPlaceTerrain(terrain) {
   }
 }
 
-// Batch-generate the ring(s) of hexes around the selected hex (3R.1 "Area"
-// tool) — the center hex itself is never touched here ("Regenerate" already
-// covers re-rolling just that one). mode:"empty" only fills gaps (the old
-// per-radius-1 "Neighbours" behaviour, generalized to any radius); mode:
-// "overwrite" re-rolls every cell in range, bumping `gen` on already-placed
-// hexes so the re-roll isn't a determinism no-op (same trick as onRegenerate).
-// One persistAndRefresh() at the end regardless of area size.
-async function onGenerateArea({ radius, mode }) {
+// Batch-generate the empty hexes in the disc of `radius` around the selected
+// hex (3R.1 "Area" tool, folded into the "Generate" submenu) — the old
+// per-radius-1 "Neighbours" behaviour, generalized to any radius and to the
+// full disc (center included). Always fill-empty only; already-placed hexes
+// (including the center, if placed) are left untouched. One
+// persistAndRefresh() at the end regardless of area size.
+async function onGenerateArea(radius) {
   if (!current || !selected) return;
   try {
     const tables = await loadTables(HEX_TABLE_IDS);
     let added = 0;
-    for (const { q, r } of hexDisc(selected.q, selected.r, radius).slice(1)) {
-      const existing = getHex(current, q, r);
-      const isPlaced = !!(existing && existing.placed);
-      if (mode === "empty" && isPlaced) continue;
-      const gen = mode === "overwrite" && isPlaced ? (existing.gen || 0) + 1 : 0;
-      addHex(current, buildRandomHex(tables, q, r, gen));
+    for (const { q, r } of hexDisc(selected.q, selected.r, radius)) {
+      if (hasHexAt(current, q, r)) continue;
+      addHex(current, buildRandomHex(tables, q, r, 0));
       added++;
     }
     if (!added) return logLine("No empty hexes in range.");

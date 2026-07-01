@@ -11,7 +11,7 @@
 // its own terrain/POI art — these only label the menu.
 export const ACTION_GLYPH = {
   terrain: "🗺️", poi: "⭐", settlement: "🏠", hook: "🎣",
-  area: "🧭", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
+  reserved: "·", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
 };
 export const TERRAIN_GLYPH = {
   Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️",
@@ -76,24 +76,28 @@ function hookChildren(canGossip) {
   ];
 }
 
-// Area submenu (3R.1): a nested submenu per size, each offering Fill empty /
-// Regenerate all against the ring(s) around the target (never the center hex
-// itself — "Regenerate" already covers that). `value` carries {radius, mode}
-// straight through to app.js (radial-menu.js passes it by reference).
+// Generate submenu: Random (anchored, single hex — same "generate" id/handler
+// as before) + Small/Medium/Large (3R.1 "Area" tool, folded in here rather than
+// its own slot). Every size always fills EMPTY hexes only in the hex-radius
+// disc around the target (center included) — no overwrite option; a hex
+// that's already there just stays put. `value` is the plain radius number.
 const AREA_SIZES = [
-  { id: "small", label: "Small", radius: 1 },
-  { id: "medium", label: "Medium", radius: 2 },
-  { id: "large", label: "Large", radius: 3 },
+  { label: "Small", radius: 1 },
+  { label: "Medium", radius: 2 },
+  { label: "Large", radius: 3 },
 ];
 
-function areaChildren() {
-  return AREA_SIZES.map(({ id, label, radius }) => {
-    const count = 3 * radius * (radius + 1); // ring cells only, center excluded
-    return submenu(id, ACTION_GLYPH.area, label, { title: `${label} — ${count} hexes` }, [
-      leaf("genArea", "🟩", "Fill empty", { value: { radius, mode: "empty" } }),
-      leaf("genArea", "🟥", "Regenerate all", { value: { radius, mode: "overwrite" }, danger: true }),
-    ]);
-  });
+function generateChildren(placed) {
+  return [
+    leaf("generate", "🎲", "Random", {
+      anchor: true,
+      ...(placed ? { enabled: false, reason: "Already here — use Regenerate" } : {}),
+    }),
+    ...AREA_SIZES.map(({ label, radius }) => {
+      const count = 1 + 3 * radius * (radius + 1);
+      return leaf("genArea", "🧭", label, { value: radius, title: `${label} — up to ${count} hexes` });
+    }),
+  ];
 }
 
 /**
@@ -127,20 +131,20 @@ export function buildRadialModel(state) {
       ? {}
       : { enabled: false, reason: `No settlement can sit on ${terrain}` };
 
-  // Area (3R.1): needs a placed hex, same bar as Regenerate/Delete — per-size
-  // emptiness isn't checked here (a size with nothing empty just reports "0
-  // hexes" when picked, rather than gating the menu on it).
-  const areaState = placed ? {} : { enabled: false, reason: "Place this hex first" };
-
   return [
     submenu("terrain", ACTION_GLYPH.terrain, placed ? "Terrain" : "Place", {}, terrainChildren(terrains)),
     submenu("poi", ACTION_GLYPH.poi, "POI", placed ? {} : needHex, poiChildren(poiTypes, pois, dungeonSizes)),
     submenu("settlement", ACTION_GLYPH.settlement, "Settlement", settlementState, settlementChildren(allowedSizes, hasSettlement)),
     submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
-    submenu("area", ACTION_GLYPH.area, "Area", areaState, areaChildren()),
+    // Reserved — no action lives here yet (a future feature, e.g. travel,
+    // may claim it). Kept in place so the other 7 slots don't shift position.
+    leaf("reserved", ACTION_GLYPH.reserved, "—", { enabled: false, reason: "Reserved for a future feature" }),
     leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
     leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
-    leaf("generate", ACTION_GLYPH.generate, "Generate", placed ? { enabled: false, reason: "Already here — use Regenerate" } : {}),
+    // Generate: Random (single hex, gated like before) + Small/Medium/Large
+    // (3R.1 "Area" fill-empty, folded in here). The submenu itself is always
+    // enabled — Area sizes work regardless of whether the center is placed.
+    submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
   ];
 }
 

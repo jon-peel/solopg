@@ -35,12 +35,14 @@ Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, s
 outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
 (node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Phase 3R — world coherence started:
 3R.1 "Generate Area" radial tool is done** (see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)) —
-the right-click **"Neighbours" slot became "Area"**, a submenu of **Small/Medium/Large** (hex-radius
-disc, radius 1/2/3) nesting **Fill empty / Regenerate all**; new `hexRing`/`hexDisc` geometry in
-`js/core/hexgeo.js`, v1 rides current per-hex generation unchanged — it's the testing aid for 3R.2+
-(terrain v2, fresh/salt water & coastlines, rivers, roads, richer settlements). **Next: 3R.2** (audit +
-research + world-model decision) **or more Phase 7** (search, undo, print/GM view, themes — see
-[phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
+folded into the existing **"Generate" slot** (Random + **Small/Medium/Large** hex-radius disc, radius
+1/2/3), always **fill-empty only**; new `hexRing`/`hexDisc` geometry in `js/core/hexgeo.js`; v1 rides
+current per-hex generation unchanged — it's the testing aid for 3R.2+ (terrain v2, fresh/salt water &
+coastlines, rivers, roads, richer settlements). The freed-up former "Neighbours" slot is now a
+`reserved` placeholder (kept so the ring's other 7 slots don't shift) awaiting a future feature (e.g.
+travel). **Next: 3R.2** (audit + research + world-model decision) **or more Phase 7** (search, undo,
+print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables
+were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7.**
 **Schema v7 (unchanged by 3R.1). 214 `node --test` passing.** Work merges to **`main`** via PR.
 
@@ -78,6 +80,12 @@ YAGNI; everything persists.
 - **Schema + migration.** `SCHEMA_VERSION` (currently **7**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
+- **No backward-compatibility burden right now.** Pre-release, with no real worlds worth
+  preserving: don't write migrations for old export formats, don't worry about whether cached
+  IndexedDB data matches the current shape — a schema/shape change can just break old worlds; the
+  fix is to start a new one. Skip defensive fallbacks/back-compat shims for data shape changes for
+  the same reason. **Revisit this once there's real save data worth protecting** — this note
+  itself should be removed at that point.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
   [canonical schema](#canonical-table-schema). *Rules* (per-terrain settlement caps / POI weights,
   terrain adjacency) are small pure JS consts (`js/gen/terrain-profile.js`,

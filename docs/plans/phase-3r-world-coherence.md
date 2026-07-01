@@ -85,35 +85,36 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 ### 3R.1 — "Generate Area" radial tool ✅ done
 *A testing aid first, a genuine QoL feature second.*
 
-- The **"Neighbours" radial slot became "Area"** (`js/ui/radial-model.js`): a
-  submenu of **Small (radius 1, 7 hexes) / Medium (radius 2, 19 hexes) / Large
-  (radius 3, 37 hexes)**, a true hex-radius disc (not a rectangle), each nesting
-  **"Fill empty" / "Regenerate all"** (the latter `danger`-flagged).
-- **Geometry:** `hexRing(q, r, radius)` / `hexDisc(q, r, radius)` added to
+- **Folded into the existing "Generate" slot** (`js/ui/radial-model.js`) rather
+  than a separate "Area" slot: **Generate** is now a submenu — **Random**
+  (anchored nearest the cursor, the original single-hex action, gates on
+  `placed` as before) plus **Small (radius 1) / Medium (radius 2) / Large
+  (radius 3)**, a true hex-radius disc (not a rectangle).
+- **Always fill-empty only** — the "Fill empty" vs "Regenerate all" choice from
+  the first pass was **removed**: every size just fills whatever's empty in its
+  disc (center included) and leaves already-placed hexes untouched. Simpler
+  mental model, no destructive option to guard against.
+- The freed-up **"Neighbours"/"Area" slot position is now `reserved`** — an
+  always-disabled placeholder (`"—"`, reason "Reserved for a future feature")
+  so the other 7 slots keep their fixed angular position; a future feature
+  (e.g. **travel**) may claim it.
+- **Geometry:** `hexRing(q, r, radius)` / `hexDisc(q, r, radius)` in
   `js/core/hexgeo.js` — the standard axial spiral, a pure function of
   `(q, r, radius)` so fill order is deterministic regardless of caller/Map
-  iteration order. `hexDisc(...).slice(1)` (rings only, center excluded) is what
-  the Area tool walks — the center hex is never touched by "Area"; the
-  dedicated "Regenerate" leaf already covers it.
+  iteration order.
 - **v1 rides current per-hex logic** exactly (`buildRandomHex`/`generateHex`,
   unchanged) — this is the iteration/testing aid for 3R.2+; **3R.8** will swap it
   onto the v2 pipeline.
-- **Fill policy:** "Fill empty" skips already-placed cells (generalizes the old
-  radius-1-only neighbor fill); "Regenerate all" re-rolls every cell in range,
-  bumping `gen` on already-placed hexes (same escape-determinism trick as
-  "Regenerate") so an overwrite isn't a no-op. One `persistAndRefresh()` per
-  pick regardless of area size — no progress UI needed at these sizes (≤37
-  hexes, synchronous, sub-second in manual testing).
-- `js/ui/app.js`: `onGenerateArea({radius, mode})` replaced `onGenerateNeighbors`
-  (no back-compat shim); `radialDispatch` case `"genArea"`; `onContextMenu`'s
-  now-unused `emptyNeighbors` count removed (gating is `placed` only, matching
-  Regenerate/Delete — see radial-model.js).
+- `js/ui/app.js`: `onGenerateArea(radius)` walks the full `hexDisc(...)`
+  (center included), skipping any already-placed cell; `radialDispatch` case
+  `"genArea"`.
 - **Tests:** `test/hexgeo.test.js` (ring/disc count, no-dupes, exact-distance,
   matches `neighbors()` at r=1, deterministic order, matches doc sizing 7/19/37,
-  center-first ring-by-ring order) and `test/radial-model.test.js` (Area gating +
-  submenu shape). 214 `node --test` passing. Manually verified in-browser
-  (Playwright smoke pass): fill-empty, "no empty hexes in range" on a full area,
-  and regenerate-all all behave as designed; center hex never touched.
+  center-first ring-by-ring order) and `test/radial-model.test.js` (reserved
+  slot, Generate submenu shape/gating). 214 `node --test` passing. Manually
+  verified in-browser (Playwright smoke pass): Small/Medium/Large fill exactly
+  the empty cells in range (including an empty center), and report "No empty
+  hexes in range." once full.
 
 ### 3R.2 — Audit + research + world-model decision
 *Design/analysis; minimal code (harness + docs).*
