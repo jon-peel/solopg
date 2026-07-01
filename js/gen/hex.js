@@ -18,8 +18,10 @@ import { generatePoi } from "./poi.js";
  *   poi-types, poi-occupant, creatures, occupiers (and terrain sub-tables).
  * @param {() => number} rng a single stream consumed in a fixed order
  * @param {{ key?: string, coords?: object|null, placed?: boolean,
- *   terrain?: string, seed?: number|string, gen?: number }} [opts]
- *   seed+gen+coords seed per-POI sub-streams (order-stable).
+ *   terrain?: string, seed?: number|string, gen?: number, seaNeighborCount?: number }} [opts]
+ *   seed+gen+coords seed per-POI sub-streams (order-stable). seaNeighborCount
+ *   feeds sea-coastline contagion (js/gen/biome.js) — how many of this hex's
+ *   already-placed neighbours are Sea; omit/0 for the pure position-based roll.
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
@@ -28,9 +30,11 @@ export function generateHex(tables, rng, opts = {}) {
   // 1. Terrain. Elevation/moisture (Phase 3R.3) are ALWAYS computed from
   //    (seed, coords) alone — a pure function of position, so it's the same
   //    regardless of forced/rolled terrain or fill order. Terrain is forced
-  //    (manual placement) or the classifier's pick from those fields.
+  //    (manual placement) or the classifier's pick from those fields (which
+  //    may itself factor in nearby Sea neighbours — see seaNeighborCount).
   const coords = opts.coords || { q: 0, r: 0 };
-  const { elevation, moisture, continent, terrain: classified } = biomeAt(opts.seed ?? 0, coords.q, coords.r);
+  const { elevation, moisture, continent, terrain: classified } =
+    biomeAt(opts.seed ?? 0, coords.q, coords.r, opts.seaNeighborCount ?? 0);
   const terrain = opts.terrain || classified;
 
   // Nested terrain feature (e.g. Swamp's swamp-feature roll) stays

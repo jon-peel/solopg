@@ -60,6 +60,45 @@ test("biomeAt: returns a continent field alongside elevation/moisture", () => {
   assert.equal(typeof continent, "number");
 });
 
+test("biomeAt: seaNeighborCount 0 (default) behaves identically to the pure position-based roll", () => {
+  for (const [seed, q, r] of [[1, 3, -2], [2, 40, 40], ["seed", -5, 8]]) {
+    assert.deepEqual(biomeAt(seed, q, r), biomeAt(seed, q, r, 0));
+  }
+});
+
+test("biomeAt: a high seaNeighborCount makes Sea overwhelmingly likely", () => {
+  // Statistical: 6 sea neighbours -> ~99.98% per-trial chance, so Sea should
+  // dominate heavily across many independent (seed, coord) draws.
+  let seaCount = 0;
+  const trials = 200;
+  for (let i = 0; i < trials; i++) {
+    const { terrain } = biomeAt(`seed-${i}`, 40 + i, 40, 6);
+    if (terrain === "Sea") seaCount++;
+  }
+  assert.ok(seaCount / trials > 0.9, `expected >90% Sea with 6 sea neighbours, got ${seaCount}/${trials}`);
+});
+
+test("biomeAt: sea contagion always leaves an escape hatch — never certain", () => {
+  // A lower neighbour count (chance ~94%, not ~99.98%) makes the escape
+  // hatch observable within a modest, non-flaky number of trials.
+  let landCount = 0;
+  const trials = 200;
+  for (let i = 0; i < trials; i++) {
+    const { terrain } = biomeAt(`seed-${i}`, 40 + i, 40, 2);
+    if (terrain !== "Sea") landCount++;
+  }
+  assert.ok(landCount > 0, "expected at least one non-Sea escape across 200 trials at seaNeighborCount=2");
+});
+
+test("biomeAt: seaNeighborCount never triggers with 0 neighbours (falls through to continent gate)", () => {
+  // Confirms the contagion roll is gated on seaNeighborCount, not always-on.
+  for (let i = 0; i < 50; i++) {
+    const withZero = biomeAt(`seed-${i}`, 40, 40, 0);
+    const withoutParam = biomeAt(`seed-${i}`, 40, 40);
+    assert.deepEqual(withZero, withoutParam);
+  }
+});
+
 test("biomeAt: origin (0,0) is always land, never Sea, regardless of seed", () => {
   // The world's spawn point is always (0,0) (app.js onNewWorld) — without the
   // origin land-bias, some seeds place it deep in an ocean basin. Regression

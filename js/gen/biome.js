@@ -37,9 +37,16 @@
 // (existing, already-tuned logic), which is what actually produces real
 // coastlines: huge contiguous Sea bodies at the gate boundary, with Mountains/
 // Hills/Forest/Plains/Desert/Swamp proportions on the land side unaffected.
+//
+// Sea contagion (also 3R.4): a manually-placed (or procedurally-rolled) Sea
+// hex should make NEARBY future generation more likely to continue the
+// coastline, not sit inert next to whatever the continent field happens to
+// say. This is a deliberate, narrowly-scoped exception to "pure function of
+// position" — see rollSeaContagion below.
 
 import { fbm2D, smoothstep } from "../core/noise.js";
 import { axialDistance } from "../core/hexgeo.js";
+import { subRng } from "../core/rng.js";
 
 // Land classification — UNCHANGED from 3R.3.
 const NOISE_OPTS = { octaves: 3, frequency: 0.2, lacunarity: 2, persistence: 0.5 };
@@ -61,6 +68,23 @@ const FALLOFF_RADIUS = 30;
 function originLandBias(q, r) {
   const t = Math.max(0, Math.min(1, 1 - axialDistance(0, 0, q, r) / FALLOFF_RADIUS));
   return LAND_BOOST * smoothstep(t);
+}
+
+// Sea contagion: placing (or generating) a Sea hex should make hexes
+// generated NEAR it more likely to continue the coastline, decaying the
+// further out you go, until land randomly breaks through as an island or
+// continent. This is the one deliberate exception to "terrain is a pure
+// function of (seed, q, r)" — it depends on generation history (which
+// neighbours are already placed), by design, so manual/procedural Sea
+// placements actually propagate rather than sitting inert next to whatever
+// the continent field says. Chance compounds with more Sea neighbours
+// (capped at 1), and always leaves an escape hatch — it's never certain, so
+// a coastline eventually gives way to land if you keep going.
+const SEA_CONTAGION_CHANCE = 0.75; // per already-placed Sea neighbour
+function rollSeaContagion(seed, q, r, seaNeighborCount) {
+  if (seaNeighborCount <= 0) return false;
+  const chance = 1 - Math.pow(1 - SEA_CONTAGION_CHANCE, seaNeighborCount);
+  return subRng(seed, "hex", q, r, "seaContagion")() < chance;
 }
 
 // Axial -> an approximately-isotropic Cartesian coordinate, reusing hexgeo's
@@ -93,22 +117,30 @@ export function classifyLand(elevation, moisture) {
 
 /**
  * Sample elevation+moisture+continent for a hex's axial coords and classify
- * its biome. A pure function of (seed, q, r) alone — order-independent by
- * construction.
+ * its biome. Pure function of (seed, q, r) alone WHEN seaNeighborCount is 0
+ * (the default) — order-independent by construction, same as 3R.3/3R.4. A
+ * non-zero seaNeighborCount deliberately breaks that purity (see module
+ * comment on sea contagion): it lets already-placed Sea neighbours "grow"
+ * the coastline into newly-generated hexes nearby.
  * @param {number|string} seed world seed
  * @param {number} q
  * @param {number} r
- * @returns {{ elevation: number, moisture: number, continent: number, terrain: string }}
+ * @param {number} [seaNeighborCount] how many of this hex's already-placed
+ *   neighbours are Sea (0-6); 0 = today's pure position-based behaviour.
+ * @returns {{ elevation: number, moisture: number, continent: number|null, terrain: string }}
  */
-export function biomeAt(seed, q, r) {
+export function biomeAt(seed, q, r, seaNeighborCount = 0) {
   const { x, y } = axialToNoiseXY(q, r);
-  const continent = fbm2D(seed, "continent", x, y, CONTINENT_OPTS) + originLandBias(q, r);
   // Always sampled, even for Sea hexes — mirrors elevation/moisture's own
   // "always compute regardless of what it's used for" precedent, so the
   // field stays available uniformly (e.g. a manually-placed Sea hex still
   // carries real local elevation/moisture for later sub-phases).
   const elevation = fbm2D(seed, "elevation", x, y, NOISE_OPTS);
   const moisture = fbm2D(seed, "moisture", x, y, NOISE_OPTS);
+  if (rollSeaContagion(seed, q, r, seaNeighborCount)) {
+    return { elevation, moisture, continent: null, terrain: "Sea" };
+  }
+  const continent = fbm2D(seed, "continent", x, y, CONTINENT_OPTS) + originLandBias(q, r);
   const terrain = continent < OCEAN_THRESHOLD ? "Sea" : classifyLand(elevation, moisture);
   return { elevation, moisture, continent, terrain };
 }

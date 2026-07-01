@@ -380,12 +380,34 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   above the ocean threshold) are also a follow-up, not implemented this pass.
 - Schema bumped to **v10** (stamp-only — old `terrain:"Water"` hexes and the `basin`→
   `continent` rename both need no retrofit).
+- **Sea contagion (a further revision, on request):** placing/finding a Sea hex should
+  make hexes generated *near* it more likely to continue the coastline, decaying with
+  distance until land randomly breaks through (an island/continent) — the `continent`
+  gate alone doesn't do this (it's a pure function of position, so a manually-placed Sea
+  hex had zero effect on anything generated near it later). Added `rollSeaContagion` in
+  `js/gen/biome.js`: if any already-placed neighbour is Sea, roll a chance (compounding
+  with more Sea neighbours, capped, `SEA_CONTAGION_CHANCE = 0.75` per neighbour) to
+  continue the coast outright, before even consulting the `continent` gate; falling
+  through (or having zero Sea neighbours) reverts to the unchanged pure-position
+  behaviour. **This is a deliberate, narrowly-scoped exception to "terrain is a pure
+  function of `(seed, q, r)`"** — Sea classification near existing content now depends
+  on generation history (`seaNeighborCount`, computed from already-placed neighbours in
+  `js/ui/app.js`, mirroring the pre-3R.3 `neighborTerrains` helper removed in that pass),
+  not position alone. Verified in the scratchpad (walking outward from a forced Sea hex)
+  and end-to-end in the browser: forcing Sea at a point then filling a Large area around
+  it turned the whole area to Sea in one real run — a visible, one-placement coastline.
+  Land still reliably breaks through at lower neighbour counts (tested, non-flaky).
 - **Tests:** `test/biome.test.js` (`classifyLand` boundary tests — Sea isn't reachable
-  from it; origin-never-Sea regression across 14 seeds), `test/terrain-profile.test.js`
+  from it; origin-never-Sea regression across 14 seeds; `seaNeighborCount=0` is
+  byte-identical to the old pure-position path; high neighbour counts make Sea
+  overwhelmingly likely without ever being literally certain), `test/terrain-profile.test.js`
   (`biasKey` + shared-profile assertions), `test/terrain-coherence.test.js` (Lake/Sea
   both appear at continent scale, Sea forms a large contiguous body dwarfing Lake by
-  10×+, origin is always land, `continent` included in the order-independence check).
-  240 `node --test test/*.test.js` passing.
+  10×+, origin is always land, `continent` included in the order-independence check,
+  plus a dedicated sea-contagion integration test mirroring `app.js`'s real
+  `seaNeighborCount` wiring — deliberately *not* using the shared order-independent
+  `generateArea` test helper, since contagion is the one place order now matters).
+  245 `node --test test/*.test.js` passing.
 
 ### 3R.5 — Rivers
 - **Model (your rules, encoded):** rivers **start in mountains** and flow **downhill**
@@ -495,6 +517,12 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   order-independence tests early (3R.1/3R.2). **Structurally closed in 3R.3** — terrain
   is now a pure function of `(seed, q, r)` (elevation/moisture noise), not a read of
   already-placed neighbours, so order-independence is provable, not just tested.
+  **Deliberately reopened, narrowly, in 3R.4's sea-contagion revision**: Sea propagation
+  near existing content depends on generation history (which neighbours are already
+  placed) — an explicit, requested trade-off, scoped to Sea only; everything else
+  (Mountains/Hills/Forest/Plains/Desert/Swamp/Lake, and Sea itself with zero Sea
+  neighbours) stays pure-position as before. Watch this doesn't creep into other
+  terrain types without the same explicit trade-off being made consciously.
 - **Migration churn** — several schema bumps; keep every step additive and old-world-safe.
 - **Perceptual vs real** — 3R.2's baseline decides how much terrain rework is truly
   warranted before we over-engineer.

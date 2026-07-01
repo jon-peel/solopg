@@ -69,13 +69,19 @@ relationship to an actual landmass edge. Fixed by using `continent` as a pure la
 classifier runs, with its own low-elevation band now always meaning Lake. Verified: Sea now forms 1–3
 genuinely large contiguous bodies (up to ~3200 hexes) per sample, real coastlines rather than scattered
 pockets. Also added a smooth land bias around the fixed world spawn `(0,0)` — some seeds otherwise put
-the origin itself in open ocean. **Next: 3R.5** (rivers — mountains to lakes/seas, downhill, built on
-this elevation/continent data) **or more Phase 7** (search, undo, print/GM view, themes — see
-[phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
+the origin itself in open ocean. **Sea contagion added on top**: placing (or generating) a Sea hex now
+makes nearby future generation more likely to continue the coastline (`js/gen/biome.js`
+`rollSeaContagion`, ~75% chance per already-placed Sea neighbour, compounding, always leaving room for
+land to randomly break through) — verified end-to-end (forcing Sea then filling a Large area around it
+turned the whole area to Sea in one real run). This is a deliberate, narrowly-scoped exception to
+"terrain is a pure function of `(seed, q, r)`" — Sea near existing content now depends on generation
+history, everything else stays position-pure. **Next: 3R.5** (rivers — mountains to lakes/seas,
+downhill, built on this elevation/continent data) **or more Phase 7** (search, undo, print/GM view,
+themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
 `elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
 Lake/Sea (v9, reworked in v10).**
-**Schema v10. 240 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v10. 245 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

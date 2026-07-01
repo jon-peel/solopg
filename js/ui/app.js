@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -1012,6 +1012,16 @@ function hookSubjects(world) {
   return subs;
 }
 
+// How many of a cell's existing placed neighbours are already Sea — feeds
+// coastline contagion (js/gen/biome.js): placing/finding a Sea hex makes
+// nearby future generation more likely to continue the coast.
+function seaNeighborCount(q, r) {
+  return neighbors(q, r).filter((n) => {
+    const h = getHex(current, n.q, n.r);
+    return h && h.placed && h.terrain === "Sea";
+  }).length;
+}
+
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
 // carries a forced dungeon POI as the hook's subject. Marked unexplored.
@@ -1023,6 +1033,7 @@ function buildDistantTargetHex(tables, q, r) {
     placed: true,
     seed: current.seed,
     gen: 0,
+    seaNeighborCount: seaNeighborCount(q, r),
   });
   hex.gen = 0;
   hex.explored = false; // not yet visited; the intervening hexes are blank
@@ -1245,6 +1256,7 @@ function buildRandomHex(tables, q, r, gen) {
     placed: true,
     seed: current.seed,
     gen,
+    seaNeighborCount: seaNeighborCount(q, r),
   });
   hex.gen = gen;
   return hex;

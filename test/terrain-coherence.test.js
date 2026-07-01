@@ -146,6 +146,67 @@ test("generation is deterministic: same seed -> identical terrain everywhere", (
   }
 });
 
+// Sea contagion (3R.4): a manually-forced Sea hex should make nearby future
+// generation more likely to continue the coastline. This mirrors exactly how
+// app.js's buildRandomHex computes seaNeighborCount from already-placed
+// neighbours — deliberately NOT via the shared generateArea() helper above,
+// which always uses seaNeighborCount=0 (the pure, order-independent path the
+// other tests in this file assert on; contagion is an intentional, narrowly-
+// scoped exception to that, see js/gen/biome.js).
+function seaNeighborCountIn(world, q, r) {
+  return neighbors(q, r).filter((n) => {
+    const h = getHex(world, n.q, n.r);
+    return h && h.placed && h.terrain === "Sea";
+  }).length;
+}
+
+function walkFromForcedSea(seed, startQ, startR, dir, steps) {
+  const tables = loadTables();
+  const world = createWorld({ name: "contagion-test", seed });
+  const startRng = subRng(seed, "hex", startQ, startR, 0);
+  const startHex = generateHex(tables, startRng, {
+    key: axialKey(startQ, startR), coords: { q: startQ, r: startR }, placed: true,
+    terrain: "Sea", seed, gen: 0,
+  });
+  addHex(world, startHex);
+  let q = startQ, r = startR;
+  const terrains = [];
+  for (let i = 0; i < steps; i++) {
+    q += dir.q; r += dir.r;
+    const rng = subRng(seed, "hex", q, r, 0);
+    const hex = generateHex(tables, rng, {
+      key: axialKey(q, r), coords: { q, r }, placed: true, seed, gen: 0,
+      seaNeighborCount: seaNeighborCountIn(world, q, r),
+    });
+    addHex(world, hex);
+    terrains.push(hex.terrain);
+  }
+  return terrains;
+}
+
+test("sea contagion: a manually-placed Sea hex measurably extends the coastline into nearby generation", () => {
+  // Across many seeds/directions (all far from the origin's land bias),
+  // walking away from a forced Sea hex should continue as Sea for a stretch
+  // before land breaks through, on average — not just revert immediately,
+  // nor go on forever (the escape hatch must still work).
+  let totalSeaSteps = 0;
+  let walks = 0;
+  let anyLandBreakthrough = false;
+  const dirs = [{ q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 }];
+  for (const seed of [1, 2, 3, 4, 5]) {
+    for (const dir of dirs) {
+      const terrains = walkFromForcedSea(seed, 50, 0, dir, 15);
+      const firstLand = terrains.findIndex((t) => t !== "Sea");
+      totalSeaSteps += firstLand === -1 ? terrains.length : firstLand;
+      if (firstLand !== -1) anyLandBreakthrough = true;
+      walks++;
+    }
+  }
+  const meanSeaSteps = totalSeaSteps / walks;
+  assert.ok(meanSeaSteps > 1.5, `expected the coastline to extend on average > 1.5 steps, got ${meanSeaSteps.toFixed(2)}`);
+  assert.ok(anyLandBreakthrough, "expected at least one walk where land eventually broke through");
+});
+
 test("order-independence: forward vs. reverse fill order give identical per-hex terrain", () => {
   const coords = hexDisc(0, 0, 10);
   const forward = generateArea(7, 10, coords);
