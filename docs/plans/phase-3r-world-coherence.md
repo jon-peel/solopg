@@ -219,15 +219,61 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   - *(The model fork below is intentionally kept open — the research surfaces (c)
     as structurally the cleanest fix, but the actual pick waits on Step 3's
     baseline stats rather than being pre-decided here.)*
-- **Step — the fork (world-building model), the key decision that gates 3R.4–3R.7:**
+- **Step — stats harness ✅ done:** `test/stats-harness.js` — a diagnostic
+  script, **not** a `node --test` suite (see below), that fills a large hex disc
+  under **today's unchanged engine** (`generateHex`/`buildRandomHex`'s real code
+  path, real `data/*.json` weights) and reports a terrain histogram, connected-
+  same-terrain "biome clump" sizes (+ lone-hex rate), and mean nearest-settlement
+  spacing. Run: `node test/stats-harness.js [seed] [radius]` (defaults
+  `seed=1 radius=25`, ≈1951 hexes).
+  - **Discovery while building it:** `node --test`'s default discovery treats
+    *any* file under a directory named `test/` as a test file regardless of
+    name, so a bare diagnostic script there was silently getting picked up and
+    "passing" as a no-op test. Fixed by scoping both `package.json`'s `test`
+    script and `run-local.sh`'s gate to `test/*.test.js` (every real suite
+    already followed that naming) — `stats-harness.js` is excluded from
+    `node --test`/`npm test` but still runs directly.
+  - **Baseline (3 seeds, radius 25, ~1951 hexes each — stable across seeds):**
+    terrain roughly tracks the base table weights (Forest/Plains ~22%, Hills
+    ~21%, Mountains ~12%, Swamp/Water/Desert ~7–8% each) — the neighbour bias
+    barely shifts the aggregate mix. **Lone-hex rate: 23–25%** — nearly a
+    quarter of all hexes share no terrain with any existing neighbour. **Clump
+    sizes are small**: median 1–2 hexes for every terrain (Forest, the biggest
+    clumper, still usually tops out well under 20). **Settlement spacing:** mean
+    nearest-neighbour distance **~1.1–1.2 hexes** — settlements are almost
+    always immediately adjacent to another settlement. These numbers turn the
+    doc's "doesn't flow" / "towns clump" complaints into measured facts, and are
+    the baseline 3R.3/3R.6 tune against.
+- **Step — the fork (world-building model) ✅ decided: (c) two-layer
+  elevation + moisture.**
   - **(a) Incremental, stronger coherence** — keep hex-by-hex but make neighbour
     influence dominant (transition tables, not a mild additive nudge).
   - **(b) Region/chunk** — an area gets a dominant biome, then fills within it.
-  - **(c) Two-layer** — a coarse region map (elevation + moisture + sea level) →
-    per-hex detail derived from it. *(Leading candidate: makes coastlines, rivers,
-    and biome bands fall out naturally.)*
-- **Deliverable:** an audit + baseline stats + a **chosen model** written down. No
-  gameplay change yet.
+  - **(c) Two-layer (chosen)** — a coarse region map (elevation + moisture + sea
+    level) → per-hex detail derived from it.
+  - **Why (c), beyond the doc's original "coastlines/rivers/biome-bands fall out
+    naturally" case:**
+    1. **Avoids rework.** 3R.4 (water/coastlines) and 3R.5 (rivers) both need
+       elevation regardless — the doc already names elevation-threshold sea
+       level as "a natural fit if 3R.3 gives elevation." Picking (a) or (b) now
+       means adding elevation again later anyway.
+    2. **It structurally closes the doc's #1-listed risk — determinism under
+       area generation.** Today's neighbour-affinity bias reads *already-placed*
+       neighbours at generation time, so a hex's terrain roll technically
+       depends on fill order (which neighbours exist yet) — order-independence
+       is an emergent property of "always use the same fixed fill order," not a
+       guarantee. Elevation/moisture as a **coordinate-hashed noise field** (a
+       pure function of `(seed, q, r)`, no npm deps needed — a value-noise
+       function evaluated directly from position, no external libraries
+       required) is a pure function of position alone: trivially
+       order-independent, with no fixed-fill-order discipline needed to get
+       there.
+    3. The baseline numbers above (23–25% lone-hex rate, median clump size 1–2)
+       show the *current* mechanism is too weak to fix by degree alone — a
+       structural change is warranted, not just a bigger multiplier.
+- **Deliverable:** audit ✅ + research ✅ + baseline stats ✅ + a **chosen model
+  ✅ (two-layer elevation + moisture)**. **3R.2 complete.** No gameplay change in
+  this sub-phase — 3R.3 implements the model against this baseline.
 
 ### 3R.3 — Terrain generation v2
 - Implement the chosen model. Likely: **elevation + moisture** as first-class per-hex
@@ -330,11 +376,12 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 
 ## Open design decisions (to confirm as we go)
 
-- **World-building model:** (a) incremental / (b) region-chunk / (c) two-layer
-  elevation+moisture. *Leaning (c).* — decided in 3R.2.
+- **World-building model: ✅ decided in 3R.2 — (c) two-layer elevation+moisture**
+  (coordinate-hashed noise fields for elevation + moisture, Whittaker-style
+  biome classification). See 3R.2's fork write-up for the full reasoning.
 - **Water naming:** Lake/Sea vs Fresh/Salt. *Leaning Lake/Sea.*
-- **Elevation/moisture:** adopt as first-class per-hex fields? *Strong yes — it's the
-  keystone that makes terrain coherence, sea level, and rivers all fall out.*
+- **Elevation/moisture:** ✅ adopted as first-class per-hex fields (3R.2) — the
+  keystone that makes terrain coherence, sea level, and rivers all fall out.
 - **Keep/Fort:** new size tier vs martial overlay on an existing band. *Leaning overlay.*
 - **Road generation:** incremental per-settlement vs batch network pass.
 - **Regen vs manual edits:** per-hex `locked` flag semantics.

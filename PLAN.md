@@ -40,11 +40,22 @@ folded into the existing **"Generate" slot** (Random + **Small/Medium/Large** he
 current per-hex generation unchanged — it's the testing aid for 3R.2+ (terrain v2, fresh/salt water &
 coastlines, rivers, roads, richer settlements). The freed-up former "Neighbours" slot is now a
 `reserved` placeholder (kept so the ring's other 7 slots don't shift) awaiting a future feature (e.g.
-travel). **Next: 3R.2** (audit + research + world-model decision) **or more Phase 7** (search, undo,
-print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables
-were dropped).
+travel). **3R.2 (audit + research + world-model decision) is done**: audited today's
+generation against the code (found `terrainBias`, the neighbour-affinity multiplier, defaults to `1`
+and is never set elsewhere — coherence is stuck at its weakest setting), researched external
+hex-generation mechanics (AD&D DMG transition tables, Welsh Piper's hierarchical dominant-terrain,
+The Alexandrian's region/chunk method, elevation+moisture Whittaker-style biome classification), built
+a stats baseline (`test/stats-harness.js`, run via `node test/stats-harness.js`, **not** part of
+`node --test`/`npm test` — see note below) showing a **23–25% lone-hex rate** and settlements
+averaging **~1.1–1.2 hexes** apart, and **decided the world-building model: two-layer elevation +
+moisture** (coordinate-hashed noise fields, order-independent by construction — feeds 3R.4's sea level
+and 3R.5's downhill rivers with no rework). **Next: 3R.3** (implement terrain v2 against this model)
+**or more Phase 7** (search, undo, print/GM view, themes — see
+[phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7.**
-**Schema v7 (unchanged by 3R.1). 214 `node --test` passing.** Work merges to **`main`** via PR.
+**Schema v7 (unchanged by 3R.1/3R.2). 214 `node --test` passing** (now run as `test/*.test.js` —
+`node --test`'s default discovery treats any file under `test/` as a suite, which would otherwise
+snag the non-test `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
 ---
 
@@ -133,9 +144,12 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           landmark-{feature,trait,hook}, tower-{kind,master},
           hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
-/test     node --test suites (rng, dice, table, world, hexgeo, hex, terrain-weight,
-          terrain-profile, terrain-art, settlement-art, poi, migration, dungeon, dungeon-layout,
-          feature-detail, tower, hooks)
+/test     node --test suites, run as `test/*.test.js` (rng, dice, table, world, hexgeo, hex,
+          terrain-weight, terrain-profile, terrain-art, settlement-art, poi, migration, dungeon,
+          dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a diagnostic script
+          (not a suite — `node --test`'s directory-based discovery would otherwise pick up ANY
+          file under test/, hence the explicit `*.test.js` glob), run via `node
+          test/stats-harness.js [seed] [radius]` (3R.2 — terrain/settlement generation baseline)
 /docs/plans  per-step sub-plans (this overview links them)
 ```
 
@@ -204,7 +218,7 @@ graph TD
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
-| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅**; next 3R.2 (audit + research + world-model decision). |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅** (chose two-layer elevation+moisture); next 3R.3 (terrain generation v2). |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a
@@ -279,7 +293,9 @@ powers" (roaming/region/news-propagation) belong to the future Factions phase. S
   `http://localhost:8000` — aborts if tests fail). Needs `git`, `node`, `python3`. The script
   self-updates to the latest branch tip each run (hard reset — it's a tester's script, not for
   local edits). Override the port: `./run-local.sh 9000`.
-- **Tests only:** `node --test` (or `npm test`).
+- **Tests only:** `node --test test/*.test.js` (or `npm test`). (Plain `node --test` also picks up
+  `test/stats-harness.js` — a diagnostic, not a suite — since Node's default discovery treats any
+  file under `test/` as fair game; the glob avoids that.)
 - **Never** open `index.html` via `file://` (modules/`fetch`/IndexedDB need an HTTP origin).
 
 ### How a step is verified (the loop, every step)

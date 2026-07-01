@@ -23,7 +23,7 @@ git reset --hard "origin/$BRANCH"
 
 echo
 echo "Running unit tests ..."
-if ! node --test; then
+if ! node --test test/*.test.js; then
   echo
   echo "Unit tests FAILED — not starting the server. Fix the failures above." >&2
   exit 1
