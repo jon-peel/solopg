@@ -40,6 +40,7 @@ let drag = null;
 let iconsEnabled = true;
 let hovered = null; // { q, r } under the cursor | null
 let hoverKey = null; // axialKey of `hovered`, to skip redundant re-renders
+let lastPpm = null; // last pixels-per-mile emitted to onView (fire only on change)
 let hookTargets = new Set(); // axial keys "q,r" of open, unpinned hook destinations
 let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destinations
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
@@ -82,6 +83,13 @@ export function recenterOn(q, r) {
   camera.offsetX = rect.width / 2 - p.x * camera.scale;
   camera.offsetY = rect.height / 2 - p.y * camera.scale;
   render();
+}
+
+/** Screen pixels per mile at the current zoom (for the scale bar). */
+export function pixelsPerMile() {
+  const milesPerHex = (world && world.hexScale) || 6;
+  // Adjacent hex centres are sqrt(3)*HEX_SIZE world px apart = one hex = N miles.
+  return (Math.sqrt(3) * HEX_SIZE / milesPerHex) * camera.scale;
 }
 
 /** Zoom a step in (dir>0) or out (dir<0), keeping the canvas center fixed. */
@@ -202,6 +210,13 @@ export function render() {
     if (t && o && !(t.q === o.q && t.r === o.r)) drawHookLine(o, t); // under the rings
     if (o) drawHookFocus(o, FOCUS_ORIGIN);
     if (t) drawHookFocus(t, FOCUS_TARGET);
+  }
+
+  // Notify the scale bar only when the zoom (px-per-mile) actually changes.
+  const ppm = pixelsPerMile();
+  if (ppm !== lastPpm) {
+    lastPpm = ppm;
+    handlers.onView?.(ppm);
   }
 }
 

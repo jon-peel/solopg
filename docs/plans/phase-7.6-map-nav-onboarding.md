@@ -14,8 +14,12 @@ Browser-only; no schema change.
 - **Hover highlight** — the hex under the cursor gets a subtle outline (skipped
   on the selected cell); only re-renders when the hovered hex changes.
 - **Readout** (bottom-left, shown only while hovering) — the hovered hex's
-  `(q, r)` + its name/terrain (or "empty"). The world scale `⬡ N mi` sits in its
-  own **top-right** slot so the changing readout can't shift it.
+  `(q, r)` + its name/terrain (or "empty").
+- **Scale bar** (top-left) — a zoom-aware graphic scale marking a **day's march**
+  at the **B/X / OSE travel tiers** (12 / 18 / 24 mi): solid 0–12, hollow to 18
+  and 24. Redrawn when the zoom changes (`map.onView` / `pixelsPerMile()`).
+  **Hovering it shows the travel rules** — miles/day by encumbrance (with the
+  distance in *this world's* hexes), terrain modifiers, and forced march.
 - **Screen changes dismiss the ring** — opening/closing the Dungeon View or
   switching worlds calls `closeRadial()`, so a menu can't linger over a new screen.
 

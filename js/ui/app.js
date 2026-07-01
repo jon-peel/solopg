@@ -50,6 +50,7 @@ import {
   setHookFocus,
   zoomStep,
   recenter,
+  pixelsPerMile,
 } from "./map.js";
 import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
@@ -228,13 +229,55 @@ function onHover(cell) {
   box.hidden = false;
 }
 
-// Show the empty-state prompt until the world has a hex; keep the scale label
-// (top-right, fixed) current.
+// Show the empty-state prompt until the world has a hex; keep the scale bar +
+// travel tip current.
 function refreshMapChrome() {
   const empty = $("map-empty");
   if (empty) empty.hidden = !current || placedHexes(current).length > 0;
   const scale = $("map-scale");
-  if (scale) scale.textContent = current ? `⬡ ${current.hexScale} mi` : "";
+  if (scale) scale.hidden = !current;
+  const tip = $("travel-tip");
+  if (tip && current) tip.innerHTML = travelTipHTML(current.hexScale);
+  if (current) drawScaleBar(pixelsPerMile());
+}
+
+// Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
+// (the B/X / OSE travel tiers), solid 0–12 then hollow to 18 and 24.
+function drawScaleBar(ppm) {
+  const host = $("map-scale");
+  if (!host || !current) return;
+  const segs = [[12, "solid"], [6, "hollow"], [6, "hollow"]];
+  const marks = [0, 12, 18, 24];
+  const w = ppm * 24;
+  const bar = segs
+    .map(([mi, cls]) => `<div class="scale-seg ${cls}" style="width:${ppm * mi}px"></div>`)
+    .join("");
+  const ticks = marks.map((m) => `<span style="left:${ppm * m}px">${m}</span>`).join("");
+  host.innerHTML =
+    `<div class="scale-bar" style="width:${w}px">${bar}</div>` +
+    `<div class="scale-ticks" style="width:${w}px">${ticks}</div>` +
+    `<div class="scale-cap">miles — a day's march</div>`;
+}
+
+// Travel-rules popover content, with per-tier distance in this world's hexes.
+function travelTipHTML(milesPerHex) {
+  const hx = (mi) => Math.round(mi / milesPerHex);
+  const row = (label, mi) => {
+    const h = hx(mi);
+    return `<tr><td>${label}</td><td>${mi} mi</td><td>${h} hex${h === 1 ? "" : "es"}</td></tr>`;
+  };
+  return (
+    `<strong>Overland travel — B/X &amp; OSE</strong>` +
+    `<table>${row("Unencumbered", 24)}${row("Lightly loaded", 18)}` +
+    `${row("Encumbered", 12)}${row("Heavily loaded", 6)}</table>` +
+    `<div class="tt-terrain">Terrain: road ×1½ · hills/forest/desert ×⅔ · mountains/jungle/swamp ×½</div>` +
+    `<div class="tt-terrain">Forced march +½ (then rest a day)</div>`
+  );
+}
+
+function toggleTravelTip(show) {
+  const tip = $("travel-tip");
+  if (tip) tip.hidden = !show;
 }
 
 function toggleHelp(force) {
@@ -1339,6 +1382,8 @@ function wire() {
   $("btn-home").addEventListener("click", () => recenter());
   $("btn-help").addEventListener("click", () => toggleHelp());
   $("btn-help-close").addEventListener("click", () => toggleHelp(false));
+  $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
+  $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
   $("help-overlay").addEventListener("click", (e) => {
     if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
   });
@@ -1356,7 +1401,7 @@ function onToggleIcons() {
 
 async function init() {
   wire();
-  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu, onHover });
+  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu, onHover, onView: drawScaleBar });
   attachDungeon($("dungeon-canvas"), { onRoomClick, onRoomContextMenu: onRoomContextMenu });
   // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {
