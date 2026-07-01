@@ -31,10 +31,9 @@ const submenu = (id, glyph, label, { enabled = true, reason } = {}, children = [
 
 // Terrain submenu: Random (anchored nearest the cursor) + each terrain.
 function terrainChildren(terrains) {
-  return [
-    leaf("generate", "🎲", "Random", { anchor: true }),
-    ...terrains.map((t) => leaf("placeTerrain", TERRAIN_GLYPH[t] || "▮", t, { value: t })),
-  ];
+  // No "Random" leaf here — Generate (its own slot) already covers random
+  // single-hex generation, so Terrain/Place is just the explicit-pick list.
+  return terrains.map((t) => leaf("placeTerrain", TERRAIN_GLYPH[t] || "▮", t, { value: t }));
 }
 
 const shorten = (s, n = 16) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s);

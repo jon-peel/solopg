@@ -102,11 +102,16 @@ test("Hook submenu always present; gossip gates on a settlement", () => {
   assert.equal(town.children.find((c) => c.id === "genHook").enabled, true);
 });
 
-test("Terrain and POI submenus anchor their Random child for nearest-cursor placement", () => {
+test("Terrain submenu is the explicit-pick list only — no Random (Generate already covers that)", () => {
   const m = buildRadialModel(base({ placed: true, terrain: "Forest" }));
-  const terrainRandom = byId(m, "terrain").children.find((c) => c.anchor);
-  assert.equal(terrainRandom.id, "generate");
-  assert.equal(byId(m, "terrain").children.length, 1 + TERRAINS.length);
+  const terrainChildren = byId(m, "terrain").children;
+  assert.equal(terrainChildren.length, TERRAINS.length);
+  assert.ok(!terrainChildren.some((c) => c.anchor), "Terrain should have no anchored Random child");
+  assert.ok(terrainChildren.every((c) => c.id === "placeTerrain"));
+});
+
+test("POI submenu anchors its Random child for nearest-cursor placement", () => {
+  const m = buildRadialModel(base({ placed: true, terrain: "Forest" }));
   const poiRandom = byId(m, "poi").children.find((c) => c.anchor);
   assert.equal(poiRandom.id, "addRandomPoi");
 });
