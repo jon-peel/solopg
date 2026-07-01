@@ -258,7 +258,7 @@ function drawScaleBar(ppm) {
   host.innerHTML =
     `<div class="scale-bar" style="width:${w}px">${bar}</div>` +
     `<div class="scale-ticks" style="width:${w}px">${ticks}</div>` +
-    `<div class="scale-cap">miles — a day's march</div>`;
+    `<div class="scale-cap">miles</div>`;
 }
 
 // Travel-rules popover content, with per-tier distance in this world's hexes.
