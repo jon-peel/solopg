@@ -11,14 +11,13 @@ const base = (over = {}) => ({
   hasSettlement: false,
   allowedSizes: [],
   canGossip: false,
-  emptyNeighbors: 0,
   poiTypes: POI_TYPES,
   terrains: TERRAINS,
   ...over,
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "neighbors", "regenerate", "deleteHex", "generate"];
+const SLOTS = ["terrain", "poi", "settlement", "hook", "area", "regenerate", "deleteHex", "generate"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -32,27 +31,47 @@ test("empty cell: Generate + Terrain + Hook enabled; build actions disabled with
   assert.equal(byId(m, "generate").enabled, true);
   assert.equal(byId(m, "terrain").enabled, true);
   assert.equal(byId(m, "hook").enabled, true);
-  for (const id of ["poi", "settlement", "neighbors", "regenerate", "deleteHex"]) {
+  for (const id of ["poi", "settlement", "area", "regenerate", "deleteHex"]) {
     assert.equal(byId(m, id).enabled, false, `${id} should be disabled on an empty cell`);
     assert.ok(byId(m, id).reason, `${id} should carry a reason`);
   }
 });
 
 test("placed cell: build actions enabled; Generate disabled (use Regenerate)", () => {
-  const m = buildRadialModel(base({ placed: true, terrain: "Forest", allowedSizes: ["Thorp"], emptyNeighbors: 2 }));
-  for (const id of ["poi", "settlement", "neighbors", "regenerate", "deleteHex"]) {
+  const m = buildRadialModel(base({ placed: true, terrain: "Forest", allowedSizes: ["Thorp"] }));
+  for (const id of ["poi", "settlement", "area", "regenerate", "deleteHex"]) {
     assert.equal(byId(m, id).enabled, true, `${id} should be enabled on a placed cell`);
   }
   assert.equal(byId(m, "generate").enabled, false);
   assert.ok(byId(m, "generate").reason);
 });
 
-test("Neighbours disabled (with reason) when the hex is fully surrounded", () => {
-  const surrounded = byId(buildRadialModel(base({ placed: true, terrain: "Plains", emptyNeighbors: 0 })), "neighbors");
-  assert.equal(surrounded.enabled, false);
-  assert.match(surrounded.reason, /already filled/i);
-  const open = byId(buildRadialModel(base({ placed: true, terrain: "Plains", emptyNeighbors: 1 })), "neighbors");
-  assert.equal(open.enabled, true);
+test("Area disabled (with reason) on an unplaced cell; enabled once placed", () => {
+  const empty = byId(buildRadialModel(base()), "area");
+  assert.equal(empty.enabled, false);
+  assert.match(empty.reason, /place this hex/i);
+  const placed = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "area");
+  assert.equal(placed.enabled, true);
+});
+
+test("Area submenu offers Small/Medium/Large, each nesting Fill empty / Regenerate all", () => {
+  const area = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "area");
+  assert.equal(area.children.length, 3);
+  const [small, medium, large] = area.children;
+  assert.equal(small.label, "Small");
+  assert.equal(medium.label, "Medium");
+  assert.equal(large.label, "Large");
+  for (const size of area.children) {
+    assert.equal(size.kind, "submenu");
+    assert.equal(size.children.length, 2);
+    const [fill, regen] = size.children;
+    assert.equal(fill.id, "genArea");
+    assert.equal(fill.value.mode, "empty");
+    assert.equal(regen.id, "genArea");
+    assert.equal(regen.value.mode, "overwrite");
+    assert.equal(regen.danger, true);
+  }
+  assert.deepEqual(area.children.map((c) => c.children[0].value.radius), [1, 2, 3]);
 });
 
 test("Settlement disabled where the terrain allows none (e.g. open water)", () => {

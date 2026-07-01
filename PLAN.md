@@ -33,12 +33,16 @@ is done (see [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md)) �
 **fixed-slot ring** of its actions (Terrain / POI / Settlement / Hook / Neighbours / Regenerate / Delete /
 Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, submenus open as a **second
 outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
-(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Next: more Phase 7** (search, undo,
-print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables
-were dropped) **and Phase 3R — world coherence** ([phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md):
-terrain v2, fresh/salt water & coastlines, rivers, roads, richer settlements).
+(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Phase 3R — world coherence started:
+3R.1 "Generate Area" radial tool is done** (see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)) —
+the right-click **"Neighbours" slot became "Area"**, a submenu of **Small/Medium/Large** (hex-radius
+disc, radius 1/2/3) nesting **Fill empty / Regenerate all**; new `hexRing`/`hexDisc` geometry in
+`js/core/hexgeo.js`, v1 rides current per-hex generation unchanged — it's the testing aid for 3R.2+
+(terrain v2, fresh/salt water & coastlines, rivers, roads, richer settlements). **Next: 3R.2** (audit +
+research + world-model decision) **or more Phase 7** (search, undo, print/GM view, themes — see
+[phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7.**
-**Schema v7. 206 `node --test` passing.** Work merges to **`main`** via PR.
+**Schema v7 (unchanged by 3R.1). 214 `node --test` passing.** Work merges to **`main`** via PR.
 
 ---
 
@@ -99,7 +103,7 @@ package.json                    dev-only: "type":"module", scripts: test / serve
 /js
   /core   rng.js (mulberry32, hashString, makeRng, subRng, randInt, pick)
           dice.js (rollDice)   table.js (validateTable, rollTable)   loader.js (loadTables, makeResolver)
-          hexgeo.js (axial<->pixel, cube rounding, neighbors, axialDistance, axialLine, axialKey/parseKey)
+          hexgeo.js (axial<->pixel, cube rounding, neighbors, hexRing/hexDisc, axialDistance, axialLine, axialKey/parseKey)
   /gen    hex.js (generateHex, weightedTerrainTable)   poi.js (generatePoi)
           terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
           terrain-affinity.js (adjacency)
@@ -192,7 +196,7 @@ graph TD
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
-| **3R — World coherence** (terrain/water/settlements/roads/rivers) | 📋 **planning** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅**; next 3R.2 (audit + research + world-model decision). |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a

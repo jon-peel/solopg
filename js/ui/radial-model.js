@@ -11,7 +11,7 @@
 // its own terrain/POI art — these only label the menu.
 export const ACTION_GLYPH = {
   terrain: "🗺️", poi: "⭐", settlement: "🏠", hook: "🎣",
-  neighbors: "🧭", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
+  area: "🧭", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
 };
 export const TERRAIN_GLYPH = {
   Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️",
@@ -76,6 +76,26 @@ function hookChildren(canGossip) {
   ];
 }
 
+// Area submenu (3R.1): a nested submenu per size, each offering Fill empty /
+// Regenerate all against the ring(s) around the target (never the center hex
+// itself — "Regenerate" already covers that). `value` carries {radius, mode}
+// straight through to app.js (radial-menu.js passes it by reference).
+const AREA_SIZES = [
+  { id: "small", label: "Small", radius: 1 },
+  { id: "medium", label: "Medium", radius: 2 },
+  { id: "large", label: "Large", radius: 3 },
+];
+
+function areaChildren() {
+  return AREA_SIZES.map(({ id, label, radius }) => {
+    const count = 3 * radius * (radius + 1); // ring cells only, center excluded
+    return submenu(id, ACTION_GLYPH.area, label, { title: `${label} — ${count} hexes` }, [
+      leaf("genArea", "🟩", "Fill empty", { value: { radius, mode: "empty" } }),
+      leaf("genArea", "🟥", "Regenerate all", { value: { radius, mode: "overwrite" }, danger: true }),
+    ]);
+  });
+}
+
 /**
  * Build the fixed-slot radial model for the cell under the cursor.
  * @param {object} state
@@ -84,7 +104,6 @@ function hookChildren(canGossip) {
  *   hasSettlement  {boolean}
  *   allowedSizes   {string[]} settlement sizes this terrain permits
  *   canGossip      {boolean} a settlement is present (town gossip)
- *   emptyNeighbors {number} count of not-yet-generated neighbours
  *   poiTypes       {string[]}
  *   terrains       {string[]}
  *   pois           {{id:string,name:string}[]} existing POIs on this hex (for Remove)
@@ -94,7 +113,7 @@ function hookChildren(canGossip) {
 export function buildRadialModel(state) {
   const {
     placed = false, terrain = null, hasSettlement = false,
-    allowedSizes = [], canGossip = false, emptyNeighbors = 0,
+    allowedSizes = [], canGossip = false,
     poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
   } = state || {};
 
@@ -108,19 +127,17 @@ export function buildRadialModel(state) {
       ? {}
       : { enabled: false, reason: `No settlement can sit on ${terrain}` };
 
-  // Neighbours: needs a placed hex with at least one empty neighbour.
-  const neighborsState = !placed
-    ? { enabled: false, reason: "Place this hex first" }
-    : emptyNeighbors > 0
-      ? {}
-      : { enabled: false, reason: "All neighbours already filled" };
+  // Area (3R.1): needs a placed hex, same bar as Regenerate/Delete — per-size
+  // emptiness isn't checked here (a size with nothing empty just reports "0
+  // hexes" when picked, rather than gating the menu on it).
+  const areaState = placed ? {} : { enabled: false, reason: "Place this hex first" };
 
   return [
     submenu("terrain", ACTION_GLYPH.terrain, placed ? "Terrain" : "Place", {}, terrainChildren(terrains)),
     submenu("poi", ACTION_GLYPH.poi, "POI", placed ? {} : needHex, poiChildren(poiTypes, pois, dungeonSizes)),
     submenu("settlement", ACTION_GLYPH.settlement, "Settlement", settlementState, settlementChildren(allowedSizes, hasSettlement)),
     submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
-    leaf("neighbors", ACTION_GLYPH.neighbors, "Neighbours", neighborsState),
+    submenu("area", ACTION_GLYPH.area, "Area", areaState, areaChildren()),
     leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
     leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
     leaf("generate", ACTION_GLYPH.generate, "Generate", placed ? { enabled: false, reason: "Already here — use Regenerate" } : {}),

@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, neighbors, axialLine } from "../core/hexgeo.js";
+import { axialKey, neighbors, axialLine, hexDisc } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -1275,17 +1275,12 @@ function onContextMenu({ q, r, clientX, clientY }) {
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
   const hasSettlement = !!(placed && hex.settlement && hex.settlement.present);
-  let emptyNeighbors = 0;
-  if (placed) {
-    for (const n of neighbors(q, r)) if (!hasHexAt(current, n.q, n.r)) emptyNeighbors++;
-  }
   const model = buildRadialModel({
     placed,
     terrain: placed ? hex.terrain : null,
     hasSettlement,
     allowedSizes: placed ? allowedSizes(hex.terrain) : [],
     canGossip: hasSettlement,
-    emptyNeighbors,
     poiTypes: Object.keys(POI_GLYPHS),
     terrains: Object.keys(TERRAIN_COLORS),
     pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
@@ -1308,7 +1303,7 @@ function radialDispatch(id, value) {
     case "addRandomSettlement": return onAddRandomSettlement();
     case "addSettlement": return onAddSettlement(value);
     case "removeSettlement": return onRemoveSettlement();
-    case "neighbors": return onGenerateNeighbors();
+    case "genArea": return onGenerateArea(value);
     case "regenerate": return onRegenerate();
     case "deleteHex": return onDeleteHex();
     case "genHook": return onGenerateHook();
@@ -1352,21 +1347,31 @@ async function onPlaceTerrain(terrain) {
   }
 }
 
-async function onGenerateNeighbors() {
+// Batch-generate the ring(s) of hexes around the selected hex (3R.1 "Area"
+// tool) — the center hex itself is never touched here ("Regenerate" already
+// covers re-rolling just that one). mode:"empty" only fills gaps (the old
+// per-radius-1 "Neighbours" behaviour, generalized to any radius); mode:
+// "overwrite" re-rolls every cell in range, bumping `gen` on already-placed
+// hexes so the re-roll isn't a determinism no-op (same trick as onRegenerate).
+// One persistAndRefresh() at the end regardless of area size.
+async function onGenerateArea({ radius, mode }) {
   if (!current || !selected) return;
   try {
     const tables = await loadTables(HEX_TABLE_IDS);
     let added = 0;
-    for (const { q, r } of neighbors(selected.q, selected.r)) {
-      if (hasHexAt(current, q, r)) continue;
-      addHex(current, buildRandomHex(tables, q, r, 0));
+    for (const { q, r } of hexDisc(selected.q, selected.r, radius).slice(1)) {
+      const existing = getHex(current, q, r);
+      const isPlaced = !!(existing && existing.placed);
+      if (mode === "empty" && isPlaced) continue;
+      const gen = mode === "overwrite" && isPlaced ? (existing.gen || 0) + 1 : 0;
+      addHex(current, buildRandomHex(tables, q, r, gen));
       added++;
     }
-    if (!added) return logLine("All neighbors already filled.");
+    if (!added) return logLine("No empty hexes in range.");
     await persistAndRefresh();
-    logLine(`Generated ${added} neighbor hex(es).`);
+    logLine(`Generated ${added} hex(es).`);
   } catch (err) {
-    logLine(`Generate error: ${err.message}`);
+    logLine(`Generate area error: ${err.message}`);
   }
 }
 

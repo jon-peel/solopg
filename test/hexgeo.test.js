@@ -9,6 +9,9 @@ import {
   roundAxial,
   hexCorners,
   neighbors,
+  axialDistance,
+  hexRing,
+  hexDisc,
 } from "../js/core/hexgeo.js";
 
 const S = 28;
@@ -61,6 +64,54 @@ test("neighbors returns the six directions applied to a cell", () => {
   assert.deepEqual(n[0], { q: 3, r: -1 });
   // all distinct
   assert.equal(new Set(n.map((c) => axialKey(c.q, c.r))).size, 6);
+});
+
+test("hexRing(q,r,0) returns just the center", () => {
+  assert.deepEqual(hexRing(2, -3, 0), [{ q: 2, r: -3 }]);
+});
+
+test("hexRing radius 1 matches neighbors() as a set", () => {
+  const ring = hexRing(0, 0, 1);
+  assert.equal(ring.length, 6);
+  const ringSet = new Set(ring.map((c) => axialKey(c.q, c.r)));
+  const nbrSet = new Set(neighbors(0, 0).map((c) => axialKey(c.q, c.r)));
+  assert.deepEqual(ringSet, nbrSet);
+});
+
+test("hexRing: correct count (6*radius), no duplicates, all at exact distance", () => {
+  for (const radius of [1, 2, 3, 4]) {
+    const ring = hexRing(1, -2, radius);
+    assert.equal(ring.length, 6 * radius);
+    assert.equal(new Set(ring.map((c) => axialKey(c.q, c.r))).size, 6 * radius);
+    for (const c of ring) assert.equal(axialDistance(1, -2, c.q, c.r), radius);
+  }
+});
+
+test("hexRing is deterministic — same inputs, same order, regardless of call site", () => {
+  assert.deepEqual(hexRing(5, 5, 2), hexRing(5, 5, 2));
+});
+
+test("hexDisc: correct total count (1 + 3n(n+1)), no duplicates, includes center", () => {
+  for (const radius of [0, 1, 2, 3]) {
+    const disc = hexDisc(0, 0, radius);
+    assert.equal(disc.length, 1 + 3 * radius * (radius + 1));
+    assert.equal(new Set(disc.map((c) => axialKey(c.q, c.r))).size, disc.length);
+    assert.ok(disc.some((c) => c.q === 0 && c.r === 0));
+    for (const c of disc) assert.ok(axialDistance(0, 0, c.q, c.r) <= radius);
+  }
+});
+
+test("hexDisc radius matches doc sizing: Small=7, Medium=19, Large=37", () => {
+  assert.equal(hexDisc(0, 0, 1).length, 7);
+  assert.equal(hexDisc(0, 0, 2).length, 19);
+  assert.equal(hexDisc(0, 0, 3).length, 37);
+});
+
+test("hexDisc order is center-first, then ring-by-ring outward", () => {
+  const disc = hexDisc(0, 0, 2);
+  assert.deepEqual(disc[0], { q: 0, r: 0 });
+  for (let i = 1; i <= 6; i++) assert.equal(axialDistance(0, 0, disc[i].q, disc[i].r), 1);
+  for (let i = 7; i <= 18; i++) assert.equal(axialDistance(0, 0, disc[i].q, disc[i].r), 2);
 });
 
 test("axialKey/parseKey round-trip incl. negatives", () => {
