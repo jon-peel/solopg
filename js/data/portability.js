@@ -81,6 +81,10 @@ export function importWorld(json) {
  *   `continent` (3R.4 revision — real coastlines). No transform — old hexes'
  *   `basin` field is simply unused going forward; `Lake`/`Sea` values are
  *   unchanged — just stamp the version.
+ * - v10 -> v11: hexes gained a `riverEdges` array (Phase 3R.5). Additive and
+ *   there's no context here to retroactively trace rivers through old hexes,
+ *   so older hexes simply lack it (rendered as no river) until regenerated —
+ *   just stamp the version.
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -143,6 +147,11 @@ export function migrateWorld(data) {
     // `basin` -> `continent` rename/rework; old hexes simply keep whatever
     // `basin` value they had (unused going forward) — just stamp the version.
     data.schemaVersion = 10;
+  }
+  if (data.schemaVersion < 11) {
+    // hex `riverEdges` is additive (absent on old hexes, treated as no
+    // river) — just stamp the version.
+    data.schemaVersion = 11;
   }
   return data;
 }

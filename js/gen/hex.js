@@ -9,6 +9,7 @@ import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { subRng } from "../core/rng.js";
 import { biomeAt } from "./biome.js";
+import { riverStateAt } from "./river.js";
 import { profileFor, cappedSizeTable } from "./terrain-profile.js";
 import { generatePoi } from "./poi.js";
 
@@ -18,10 +19,14 @@ import { generatePoi } from "./poi.js";
  *   poi-types, poi-occupant, creatures, occupiers (and terrain sub-tables).
  * @param {() => number} rng a single stream consumed in a fixed order
  * @param {{ key?: string, coords?: object|null, placed?: boolean,
- *   terrain?: string, seed?: number|string, gen?: number, seaNeighborCount?: number }} [opts]
+ *   terrain?: string, seed?: number|string, gen?: number, seaNeighborCount?: number,
+ *   incomingRiverEdges?: number[] }} [opts]
  *   seed+gen+coords seed per-POI sub-streams (order-stable). seaNeighborCount
  *   feeds sea-coastline contagion (js/gen/biome.js) — how many of this hex's
  *   already-placed neighbours are Sea; omit/0 for the pure position-based roll.
+ *   incomingRiverEdges feeds river propagation (js/gen/river.js) — which
+ *   NEIGHBOR_DIRS sides already carry a river flowing INTO this hex from an
+ *   already-placed neighbour; omit/[] for a hex with no upstream river yet.
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
@@ -35,7 +40,22 @@ export function generateHex(tables, rng, opts = {}) {
   const coords = opts.coords || { q: 0, r: 0 };
   const { elevation, moisture, continent, terrain: classified } =
     biomeAt(opts.seed ?? 0, coords.q, coords.r, opts.seaNeighborCount ?? 0);
-  const terrain = opts.terrain || classified;
+  let terrain = opts.terrain || classified;
+
+  // 1b. Rivers (Phase 3R.5): propagate forward from already-placed upstream
+  // neighbours (see module comment in river.js for why this is incremental
+  // rather than analytically traced from scratch). A landlocked depression
+  // reaching no lower neighbour becomes a Lake — the river's new sink; no
+  // carving logic in v1. Skipped when terrain was manually forced (a GM's
+  // explicit placement shouldn't be silently overridden to Lake).
+  let riverEdges = [];
+  if (!opts.terrain) {
+    const riverState = riverStateAt(
+      opts.seed ?? 0, coords.q, coords.r, terrain, elevation, opts.incomingRiverEdges ?? [],
+    );
+    riverEdges = riverState.riverEdges;
+    if (riverState.forceLake) terrain = "Lake";
+  }
 
   // Nested terrain feature (e.g. Swamp's swamp-feature roll) stays
   // data-driven via data/terrain.json's entries[].roll — resolved directly
@@ -89,6 +109,7 @@ export function generateHex(tables, rng, opts = {}) {
     elevation, // [0,1) — Phase 3R.3; feeds sea level and river sourcing (3R.5)
     moisture, // [0,1) — Phase 3R.3
     continent, // [0,1) — Phase 3R.4; the land/ocean gate behind the Lake-vs-Sea split (not flood-fill)
+    riverEdges, // NEIGHBOR_DIRS indices (0-5) — Phase 3R.5; which hex-sides carry a river segment
     settlement,
     pois, // typed POI[] (Phase 3); empty array when none
     explored: true,

@@ -409,23 +409,74 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   `generateArea` test helper, since contagion is the one place order now matters).
   245 `node --test test/*.test.js` passing.
 
-### 3R.5 — Rivers
+### 3R.5 — Rivers ✅ done
 - **Model (your rules, encoded):** rivers **start in mountains** and flow **downhill**
   to a **lake or sea**; may flow **lake → lake → sea**; **never uphill** (never
   lake→mountain, never range→range); may pass **through their origin range** but route
   **around other ranges**.
-- **My proposed logic (for your review):**
-  - Elevation-guided **steepest-descent** path from a mountain source to the nearest
-    water sink; **guarantee a sink** (carve onward, or form a lake in a landlocked
-    basin — the classic "fill depressions" step).
-  - **Tributaries merge**; track **stream order** (Strahler-ish) so width grows
-    downstream → feeds settlement-size boosts and render thickness.
-  - Avoid near-duplicate parallel rivers; cap density per region.
-  - Represent as **hex-to-hex flow links / hex-side edges** so rivers render as lines
-    and roads/settlements can query "is this hex on a river / at a river mouth?".
-  - Deterministic; node-tested (source is mountain, monotonic descent, terminates at a
-    sink, no uphill, no range→range).
-- Runs **before settlement sizing** so cities can key off rivers/estuaries.
+- **The architectural fork:** every 3R.3/3R.4 mechanism classifies a hex from
+  `(seed, q, r)` alone. A river is a **path**, not a point — spanning dozens of hexes
+  from a distant mountain source to a distant sink, in a world that's infinite and
+  generated incrementally (no fixed edge to flood-fill from, same constraint 3R.4 hit).
+  The first design measured a **fully analytical per-hex query** (scan every candidate
+  source within a search radius, trace each from scratch, check if it crosses the
+  queried hex) at **~28ms/hex** in the scratchpad — a 1951-hex "Generate Area" fill
+  would take close to a minute. Not viable for an interactive tool.
+- **Shipped design: reuse the sea-contagion propagation pattern instead of analytical
+  tracing.** A hex only needs two cheap, local facts, both O(1)/O(6):
+  1. Is this hex itself a river **source**? (`isRiverSource` — `classifyLand`-Mountains,
+     a local elevation peak among its 6 neighbours, and a seeded density-chance roll).
+  2. Do any of its already-placed neighbours have a river edge pointing **into** this
+     hex? (`incomingRiverEdges`, `js/ui/app.js` — mirrors `seaNeighborCount` exactly: a
+     neighbour's edge in direction *i* points at us from that neighbour's own
+     `opposite(i) = (i+3)%6` side).
+  Given those, the hex decides its own outgoing edge via `downhillDirection` (steepest
+  descent among its 6 neighbours, sampled with **fewer FBM octaves (`FLOW_OCTAVES=1`)**
+  than terrain classification's elevation — a smoothed field so descent tracks the real
+  landform slope instead of getting stuck in fine noise texture). The river then
+  **grows forward** as hexes are generated, one hex at a time — not recomputed from a
+  stored path. This is a **second deliberate exception** to position-purity (after sea
+  contagion), for a **different reason**: raw performance of an otherwise-correct
+  analytical model, not responsiveness to a manual placement.
+  - Measured: **0.037ms/hex** for a 1951-hex area fill (real `generateHex` + river
+    wiring) — about **750× faster** than the rejected brute-force design.
+- **Landlocked depressions → forced Lake.** If `downhillDirection` finds no neighbour
+  lower than here (and the hex carries an incoming edge, so it's mid-river, not just
+  passing through untouched), the hex's terrain is overridden to `"Lake"` — the river's
+  new sink. No carving/routing logic in v1. Skipped entirely for manually-forced
+  terrain (a GM's explicit placement is never silently overridden), matching how sea
+  contagion also only affects the auto-classified path.
+- **Density: rare and dramatic, confirmed via scratchpad numeric verification before
+  writing real code** (matching every prior sub-phase's discipline) — `isRiverSource`'s
+  seeded chance (`RIVER_SOURCE_CHANCE = 0.06`) against real Mountains-peak rates (~1-1.5%
+  of all hexes) yields roughly **1 river source per 1200-2000 hexes**: finding one is
+  meant to feel like a landmark, not routine terrain. Fully analytical (order-ignoring)
+  path tracing in the scratchpad showed real rivers run **5-12 hexes** before reaching a
+  Lake/Sea or a depression; the incremental, generation-order-dependent propagation
+  means how much of that length is actually *visible* in a single fill depends on which
+  direction the fill grows relative to the river's downhill direction — an accepted,
+  documented trade-off of the same shape as sea contagion's order-dependence, not a bug.
+- **Data shape:** `hex.riverEdges: number[]` — `NEIGHBOR_DIRS` indices (0-5) marking
+  which hex-sides carry a river segment. No stream-order/tributary-width field yet
+  (deferred; would fall out of the same incremental-propagation data if needed later).
+- **Rendering: deferred to 3R.8**, matching the doc's original schedule — this pass
+  ships `hex.riverEdges` + tests only; no map-canvas line art yet.
+- Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
+  until regenerated).
+- **Tests:** `test/river.test.js` (13 tests — `isRiverSource` gated on Mountains and
+  rare-not-universal across many seeds; `downhillDirection` always a valid index or -1,
+  and when valid the chosen neighbour is genuinely lower, verified both ways by scanning
+  real coordinates rather than hardcoded literals; `riverStateAt`'s full decision table —
+  no-op, terminate-at-water, land-with-real-downhill, forced-Lake depression, and a
+  qualifying source, all found by scanning rather than guessed coordinates).
+  `test/terrain-coherence.test.js` gained 3 integration tests mirroring the sea-contagion
+  pattern (deliberately not the shared order-independent `generateArea` helper, since
+  river propagation is history-dependent by design): rivers appear across a large area,
+  an edge toward an already-placed *later-generated* neighbour always connects to that
+  neighbour's matching incoming edge (the core propagation invariant), and every
+  non-sink river hex has an outgoing edge toward its own real downhill direction.
+  262 `node --test test/*.test.js` passing (stable across repeated runs).
+- Runs **before settlement sizing** so cities can key off rivers/estuaries (3R.6).
 
 ### 3R.6 — Settlements v2
 - **Document current types** (Thorp/Hamlet/Village/Town/City) — done above.
@@ -523,6 +574,13 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   (Mountains/Hills/Forest/Plains/Desert/Swamp/Lake, and Sea itself with zero Sea
   neighbours) stays pure-position as before. Watch this doesn't creep into other
   terrain types without the same explicit trade-off being made consciously.
+  **Reopened again, for a second reason, in 3R.5's river propagation**: not
+  responsiveness to a manual placement this time, but the ~28ms/hex cost of a fully
+  analytical per-hex river query (measured too slow for interactive area generation) —
+  `hex.riverEdges` grows forward from already-placed upstream neighbours instead, the
+  same propagation shape as sea contagion. Two deliberate exceptions now exist, each
+  independently justified and narrowly scoped; still watch for a third creeping in
+  without the same explicit trade-off being made consciously.
 - **Migration churn** — several schema bumps; keep every step additive and old-world-safe.
 - **Perceptual vs real** — 3R.2's baseline decides how much terrain rework is truly
   warranted before we over-engineer.

@@ -95,6 +95,23 @@ function axialToNoiseXY(q, r) {
 }
 
 /**
+ * Sample raw elevation at any coordinate — exported for js/gen/river.js,
+ * which needs to peek at NEIGHBOURING hexes' elevation (placed or not; it's
+ * a pure function of position, same as everywhere else in this module).
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @param {number} [octaves] override the default octave count — river.js
+ *   uses a lower count for a smoothed "flow direction" signal, since the
+ *   full-detail field has enough small texture to get flow stuck on noise.
+ * @returns {number} in [0,1)
+ */
+export function elevationAt(seed, q, r, octaves = NOISE_OPTS.octaves) {
+  const { x, y } = axialToNoiseXY(q, r);
+  return fbm2D(seed, "elevation", x, y, { ...NOISE_OPTS, octaves });
+}
+
+/**
  * Classify LAND terrain from elevation/moisture (Whittaker-style threshold
  * bins, percentile-calibrated — see module comment). Pure, no rng. Never
  * returns Sea — the low-elevation band is always Lake here; Sea is decided
@@ -135,7 +152,7 @@ export function biomeAt(seed, q, r, seaNeighborCount = 0) {
   // "always compute regardless of what it's used for" precedent, so the
   // field stays available uniformly (e.g. a manually-placed Sea hex still
   // carries real local elevation/moisture for later sub-phases).
-  const elevation = fbm2D(seed, "elevation", x, y, NOISE_OPTS);
+  const elevation = elevationAt(seed, q, r);
   const moisture = fbm2D(seed, "moisture", x, y, NOISE_OPTS);
   if (rollSeaContagion(seed, q, r, seaNeighborCount)) {
     return { elevation, moisture, continent: null, terrain: "Sea" };

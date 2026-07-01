@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createWorld, addHex, placedHexes, getHex } from "../js/world/world.js";
 import { generateHex } from "../js/gen/hex.js";
+import { downhillDirection } from "../js/gen/river.js";
 import { subRng } from "../js/core/rng.js";
 import { axialKey, neighbors, hexDisc } from "../js/core/hexgeo.js";
 
@@ -205,6 +206,94 @@ test("sea contagion: a manually-placed Sea hex measurably extends the coastline 
   const meanSeaSteps = totalSeaSteps / walks;
   assert.ok(meanSeaSteps > 1.5, `expected the coastline to extend on average > 1.5 steps, got ${meanSeaSteps.toFixed(2)}`);
   assert.ok(anyLandBreakthrough, "expected at least one walk where land eventually broke through");
+});
+
+// Rivers (3R.5): propagated incrementally as hexes are generated, mirroring
+// exactly how app.js's buildRandomHex computes incomingRiverEdges from
+// already-placed neighbours' riverEdges. Deliberately NOT via the shared
+// generateArea() helper above (which always passes incomingRiverEdges=[]) —
+// river propagation is history-dependent by design, same rationale as sea
+// contagion above.
+function incomingRiverEdgesIn(world, q, r) {
+  const dirs = [];
+  neighbors(q, r).forEach((n, i) => {
+    const nh = getHex(world, n.q, n.r);
+    if (nh && nh.placed && nh.riverEdges && nh.riverEdges.includes((i + 3) % 6)) {
+      dirs.push(i);
+    }
+  });
+  return dirs;
+}
+
+function generateAreaWithRivers(seed, radius, coordsInOrder) {
+  const tables = loadTables();
+  const world = createWorld({ name: "river-test", seed });
+  const genIndex = new Map();
+  coordsInOrder.forEach((c, i) => genIndex.set(axialKey(c.q, c.r), i));
+  for (const { q, r } of coordsInOrder) {
+    const rng = subRng(seed, "hex", q, r, 0);
+    const hex = generateHex(tables, rng, {
+      key: axialKey(q, r), coords: { q, r }, placed: true, seed, gen: 0,
+      incomingRiverEdges: incomingRiverEdgesIn(world, q, r),
+    });
+    hex.gen = 0;
+    addHex(world, hex);
+  }
+  return { world, genIndex };
+}
+
+test("rivers: at least some hexes carry riverEdges across a large generated area", () => {
+  const { world } = generateAreaWithRivers(1, 40, hexDisc(0, 0, 40));
+  const hexes = placedHexes(world);
+  const riverHexCount = hexes.filter((h) => h.riverEdges.length > 0).length;
+  assert.ok(riverHexCount > 0, "expected at least one hex with a river edge in a ~5000-hex sample");
+});
+
+test("rivers: an edge toward an already-placed neighbour always connects to that neighbour's matching incoming edge", () => {
+  // The propagation invariant this whole design rests on: if hex A's edge
+  // points at neighbour B, and B was generated AFTER A (so it could see A's
+  // edge via incomingRiverEdges at its own generation time), B's riverEdges
+  // must include the matching opposite-direction edge. (An edge toward a
+  // neighbour generated BEFORE A is a known, accepted gap — see river.js's
+  // module comment on incremental, order-dependent propagation.)
+  const { world, genIndex } = generateAreaWithRivers(1, 40, hexDisc(0, 0, 40));
+  const hexes = placedHexes(world);
+  let checked = 0;
+  for (const h of hexes) {
+    for (const dir of h.riverEdges) {
+      const n = neighbors(h.coords.q, h.coords.r)[dir];
+      const nh = getHex(world, n.q, n.r);
+      if (!nh) continue;
+      const myIndex = genIndex.get(axialKey(h.coords.q, h.coords.r));
+      const nIndex = genIndex.get(axialKey(n.q, n.r));
+      if (nIndex <= myIndex) continue; // the known, accepted gap
+      checked++;
+      assert.ok(
+        nh.riverEdges.includes((dir + 3) % 6),
+        `neighbour at (${n.q},${n.r}) should carry the matching incoming edge from (${h.coords.q},${h.coords.r})`,
+      );
+    }
+  }
+  assert.ok(checked > 0, "expected at least one edge toward a later-generated neighbour to check");
+});
+
+test("rivers: any river hex that isn't a sink (Lake/Sea) always has an outgoing edge toward its own downhill neighbour", () => {
+  // Every non-sink hex carrying a river must have routed onward — either it
+  // has a real downhill direction included in its edges, or (river.js's
+  // riverStateAt) it would have been forced to Lake instead. Since we only
+  // look at non-Lake/Sea hexes here, downhillDirection must be valid.
+  const { world } = generateAreaWithRivers(2, 40, hexDisc(0, 0, 40));
+  const hexes = placedHexes(world);
+  let checked = 0;
+  for (const h of hexes) {
+    if (h.riverEdges.length === 0) continue;
+    if (h.terrain === "Lake" || h.terrain === "Sea") continue;
+    checked++;
+    const outDir = downhillDirection(2, h.coords.q, h.coords.r);
+    assert.notEqual(outDir, -1, `hex (${h.coords.q},${h.coords.r}) carries a river but has no valid downhill dir and wasn't forced to Lake`);
+    assert.ok(h.riverEdges.includes(outDir), `hex (${h.coords.q},${h.coords.r})'s edges should include its own downhill direction`);
+  }
+  assert.ok(checked > 0, "expected at least one non-sink river hex to check");
 });
 
 test("order-independence: forward vs. reverse fill order give identical per-hex terrain", () => {

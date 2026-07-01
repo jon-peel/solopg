@@ -75,13 +75,24 @@ makes nearby future generation more likely to continue the coastline (`js/gen/bi
 land to randomly break through) — verified end-to-end (forcing Sea then filling a Large area around it
 turned the whole area to Sea in one real run). This is a deliberate, narrowly-scoped exception to
 "terrain is a pure function of `(seed, q, r)`" — Sea near existing content now depends on generation
-history, everything else stays position-pure. **Next: 3R.5** (rivers — mountains to lakes/seas,
-downhill, built on this elevation/continent data) **or more Phase 7** (search, undo, print/GM view,
-themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
+history, everything else stays position-pure. **3R.5 (rivers) is done**: `js/gen/river.js` traces
+mountain-peak sources downhill (steepest descent, smoothed with fewer FBM octaves so it tracks real
+landform slope) to a Lake/Sea sink, or forces a landlocked depression to become a **Lake** (no carving
+in v1). A fully analytical per-hex query (scan candidate sources within a radius, trace each) measured
+**~28ms/hex** in the scratchpad — too slow for interactive area generation — so rivers instead **reuse
+the sea-contagion propagation pattern**: a hex checks only its own local peak/source status (O(1)) and
+whether an already-placed neighbour already has a river edge pointing into it (O(6)), growing
+`hex.riverEdges` forward as hexes are generated rather than recomputing a path from scratch. Measured
+**0.037ms/hex** (~750× faster). This is a **second** deliberate exception to position-purity — for
+raw performance this time, not manual-placement responsiveness. Density tuned for "rare and dramatic"
+(`RIVER_SOURCE_CHANCE=0.06`, ~1 source per 1200–2000 hexes). Rendering deferred to 3R.8 (data + tests
+only this pass). **Next: 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
+Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
+in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
 `elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
-Lake/Sea (v9, reworked in v10).**
-**Schema v10. 245 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+Lake/Sea (v9, reworked in v10); 3R.5 adds `riverEdges` (v11).**
+**Schema v11. 262 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -116,7 +127,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **10**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **11**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **No backward-compatibility burden right now.** Pre-release, with no real worlds worth
@@ -154,8 +165,10 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           noise.js (valueNoise2D, fbm2D — Phase 3R.3 deterministic coordinate-hashed value noise)
   /gen    hex.js (generateHex)   poi.js (generatePoi)
           terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
-          biome.js (biomeAt/classifyLand — Phase 3R.3/3R.4 elevation+moisture -> land terrain, `continent`
-                    coarse noise field gates Sea vs. running the land classifier)
+          biome.js (biomeAt/classifyLand/elevationAt — Phase 3R.3/3R.4 elevation+moisture -> land terrain,
+                    `continent` coarse noise field gates Sea vs. running the land classifier)
+          river.js (isRiverSource/downhillDirection/riverStateAt — Phase 3R.5 mountain-to-sink rivers,
+                    propagated incrementally like sea contagion for performance, not analytically traced)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
@@ -175,7 +188,7 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites, run as `test/*.test.js` (rng, dice, table, world, hexgeo, hex,
-          noise, biome, terrain-coherence, terrain-profile, terrain-art, settlement-art, poi,
+          noise, biome, river, terrain-coherence, terrain-profile, terrain-art, settlement-art, poi,
           migration, dungeon, dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a
           diagnostic script
           (not a suite — `node --test`'s directory-based discovery would otherwise pick up ANY
@@ -200,9 +213,9 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v10)
+## Current data model (as built, schema v11)
 
-- **World:** `{ schemaVersion:10, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
+- **World:** `{ schemaVersion:11, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
 - **Hook** (Phase 6; top-level `world.hooks[]`):
   `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
@@ -211,14 +224,19 @@ graph TD
   `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
-  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, elevation, moisture, continent, settlement,
-  pois:[], explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations — `name` shows
-  as a map label. `elevation`/`moisture` (v8) and `continent` (v9, renamed from `basin` in v10; floats in
-  `[0,1)`) are the Phase 3R.3/3R.4 biome-classifier inputs — pure functions of `(seed, q, r)`, always
-  present regardless of how terrain was chosen. `continent` is a coarse, continent-scale land/ocean
-  **gate** (not flood-fill — this world is infinite/incrementally generated, so there's no map edge to
-  flood-fill from): below a threshold it's always Sea; otherwise the unchanged land classifier runs, and
-  its own low-elevation band means Lake. A smooth bias keeps the fixed world origin `(0,0)` always land.
+  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, elevation, moisture, continent, riverEdges,
+  settlement, pois:[], explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations —
+  `name` shows as a map label. `elevation`/`moisture` (v8) and `continent` (v9, renamed from `basin` in
+  v10; floats in `[0,1)`) are the Phase 3R.3/3R.4 biome-classifier inputs — pure functions of
+  `(seed, q, r)`, always present regardless of how terrain was chosen. `continent` is a coarse,
+  continent-scale land/ocean **gate** (not flood-fill — this world is infinite/incrementally generated,
+  so there's no map edge to flood-fill from): below a threshold it's always Sea; otherwise the unchanged
+  land classifier runs, and its own low-elevation band means Lake. A smooth bias keeps the fixed world
+  origin `(0,0)` always land. `riverEdges` (v11) is an array of `NEIGHBOR_DIRS` indices (0-5) marking
+  which hex-sides carry a river segment — grown incrementally from mountain-peak sources as neighbouring
+  hexes are generated (`js/gen/river.js`), the same propagation shape as sea contagion, chosen for
+  performance (a fully analytical per-hex query measured ~28ms/hex, too slow for interactive area
+  generation; incremental propagation measures ~0.037ms/hex).
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
   `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Lake/Sea).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
@@ -257,7 +275,7 @@ graph TD
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
-| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅** (Lake/Sea via a `continent` land/ocean gate — revised after manual testing found "inland seas"; real coastlines now, schema v10); next 3R.5 (rivers). |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅** (Lake/Sea via a `continent` land/ocean gate — revised after manual testing found "inland seas"; real coastlines now; rivers grow incrementally from mountain sources like sea contagion, for performance; schema v11); next 3R.6 (settlements v2). |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a

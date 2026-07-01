@@ -1022,6 +1022,21 @@ function seaNeighborCount(q, r) {
   }).length;
 }
 
+// Which NEIGHBOR_DIRS sides already carry a river flowing INTO (q, r) from an
+// already-placed neighbour — feeds river propagation (js/gen/river.js). A
+// neighbour's edge in direction i points at (q, r) from OUR side i, which is
+// the neighbour's own opposite(i) = (i+3)%6 side.
+function incomingRiverEdges(q, r) {
+  const dirs = [];
+  neighbors(q, r).forEach((n, i) => {
+    const nh = getHex(current, n.q, n.r);
+    if (nh && nh.placed && nh.riverEdges && nh.riverEdges.includes((i + 3) % 6)) {
+      dirs.push(i);
+    }
+  });
+  return dirs;
+}
+
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
 // carries a forced dungeon POI as the hook's subject. Marked unexplored.
@@ -1034,6 +1049,7 @@ function buildDistantTargetHex(tables, q, r) {
     seed: current.seed,
     gen: 0,
     seaNeighborCount: seaNeighborCount(q, r),
+    incomingRiverEdges: incomingRiverEdges(q, r),
   });
   hex.gen = 0;
   hex.explored = false; // not yet visited; the intervening hexes are blank
@@ -1257,6 +1273,7 @@ function buildRandomHex(tables, q, r, gen) {
     seed: current.seed,
     gen,
     seaNeighborCount: seaNeighborCount(q, r),
+    incomingRiverEdges: incomingRiverEdges(q, r),
   });
   hex.gen = gen;
   return hex;

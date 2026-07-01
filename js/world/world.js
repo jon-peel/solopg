@@ -33,7 +33,11 @@ import { axialKey } from "../core/hexgeo.js";
 // contiguous coastal bodies correlated with a continent-scale field, instead
 // of an independent per-hex label. Old hexes' `basin` field is simply unused
 // going forward (no retrofit); `Lake`/`Sea` terrain values are unchanged.
-export const SCHEMA_VERSION = 10;
+// v11: hexes gained a `riverEdges` array (Phase 3R.5) — NEIGHBOR_DIRS indices
+// (0-5) marking which hex-sides carry a river segment, propagated forward
+// from mountain sources as neighbouring hexes are generated (js/gen/river.js).
+// Additive; older hexes simply have none until regenerated.
+export const SCHEMA_VERSION = 11;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
