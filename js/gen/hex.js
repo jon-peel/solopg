@@ -8,33 +8,9 @@
 import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { subRng } from "../core/rng.js";
-import { TERRAIN_AFFINITY } from "./terrain-affinity.js";
+import { biomeAt } from "./biome.js";
 import { profileFor, cappedSizeTable } from "./terrain-profile.js";
 import { generatePoi } from "./poi.js";
-
-/**
- * Build a terrain table biased toward neighbor terrains using an affinity
- * matrix (compatible terrains get a bonus, not just identical ones). Returns a
- * NEW table (never mutates the base); each entry is spread so its `roll` (e.g.
- * Swamp's nested swamp-feature roll) is preserved.
- * @param {object} baseTable canonical terrain table
- * @param {string[]} neighborTerrains terrain strings of existing neighbors
- * @param {{ affinity?: object, multiplier?: number }} [opts]
- * @returns {object} new table
- */
-export function weightedTerrainTable(baseTable, neighborTerrains = [], opts = {}) {
-  const affinity = opts.affinity || TERRAIN_AFFINITY;
-  const multiplier = opts.multiplier ?? 1;
-  const entries = baseTable.entries.map((e) => {
-    const base = "weight" in e ? e.weight : 1;
-    let bonus = 0;
-    for (const nbr of neighborTerrains) {
-      bonus += (affinity[nbr] && affinity[nbr][e.value]) || 0;
-    }
-    return { ...e, weight: base + bonus * multiplier };
-  });
-  return { id: baseTable.id, entries };
-}
 
 /**
  * Generate one hex from the given tables and random stream.
@@ -42,31 +18,29 @@ export function weightedTerrainTable(baseTable, neighborTerrains = [], opts = {}
  *   poi-types, poi-occupant, creatures, occupiers (and terrain sub-tables).
  * @param {() => number} rng a single stream consumed in a fixed order
  * @param {{ key?: string, coords?: object|null, placed?: boolean,
- *   neighborTerrains?: string[], terrainBias?: number,
- *   seed?: number|string, gen?: number }} [opts]
+ *   terrain?: string, seed?: number|string, gen?: number }} [opts]
  *   seed+gen+coords seed per-POI sub-streams (order-stable).
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
   const resolve = makeResolver(tables);
 
-  // 1. Terrain. Either forced (manual placement) or rolled — when rolled, bias
-  //    toward neighbor terrains and resolve any nested feature (Swamp).
-  let terrain;
+  // 1. Terrain. Elevation/moisture (Phase 3R.3) are ALWAYS computed from
+  //    (seed, coords) alone — a pure function of position, so it's the same
+  //    regardless of forced/rolled terrain or fill order. Terrain is forced
+  //    (manual placement) or the classifier's pick from those fields.
+  const coords = opts.coords || { q: 0, r: 0 };
+  const { elevation, moisture, terrain: classified } = biomeAt(opts.seed ?? 0, coords.q, coords.r);
+  const terrain = opts.terrain || classified;
+
+  // Nested terrain feature (e.g. Swamp's swamp-feature roll) stays
+  // data-driven via data/terrain.json's entries[].roll — resolved directly
+  // against the chosen terrain's entry, not via a re-roll of the top table.
   let terrainFeature = null;
-  if (opts.terrain) {
-    terrain = opts.terrain;
-  } else {
-    const baseTerrain = tables.get("terrain");
-    const terrainTable =
-      opts.neighborTerrains && opts.neighborTerrains.length
-        ? weightedTerrainTable(baseTerrain, opts.neighborTerrains, {
-            multiplier: opts.terrainBias,
-          })
-        : baseTerrain;
-    const terrainRoll = rollTable(terrainTable, rng, { resolve });
-    terrain = terrainRoll.value;
-    terrainFeature = terrainRoll.sub ? terrainRoll.sub.value : null;
+  const terrainEntry = tables.get("terrain").entries.find((e) => e.value === terrain);
+  if (terrainEntry && terrainEntry.roll) {
+    const sub = rollTable(resolve(terrainEntry.roll.table), rng, { resolve });
+    terrainFeature = sub.value;
   }
 
   // Subsequent rolls (settlement, POIs) are gated by the chosen terrain's
@@ -107,6 +81,8 @@ export function generateHex(tables, rng, opts = {}) {
     placed: opts.placed ?? false,
     terrain,
     terrainFeature,
+    elevation, // [0,1) — Phase 3R.3; feeds sea level (3R.4) and river sourcing (3R.5)
+    moisture, // [0,1) — Phase 3R.3
     settlement,
     pois, // typed POI[] (Phase 3); empty array when none
     explored: true,

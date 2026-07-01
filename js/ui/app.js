@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, neighbors, axialLine, hexDisc } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -388,14 +388,6 @@ function onImportFile(e) {
   };
   reader.readAsText(file);
   e.target.value = ""; // allow re-importing the same file
-}
-
-// Terrain strings of a cell's existing placed neighbors (for weighting).
-function neighborTerrains(q, r) {
-  return neighbors(q, r)
-    .map((n) => getHex(current, n.q, n.r))
-    .filter((h) => h && h.placed)
-    .map((h) => h.terrain);
 }
 
 // --- selection + its right-panel actions ---------------------------------
@@ -1029,7 +1021,6 @@ function buildDistantTargetHex(tables, q, r) {
     key: axialKey(q, r),
     coords: { q, r },
     placed: true,
-    neighborTerrains: neighborTerrains(q, r),
     seed: current.seed,
     gen: 0,
   });
@@ -1243,14 +1234,15 @@ async function persistAndRefresh() {
   refreshMapChrome();
 }
 
-// Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.
+// Build (in memory) a random hex at (q,r) for generation `gen` — terrain comes
+// from the elevation/moisture biome classifier (Phase 3R.3), a pure function
+// of (seed, q, r), not a neighbor-weighted roll.
 function buildRandomHex(tables, q, r, gen) {
   const rng = subRng(current.seed, "hex", q, r, gen);
   const hex = generateHex(tables, rng, {
     key: axialKey(q, r),
     coords: { q, r },
     placed: true,
-    neighborTerrains: neighborTerrains(q, r),
     seed: current.seed,
     gen,
   });

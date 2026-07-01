@@ -49,13 +49,21 @@ a stats baseline (`test/stats-harness.js`, run via `node test/stats-harness.js`,
 `node --test`/`npm test` — see note below) showing a **23–25% lone-hex rate** and settlements
 averaging **~1.1–1.2 hexes** apart, and **decided the world-building model: two-layer elevation +
 moisture** (coordinate-hashed noise fields, order-independent by construction — feeds 3R.4's sea level
-and 3R.5's downhill rivers with no rework). **Next: 3R.3** (implement terrain v2 against this model)
-**or more Phase 7** (search, undo, print/GM view, themes — see
+and 3R.5's downhill rivers with no rework). **3R.3 (terrain generation v2) is done**: `js/core/noise.js`
+(`valueNoise2D`/`fbm2D`, 3-octave value noise, no npm deps) + `js/gen/biome.js` (`biomeAt`/
+`classifyBiome`, a percentile-calibrated Whittaker-style classifier) give every hex a first-class
+`elevation`/`moisture` (schema **v8**) that's a **pure function of `(seed, q, r)`** — replacing the old
+neighbour-affinity roll (`weightedTerrainTable`/`TERRAIN_AFFINITY`/`terrainBias`, now deleted) outright.
+Measured result: **lone-hex rate 23–25% → 2–3%**, **Mountains mean clump size 2.1 → 7.6–13.6** (real
+ranges, not speckle) — see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) for the
+full before/after. **Next: 3R.4** (water v2 — fresh/salt split + coastlines, built on this elevation
+data) **or more Phase 7** (search, undo, print/GM view, themes — see
 [phase-7-backlog.md](docs/plans/phase-7-backlog.md); in-app custom tables were dropped).
-**Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7.**
-**Schema v7 (unchanged by 3R.1/3R.2). 214 `node --test` passing** (now run as `test/*.test.js` —
-`node --test`'s default discovery treats any file under `test/` as a suite, which would otherwise
-snag the non-test `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
+**Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
+`elevation`/`moisture` — schema v8.**
+**Schema v8. 231 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+treats any file under `test/` as a suite, which would otherwise snag the non-test
+`stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
 ---
 
@@ -88,7 +96,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **7**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **8**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **No backward-compatibility burden right now.** Pre-release, with no real worlds worth
@@ -99,8 +107,8 @@ YAGNI; everything persists.
   itself should be removed at that point.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
   [canonical schema](#canonical-table-schema). *Rules* (per-terrain settlement caps / POI weights,
-  terrain adjacency) are small pure JS consts (`js/gen/terrain-profile.js`,
-  `js/gen/terrain-affinity.js`), not tables.
+  terrain coherence via elevation+moisture) are small pure JS consts/functions
+  (`js/gen/terrain-profile.js`, `js/gen/biome.js`, `js/core/noise.js`), not tables.
 - **Art = SVG assets with emoji fallback.** Terrain/settlement motifs are coloured-pencil SVGs in
   `assets/`; the renderer falls back to emoji until an image loads / if one is missing. POIs are
   emoji.
@@ -123,9 +131,10 @@ package.json                    dev-only: "type":"module", scripts: test / serve
   /core   rng.js (mulberry32, hashString, makeRng, subRng, randInt, pick)
           dice.js (rollDice)   table.js (validateTable, rollTable)   loader.js (loadTables, makeResolver)
           hexgeo.js (axial<->pixel, cube rounding, neighbors, hexRing/hexDisc, axialDistance, axialLine, axialKey/parseKey)
-  /gen    hex.js (generateHex, weightedTerrainTable)   poi.js (generatePoi)
+          noise.js (valueNoise2D, fbm2D — Phase 3R.3 deterministic coordinate-hashed value noise)
+  /gen    hex.js (generateHex)   poi.js (generatePoi)
           terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
-          terrain-affinity.js (adjacency)
+          biome.js (biomeAt/classifyBiome — Phase 3R.3 elevation+moisture -> terrain classifier)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
@@ -145,8 +154,9 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites, run as `test/*.test.js` (rng, dice, table, world, hexgeo, hex,
-          terrain-weight, terrain-profile, terrain-art, settlement-art, poi, migration, dungeon,
-          dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a diagnostic script
+          noise, biome, terrain-coherence, terrain-profile, terrain-art, settlement-art, poi,
+          migration, dungeon, dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a
+          diagnostic script
           (not a suite — `node --test`'s directory-based discovery would otherwise pick up ANY
           file under test/, hence the explicit `*.test.js` glob), run via `node
           test/stats-harness.js [seed] [radius]` (3R.2 — terrain/settlement generation baseline)
@@ -169,9 +179,9 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v7)
+## Current data model (as built, schema v8)
 
-- **World:** `{ schemaVersion:7, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
+- **World:** `{ schemaVersion:8, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
   (IndexedDB holds a **list** of worlds). No `factions` (deferred).
 - **Hook** (Phase 6; top-level `world.hooks[]`):
   `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
@@ -180,8 +190,10 @@ graph TD
   `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
-  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, settlement, pois:[], explored, gen, name?, note? }`.
-  `name`/`note` (v7) are optional GM annotations — `name` shows as a map label.
+  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, elevation, moisture, settlement, pois:[],
+  explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations — `name` shows as a map
+  label. `elevation`/`moisture` (v8, floats in `[0,1)`) are the Phase 3R.3 biome-classifier inputs — a
+  pure function of `(seed, q, r)`, always present regardless of how terrain was chosen.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
   `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Water).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
@@ -218,7 +230,7 @@ graph TD
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
-| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅** (chose two-layer elevation+moisture); next 3R.3 (terrain generation v2). |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅ · 3R.3 terrain v2 ✅** (elevation+moisture noise fields, schema v8); next 3R.4 (water v2 — fresh/salt + coastlines). |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a

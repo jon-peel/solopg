@@ -18,7 +18,12 @@ import { axialKey } from "../core/hexgeo.js";
 // point at a hex/POI. Older worlds backfill `hooks: []`. See migrateWorld.
 // v7: hexes gained optional GM annotations — `name` (a custom map label) and
 // `note` (freeform text). Additive; older hexes simply have none.
-export const SCHEMA_VERSION = 7;
+// v8: hexes gained first-class `elevation`/`moisture` fields (Phase 3R.3,
+// terrain generation v2) — a coordinate-hashed noise sample in [0,1) used by
+// the biome classifier (js/gen/biome.js) in place of the retired neighbour-
+// affinity terrain roll. Additive; older hexes simply have neither field
+// until regenerated.
+export const SCHEMA_VERSION = 8;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

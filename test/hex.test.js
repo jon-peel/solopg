@@ -86,21 +86,44 @@ test("no City in Desert (size capped at Town)", () => {
   assert.notEqual(hex.settlement.size, "City");
 });
 
-test("Swamp yields a terrain feature when rolled", () => {
+test("Swamp yields a terrain feature when forced (nested roll still resolves)", () => {
   const t = makeTables({
     id: "terrain",
-    entries: [{ value: "Swamp", roll: { table: "swamp-feature" } }],
+    entries: [{ value: "Swamp", roll: { table: "swamp-feature" } }, { value: "Plains" }],
   });
-  const hex = generateHex(t, mulberry32(1), opts());
+  // Terrain is no longer rng-rolled (Phase 3R.3 — it's classified from
+  // elevation/moisture); force it directly and confirm the nested
+  // swamp-feature roll still fires against the chosen entry.
+  const hex = generateHex(t, mulberry32(1), opts({ terrain: "Swamp" }));
   assert.equal(hex.terrain, "Swamp");
   assert.equal(hex.terrainFeature, "Bog");
 });
 
-test("manual (forced) terrain skips the terrain roll", () => {
+test("manual (forced) terrain overrides the classifier; no nested feature outside Swamp", () => {
   const t = makeTables();
   const hex = generateHex(t, mulberry32(7), opts({ terrain: "Mountains" }));
   assert.equal(hex.terrain, "Mountains");
   assert.equal(hex.terrainFeature, null);
+});
+
+test("elevation/moisture are always present and in [0,1), classified or forced", () => {
+  const t = makeTables();
+  const rolled = generateHex(t, mulberry32(1), opts());
+  const forced = generateHex(t, mulberry32(1), opts({ terrain: "Mountains" }));
+  for (const hex of [rolled, forced]) {
+    assert.equal(typeof hex.elevation, "number");
+    assert.equal(typeof hex.moisture, "number");
+    assert.ok(hex.elevation >= 0 && hex.elevation < 1);
+    assert.ok(hex.moisture >= 0 && hex.moisture < 1);
+  }
+});
+
+test("elevation/moisture are a pure function of (seed, coords) — independent of forced terrain", () => {
+  const t = makeTables();
+  const rolled = generateHex(t, mulberry32(1), opts());
+  const forced = generateHex(t, mulberry32(1), opts({ terrain: "Mountains" }));
+  assert.equal(rolled.elevation, forced.elevation);
+  assert.equal(rolled.moisture, forced.moisture);
 });
 
 test("shipped weighted tables are valid", () => {

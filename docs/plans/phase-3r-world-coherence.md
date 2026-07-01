@@ -275,17 +275,50 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   ✅ (two-layer elevation + moisture)**. **3R.2 complete.** No gameplay change in
   this sub-phase — 3R.3 implements the model against this baseline.
 
-### 3R.3 — Terrain generation v2
-- Implement the chosen model. Likely: **elevation + moisture** as first-class per-hex
-  fields → biome via a small classifier, giving clustered biomes, **mountain ranges**
-  (chains, not speckle), and suppression of lone single-hex anomalies. If we pick the
-  incremental model instead, replace the additive nudge with **neighbour transition
-  tables**.
-- Keep **manual placement** + `terrainBias` meaningful.
-- **Tests:** distribution/adjacency assertions (e.g. mountains form runs ≥ N; lone-hex
-  rate below a threshold), not exact-art snapshots. Compare against the 3R.2 baseline.
-- **Migration/regen:** how existing worlds adopt v2 (regenerate affordance vs leave
-  as-is).
+### 3R.3 — Terrain generation v2 ✅ done
+- Implemented the 3R.2-chosen model: **elevation + moisture** as first-class per-hex
+  fields (`hex.elevation`, `hex.moisture`, floats in `[0,1)`), each a **coordinate-hashed
+  value-noise field** (`js/core/noise.js` — `valueNoise2D`/`fbm2D`, 3-octave FBM, no npm
+  deps, built only from `subRng`/`hashString`), combined via a Whittaker-style threshold
+  classifier (`js/gen/biome.js` — `biomeAt`/`classifyBiome`) into one of the existing 7
+  terrains. Both fields are a **pure function of `(seed, q, r)` alone** — order-
+  independent by construction, closing the doc's #1-listed determinism risk (a
+  regression test asserts forward vs. reverse fill order give identical results).
+- **Frequency/threshold tuning was measured, not guessed:** a first-draft attempt (naive
+  `[0,1)`-linear thresholds, frequency 0.08) produced a **~65% single-terrain blob**
+  (FBM output clusters toward the middle of its range, not uniform) — caught by
+  simulating standalone before writing any real code. Recalibrated to **percentile-
+  derived thresholds** (elevation `<0.35`→Water/Swamp band, `<0.58`→mid band,
+  `<0.68`→Hills, else Mountains; moisture splits Desert/Plains/Forest within the mid
+  band and Water/Swamp within the low band) at **frequency 0.2** — verified against 3
+  seeds before implementation, then re-verified live via `test/stats-harness.js`.
+- **Retired the old neighbour-affinity mechanism** (superseded, not layered under):
+  deleted `js/gen/terrain-affinity.js` (`TERRAIN_AFFINITY`), `weightedTerrainTable`, the
+  `terrainBias`/`neighborTerrains` opts, and `app.js`'s now-dead `neighborTerrains()`
+  helper + its 2 call-site args. `terrainBias` was already flagged dead in the 3R.2
+  audit (stuck at its default of 1) — no longer meaningful to keep once the coherence
+  mechanism moved to noise fields, so the doc's original "keep terrainBias meaningful"
+  goal is met differently: manual placement (`opts.terrain` forced) still works exactly
+  as before, and still gets real elevation/moisture data (always computed regardless of
+  how terrain was chosen) for 3R.4/3R.5 to consume uniformly.
+- **Nested terrain features stay data-driven**: Swamp's `swamp-feature` roll still
+  resolves via `data/terrain.json`'s `entries[].roll`, just looked up directly against
+  the classified/forced terrain instead of re-rolling the top-level table.
+- **Measured result** (3 seeds, radius 25, ~1951 hexes — matches the 3R.2 baseline
+  sample): **lone-hex rate dropped from 23–25% to 2–3%**; **Mountains mean clump size
+  rose from 2.1 to 7.6–13.6** (real ranges, not speckle); terrain histograms land in the
+  same ballpark as the old weights for most seeds (one seed skews Forest-heavy at ~39%,
+  accepted as natural per-world variety, not a regression). Settlement spacing is
+  unaffected (~1.1 hexes apart still — that's 3R.6's job).
+- **Tests:** `test/noise.test.js` (determinism, range, continuity, layer decorrelation),
+  `test/biome.test.js` (threshold boundaries, always a known terrain, pure-function
+  determinism), `test/hex.test.js` (elevation/moisture present & in-range, independent
+  of forced terrain, Swamp nested roll still fires), `test/terrain-coherence.test.js`
+  (lone-hex rate < 15%, Mountains mean clump ≥ 4 with a run ≥ 8, determinism, and the
+  forward/reverse fill-order regression test). 231 `node --test test/*.test.js` passing.
+- **Migration:** `SCHEMA_VERSION` 7→8, stamp-only (no data transform — additive fields,
+  and per PLAN.md's relaxed backward-compat policy no regen affordance is needed for
+  old worlds right now).
 
 ### 3R.4 — Water v2: fresh vs salt, coastlines, continents & islands
 - Split **Water → Lake (fresh) + Sea (salt)**. *(Recommend "Lake"/"Sea" over
@@ -402,7 +435,9 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 
 - **Scope** — this is a multi-sub-phase arc; keep each shippable on its own.
 - **Determinism under area generation** — the biggest correctness risk; lock it with
-  order-independence tests early (3R.1/3R.2).
+  order-independence tests early (3R.1/3R.2). **Structurally closed in 3R.3** — terrain
+  is now a pure function of `(seed, q, r)` (elevation/moisture noise), not a read of
+  already-placed neighbours, so order-independence is provable, not just tested.
 - **Migration churn** — several schema bumps; keep every step additive and old-world-safe.
 - **Perceptual vs real** — 3R.2's baseline decides how much terrain rework is truly
   warranted before we over-engineer.

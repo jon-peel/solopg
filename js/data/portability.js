@@ -70,6 +70,9 @@ export function importWorld(json) {
  * - v6 -> v7: hexes gained optional `name`/`note` annotations (Phase 7.5).
  *   Additive — older hexes simply have none, so there's nothing to transform;
  *   we just stamp the version.
+ * - v7 -> v8: hexes gained `elevation`/`moisture` fields (Phase 3R.3). Additive
+ *   and there's no rng/seed context here to retroactively sample them, so
+ *   older hexes simply lack both until regenerated — just stamp the version.
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -116,6 +119,11 @@ export function migrateWorld(data) {
   if (data.schemaVersion < 7) {
     // hex `name`/`note` are additive and default to none — just stamp the version.
     data.schemaVersion = 7;
+  }
+  if (data.schemaVersion < 8) {
+    // hex `elevation`/`moisture` are additive and default to absent on old
+    // hexes (no retrofit noise sample) — just stamp the version.
+    data.schemaVersion = 8;
   }
   return data;
 }

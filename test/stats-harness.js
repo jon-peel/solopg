@@ -1,8 +1,8 @@
-// 3R.2 stats harness — a diagnostic, NOT part of `node --test` (it prints a
-// report, it doesn't assert). Generates a large area under TODAY's engine
-// (unchanged hex-by-hex generateHex + the neighbour-affinity bias) and reports
-// terrain distribution, biome clump-size / lone-hex rate, and settlement
-// spacing — the baseline 3R.3+ tunes against.
+// Stats harness — a diagnostic, NOT part of `node --test` (it prints a
+// report, it doesn't assert). Generates a large area under the REAL engine
+// (js/gen/hex.js's generateHex — the elevation/moisture biome classifier as
+// of Phase 3R.3) and reports terrain distribution, biome clump-size / lone-hex
+// rate, and settlement spacing.
 //
 // Usage: node test/stats-harness.js [seed] [radius]
 //   seed   default 1        any string/number (subRng seed)
@@ -10,7 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createWorld, addHex, getHex, placedHexes } from "../js/world/world.js";
+import { createWorld, addHex, placedHexes } from "../js/world/world.js";
 import { generateHex } from "../js/gen/hex.js";
 import { subRng } from "../js/core/rng.js";
 import { axialKey, neighbors, hexDisc, axialDistance } from "../js/core/hexgeo.js";
@@ -28,18 +28,10 @@ function loadTables() {
   return t;
 }
 
-// Terrain strings of a cell's existing placed neighbors — mirrors app.js's
-// neighborTerrains() exactly, so the harness measures the real generation path.
-function neighborTerrains(world, q, r) {
-  return neighbors(q, r)
-    .map((n) => getHex(world, n.q, n.r))
-    .filter((h) => h && h.placed)
-    .map((h) => h.terrain);
-}
-
 // Fill a hex disc of `radius` around the origin, center-first then ring-by-ring
-// (hexDisc's own deterministic order) — so each hex sees only the neighbours
-// generated before it in that fixed order, same as the app's batch fill.
+// (hexDisc's own deterministic order). Each hex's terrain is a pure function
+// of (seed, q, r) since 3R.3, so fill order no longer affects the result —
+// kept as a fixed, deterministic order anyway for a reproducible report.
 function generateArea(seed, radius) {
   const tables = loadTables();
   const world = createWorld({ name: "stats-harness", seed });
@@ -49,7 +41,6 @@ function generateArea(seed, radius) {
       key: axialKey(q, r),
       coords: { q, r },
       placed: true,
-      neighborTerrains: neighborTerrains(world, q, r),
       seed,
       gen: 0,
     });
@@ -128,7 +119,7 @@ function report(seed, radius) {
   const hexes = placedHexes(world);
   const total = hexes.length;
 
-  console.log(`\n3R.2 stats harness — seed=${JSON.stringify(seed)} radius=${radius} (${total} hexes)\n`);
+  console.log(`\nstats harness — seed=${JSON.stringify(seed)} radius=${radius} (${total} hexes)\n`);
 
   console.log("Terrain histogram:");
   const hist = terrainHistogram(hexes);
