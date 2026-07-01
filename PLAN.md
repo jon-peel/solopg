@@ -85,13 +85,25 @@ whether an already-placed neighbour already has a river edge pointing into it (O
 `hex.riverEdges` forward as hexes are generated rather than recomputing a path from scratch. Measured
 **0.037ms/hex** (~750× faster). This is a **second** deliberate exception to position-purity — for
 raw performance this time, not manual-placement responsiveness. Density tuned for "rare and dramatic"
-(`RIVER_SOURCE_CHANCE=0.06`, ~1 source per 1200–2000 hexes). **Rendering pulled forward from 3R.8 on
-request** (a river you can't see isn't testable) — `map.js`'s `drawRiverEdges` draws a line per
-`riverEdges` direction from a hex's center to the midpoint between its center and that neighbour's
-(the true shared-edge midpoint on any regular hex grid, no corner lookup needed), styled cyan over a
-dark outline so it reads over any terrain colour; verified visually — a continuous multi-hex river
-renders correctly from a mountain source downhill. **Next: 3R.6** (settlements v2 — names, Keep/Fort,
-river/coast size boosts) **or more
+(`RIVER_SOURCE_CHANCE`, originally 0.06, ~1 source per 1200–2000 hexes). **Rendering pulled forward
+from 3R.8 on request** (a river you can't see isn't testable) — `map.js`'s `drawRiverEdges` draws a
+line per `riverEdges` direction from a hex's center to the midpoint between its center and that
+neighbour's (the true shared-edge midpoint on any regular hex grid, no corner lookup needed), styled
+cyan over a dark outline so it reads over any terrain colour. **Revised twice more after real GM
+use:** (1) 0.06 was too rare — ~50 "Generate Area" clicks (~1350 hexes) gave only 1 short river;
+considered fixing the underlying order-dependent propagation gap with a "pendingRivers" side-channel,
+but traced through it carefully (and confirmed via a scratchpad simulation of realistic scattered-click
+usage) that it would add **zero value** — the only loss case (a hex explored before the river that
+would have flowed through it existed) can't be fixed without rewriting already-placed map content,
+which stays off the table. Simply bumped `RIVER_SOURCE_CHANCE` to **0.25** (~4×) instead — same
+simulation shows a ~1350-hex map going from under 1 river on average to 3–4, still clearly a landmark.
+(2) Bends looked like sharp corners (two straight lines meeting at the hex center); `drawRiverEdges`
+now draws a pass-through hex's two edges as **one quadratic curve using the hex's own center as the
+control point** — bends smoothly on an actual turn, and degenerates to a perfectly straight line for
+opposite edges with no special-casing (the center sits exactly on that line for a regular hex). Verified
+visually — a continuous multi-hex river renders correctly from a mountain source downhill, and a
+synthetic 4-shape test (straight/bend/source/confluence) confirmed each renders as designed. **Next:
+3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds

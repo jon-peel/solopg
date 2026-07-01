@@ -448,14 +448,35 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   contagion also only affects the auto-classified path.
 - **Density: rare and dramatic, confirmed via scratchpad numeric verification before
   writing real code** (matching every prior sub-phase's discipline) — `isRiverSource`'s
-  seeded chance (`RIVER_SOURCE_CHANCE = 0.06`) against real Mountains-peak rates (~1-1.5%
-  of all hexes) yields roughly **1 river source per 1200-2000 hexes**: finding one is
-  meant to feel like a landmark, not routine terrain. Fully analytical (order-ignoring)
-  path tracing in the scratchpad showed real rivers run **5-12 hexes** before reaching a
-  Lake/Sea or a depression; the incremental, generation-order-dependent propagation
-  means how much of that length is actually *visible* in a single fill depends on which
-  direction the fill grows relative to the river's downhill direction — an accepted,
-  documented trade-off of the same shape as sea contagion's order-dependence, not a bug.
+  seeded chance (originally `RIVER_SOURCE_CHANCE = 0.06`, **revised to 0.25** — see
+  below) against real Mountains-peak rates (~1-1.5% of all hexes) yields roughly **1
+  river source per 1200-2000 hexes** at the original value: finding one is meant to feel
+  like a landmark, not routine terrain. Fully analytical (order-ignoring) path tracing in
+  the scratchpad showed real rivers run **5-12 hexes** before reaching a Lake/Sea or a
+  depression; the incremental, generation-order-dependent propagation means how much of
+  that length is actually *visible* in a single fill depends on which direction the fill
+  grows relative to the river's downhill direction — an accepted, documented trade-off of
+  the same shape as sea contagion's order-dependence, not a bug.
+- **Revision (user report): 0.06 was too rare in practice** — ~50 "Generate Area" clicks
+  (~1350 unique hexes) produced just 1 short river. Investigated whether the
+  order-dependent propagation gap could be *fixed* rather than just made more frequent: a
+  "pendingRivers" side-channel was designed (remember an outgoing edge toward a
+  not-yet-placed neighbour, honour it whenever that neighbour is eventually generated,
+  regardless of how much later) and traced through carefully before writing any code.
+  **Turned out to add zero value, proven both by reasoning and by a scratchpad
+  simulation of realistic usage (50 scattered "Large" clicks, not one big coherent
+  fill):** whenever a downstream hex is generated *after* its upstream source, the
+  existing already-placed-neighbour scan already finds the connection with no extra
+  bookkeeping — pending only matters for a downstream hex generated *before* its source
+  even exists, and that hex is by then permanently finalized (never retroactively
+  edited, by design), so pending can't help there either. The sole loss case — a hex
+  explored before the river that would have flowed through it existed — is structurally
+  unfixable without rewriting already-shown map content, which stays off the table.
+  Abandoned the pendingRivers idea (no schema bump, no added complexity) and instead
+  simply **raised `RIVER_SOURCE_CHANCE` to 0.25** (~4x): the same "scattered clicks"
+  simulation shows this moves a ~1350-hex map from averaging under 1 river to averaging
+  3-4, while keeping most Mountains hexes river-free (still clearly a landmark, not
+  wallpaper).
 - **Data shape:** `hex.riverEdges: number[]` — `NEIGHBOR_DIRS` indices (0-5) marking
   which hex-sides carry a river segment. No stream-order/tributary-width field yet
   (deferred; would fall out of the same incremental-propagation data if needed later).
@@ -474,6 +495,19 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   colour including Mountains' grey and Plains' green. Verified visually in the browser:
   built a small world around a known river source and confirmed a continuous multi-hex
   blue line renders correctly from the mountain peak downhill.
+- **Revision (user request): curved bends, not sharp corners.** The first cut drew two
+  independent straight lines per pass-through hex (center to each edge's midpoint),
+  meeting at a hard angle whenever the river actually turned. Replaced with: a
+  pass-through hex (exactly 2 edges) draws **one quadratic curve** between the two edge
+  midpoints, using the hex's own **center as the control point**. This bends smoothly
+  through the hex when the edges aren't opposite (an actual turn), and — with no special
+  casing needed — degenerates to a perfectly straight line when they *are* opposite,
+  since a regular hex's center sits exactly on the line between two opposite edge
+  midpoints (a quadratic Bézier through a colinear control point is a straight line by
+  construction). A source (1 edge) or a confluence (3+, tributaries merging) has no
+  single obvious "through" pair, so those still fall back to straight center-to-midpoint
+  spokes. Verified visually with a synthetic 4-hex test world covering all four shapes
+  (straight-through, bend, source stub, confluence) — each rendered exactly as designed.
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
 - **Tests:** `test/river.test.js` (13 tests — `isRiverSource` gated on Mountains and

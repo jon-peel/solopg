@@ -34,12 +34,16 @@ import { neighbors, NEIGHBOR_DIRS } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
 import { elevationAt } from "./biome.js";
 
-// Tuned for "rare and dramatic" (explicit design call — see the 3R.5 plan):
-// verified in the scratchpad that with Mountains ~12% of hexes and local
-// peaks a further ~1-1.5% of ALL hexes, this chance yields roughly one river
-// source per 1200-2000 hexes generated — a notable landmark, not routine
-// terrain.
-const RIVER_SOURCE_CHANCE = 0.06;
+// Tuned for "rare and dramatic" (explicit design call — see the 3R.5 plan).
+// First shipped at 0.06 (roughly one source per 1200-2000 hexes), but real
+// GM usage (~50 "Generate Area" clicks, ~1350 unique hexes) turned up only 1
+// small river — confirmed via a scratchpad simulation of many scattered
+// area-fills (matching how a GM actually explores, not one single big fill)
+// that 0.06 averages under 1 river per similarly-sized map. Bumped to 0.25
+// (~4x): the same simulation shows ~3-4 rivers per map of that size, still
+// clearly a landmark rather than routine terrain (most Mountains hexes still
+// have none), just no longer vanishingly rare.
+const RIVER_SOURCE_CHANCE = 0.25;
 
 // Flow-direction uses FEWER octaves than terrain classification's elevation
 // (NOISE_OPTS.octaves = 3) — a smoothed field so steepest-descent tracks the

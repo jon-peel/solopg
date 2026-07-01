@@ -302,33 +302,59 @@ function drawHookLine(a, b) {
 // Rivers (3R.5): hex.riverEdges holds NEIGHBOR_DIRS indices for the sides
 // carrying a river segment. A shared hex edge's midpoint is exactly the
 // midpoint between the two hexes' centres (true for any regular hex grid),
-// so each hex draws hex-center -> edge-midpoint independently — no shared
-// geometry lookup needed, and it degrades gracefully to a short stub when
-// only one side of a boundary has registered the edge (the accepted
-// order-dependent gap documented in river.js).
+// so each hex draws its own edges independently — no shared geometry lookup
+// needed, and it degrades gracefully to a short stub when only one side of a
+// boundary has registered the edge (the accepted order-dependent gap
+// documented in river.js).
+//
+// A pass-through hex (exactly 2 edges: one incoming, one outgoing) draws ONE
+// quadratic curve between their two midpoints, using the hex's own CENTER as
+// the control point — this bends smoothly through the hex when the river
+// actually turns, and degenerates to a perfectly straight line when the two
+// edges are opposite (the center sits exactly on that line for a regular
+// hex, so a quadratic Bezier through a colinear control point is a straight
+// line — no special-casing needed). A source (1 edge) or a confluence (3+,
+// tributaries merging) has no single obvious "through" pair, so those just
+// fall back to straight center-to-midpoint spokes.
 const RIVER_COLOR = "#6fd0f0";
 function drawRiverEdges(cx, cy, q, r, riverEdges) {
   if (!riverEdges || !riverEdges.length) return;
-  ctx.save();
-  ctx.lineCap = "round";
-  for (const dir of riverEdges) {
+  const midpoints = riverEdges.map((dir) => {
     const [dq, dr] = NEIGHBOR_DIRS[dir];
     const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
-    const mx = (cx + n.x) / 2;
-    const my = (cy + n.y) / 2;
+    return { x: (cx + n.x) / 2, y: (cy + n.y) / 2 };
+  });
+
+  const strokeTwice = (draw) => {
     // A dark outline first so the river reads over any terrain fill colour.
     ctx.strokeStyle = "rgba(8,16,26,0.6)";
     ctx.lineWidth = 5 / camera.scale;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(mx, my);
-    ctx.stroke();
+    draw();
     ctx.strokeStyle = RIVER_COLOR;
     ctx.lineWidth = 2.4 / camera.scale;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(mx, my);
-    ctx.stroke();
+    draw();
+  };
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (midpoints.length === 2) {
+    const [a, b] = midpoints;
+    strokeTwice(() => {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.quadraticCurveTo(cx, cy, b.x, b.y);
+      ctx.stroke();
+    });
+  } else {
+    for (const m of midpoints) {
+      strokeTwice(() => {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(m.x, m.y);
+        ctx.stroke();
+      });
+    }
   }
   ctx.restore();
 }
