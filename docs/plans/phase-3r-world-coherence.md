@@ -541,21 +541,78 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   chains reaching a real Lake/Sea sink 1 → 5 (5×). Confirmed again via a real
   browser-driven session (40 scattered "Large" clicks through the actual UI): 0 one-hex
   orphans, mean chain length 9.75, longest chain 15 hexes, no console errors.
+- **Flow-direction redesign (real-play request): "longer, windier, real transportation
+  routes."** The steepest-descent rule always picked the single lowest neighbour —
+  deterministic, but every river was a short, direct line (5-12 hexes analytically, per
+  earlier scratchpad tracing), with no meander and no relationship to nearby wetlands or
+  the coast. `downhillDirection` now scores every valid downhill candidate (still
+  strictly lower elevation — "never uphill" stays unconditional) on **three** factors,
+  then makes a seeded weighted-random pick among them — still a pure, deterministic
+  function of `(seed, q, r)`, just no longer always the single argmax:
+  1. **Elevation drop** (the original signal, unchanged in spirit).
+  2. **Swamp/wetland attraction** (`SWAMP_ATTRACTION = 0.8`) — biases toward the wetter
+     of the two candidate neighbours. Moisture is a smooth, spatially-correlated field
+     (unlike raw per-hex noise), so a cheap "prefer the wetter neighbour" rule, applied
+     every step, compounds over a multi-hex path into a genuine drift toward a wetland
+     cluster — no expensive wide-radius lookahead needed. Also fixed a real classifier
+     bug this surfaced: **Swamp is LAND** (in `classifyLand`'s low band alongside Lake,
+     split by moisture), so a river should flow *through* it toward the sea, not
+     terminate there — an earlier scratchpad prototype had this backwards, treating any
+     low-elevation hex as a stop; the real `riverStateAt` never had this bug (only
+     `Sea`/`Lake` were ever checked as termini), but it's now an explicit test.
+  3. **Coastward pull** (`COAST_PULL = 150`) — biases toward lower `continent` (closer to
+     the ocean gate). `continent` is a MUCH coarser field than elevation — measured
+     ~13× smaller step-to-step difference in the scratchpad — so on its own it's far too
+     faint to affect any single hex's choice, but a small, *consistent* per-step bias
+     compounds over a long path into real large-scale drift toward the sea, which raw
+     elevation alone has no reason to produce (the two fields are independent noise
+     layers with no inherent relationship).
+  A **"prefer neighbours that aren't placed yet"** world-aware bias was also prototyped,
+  hoping to sidestep the incremental-generation dead-end case from the stitching fix
+  above — but measured **worse on every metric in both a single-big-fill and a
+  many-scattered-clicks simulation**: it rushes rivers toward the edge of whatever's been
+  generated so far, cutting the *visible* portion short. Stitching alone turned out to
+  already fully resolve the "points at an already-placed dry neighbour" case (confirmed:
+  0 such cases in either scenario once stitching is in place), so this idea was dropped —
+  `downhillDirection` stays a pure function of position, no world-state awareness needed.
+- **Lake outflow** (the other real-play request: "if rivers flow into a lake, there
+  should be a greater chance of one flowing out"). `riverStateAt`: a Lake hex that
+  receives incoming edges now rolls a chance to *also* add an outgoing edge, continuing
+  the river past it rather than always terminating there. Reuses sea contagion's exact
+  compounding shape (`js/gen/biome.js` `rollSeaContagion`) — `LAKE_OUTFLOW_CHANCE = 0.5`
+  per inflow, `chance = 1 - (1 - 0.5)^inflowCount`, so a lake fed by more tributaries is
+  more likely to have an outlet, never certain. Sea never rolls an outflow — it's the
+  actual ocean, the end of the line; only a landlocked Lake can pass a river onward
+  toward the next lake or the sea.
+- **Combined verification** (scratchpad, all four mechanisms together — meander, swamp
+  attraction, coast pull, lake outflow — plus the existing stitching, no world-awareness):
+  in a single big fill (radius-40 disc, ~4921 hexes, matching what the "Huge" tool now
+  makes practical): mean chain length **3.8 → 11.4 hexes**, chains reaching real water
+  **15% → 59%**, one-hex orphans **79 → 7**. In the more fragmented many-scattered-clicks
+  scenario (50 separate "Large" clicks, ~1350 hexes): mean chain length **1.7 → 5.6**,
+  reach-water **2% → 18.5%**, orphans **110 → 30**. Confirmed visually in the browser
+  (using the new "Huge" tool): a 33-hex chain rendered as two clearly winding rivers,
+  both trending toward a coastline, with real curved bends (not straight segments) —
+  screenshot on file. Performance unaffected: ~0.02-0.04ms/hex measured for both a 721-hex
+  ("Huge") and a 4921-hex fill, despite the extra moisture/continent sampling per step.
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
-- **Tests:** `test/river.test.js` (13 tests — `isRiverSource` gated on Mountains and
+- **Tests:** `test/river.test.js` (17 tests — `isRiverSource` gated on Mountains and
   rare-not-universal across many seeds; `downhillDirection` always a valid index or -1,
   and when valid the chosen neighbour is genuinely lower, verified both ways by scanning
   real coordinates rather than hardcoded literals; `riverStateAt`'s full decision table —
   no-op, terminate-at-water, land-with-real-downhill, forced-Lake depression, and a
-  qualifying source, all found by scanning rather than guessed coordinates).
+  qualifying source, all found by scanning rather than guessed coordinates. 4 tests added
+  for the redesign: Swamp is pass-through land not a terminus; a natural Lake with no
+  inflow never gets river data; a single inflow sometimes-not-always-not-never grows an
+  outflow; outflow chance strictly increases with more inflows).
   `test/terrain-coherence.test.js` gained 3 integration tests mirroring the sea-contagion
   pattern (deliberately not the shared order-independent `generateArea` helper, since
   river propagation is history-dependent by design): rivers appear across a large area,
   an edge toward an already-placed *later-generated* neighbour always connects to that
   neighbour's matching incoming edge (the core propagation invariant), and every
   non-sink river hex has an outgoing edge toward its own real downhill direction.
-  262 `node --test test/*.test.js` passing (stable across repeated runs).
+  266 `node --test test/*.test.js` passing (stable across repeated runs).
 - Runs **before settlement sizing** so cities can key off rivers/estuaries (3R.6).
 
 ### 3R.6 — Settlements v2

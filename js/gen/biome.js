@@ -112,6 +112,39 @@ export function elevationAt(seed, q, r, octaves = NOISE_OPTS.octaves) {
 }
 
 /**
+ * Sample raw moisture at any coordinate — exported for js/gen/river.js's
+ * swamp/wetland attraction (a river's flow direction is biased toward
+ * wetter neighbours, not just the steepest drop), same rationale as
+ * elevationAt: needs to peek at neighbouring hexes regardless of whether
+ * they're placed yet.
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @returns {number} in [0,1)
+ */
+export function moistureAt(seed, q, r) {
+  const { x, y } = axialToNoiseXY(q, r);
+  return fbm2D(seed, "moisture", x, y, NOISE_OPTS);
+}
+
+/**
+ * Sample the raw continent gate field at any coordinate (before the origin
+ * land-bias / threshold are applied) — exported for js/gen/river.js, which
+ * biases flow direction toward decreasing continent (i.e. toward the coast):
+ * continent is a much coarser field than elevation, so it doesn't meaningfully
+ * affect any single step's choice, but consistently nudges a long path's
+ * overall drift toward the sea over many hexes.
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @returns {number} in [0,1), pre-bias/pre-threshold
+ */
+export function continentAt(seed, q, r) {
+  const { x, y } = axialToNoiseXY(q, r);
+  return fbm2D(seed, "continent", x, y, CONTINENT_OPTS);
+}
+
+/**
  * Classify LAND terrain from elevation/moisture (Whittaker-style threshold
  * bins, percentile-calibrated — see module comment). Pure, no rng. Never
  * returns Sea — the low-elevation band is always Lake here; Sea is decided
@@ -147,17 +180,16 @@ export function classifyLand(elevation, moisture) {
  * @returns {{ elevation: number, moisture: number, continent: number|null, terrain: string }}
  */
 export function biomeAt(seed, q, r, seaNeighborCount = 0) {
-  const { x, y } = axialToNoiseXY(q, r);
   // Always sampled, even for Sea hexes — mirrors elevation/moisture's own
   // "always compute regardless of what it's used for" precedent, so the
   // field stays available uniformly (e.g. a manually-placed Sea hex still
   // carries real local elevation/moisture for later sub-phases).
   const elevation = elevationAt(seed, q, r);
-  const moisture = fbm2D(seed, "moisture", x, y, NOISE_OPTS);
+  const moisture = moistureAt(seed, q, r);
   if (rollSeaContagion(seed, q, r, seaNeighborCount)) {
     return { elevation, moisture, continent: null, terrain: "Sea" };
   }
-  const continent = fbm2D(seed, "continent", x, y, CONTINENT_OPTS) + originLandBias(q, r);
+  const continent = continentAt(seed, q, r) + originLandBias(q, r);
   const terrain = continent < OCEAN_THRESHOLD ? "Sea" : classifyLand(elevation, moisture);
   return { elevation, moisture, continent, terrain };
 }

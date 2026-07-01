@@ -118,14 +118,36 @@ already-placed hex at all (the other two only ever affect a hex at its own gener
 Verified: scratchpad simulation of realistic scattered-click usage showed mean chain length
 1.68→4.46 hexes, one-hex orphans 27→7 (-74%), chains reaching real water 1→5 (5×); a real
 40-click browser session then confirmed 0 orphans, mean length 9.75, longest 15 hexes, no
-console errors. **Next:
+console errors.
+**Fourth revision (real-play request): "longer, windier, real transportation routes" +
+lake outflow.** Steepest-descent always picked the single lowest neighbour — every river a
+short, direct 5-12 hex line, no meander, no relationship to nearby wetlands or the coast.
+`js/gen/river.js`'s `downhillDirection` now scores every valid downhill candidate (still
+strictly lower elevation, never uphill) on three factors and makes a seeded weighted-random
+pick among them (still a pure, deterministic function of `(seed,q,r)`): elevation drop
+(original signal), a swamp/moisture attraction (`SWAMP_ATTRACTION=0.8` — also surfaced and
+confirmed a fix where a scratchpad prototype had wrongly treated Swamp, which is LAND, as a
+river-stopping body of water like Lake), and a coastward pull toward decreasing `continent`
+(`COAST_PULL=150` — `continent` is ~13× coarser than elevation so needs a big multiplier to
+matter, but even a faint per-step bias compounds into real large-scale drift toward the sea
+over a long path). Added **lake outflow**: a Lake with incoming edges now rolls a chance
+(`LAKE_OUTFLOW_CHANCE=0.5` per inflow, compounding — reuses sea contagion's exact shape) to
+grow an outgoing edge, letting rivers continue past a lake instead of always stopping there.
+A "prefer neighbours that aren't placed yet" bias was also prototyped to help connectivity,
+but measured WORSE on every metric in both a single-big-fill and scattered-clicks simulation
+(it rushes rivers off the edge of whatever's generated so far) — dropped in favour of relying
+on stitching alone, which fully resolves the dead-end case on its own. Verified: combined,
+in a single big fill mean chain length 3.8→11.4 hexes, reach-water 15%→59%, orphans 79→7; in
+scattered clicks mean length 1.7→5.6, reach-water 2%→18.5%, orphans 110→30; confirmed
+visually via the new "Huge" tool (two clearly winding, coastward rivers, real curved bends).
+Performance unaffected (~0.02-0.04ms/hex). **Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
 `elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
 Lake/Sea (v9, reworked in v10); 3R.5 adds `riverEdges` (v11).**
-**Schema v11. 262 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v11. 266 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

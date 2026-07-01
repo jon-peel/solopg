@@ -176,3 +176,76 @@ test("riverStateAt: deterministic — same inputs always give the same result", 
   const b = riverStateAt("seed", 12, -8, "Mountains", 0.9, []);
   assert.deepEqual(a, b);
 });
+
+test("riverStateAt: Swamp is dry land to a river, not a terminus — an incoming edge gets an outgoing one too", () => {
+  // Swamp sits in the classifyLand low band alongside Lake, but it's LAND
+  // (moisture >= 0.47 there) — a river should pass through it toward the
+  // sea, not stop, matching the "attracted into the swamp, then to the sea"
+  // design ask.
+  const spot = findCoord("seed", (q, r) => {
+    const { terrain } = biomeAt("seed", q, r);
+    return terrain === "Swamp" && downhillDirection("seed", q, r) !== -1;
+  });
+  assert.ok(spot, "expected a Swamp hex with a real downhill neighbour in the scanned range");
+  const { terrain, elevation } = biomeAt("seed", spot.q, spot.r);
+  const outDir = downhillDirection("seed", spot.q, spot.r);
+  const state = riverStateAt("seed", spot.q, spot.r, terrain, elevation, [1]);
+  assert.deepEqual(state.riverEdges, [1, outDir]);
+  assert.equal(state.forceLake, false);
+});
+
+test("riverStateAt: a natural Lake with no incoming edges never gets river data (it isn't a source)", () => {
+  const spot = findCoord("seed", (q, r) => biomeAt("seed", q, r).terrain === "Lake");
+  assert.ok(spot, "expected a Lake hex in the scanned range");
+  const { terrain, elevation } = biomeAt("seed", spot.q, spot.r);
+  const state = riverStateAt("seed", spot.q, spot.r, terrain, elevation, []);
+  assert.deepEqual(state, { riverEdges: [], forceLake: false });
+});
+
+test("riverStateAt: Lake outflow — a single inflow sometimes (not always, not never) adds an outgoing edge", () => {
+  // Statistical: scan many Lake hexes across many seeds with exactly one
+  // inflow and confirm both outcomes occur (an escape hatch AND a real stop,
+  // mirroring sea contagion's own "never certain" test pattern). Checks the
+  // hex's real downhill direction specifically so a synthetic incoming-dirs
+  // fixture can't accidentally collide with it and undercount an outflow.
+  let withOutflow = 0, withoutOutflow = 0;
+  for (let s = 0; s < 60; s++) {
+    const seed = `lake-seed-${s}`;
+    const spot = findCoord(seed, (q, r) => biomeAt(seed, q, r).terrain === "Lake", { qMax: 30, rMax: 30 });
+    if (!spot) continue;
+    const { terrain, elevation } = biomeAt(seed, spot.q, spot.r);
+    const outDir = downhillDirection(seed, spot.q, spot.r);
+    const state = riverStateAt(seed, spot.q, spot.r, terrain, elevation, [0]);
+    assert.ok(state.riverEdges.includes(0), "must always keep the incoming edge");
+    if (outDir !== 0 && outDir !== -1 && state.riverEdges.includes(outDir)) withOutflow++;
+    else withoutOutflow++;
+  }
+  assert.ok(withOutflow > 0, "expected at least one Lake to grow an outflow across many seeds");
+  assert.ok(withoutOutflow > 0, "expected at least one Lake to stay a pure sink across many seeds");
+});
+
+test("riverStateAt: Lake outflow chance compounds with more inflows (matches sea contagion's shape)", () => {
+  // More inflows -> strictly higher (or equal) outflow rate, over many
+  // trials. Checks for the hex's own real downhill direction specifically
+  // (rather than comparing riverEdges.length) so a synthetic incoming-dirs
+  // fixture can't accidentally collide with the chosen outgoing direction
+  // and undercount a real outflow.
+  const trials = 150;
+  function outflowRate(inflowCount) {
+    let count = 0;
+    for (let s = 0; s < trials; s++) {
+      const seed = `compound-seed-${s}`;
+      const spot = findCoord(seed, (q, r) => biomeAt(seed, q, r).terrain === "Lake", { qMax: 30, rMax: 30 });
+      if (!spot) continue;
+      const { terrain, elevation } = biomeAt(seed, spot.q, spot.r);
+      const incoming = Array.from({ length: inflowCount }, (_, i) => i);
+      const outDir = downhillDirection(seed, spot.q, spot.r);
+      const state = riverStateAt(seed, spot.q, spot.r, terrain, elevation, incoming);
+      if (outDir !== -1 && !incoming.includes(outDir) && state.riverEdges.includes(outDir)) count++;
+    }
+    return count / trials;
+  }
+  const rate1 = outflowRate(1);
+  const rate3 = outflowRate(3);
+  assert.ok(rate3 > rate1, `expected 3 inflows (${rate3}) to outflow more often than 1 (${rate1})`);
+});
