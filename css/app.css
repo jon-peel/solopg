@@ -108,19 +108,27 @@ button:hover {
   position: absolute;
   left: 0.6rem;
   bottom: 0.6rem;
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
+  font-size: 0.75rem;
+  color: var(--fg);
+  background: rgba(13, 15, 21, 0.65);
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  pointer-events: none;
+}
+#map-readout[hidden] {
+  display: none;
+}
+/* World scale, pinned top-right so the hover readout can't shift it. */
+#map-scale {
+  position: absolute;
+  right: 0.6rem;
+  top: 0.6rem;
   font-size: 0.75rem;
   color: var(--muted);
   background: rgba(13, 15, 21, 0.65);
   padding: 0.15rem 0.45rem;
   border-radius: 6px;
   pointer-events: none;
-}
-#readout-cell {
-  color: var(--fg);
-  min-width: 1px;
 }
 
 #map-controls {

@@ -55,7 +55,7 @@ import { TERRAIN_COLORS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
-import { openRadial, isRadialOpen } from "./radial-menu.js";
+import { openRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
 
 // Tables the hex generator rolls on. Settlement/POI presence are now driven by
 // the terrain profile (not tables); settlement-size is still rolled (capped).
@@ -173,6 +173,7 @@ async function refreshWorldList() {
 }
 
 async function setCurrent(world) {
+  closeRadial(); // switching worlds dismisses any open radial menu
   if (dungeonPoi) closeDungeonView(); // leave any open dungeon when switching worlds
   if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
@@ -209,23 +210,30 @@ async function onNewWorld() {
 
 // --- map chrome (hover readout, scale, empty-state prompt, help) ---------
 
-// Update the hovered-hex readout (bottom-left of the map).
+// Update the hovered-hex readout (bottom-left), shown only while hovering.
 function onHover(cell) {
+  const box = $("map-readout");
   const el = $("readout-cell");
-  if (!el) return;
-  if (!cell || !current) return void (el.textContent = "");
+  if (!box || !el) return;
+  if (!cell || !current) {
+    el.textContent = "";
+    box.hidden = true;
+    return;
+  }
   const hex = getHex(current, cell.q, cell.r);
   const label = hex && hex.placed
     ? (hex.name ? `${hex.name} · ${hex.terrain}` : hex.terrain)
     : "empty";
   el.textContent = `(${cell.q}, ${cell.r}) ${label}`;
+  box.hidden = false;
 }
 
-// Show the empty-state prompt until the world has a hex; keep the scale label current.
+// Show the empty-state prompt until the world has a hex; keep the scale label
+// (top-right, fixed) current.
 function refreshMapChrome() {
   const empty = $("map-empty");
   if (empty) empty.hidden = !current || placedHexes(current).length > 0;
-  const scale = $("readout-scale");
+  const scale = $("map-scale");
   if (scale) scale.textContent = current ? `⬡ ${current.hexScale} mi` : "";
 }
 
@@ -600,6 +608,7 @@ function dungeonFrame(dungeon) {
 function openDungeonView(poi) {
   const dungeon = poi.detail && poi.detail.dungeon;
   if (!dungeon) return; // nothing to show (build failed); stay on the hex map
+  closeRadial(); // changing screens dismisses any open radial menu
   dungeonPoi = poi;
   dungeonFrameBB = dungeonFrame(dungeon);
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
@@ -611,6 +620,7 @@ function openDungeonView(poi) {
 }
 
 function closeDungeonView() {
+  closeRadial(); // changing screens dismisses any open radial menu
   dungeonPoi = null;
   dungeonRoomN = null;
   $("dungeon-view").hidden = true;

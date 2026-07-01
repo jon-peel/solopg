@@ -13,8 +13,11 @@ Browser-only; no schema change.
   `?` help.
 - **Hover highlight** — the hex under the cursor gets a subtle outline (skipped
   on the selected cell); only re-renders when the hovered hex changes.
-- **Readout** (bottom-left) — the hovered hex's `(q, r)` + its name/terrain (or
-  "empty"), plus the world scale `⬡ N mi`.
+- **Readout** (bottom-left, shown only while hovering) — the hovered hex's
+  `(q, r)` + its name/terrain (or "empty"). The world scale `⬡ N mi` sits in its
+  own **top-right** slot so the changing readout can't shift it.
+- **Screen changes dismiss the ring** — opening/closing the Dungeon View or
+  switching worlds calls `closeRadial()`, so a menu can't linger over a new screen.
 
 **Onboarding & discoverability (Theme 3)**
 - **Empty-state prompt** — "Right-click anywhere to begin" centred on a fresh

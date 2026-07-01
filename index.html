@@ -30,11 +30,10 @@
         <canvas id="map"></canvas>
         <!-- Empty-state prompt for a fresh world (hidden once a hex is placed). -->
         <div id="map-empty" hidden>Right-click anywhere to begin</div>
-        <!-- Bottom-left readout: hovered hex + world scale. -->
-        <div id="map-readout">
-          <span id="readout-cell"></span>
-          <span id="readout-scale"></span>
-        </div>
+        <!-- Bottom-left readout: hovered hex (shown only while hovering). -->
+        <div id="map-readout" hidden><span id="readout-cell"></span></div>
+        <!-- Top-right: world scale, fixed in its own spot. -->
+        <div id="map-scale"></div>
         <!-- Bottom-right map controls. -->
         <div id="map-controls">
           <button id="btn-zoom-in" title="Zoom in">＋</button>
