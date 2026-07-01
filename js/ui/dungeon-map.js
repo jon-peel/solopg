@@ -1,9 +1,10 @@
 // Dungeon level renderer (Phase 4 arc) — browser-only, not unit-tested.
 //
 // Draws one level's layout (from js/gen/dungeon-layout.js) on its own canvas:
-// corridors as muted cells, rooms tinted by stocked content, room numbers, and
-// the entrance highlighted. Fit-to-view (no pan/zoom). Reports room clicks via a
-// callback. The layout math lives in the (tested) generator; this just paints.
+// corridors as muted cells, rooms tinted by stocked content, and room numbers.
+// Entrances are flagged by an "E" connector badge, not a border. Fit-to-view (no
+// pan/zoom). Reports room clicks via a callback. The layout math lives in the
+// (tested) generator; this just paints.
 
 const CONTENT_FILL = {
   Monster: "#7c3b32",
@@ -16,7 +17,6 @@ const CORRIDOR_FILL = "#262b36";
 const DOOR_FILL = { door: "#caa46a", locked: "#c0524a", stuck: "#c98a3a", secret: "#9a6fd0" };
 const DOOR_SYMBOL = { locked: "L", stuck: "J", secret: "S" }; // plain door: no letter
 const ROOM_STROKE = "#11131a";
-const ENTRANCE_STROKE = "#5fbf77";
 const SELECTED_STROKE = "#6ea8fe";
 const PAD = 16; // px border inside the canvas
 
@@ -222,10 +222,10 @@ export function render() {
       ctx.fillRect(x, y, w, h);
     }
 
-    const entrance = r.n === layout.entrance;
-    ctx.strokeStyle =
-      r.n === selectedRoom ? SELECTED_STROKE : entrance ? ENTRANCE_STROKE : ROOM_STROKE;
-    ctx.lineWidth = r.n === selectedRoom || entrance ? 3 : 2;
+    // Entrances are shown by the "E" connector badge (which handles multiple
+    // entrances); the room border only reflects selection.
+    ctx.strokeStyle = r.n === selectedRoom ? SELECTED_STROKE : ROOM_STROKE;
+    ctx.lineWidth = r.n === selectedRoom ? 3 : 2;
     ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
 
     ctx.fillStyle = "#e6e8ee";
