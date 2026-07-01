@@ -192,6 +192,25 @@ export function render() {
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
   }
 
+  // 2b. Annotations on un-generated cells: a name label / note badge float on
+  //     the empty grid (detail tier only, to avoid clutter when zoomed out).
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.44;
+    for (const hex of Object.values(world.hexes)) {
+      if (hex.placed || !hex.coords || (!hex.name && !hex.note)) continue;
+      const c = axialToPixel(hex.coords.q, hex.coords.r, HEX_SIZE);
+      if (c.x < minX - margin || c.x > maxX + margin || c.y < minY - margin || c.y > maxY + margin) continue;
+      if (hex.note) {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `${size}px sans-serif`;
+        drawMarker(c.x - off, c.y + off, "🗒", size, "#fff");
+      }
+      if (hex.name && labelsEnabled) drawHexLabel(c.x, c.y, hex.name);
+    }
+  }
+
   // Hover outline (under the selection ring; skipped on the selected cell).
   if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);

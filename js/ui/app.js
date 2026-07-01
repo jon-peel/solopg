@@ -225,7 +225,7 @@ function onHover(cell) {
   const hex = getHex(current, cell.q, cell.r);
   const label = hex && hex.placed
     ? (hex.name ? `${hex.name} · ${hex.terrain}` : hex.terrain)
-    : "empty";
+    : (hex && hex.name ? hex.name : "empty");
   el.textContent = `(${cell.q}, ${cell.r}) ${label}`;
   box.hidden = false;
 }
@@ -419,6 +419,7 @@ function renderSelection() {
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
+    annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
     selectedPoiId,
     onSelectPoi,
     onClearPoi: () => {
@@ -430,24 +431,43 @@ function renderSelection() {
   });
 }
 
-// GM annotations on the selected hex. A name shows as a map label, so renaming
-// re-renders; a note has no map presence, so it just persists (keeps focus).
+// GM annotations work on any selected cell. An empty cell is annotated by
+// creating a lightweight placed:false hex that carries just name/note; clearing
+// both removes it again (no orphan entries). Names show as map labels and notes
+// as a 🗒 badge, so both re-render the map.
+function annotationHex(q, r, create) {
+  let hex = getHex(current, q, r);
+  if (!hex && create) {
+    hex = { key: axialKey(q, r), coords: { q, r }, placed: false, pois: [] };
+    addHex(current, hex);
+  }
+  return hex;
+}
+
+function pruneIfEmpty(hex, q, r) {
+  if (hex && !hex.placed && !hex.name && !hex.note) removeHex(current, q, r);
+}
+
 async function onRenameHex(name) {
   if (!current || !selected) return;
-  const hex = getHex(current, selected.q, selected.r);
-  if (!hex || !hex.placed) return;
+  const { q, r } = selected;
   const v = (name || "").trim();
+  const hex = annotationHex(q, r, !!v);
+  if (!hex) return;
   if (v) hex.name = v; else delete hex.name;
+  pruneIfEmpty(hex, q, r);
   await persistAndRefresh();
 }
 
 async function onNoteHex(text) {
   if (!current || !selected) return;
-  const hex = getHex(current, selected.q, selected.r);
-  if (!hex || !hex.placed) return;
+  const { q, r } = selected;
   const v = text || "";
+  const hex = annotationHex(q, r, !!v);
+  if (!hex) return;
   if (v) hex.note = v; else delete hex.note;
-  current = await saveWorld(current);
+  pruneIfEmpty(hex, q, r);
+  await persistAndRefresh();
 }
 
 // Settlement sizes the terrain permits (capped; empty for open water).

@@ -349,13 +349,14 @@ export function renderGlobalHooks(model) {
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
 // notes. Both commit on blur/Enter (change event) — the only editable bits left
 // in the otherwise read-only Detail tab.
-function renderHexNotes(sel, hex, model) {
+function renderHexNotes(sel, model) {
+  const a = model.annotation || { name: "", note: "" };
   sel.appendChild(sectionLabel("Notes"));
 
   const name = document.createElement("input");
   name.className = "hex-name";
   name.placeholder = "Name this hex…";
-  name.value = hex.name || "";
+  name.value = a.name || "";
   name.setAttribute("aria-label", "Hex name");
   if (model.onRenameHex) {
     name.addEventListener("change", () => model.onRenameHex(name.value));
@@ -367,7 +368,7 @@ function renderHexNotes(sel, hex, model) {
   note.className = "room-note";
   note.rows = 3;
   note.placeholder = "Notes…";
-  note.value = hex.note || "";
+  note.value = a.note || "";
   if (model.onNoteHex) note.addEventListener("change", () => model.onNoteHex(note.value));
   sel.appendChild(note);
 }
@@ -401,8 +402,11 @@ export function renderSelectionPanel(model) {
       sel.appendChild(div);
     }
     renderPoiSection(sel, hex, model);
-    renderHexNotes(sel, hex, model);
   }
+
+  // Annotations (name + notes) work for any selected cell — even an ungenerated
+  // one — so the GM can label a spot before placing terrain there.
+  renderHexNotes(sel, model);
 
   // Point at the radial menu now that the action buttons are gone.
   const hint = document.createElement("div");
