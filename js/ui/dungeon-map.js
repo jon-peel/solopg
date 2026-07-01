@@ -11,6 +11,7 @@ const CONTENT_FILL = {
   Empty: "#2f3542",
   Special: "#3b4b7c",
 };
+const CONTENT_GLYPH = { Monster: "👹", Trap: "⚠️", Special: "✨" }; // Empty: none
 const CORRIDOR_FILL = "#262b36";
 const DOOR_FILL = { door: "#caa46a", locked: "#c0524a", stuck: "#c98a3a", secret: "#9a6fd0" };
 const DOOR_SYMBOL = { locked: "L", stuck: "J", secret: "S" }; // plain door: no letter
@@ -336,6 +337,18 @@ export function render() {
     for (const r of layout.rooms) {
       if (!treasureRooms.has(r.n)) continue;
       ctx.fillText("💰", sx(r.x) + 2, sy(r.y) + r.h * cell - 2);
+    }
+  }
+
+  // Content glyph (top-centre) — read a level at a glance without clicking. The
+  // colour fill already encodes this; the glyph helps (and aids colour-blind GMs).
+  if (cell >= 10) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.font = `${Math.floor(cell * 0.7)}px sans-serif`;
+    for (const r of layout.rooms) {
+      const g = CONTENT_GLYPH[contentFor(r.n)];
+      if (g) ctx.fillText(g, sx(r.x) + (r.w * cell) / 2, sy(r.y) + 2);
     }
   }
 }
