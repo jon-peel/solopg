@@ -307,23 +307,53 @@ function drawHookLine(a, b) {
 // boundary has registered the edge (the accepted order-dependent gap
 // documented in river.js).
 //
-// A pass-through hex (exactly 2 edges: one incoming, one outgoing) draws ONE
-// quadratic curve between their two midpoints, using the hex's own CENTER as
-// the control point — this bends smoothly through the hex when the river
-// actually turns, and degenerates to a perfectly straight line when the two
-// edges are opposite (the center sits exactly on that line for a regular
-// hex, so a quadratic Bezier through a colinear control point is a straight
-// line — no special-casing needed). A source (1 edge) or a confluence (3+,
-// tributaries merging) has no single obvious "through" pair, so those just
-// fall back to straight center-to-midpoint spokes.
+// Two selectable styles (an experiment, on request — flip the const to
+// compare; both consume the identical riverEdges data):
+//  - "center": a pass-through hex (exactly 2 edges) draws ONE quadratic
+//    curve between the two side-midpoints using the hex's own CENTER as the
+//    control point — bends smoothly on a turn, degenerates to a perfectly
+//    straight line when the edges are opposite (the center is colinear).
+//    Sources (1 edge) and confluences (3+) draw center-to-midpoint spokes.
+//  - "hexside": the classic hex-wargame look — the river runs along the
+//    hex's own BORDER, following the rim (corner to corner) between its
+//    side-midpoints instead of cutting through the interior. Crossings still
+//    meet neighbours at the shared side-midpoint, so continuity across hexes
+//    is preserved. Ties (opposite sides — both rim arcs equal) pick a side
+//    deterministically from the hex coords, so it's stable frame to frame.
+const RIVER_STYLE = "hexside"; // "hexside" | "center"
 const RIVER_COLOR = "#6fd0f0";
+
+// The 12-point rim ring of a hex — side-midpoints and corners interleaved in
+// angular order — used by the hexside style to walk along the border.
+function rimRing(cx, cy, q, r) {
+  const pts = [];
+  NEIGHBOR_DIRS.forEach(([dq, dr], i) => {
+    const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
+    pts.push({ x: (cx + n.x) / 2, y: (cy + n.y) / 2, sideDir: i });
+  });
+  for (const c of hexCorners(cx, cy, HEX_SIZE)) pts.push({ x: c.x, y: c.y, sideDir: -1 });
+  pts.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+  return pts;
+}
+
+// Rim points from ring index a to ring index b, walking the shorter way
+// around (12 positions); `preferForward` breaks the exact-opposite tie.
+function rimArc(ring, a, b, preferForward) {
+  const forward = (b - a + 12) % 12;
+  const backward = 12 - forward;
+  const goForward = forward < backward || (forward === backward && preferForward);
+  const step = goForward ? 1 : -1;
+  const count = goForward ? forward : backward;
+  const pts = [ring[a]];
+  for (let k = 1, idx = a; k <= count; k++) {
+    idx = (idx + step + 12) % 12;
+    pts.push(ring[idx]);
+  }
+  return pts;
+}
+
 function drawRiverEdges(cx, cy, q, r, riverEdges) {
   if (!riverEdges || !riverEdges.length) return;
-  const midpoints = riverEdges.map((dir) => {
-    const [dq, dr] = NEIGHBOR_DIRS[dir];
-    const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
-    return { x: (cx + n.x) / 2, y: (cy + n.y) / 2 };
-  });
 
   const strokeTwice = (draw) => {
     // A dark outline first so the river reads over any terrain fill colour.
@@ -334,12 +364,34 @@ function drawRiverEdges(cx, cy, q, r, riverEdges) {
     ctx.lineWidth = 2.4 / camera.scale;
     draw();
   };
+  const polyline = (pts) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
+    ctx.stroke();
+  };
 
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  if (midpoints.length === 2) {
-    const [a, b] = midpoints;
+
+  if (RIVER_STYLE === "hexside" && riverEdges.length >= 2) {
+    // Connect this hex's river sides in ring order along the border; a chain
+    // of shorter arcs covers pass-through (2) and confluences (3+) alike.
+    const ring = rimRing(cx, cy, q, r);
+    const idxs = riverEdges
+      .map((dir) => ring.findIndex((p) => p.sideDir === dir))
+      .sort((x, y) => x - y);
+    const preferForward = hashString(`${q},${r}`) % 2 === 0;
+    strokeTwice(() => {
+      for (let k = 0; k + 1 < idxs.length; k++) polyline(rimArc(ring, idxs[k], idxs[k + 1], preferForward));
+    });
+  } else if (RIVER_STYLE === "center" && riverEdges.length === 2) {
+    const [a, b] = riverEdges.map((dir) => {
+      const [dq, dr] = NEIGHBOR_DIRS[dir];
+      const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
+      return { x: (cx + n.x) / 2, y: (cy + n.y) / 2 };
+    });
     strokeTwice(() => {
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
@@ -347,7 +399,12 @@ function drawRiverEdges(cx, cy, q, r, riverEdges) {
       ctx.stroke();
     });
   } else {
-    for (const m of midpoints) {
+    // Single-edge stubs (source / terminus) and the center style's
+    // confluence fallback: straight center-to-midpoint spokes.
+    for (const dir of riverEdges) {
+      const [dq, dr] = NEIGHBOR_DIRS[dir];
+      const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
+      const m = { x: (cx + n.x) / 2, y: (cy + n.y) / 2 };
       strokeTwice(() => {
         ctx.beginPath();
         ctx.moveTo(cx, cy);

@@ -23,7 +23,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
-import { downhillDirection, riverStateAt } from "../gen/river.js";
+import { riverStateAt } from "../gen/river.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -1049,29 +1049,46 @@ function incomingRiverEdges(q, r) {
 // reason).
 //
 // Fix: when a freshly-generated hex's river wants to continue into an
-// ALREADY-PLACED, still river-free neighbour, extend the river into it —
-// but PURELY as a river-edge overlay: that neighbour's terrain/settlement/
-// POIs are never touched, even if riverStateAt would otherwise force a Lake
-// (the neighbour might already carry a settlement rolled for its original
-// terrain; flooding it retroactively would leave that inconsistent). This is
-// a deliberate, narrow exception to "never edit an already-placed hex" —
-// scoped to cosmetic river-edge data only, and only onto hexes with no river
-// data of their own yet (never overwrites another river's edges). Cascades
-// forward a bounded number of hops so a whole already-explored stretch can
-// light up in one go.
-const RIVER_STITCH_MAX_HOPS = 20;
+// ALREADY-PLACED neighbour, extend the river into it — but PURELY as a
+// river-edge overlay: that neighbour's terrain/settlement/POIs are never
+// touched, even if riverStateAt would otherwise force a Lake (the neighbour
+// might already carry a settlement rolled for its original terrain; flooding
+// it retroactively would leave that inconsistent). This is a deliberate,
+// narrow exception to "never edit an already-placed hex" — scoped to
+// cosmetic river-edge data only. If the neighbour already carries its OWN
+// river, the stitch adds just the one incoming edge and stops: a tributary
+// confluence (the downstream continuation already exists), rather than the
+// old behaviour of stopping dead one hex short and leaving a visible gap.
+// Cascades forward a bounded number of hops so a whole already-explored
+// stretch can light up in one go.
+//
+// The hex's outgoing edge is found as its one edge NOT mirrored by the
+// matching neighbour edge (incoming edges are mirrored by construction) —
+// NOT via downhillDirection, which no longer identifies every exit: a lake's
+// outflow can leave via rim overflow (see js/gen/river.js), a direction
+// steepest-descent would never report.
+const RIVER_STITCH_MAX_HOPS = 30;
+function unmatchedOutgoingDir(hex) {
+  return hex.riverEdges.find((d) => {
+    const n = neighbors(hex.coords.q, hex.coords.r)[d];
+    const nh = getHex(current, n.q, n.r);
+    return !(nh && nh.placed && nh.riverEdges && nh.riverEdges.includes((d + 3) % 6));
+  });
+}
 function stitchRiverForward(hex) {
   let cur = hex;
   for (let hop = 0; hop < RIVER_STITCH_MAX_HOPS; hop++) {
     if (!cur.riverEdges || !cur.riverEdges.length) return;
-    if (cur.terrain === "Sea" || cur.terrain === "Lake") return; // reached a real sink
-    const outDir = downhillDirection(current.seed, cur.coords.q, cur.coords.r);
-    if (outDir === -1 || !cur.riverEdges.includes(outDir)) return; // no genuine outgoing edge
+    const outDir = unmatchedOutgoingDir(cur);
+    if (outDir === undefined) return; // fully connected already
     const n = neighbors(cur.coords.q, cur.coords.r)[outDir];
     const nh = getHex(current, n.q, n.r);
     if (!nh || !nh.placed) return; // not yet placed — ordinary forward propagation covers it
-    if (nh.riverEdges && nh.riverEdges.length) return; // already carries its own river — don't touch
     const incomingDir = (outDir + 3) % 6;
+    if (nh.riverEdges && nh.riverEdges.length) {
+      nh.riverEdges.push(incomingDir); // tributary joins an existing river
+      return;
+    }
     const { riverEdges } = riverStateAt(current.seed, n.q, n.r, nh.terrain, nh.elevation, [incomingDir]);
     nh.riverEdges = riverEdges; // cosmetic only — terrain/settlement/pois stay exactly as generated
     cur = nh;

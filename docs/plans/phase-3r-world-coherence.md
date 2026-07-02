@@ -595,6 +595,58 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   both trending toward a coastline, with real curved bends (not straight segments) —
   screenshot on file. Performance unaffected: ~0.02-0.04ms/hex measured for both a 721-hex
   ("Huge") and a 4921-hex fill, despite the extra moisture/continent sampling per step.
+- **Second real-play round of fixes** (reported: lakes still never visibly outflow;
+  rivers ending in Swamp/Plains/Forest; lake tiles marooned mid-ocean and on the
+  coastline; want ~8 rivers per large map):
+  - **Rim overflow — the real reason lake outflow "never" happened.** The outflow
+    *roll* was passing half the time, but a lake sits in a local depression by
+    definition (that's why the water pooled there), so `downhillDirection` from a lake
+    hex is usually -1 and the successful roll silently added no edge. Real lakes exit
+    by rising until they spill the lowest point of their rim, even though the rim is
+    uphill of the lake surface: `overflowDirection` picks the lowest neighbour
+    excluding the inflow directions. Verified: lakes passed through per 8-map batch
+    went from ~0 to 50-70. `LAKE_OUTFLOW_CHANCE` also bumped 0.5 → **0.75** per inflow
+    ("more times than not", per the request), still compounding, still never certain.
+    A **ping-pong guard** accompanies it: the hex just past an overflow can sit uphill
+    of the lake it left, so its own steepest-descent could point straight back —
+    outgoing picks now exclude the inflow directions, and if nothing else is downhill
+    the pocket floods (forceLake) as part of the same basin.
+  - **Coastal/mid-ocean lake fix — the "bay" rule** (`js/gen/biome.js`). The Lake band
+    of `classifyLand` has no relationship to the continent gate, so a hex barely
+    clearing the ocean threshold could classify Lake while marooned in open Sea, and
+    fresh lakes could sit directly on the coast. A margin-based fix (reclassify
+    near-threshold Lakes) was prototyped and REJECTED — it just moves the coastline
+    one band inland; measured adjacency was unchanged. The working rule: flood-fill
+    the connected would-be-Lake cluster (bounded, `LAKE_REGION_CAP = 48`, no early
+    exit so every member computes the identical answer); if it touches raw ocean
+    anywhere it's a **bay/inlet — the whole cluster is Sea**. Still a pure function of
+    position. Verified: lakes-adjacent-to-Sea 37 → **0** across 8 maps (~39k hexes),
+    zero cluster-mate disagreements; regression test scans dense 51×51 grids across
+    3 seeds. Perf: "Huge" fill 26ms → 95ms (~0.13ms/hex) — still instant.
+  - **Stitch upgrades** (`js/ui/app.js`): the stitcher now finds a hex's outgoing edge
+    as its one edge NOT mirrored by the matching neighbour edge (incoming edges are
+    mirrored by construction) instead of via `downhillDirection` — required because a
+    lake's overflow exit is a direction steepest-descent would never report. And when
+    the next hex already carries its own river, the stitch now adds the single
+    incoming edge — a **tributary confluence** — instead of stopping dead one hex
+    short (a visible gap and another source of "river ends in a field" reports).
+    `RIVER_STITCH_MAX_HOPS` 20 → 30 (paths are longer now). Still cosmetic-only.
+  - **Density**: `RIVER_SOURCE_CHANCE` 0.25 → **0.35** — real usage saw 6 rivers on a
+    large map and asked for ~8; verified ~11 per 2800-hex single fill, which lands
+    near 8 under realistic fragmented exploration. Combined with the fixes above, the
+    same verification run shows mean chain length ~11 hexes (max 43+) and dry endings
+    down to ~2-3 per map, almost all at the exploration frontier ("to be continued",
+    not a true dead end).
+- **Hexside river rendering** (experiment, on request — "use the hex edges as the
+  river"): `js/ui/map.js` gained a `RIVER_STYLE` toggle. `"hexside"` (now active)
+  draws the river along the hex's own BORDER — walking the rim (corner to corner)
+  between its side-midpoints, the classic hex-wargame look — instead of cutting
+  through the interior. Crossings still meet neighbours at the shared side-midpoint,
+  so continuity across hexes is preserved, and confluences chain arcs along the rim.
+  Opposite-side ties pick a rim side deterministically from the hex coords. The
+  previous `"center"` style (quadratic curve through the hex center) is fully intact
+  behind the toggle — flipping one word restores it. Comparison screenshots of the
+  identical fixed-seed world were captured for the call.
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
 - **Tests:** `test/river.test.js` (17 tests — `isRiverSource` gated on Mountains and

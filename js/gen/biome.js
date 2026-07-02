@@ -45,7 +45,7 @@
 // position" — see rollSeaContagion below.
 
 import { fbm2D, smoothstep } from "../core/noise.js";
-import { axialDistance } from "../core/hexgeo.js";
+import { axialDistance, axialKey, neighbors } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
 
 // Land classification — UNCHANGED from 3R.3.
@@ -179,6 +179,52 @@ export function classifyLand(elevation, moisture) {
  *   neighbours are Sea (0-6); 0 = today's pure position-based behaviour.
  * @returns {{ elevation: number, moisture: number, continent: number|null, terrain: string }}
  */
+// Coastal-lake "bay" rule (3R.5 follow-up, real-play bug): the low-elevation
+// Lake band has no relationship to the continent gate, so a hex could barely
+// clear the ocean threshold yet classify Lake — producing lone "lake" tiles
+// marooned in open ocean, and fresh lakes sitting directly on the coastline.
+// A margin-based fix (reclassify near-threshold Lakes as Sea) was prototyped
+// and REJECTED: it just moves the coastline inland one band — the lakes
+// immediately behind the new boundary become the new adjacent ones (verified:
+// adjacency count was unchanged across every margin tried). The working fix
+// treats a connected cluster of would-be-Lake hexes as ONE body of water: if
+// the cluster touches raw ocean anywhere, it's a bay/inlet — salt water, the
+// WHOLE cluster is Sea. Still a pure function of position (a bounded
+// flood-fill over pure per-hex classifications, no early exit, so every
+// member of a cluster computes the identical answer regardless of generation
+// order — verified: zero cluster-mate disagreements across sampled maps).
+// A cluster bigger than the cap stays Lake for everyone (a genuinely huge
+// inland lake; the cap only bounds cost — natural clusters average 6-9 hexes).
+const LAKE_REGION_CAP = 48;
+
+// Position-pure terrain before the contagion/bay adjustments — the base
+// classification the bay fill runs over.
+function rawTerrainAt(seed, q, r) {
+  const continent = continentAt(seed, q, r) + originLandBias(q, r);
+  if (continent < OCEAN_THRESHOLD) return "Sea";
+  return classifyLand(elevationAt(seed, q, r), moistureAt(seed, q, r));
+}
+
+function lakeRegionTouchesSea(seed, q, r) {
+  const seen = new Set([axialKey(q, r)]);
+  const queue = [{ q, r }];
+  let touchesSea = false;
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const n of neighbors(cur.q, cur.r)) {
+      const nk = axialKey(n.q, n.r);
+      if (seen.has(nk)) continue;
+      const t = rawTerrainAt(seed, n.q, n.r);
+      if (t === "Sea") { touchesSea = true; continue; }
+      if (t !== "Lake") continue;
+      seen.add(nk);
+      if (seen.size > LAKE_REGION_CAP) return false; // huge inland lake — stays Lake
+      queue.push(n);
+    }
+  }
+  return touchesSea;
+}
+
 export function biomeAt(seed, q, r, seaNeighborCount = 0) {
   // Always sampled, even for Sea hexes — mirrors elevation/moisture's own
   // "always compute regardless of what it's used for" precedent, so the
@@ -190,6 +236,7 @@ export function biomeAt(seed, q, r, seaNeighborCount = 0) {
     return { elevation, moisture, continent: null, terrain: "Sea" };
   }
   const continent = continentAt(seed, q, r) + originLandBias(q, r);
-  const terrain = continent < OCEAN_THRESHOLD ? "Sea" : classifyLand(elevation, moisture);
+  let terrain = continent < OCEAN_THRESHOLD ? "Sea" : classifyLand(elevation, moisture);
+  if (terrain === "Lake" && lakeRegionTouchesSea(seed, q, r)) terrain = "Sea";
   return { elevation, moisture, continent, terrain };
 }

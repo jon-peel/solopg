@@ -140,14 +140,32 @@ on stitching alone, which fully resolves the dead-end case on its own. Verified:
 in a single big fill mean chain length 3.8→11.4 hexes, reach-water 15%→59%, orphans 79→7; in
 scattered clicks mean length 1.7→5.6, reach-water 2%→18.5%, orphans 110→30; confirmed
 visually via the new "Huge" tool (two clearly winding, coastward rivers, real curved bends).
-Performance unaffected (~0.02-0.04ms/hex). **Next:
+Performance unaffected (~0.02-0.04ms/hex).
+**Fifth revision (second real-play round):** (1) **rim overflow** — lake outflow rolls were
+passing but silently doing nothing, because a lake sits in a local depression by definition, so
+steepest-descent from it is usually -1; lakes now exit by spilling their lowest rim neighbour
+(excluding inflow dirs), with a ping-pong guard so the next hex can't point straight back;
+`LAKE_OUTFLOW_CHANCE` 0.5→0.75 ("more times than not"). Verified: lakes passed through went
+~0→50-70 per 8-map batch. (2) **the "bay" rule** (`js/gen/biome.js`) — lake tiles were
+appearing mid-ocean/on the coast because the Lake band ignores the continent gate; a
+margin-based fix was prototyped and rejected (it just moves the coastline; adjacency
+unchanged), the working rule flood-fills the connected would-be-Lake cluster (bounded, cap 48,
+no early exit so all members agree) and turns the WHOLE cluster Sea if it touches raw ocean —
+a bay/inlet; verified lakes-adjacent-to-Sea 37→0 across ~39k hexes, still position-pure.
+(3) **stitch upgrades** — outgoing edge found as the unmirrored edge (a lake's overflow exit
+isn't its downhill), and stitching into a river-carrying hex now adds the incoming edge as a
+tributary confluence instead of stopping one hex short. (4) `RIVER_SOURCE_CHANCE` 0.25→0.35
+(~8 rivers per large map, per request). (5) **Hexside river rendering** (experiment, on
+request): `map.js` `RIVER_STYLE` toggle, `"hexside"` active — rivers run along hex BORDERS
+(rim arcs between side-midpoints, classic wargame look); the `"center"` curve style is intact
+one word away. **Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
 `elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
 Lake/Sea (v9, reworked in v10); 3R.5 adds `riverEdges` (v11).**
-**Schema v11. 266 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v11. 267 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

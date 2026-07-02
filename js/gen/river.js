@@ -34,16 +34,14 @@ import { neighbors, NEIGHBOR_DIRS } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
 import { elevationAt, moistureAt, continentAt } from "./biome.js";
 
-// Tuned for "rare and dramatic" (explicit design call — see the 3R.5 plan).
-// First shipped at 0.06 (roughly one source per 1200-2000 hexes), but real
-// GM usage (~50 "Generate Area" clicks, ~1350 unique hexes) turned up only 1
-// small river — confirmed via a scratchpad simulation of many scattered
-// area-fills (matching how a GM actually explores, not one single big fill)
-// that 0.06 averages under 1 river per similarly-sized map. Bumped to 0.25
-// (~4x): the same simulation shows ~3-4 rivers per map of that size, still
-// clearly a landmark rather than routine terrain (most Mountains hexes still
-// have none), just no longer vanishingly rare.
-const RIVER_SOURCE_CHANCE = 0.25;
+// Density history: shipped at 0.06 ("rare and dramatic": ~1 source per
+// 1200-2000 hexes) — real GM usage found that vanishingly rare (1 short
+// river in ~1350 hexes). Bumped to 0.25 (~3-4 rivers per map that size).
+// Real usage then reported 6 rivers on a large map and asked for ~8, so
+// bumped again to 0.35 — verified in the scratchpad: ~11 rivers per
+// 2800-hex single fill, which lands near 8 in realistic fragmented
+// exploration where part of every river falls outside the explored area.
+const RIVER_SOURCE_CHANCE = 0.35;
 
 // Flow-direction uses FEWER octaves than terrain classification's elevation
 // (NOISE_OPTS.octaves = 3) — a smoothed field so steepest-descent tracks the
@@ -158,15 +156,38 @@ export function downhillDirection(seed, q, r) {
 }
 
 // Lake outflow (3R.5 follow-up, on request — real lakes commonly have both
-// an inflow and an outflow). Reuses sea contagion's exact compounding shape
-// (js/gen/biome.js SEA_CONTAGION_CHANCE): chance rises with more inflows,
-// capped at 1, never certain. A Sea never gets an outflow roll — it's the
-// world's actual ocean, the end of the line; only Lake (a landlocked body)
-// can pass a river onward toward the next lake or the sea.
-const LAKE_OUTFLOW_CHANCE = 0.5; // per inflow, compounding
+// an inflow and an outflow; per the follow-up report, "more times than not"
+// a river entering a lake should continue out). Reuses sea contagion's exact
+// compounding shape (js/gen/biome.js SEA_CONTAGION_CHANCE): chance rises
+// with more inflows, capped at 1, never certain. A Sea never gets an outflow
+// roll — it's the world's actual ocean, the end of the line; only Lake (a
+// landlocked body) can pass a river onward toward the next lake or the sea.
+const LAKE_OUTFLOW_CHANCE = 0.75; // per inflow, compounding
 function rollLakeOutflow(seed, q, r, inflowCount) {
   const chance = 1 - Math.pow(1 - LAKE_OUTFLOW_CHANCE, inflowCount);
   return subRng(seed, "lake-outflow", q, r)() < chance;
+}
+
+// Rim overflow: a lake usually sits in a local depression — that's exactly
+// why the water pooled there — so downhillDirection from a lake hex is very
+// often -1 and a successful outflow roll used to silently do NOTHING (the
+// original real-play "rivers never flow out of lakes" report, despite the
+// roll itself passing half the time). Real lakes exit by rising until they
+// spill over the LOWEST point of their rim, even though that rim is uphill
+// of the lake surface: pick the lowest neighbour excluding the direction(s)
+// the water came in from. Also reused as the dry-land ping-pong guard: after
+// an overflow, the next hex downstream may be uphill of the lake it just
+// left, so its own steepest-descent can point straight back at that lake —
+// re-picking with the incoming dirs excluded keeps the water moving away.
+function overflowDirection(seed, q, r, excludeDirs) {
+  let bestDir = -1;
+  let bestElev = Infinity;
+  NEIGHBOR_DIRS.forEach(([dq, dr], i) => {
+    if (excludeDirs.includes(i)) return;
+    const e = elevationAt(seed, q + dq, r + dr, FLOW_OCTAVES);
+    if (e < bestElev) { bestElev = e; bestDir = i; }
+  });
+  return bestDir;
 }
 
 /**
@@ -203,13 +224,29 @@ export function riverStateAt(seed, q, r, terrain, elevation, incomingDirs) {
   if (terrain === "Sea") return { riverEdges: edges, forceLake: false };
   if (terrain === "Lake") {
     if (hasIncoming && rollLakeOutflow(seed, q, r, incomingDirs.length)) {
-      const outDir = downhillDirection(seed, q, r);
+      // Downhill when the terrain allows it; otherwise spill the rim (see
+      // overflowDirection — the lake IS the depression, so downhill is
+      // usually -1 here and outflow would otherwise never actually happen).
+      let outDir = downhillDirection(seed, q, r);
+      if (outDir === -1 || incomingDirs.includes(outDir)) {
+        outDir = overflowDirection(seed, q, r, incomingDirs);
+      }
       if (outDir !== -1) edges.push(outDir);
     }
     return { riverEdges: edges, forceLake: false };
   }
 
-  const outDir = downhillDirection(seed, q, r);
+  let outDir = downhillDirection(seed, q, r);
+  // Ping-pong guard: after a rim overflow the water may sit uphill of the
+  // lake it just left, so steepest-descent can point straight back into it.
+  // Re-pick the best candidate excluding the inflow directions; if nothing
+  // else is downhill, this pocket is part of the same basin — flood it.
+  if (outDir !== -1 && incomingDirs.includes(outDir)) {
+    const candidates = scoreCandidates(seed, q, r).filter((c) => !incomingDirs.includes(c.i));
+    outDir = candidates.length
+      ? candidates.reduce((best, c) => (c.weight > best.weight ? c : best)).i
+      : -1;
+  }
   if (outDir === -1) return { riverEdges: edges, forceLake: true };
   edges.push(outDir);
   return { riverEdges: edges, forceLake: false };

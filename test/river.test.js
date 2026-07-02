@@ -202,34 +202,34 @@ test("riverStateAt: a natural Lake with no incoming edges never gets river data 
   assert.deepEqual(state, { riverEdges: [], forceLake: false });
 });
 
-test("riverStateAt: Lake outflow — a single inflow sometimes (not always, not never) adds an outgoing edge", () => {
+test("riverStateAt: Lake outflow — a single inflow usually (but not always) adds an outgoing edge", () => {
   // Statistical: scan many Lake hexes across many seeds with exactly one
-  // inflow and confirm both outcomes occur (an escape hatch AND a real stop,
-  // mirroring sea contagion's own "never certain" test pattern). Checks the
-  // hex's real downhill direction specifically so a synthetic incoming-dirs
-  // fixture can't accidentally collide with it and undercount an outflow.
+  // inflow. The outflow edge is never an incoming dir (rim overflow excludes
+  // them; the ping-pong guard covers the dry-land side), so detection is a
+  // simple edge-count comparison. Per the design ask ("more times than not
+  // a river entering a lake should continue out") the outflow should be the
+  // MAJORITY outcome, while still never being certain (a real stop must
+  // remain possible — mirrors sea contagion's own escape-hatch pattern).
   let withOutflow = 0, withoutOutflow = 0;
-  for (let s = 0; s < 60; s++) {
+  for (let s = 0; s < 80; s++) {
     const seed = `lake-seed-${s}`;
     const spot = findCoord(seed, (q, r) => biomeAt(seed, q, r).terrain === "Lake", { qMax: 30, rMax: 30 });
     if (!spot) continue;
     const { terrain, elevation } = biomeAt(seed, spot.q, spot.r);
-    const outDir = downhillDirection(seed, spot.q, spot.r);
     const state = riverStateAt(seed, spot.q, spot.r, terrain, elevation, [0]);
     assert.ok(state.riverEdges.includes(0), "must always keep the incoming edge");
-    if (outDir !== 0 && outDir !== -1 && state.riverEdges.includes(outDir)) withOutflow++;
+    assert.ok(!state.riverEdges.slice(1).includes(0), "outflow must never duplicate the inflow");
+    if (state.riverEdges.length > 1) withOutflow++;
     else withoutOutflow++;
   }
-  assert.ok(withOutflow > 0, "expected at least one Lake to grow an outflow across many seeds");
+  assert.ok(withOutflow > withoutOutflow, `outflow should be the majority outcome (got ${withOutflow} vs ${withoutOutflow})`);
   assert.ok(withoutOutflow > 0, "expected at least one Lake to stay a pure sink across many seeds");
 });
 
 test("riverStateAt: Lake outflow chance compounds with more inflows (matches sea contagion's shape)", () => {
-  // More inflows -> strictly higher (or equal) outflow rate, over many
-  // trials. Checks for the hex's own real downhill direction specifically
-  // (rather than comparing riverEdges.length) so a synthetic incoming-dirs
-  // fixture can't accidentally collide with the chosen outgoing direction
-  // and undercount a real outflow.
+  // More inflows -> higher outflow rate, over many trials. An outflow edge
+  // is never one of the incoming dirs (rim overflow excludes them), so a
+  // grown edge count is exactly "an outflow happened".
   const trials = 150;
   function outflowRate(inflowCount) {
     let count = 0;
@@ -239,9 +239,8 @@ test("riverStateAt: Lake outflow chance compounds with more inflows (matches sea
       if (!spot) continue;
       const { terrain, elevation } = biomeAt(seed, spot.q, spot.r);
       const incoming = Array.from({ length: inflowCount }, (_, i) => i);
-      const outDir = downhillDirection(seed, spot.q, spot.r);
       const state = riverStateAt(seed, spot.q, spot.r, terrain, elevation, incoming);
-      if (outDir !== -1 && !incoming.includes(outDir) && state.riverEdges.includes(outDir)) count++;
+      if (state.riverEdges.length > inflowCount) count++;
     }
     return count / trials;
   }

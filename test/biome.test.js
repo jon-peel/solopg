@@ -136,3 +136,25 @@ test("biomeAt: always returns one of the known terrains", () => {
     }
   }
 });
+
+test("biomeAt: a Lake is never adjacent to Sea — lake clusters open to the ocean become Sea (bays)", () => {
+  // Regression for the "lake tiles in the middle of the ocean / along the
+  // coast" bug: the low-elevation Lake band has no relationship to the
+  // continent gate, so without the bay rule a hex barely clearing the ocean
+  // threshold could classify Lake while marooned in (or beside) open Sea.
+  // Dense contiguous scan (not strided — adjacency needs real neighbours).
+  const NEIGHBOR_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+  for (const seed of [1, 2, "gamma"]) {
+    for (let q = -25; q <= 25; q++) {
+      for (let r = -25; r <= 25; r++) {
+        if (biomeAt(seed, q, r).terrain !== "Lake") continue;
+        for (const [dq, dr] of NEIGHBOR_DIRS) {
+          assert.notEqual(
+            biomeAt(seed, q + dq, r + dr).terrain, "Sea",
+            `Lake at (${q},${r}) sits next to Sea at (${q + dq},${r + dr}) [seed ${seed}]`,
+          );
+        }
+      }
+    }
+  }
+});
