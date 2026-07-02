@@ -373,9 +373,12 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 - **Second bug found during this fix, not in the original ask:** the world's spawn point
   is always the fixed origin `(0,0)`. Some seeds place the origin deep in an ocean basin
   — one tested seed gave **100% Sea at the origin itself**. **Fix:** a smooth
-  origin-centered land bias (`LAND_BOOST 0.7`, falloff over `FALLOFF_RADIUS 30` hexes via
+  origin-centered land bias (`LAND_BOOST 0.7`, falloff over `FALLOFF_RADIUS` hexes via
   `axialDistance`) boosts `continent` near `(0,0)` only, guaranteeing every new world
   spawns on land — verified across 14 seeds (`biomeAt(seed, 0, 0)` is never `"Sea"`).
+  (`FALLOFF_RADIUS` was later shrunk 30 → 15 — see the "not enough rivers reach the sea"
+  round in 3R.5 — so coastline appears within a starting Huge fill; the origin and its
+  immediate start rings stay reliably land either way.)
 - The renamed **`hex.continent`** field (was `basin`) is always computed and stored
   (mirrors elevation/moisture's precedent), available uniformly for 3R.5+.
 - Rendering: `Lake`/`Sea` get distinct colours (`terrain-style.js`) and emoji
@@ -691,6 +694,26 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   3. **Solid blue line** (`js/ui/map.js`): the river's dark outline pass is now drawn in
      the river colour too, so the two width passes read as one solid light-blue stroke
      instead of an outlined one. Verified in the browser.
+- **Fifth real-play round: "not enough rivers reach the sea." The root cause was NOT
+  routing — it was that the sea wasn't in the generated area at all.** Instrumenting a
+  big fill showed the sea IS reachable in principle (591 sea hexes in a radius-40 fill)
+  but only ~6% of rivers reached it — so the first instinct was to tune routing. A long
+  sweep (coast-pull 150→800, lake-outflow 0.75→0.95, coast-biased rim spill, and a
+  combined "flow down elevation+continent" field) all capped at ~10% and one variant
+  (the combined flow field) actually made rivers *spiral* — maxLen 300+. **The real
+  diagnosis:** a Huge fill (radius 15) centred on the origin contains **ZERO Sea**
+  (measured 0/8 sample maps), because the origin land-bias guaranteed land out to
+  radius 30 and the whole fill sat inside that bubble. Rivers can't reach a coast that
+  was never generated. **Fix: shrink `FALLOFF_RADIUS` 30 → 15** (`js/gen/biome.js`). At
+  15 the origin and its inner ~5 rings stay reliably land (origin never Sea across 40
+  seeds; the r3 start disc always fully land), but real coastline now appears within a
+  starting Huge fill in ~55% of maps (avg ~180 Sea hexes, up from ~0). Re-measured with
+  the real modules + real stitcher on the actual near-origin scenario: a Huge (r15) fill
+  now averages 177 Sea hexes and ~15% of rivers reach the sea, with ≥1 sea-reaching
+  river in ~30% of maps (rising to ~60% by radius 25). Confirmed visually — a river
+  running mountains-to-coast within a fresh near-origin Huge fill. (The routing sweep
+  was left un-applied: it was marginal and the combined-field variant risked spirals;
+  the honest fix was making the sea exist where people generate.)
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
 - **Tests:** `test/river.test.js` (19 tests — source detection now covers BOTH

@@ -61,10 +61,20 @@ const OCEAN_THRESHOLD = 0.45;
 // ocean basin — verified: one seed gave 100% Sea AT the origin, another gave
 // 95%+ Sea within the normal starting exploration radius, stranding a new
 // world's GM in open ocean from the start. This smoothly boosts `continent`
-// near the origin (falloff to zero by ~30 hexes out) so the spawn area is
-// always land, without touching the field's behaviour anywhere else.
+// near the origin so the spawn area is always land, without touching the
+// field's behaviour further out.
+//
+// FALLOFF_RADIUS shrank 30 → 15 (real-play: "not enough rivers reach the
+// sea"). The diagnosis: a Huge fill (radius 15) centred on the origin sat
+// ENTIRELY inside the old 30-hex land bubble, so it contained ZERO Sea
+// (measured 0/8 sample maps) — rivers literally couldn't reach a coast that
+// wasn't generated. At falloff 15 the immediate start area (inner ~5 rings)
+// stays reliably land (origin never Sea across 40 seeds; the r3 start disc is
+// always fully land), but real coastline now appears within a starting Huge
+// fill in ~55% of maps (avg ~180 Sea hexes vs ~0 before) — so rivers have a
+// sea to flow to. LAND_BOOST unchanged (the spawn safety margin).
 const LAND_BOOST = 0.7;
-const FALLOFF_RADIUS = 30;
+const FALLOFF_RADIUS = 15;
 function originLandBias(q, r) {
   const t = Math.max(0, Math.min(1, 1 - axialDistance(0, 0, q, r) / FALLOFF_RADIUS));
   return LAND_BOOST * smoothstep(t);

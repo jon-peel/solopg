@@ -182,7 +182,18 @@ a spontaneous source. (2) The **inflow-raises-outflow-likelihood** half was alre
 present (`LAKE_OUTFLOW_CHANCE=0.75`, compounding) but invisible; combined with the origin fix it
 now shows ~7.3 pass-through lakes (inflow AND outflow) per Huge fill. (3) **Solid blue river
 line** (`map.js`): the outline pass is now the river colour too, so it reads as one solid
-light-blue stroke — verified in-browser. **Next:
+light-blue stroke — verified in-browser.
+**Eighth revision (fifth real-play round — "not enough rivers reach the sea"):** the root cause
+was NOT routing but that the sea wasn't in the generated area — a Huge (r15) fill centred on the
+origin contained ZERO Sea (measured 0/8), because the origin land-bias guaranteed land out to
+radius 30 and the whole fill sat inside that bubble. A long routing sweep (coast-pull to 800,
+lake-outflow to 0.95, coast-biased spill, a combined elevation+continent flow field) all capped
+at ~10% and the flow-field variant made rivers spiral (maxLen 300+) — so it was left un-applied.
+**Fix: `FALLOFF_RADIUS` 30 → 15** (`js/gen/biome.js`) — the origin and its inner rings stay
+reliably land (origin never Sea across 40 seeds; r3 start disc always land), but coastline now
+appears within a starting Huge fill in ~55% of maps (avg ~180 Sea hexes, up from ~0). Real
+near-origin Huge fills now average 177 Sea hexes and ~15% reach-sea, with ≥1 sea-reaching river
+in ~30% of maps (~60% by radius 25); confirmed visually. **Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
