@@ -320,7 +320,7 @@ function drawHookLine(a, b) {
 //    meet neighbours at the shared side-midpoint, so continuity across hexes
 //    is preserved. Ties (opposite sides — both rim arcs equal) pick a side
 //    deterministically from the hex coords, so it's stable frame to frame.
-const RIVER_STYLE = "hexside"; // "hexside" | "center"
+const RIVER_STYLE = "center"; // "hexside" | "center"
 const RIVER_COLOR = "#6fd0f0";
 
 // The 12-point rim ring of a hex — side-midpoints and corners interleaved in

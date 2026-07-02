@@ -23,7 +23,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
-import { riverStateAt } from "../gen/river.js";
+import { riverStateAt, overflowDirection } from "../gen/river.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -1068,18 +1068,34 @@ function incomingRiverEdges(q, r) {
 // outflow can leave via rim overflow (see js/gen/river.js), a direction
 // steepest-descent would never report.
 const RIVER_STITCH_MAX_HOPS = 30;
-function unmatchedOutgoingDir(hex) {
+// `skipDir` excludes the edge we KNOW is this hex's incoming (just pushed by
+// the cascade) — during a stitch the fresh source hex isn't in the world yet
+// (buildRandomHex stitches before its caller addHex-es), so that incoming
+// edge would otherwise look unmatched and send the cascade BACKWARD into a
+// not-yet-placed cell, killing it one hop in. (Found the hard way: a browser
+// world where every river was 1-2 hexes ending unmatched on placed land.)
+function unmatchedOutgoingDir(hex, skipDir) {
   return hex.riverEdges.find((d) => {
+    if (d === skipDir) return false;
     const n = neighbors(hex.coords.q, hex.coords.r)[d];
     const nh = getHex(current, n.q, n.r);
     return !(nh && nh.placed && nh.riverEdges && nh.riverEdges.includes((d + 3) % 6));
   });
 }
+// A hex the GM has effectively never touched: no settlement, no POIs, no
+// name/note — safe to retroactively reshape (see the basin flip below).
+function isPristineHex(hex) {
+  return !(hex.settlement && hex.settlement.present)
+    && !(Array.isArray(hex.pois) && hex.pois.length)
+    && !hex.name && !hex.note;
+}
+
 function stitchRiverForward(hex) {
   let cur = hex;
+  let cameFrom; // cur's incoming dir once the cascade is moving (see unmatchedOutgoingDir)
   for (let hop = 0; hop < RIVER_STITCH_MAX_HOPS; hop++) {
     if (!cur.riverEdges || !cur.riverEdges.length) return;
-    const outDir = unmatchedOutgoingDir(cur);
+    const outDir = unmatchedOutgoingDir(cur, cameFrom);
     if (outDir === undefined) return; // fully connected already
     const n = neighbors(cur.coords.q, cur.coords.r)[outDir];
     const nh = getHex(current, n.q, n.r);
@@ -1089,9 +1105,35 @@ function stitchRiverForward(hex) {
       nh.riverEdges.push(incomingDir); // tributary joins an existing river
       return;
     }
-    const { riverEdges } = riverStateAt(current.seed, n.q, n.r, nh.terrain, nh.elevation, [incomingDir]);
-    nh.riverEdges = riverEdges; // cosmetic only — terrain/settlement/pois stay exactly as generated
+    const state = riverStateAt(current.seed, n.q, n.r, nh.terrain, nh.elevation, [incomingDir]);
+    if (state.forceLake) {
+      // A landlocked basin. At generation time this hex would have BECOME a
+      // Lake; the stitcher's cosmetic-only rule used to just drop that, which
+      // left the river silently dead-ending on dry land — measured as a
+      // third of all rivers in a filled region, and the source of the
+      // repeated "rivers end in a forest" reports (spilling onward instead
+      // was also tried and measured: the water just spirals the pocket and
+      // merges back into itself). So, one further explicitly-gated
+      // extension of the exception: a PRISTINE basin hex (no settlement, no
+      // POIs, no GM name/note — nothing the GM has invested in) flips to
+      // Lake, terminating the river properly. A non-pristine basin keeps its
+      // terrain and the water spills its rim instead, detouring around the
+      // GM's content.
+      if (isPristineHex(nh)) {
+        nh.terrain = "Lake";
+        nh.terrainFeature = null;
+        nh.riverEdges = [incomingDir];
+        return;
+      }
+      const spill = overflowDirection(current.seed, n.q, n.r, [incomingDir]);
+      nh.riverEdges = spill === -1 ? [incomingDir] : [incomingDir, spill];
+      cur = nh;
+      cameFrom = incomingDir;
+      continue;
+    }
+    nh.riverEdges = state.riverEdges; // cosmetic only — terrain/settlement/pois stay exactly as generated
     cur = nh;
+    cameFrom = incomingDir;
   }
 }
 

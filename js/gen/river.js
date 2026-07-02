@@ -179,7 +179,8 @@ function rollLakeOutflow(seed, q, r, inflowCount) {
 // an overflow, the next hex downstream may be uphill of the lake it just
 // left, so its own steepest-descent can point straight back at that lake —
 // re-picking with the incoming dirs excluded keeps the water moving away.
-function overflowDirection(seed, q, r, excludeDirs) {
+// Exported for js/ui/app.js's stitcher (the non-pristine-basin fallback).
+export function overflowDirection(seed, q, r, excludeDirs) {
   let bestDir = -1;
   let bestElev = Infinity;
   NEIGHBOR_DIRS.forEach(([dq, dr], i) => {

@@ -638,15 +638,40 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
     down to ~2-3 per map, almost all at the exploration frontier ("to be continued",
     not a true dead end).
 - **Hexside river rendering** (experiment, on request — "use the hex edges as the
-  river"): `js/ui/map.js` gained a `RIVER_STYLE` toggle. `"hexside"` (now active)
-  draws the river along the hex's own BORDER — walking the rim (corner to corner)
-  between its side-midpoints, the classic hex-wargame look — instead of cutting
-  through the interior. Crossings still meet neighbours at the shared side-midpoint,
-  so continuity across hexes is preserved, and confluences chain arcs along the rim.
-  Opposite-side ties pick a rim side deterministically from the hex coords. The
-  previous `"center"` style (quadratic curve through the hex center) is fully intact
-  behind the toggle — flipping one word restores it. Comparison screenshots of the
-  identical fixed-seed world were captured for the call.
+  river"): `js/ui/map.js` gained a `RIVER_STYLE` toggle. `"hexside"` draws the river
+  along the hex's own BORDER — walking the rim (corner to corner) between its
+  side-midpoints, the classic hex-wargame look — instead of cutting through the
+  interior. Crossings still meet neighbours at the shared side-midpoint, so continuity
+  across hexes is preserved, and confluences chain arcs along the rim. Opposite-side
+  ties pick a rim side deterministically from the hex coords. Comparison screenshots
+  of the identical fixed-seed world were captured; **verdict: the user preferred the
+  curves — `"center"` is the active style again**, hexside stays available behind the
+  one-word toggle.
+- **Third real-play round: "still have rivers ending in forests." Two genuine root
+  causes found and fixed, both diagnosed by instrumenting full simulated fills:**
+  1. **Sealed dry basins.** A river descending into a landlocked basin whose floor is
+     dry Swamp/Forest would, at STITCH time, hit `forceLake` — which the cosmetic-only
+     stitcher just dropped (it never edits terrain), leaving the water to spiral the
+     pocket via rim-spill and merge back into itself: a chain with every edge matched,
+     no water, no frontier — an invisible mid-map dead end. Measured at a THIRD of all
+     rivers in a filled region (15/45 chains). Spilling onward alone was tried first
+     and measured nearly useless (15→12) — the spiral just reforms. **Fix: the
+     pristine-hex Lake flip.** A basin hex the GM has never touched (no settlement, no
+     POIs, no name/note) now flips to Lake at stitch time, terminating the river
+     properly — the first and only case where an already-placed hex's TERRAIN changes,
+     gated exactly on "nothing the GM has invested in"; a non-pristine basin keeps its
+     terrain and the water spills its rim instead. Verified: sealed-dry chains 29 → 0
+     across 10 simulated 5-fill maps (reach-water 46% → 78%, remainder all frontier).
+  2. **A stitcher regression from the previous commit.** `unmatchedOutgoingDir` could
+     return a hex's INCOMING edge whenever the upstream hex wasn't in the world yet —
+     which is always true mid-stitch, since `buildRandomHex` stitches before its
+     caller `addHex`-es the fresh hex. The cascade followed the river BACKWARD into a
+     not-yet-placed cell and died one hop in; a real browser world showed every river
+     1-2 hexes long, unmatched on placed land. **Fix:** thread the known incoming
+     direction (`cameFrom`) through the cascade and exclude it from the unmatched-edge
+     scan. Verified end-to-end in 5 fresh browser worlds (3 overlapping Huge fills
+     each): every chain now reaches water or the exploration frontier; a single
+     non-pristine-basin spill fallback appeared once across all runs.
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
 - **Tests:** `test/river.test.js` (17 tests — `isRiverSource` gated on Mountains and

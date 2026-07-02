@@ -156,9 +156,24 @@ a bay/inlet; verified lakes-adjacent-to-Sea 37→0 across ~39k hexes, still posi
 isn't its downhill), and stitching into a river-carrying hex now adds the incoming edge as a
 tributary confluence instead of stopping one hex short. (4) `RIVER_SOURCE_CHANCE` 0.25→0.35
 (~8 rivers per large map, per request). (5) **Hexside river rendering** (experiment, on
-request): `map.js` `RIVER_STYLE` toggle, `"hexside"` active — rivers run along hex BORDERS
-(rim arcs between side-midpoints, classic wargame look); the `"center"` curve style is intact
-one word away. **Next:
+request): `map.js` `RIVER_STYLE` toggle — rivers along hex BORDERS (rim arcs between
+side-midpoints, classic wargame look); after a side-by-side comparison the user preferred the
+curves, so `"center"` is active again and hexside stays one word away.
+**Sixth revision (third real-play round — "still rivers ending in forests"): two root causes
+found by instrumenting full simulated fills.** (1) **Sealed dry basins**: a river descending
+into a landlocked basin with a dry Swamp/Forest floor hit `forceLake` at STITCH time, which the
+cosmetic-only stitcher dropped — the water then spiralled the pocket via rim-spill and merged
+back into itself (an invisible mid-map dead end; measured at a third of all rivers in a filled
+region). Fix: the **pristine-hex Lake flip** — a basin hex with no settlement/POIs/name/note
+flips to Lake at stitch time (the first and only case where an already-placed hex's terrain
+changes, gated on "nothing the GM has invested in"); non-pristine basins spill onward instead.
+Verified sealed-dry 29→0 across 10 simulated 5-fill maps. (2) **A stitcher regression** from
+the previous commit: `unmatchedOutgoingDir` could return an INCOMING edge whenever the
+upstream hex wasn't in the world yet (always true mid-stitch — buildRandomHex stitches before
+its caller addHex-es), sending the cascade backward to die one hop in; every river in a real
+browser world was 1-2 hexes. Fix: thread the incoming direction (`cameFrom`) through the
+cascade and exclude it. Verified in 5 fresh browser worlds: every chain reaches water or the
+exploration frontier. **Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
