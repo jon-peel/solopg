@@ -211,9 +211,10 @@ test("sea contagion: a manually-placed Sea hex measurably extends the coastline 
 });
 
 // Rivers (3R.5 "curated rivers"): mirror app.js's syncRivers — generate an
-// area, scan its placed hexes for river sources, trace each to the sea, and
-// build the world.rivers[] registry. Asserts the whole point of the rework:
-// rivers exist and reach the coast.
+// area, find its river sources, trace each to the sea in CANONICAL order with a
+// shared `claimed` set so tributaries merge into trunks (dendritic network, no
+// spaghetti). Asserts the whole point of the rework: rivers exist and reach
+// the coast.
 function generateAreaWithRivers(seed, radius) {
   const tables = loadTables();
   const world = createWorld({ name: "river-test", seed });
@@ -225,16 +226,25 @@ function generateAreaWithRivers(seed, radius) {
     hex.gen = 0;
     addHex(world, hex);
   }
-  // syncRivers (app.js) equivalent.
-  const have = new Set();
+  const sources = [];
   for (const hex of placedHexes(world)) {
     const { q, r } = hex.coords;
-    const id = riverId(q, r);
-    if (have.has(id)) continue;
-    if (!isRiverSource(seed, q, r, hex.terrain, hex.elevation)) continue;
-    const { path, reachedSea } = traceRiverToSea(seed, q, r);
-    world.rivers.push({ id, source: { q, r }, path, reachedSea });
-    have.add(id);
+    if (isRiverSource(seed, q, r, hex.terrain, hex.elevation)) sources.push({ q, r });
+  }
+  sources.sort((a, b) => (a.q - b.q) || (a.r - b.r));
+  const claimed = new Set();
+  const claimedReachedSea = new Map();
+  for (const { q, r } of sources) {
+    const res = traceRiverToSea(seed, q, r, { claimed });
+    const end = res.path[res.path.length - 1];
+    const endKey = axialKey(end.q, end.r);
+    const reachedSea = res.reachedSea || (res.joined && (claimedReachedSea.get(endKey) ?? true));
+    for (const p of res.path) {
+      const k = axialKey(p.q, p.r);
+      claimed.add(k);
+      if (!claimedReachedSea.has(k)) claimedReachedSea.set(k, reachedSea);
+    }
+    world.rivers.push({ id: riverId(q, r), source: { q, r }, path: res.path, reachedSea, joined: res.joined });
   }
   return { world };
 }
@@ -258,18 +268,27 @@ test("rivers: every traced river is a connected chain from its source hex", () =
   }
 });
 
-test("rivers: the overwhelming majority of traced rivers reach the sea (the rework's whole point)", () => {
+test("rivers: tributaries merge — most rivers END at either the sea or another river (a confluence), not mid-land", () => {
   const { world } = generateAreaWithRivers(2, 40);
   assert.ok(world.rivers.length > 0, "expected traced rivers");
-  const reached = world.rivers.filter((rv) => rv.reachedSea).length;
-  // A river that ends on an ocean hex genuinely terminates at the coast.
-  for (const rv of world.rivers) {
-    if (!rv.reachedSea) continue;
-    const end = rv.path[rv.path.length - 1];
-    assert.ok(isOceanAt(2, end.q, end.r), `river ${rv.id} claims reachedSea but ends on land`);
+  // The mouth of each river is either an ocean hex (a true sea outlet) or a hex
+  // that belongs to a DIFFERENT river (a confluence). A merged network has no
+  // rivers dead-ending on open land except the rare budget-fallback partial.
+  const onSomeRiver = new Map(); // hexKey -> owning river id
+  for (const rv of world.rivers) for (const p of rv.path) {
+    const k = axialKey(p.q, p.r);
+    if (!onSomeRiver.has(k)) onSomeRiver.set(k, rv.id);
   }
-  assert.ok(reached / world.rivers.length > 0.9,
-    `expected >90% of rivers to reach the sea, got ${reached}/${world.rivers.length}`);
+  let good = 0;
+  for (const rv of world.rivers) {
+    const end = rv.path[rv.path.length - 1];
+    const endKey = axialKey(end.q, end.r);
+    const atSea = isOceanAt(2, end.q, end.r);
+    const atConfluence = rv.joined && onSomeRiver.get(endKey) !== rv.id;
+    if (atSea || atConfluence) good++;
+  }
+  assert.ok(good / world.rivers.length > 0.9,
+    `expected >90% of rivers to end at sea or a confluence, got ${good}/${world.rivers.length}`);
 });
 
 test("order-independence: forward vs. reverse fill order give identical per-hex terrain", () => {

@@ -106,17 +106,23 @@ function flowElevation(seed, q, r) {
  * @param {number|string} seed world seed
  * @param {number} sq source axial q
  * @param {number} sr source axial r
- * @param {{ maxExpand?: number }} [opts]
- * @returns {{ path: {q:number,r:number}[], reachedSea: boolean }} path from the
- *   source (inclusive) to the terminating ocean hex (inclusive). On the rare
- *   budget-exhausted case, path ends at the most-seaward frontier reached and
- *   reachedSea is false. path always has length >= 1 (the source itself).
+ * @param {{ maxExpand?: number, claimed?: Set<string> }} [opts] `claimed` is a
+ *   set of axialKey strings already occupied by earlier-traced rivers; the
+ *   trace ALSO terminates on reaching one of those (a confluence — this river
+ *   is a tributary joining that trunk), so rivers form a dendritic network
+ *   instead of running near-parallel to the same coast. Confluence detection is
+ *   how the caller (app.js syncRivers) prevents "spaghetti" — see there.
+ * @returns {{ path: {q:number,r:number}[], reachedSea: boolean, joined: boolean }}
+ *   path from the source (inclusive) to the terminating hex (inclusive): an
+ *   ocean hex (reachedSea), a claimed confluence hex (joined), or — on the rare
+ *   budget-exhausted case — the most-seaward frontier reached (neither). path
+ *   always has length >= 1 (the source itself).
  */
-export function traceRiverToSea(seed, sq, sr, { maxExpand = MAX_EXPAND } = {}) {
+export function traceRiverToSea(seed, sq, sr, { maxExpand = MAX_EXPAND, claimed = null } = {}) {
   const startKey = axialKey(sq, sr);
   // If the source itself is already ocean (shouldn't happen for a Mountain/Lake
   // source, but guard anyway), the "river" is a single point.
-  if (isOceanAt(seed, sq, sr)) return { path: [{ q: sq, r: sr }], reachedSea: true };
+  if (isOceanAt(seed, sq, sr)) return { path: [{ q: sq, r: sr }], reachedSea: true, joined: false };
 
   const bestPass = new Map([[startKey, flowElevation(seed, sq, sr)]]);
   const parent = new Map([[startKey, null]]);
@@ -151,11 +157,18 @@ export function traceRiverToSea(seed, sq, sr, { maxExpand = MAX_EXPAND } = {}) {
     expanded++;
 
     if (isOceanAt(seed, cur.q, cur.r)) {
-      return { path: reconstruct(ck), reachedSea: true };
+      return { path: reconstruct(ck), reachedSea: true, joined: false };
+    }
+    // A confluence with an earlier river: join it here and stop (this river is
+    // a tributary; its downstream is that trunk's, already drawn). Never the
+    // start hex itself (a source sitting on an existing river still traces its
+    // one step off it before joining).
+    if (claimed && ck !== startKey && claimed.has(ck)) {
+      return { path: reconstruct(ck), reachedSea: false, joined: true };
     }
     if (cur.pri < fallbackPass) { fallbackPass = cur.pri; fallbackKey = ck; }
     if (expanded > maxExpand) {
-      return { path: reconstruct(fallbackKey), reachedSea: false };
+      return { path: reconstruct(fallbackKey), reachedSea: false, joined: false };
     }
 
     for (const n of neighbors(cur.q, cur.r)) {
@@ -170,7 +183,7 @@ export function traceRiverToSea(seed, sq, sr, { maxExpand = MAX_EXPAND } = {}) {
   }
   // Frontier exhausted without reaching ocean (extremely unlikely under the
   // budget) — return the partial path to the most-seaward hex found.
-  return { path: reconstruct(fallbackKey), reachedSea: false };
+  return { path: reconstruct(fallbackKey), reachedSea: false, joined: false };
 }
 
 /** Stable registry id for the river sourced at (q, r). */

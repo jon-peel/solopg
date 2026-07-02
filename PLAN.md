@@ -219,7 +219,17 @@ the sea itself hasn't been generated — with a bounding-box viewport cull. The 
 (`downhillDirection`, `riverStateAt`, lake-overflow, `stitchRiverForward`, `hex.riverEdges`) and its
 tests were removed; `river.js` keeps only source detection (`isRiverSource`). Verified in-browser:
 a Huge fill yields ~19-47 long winding rivers, 100% traced to sea; a coastal seed shows multiple
-rivers visibly flowing into a rendered Sea body. **Next:
+rivers visibly flowing into a rendered Sea body. **Follow-up (immediate real-play — "a lot of rivers
+almost cross and look like spaghetti"): tributary merging.** Independent traces from nearby sources
+found near-identical lowest-pass routes to the same coast and ran near-parallel/crossing. Fix:
+`syncRivers` now traces sources in **canonical (sorted) order sharing one `claimed` set**, and
+`traceRiverToSea` terminates on reaching a claimed hex (a **confluence** — the tributary joins that
+trunk and its downstream is drawn once). Result is a dendritic network: scratchpad measured **82% of
+rivers join a trunk, 81% less line drawn**, distinct river hexes 2391→667, with ~7 sea-reaching
+trunks per large map. Order-independent (canonical, not generation order); the whole network rebuilds
+when the source set changes (`world.riversMerged` forces a one-time rebuild of pre-merge worlds).
+Confirmed in-browser on the same seed as the spaghetti shot — clean confluences, no parallel bundles.
+**Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
@@ -227,7 +237,7 @@ in-app custom tables were dropped).
 `elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
 Lake/Sea (v9, reworked in v10); 3R.5 first added per-hex `riverEdges` (v11), then reworked rivers
 into a top-level `world.rivers[]` traced-path registry (v12, per-hex `riverEdges` retired).**
-**Schema v12. 260 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v12. 261 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

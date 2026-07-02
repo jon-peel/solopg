@@ -1028,33 +1028,58 @@ function seaNeighborCount(q, r) {
   }).length;
 }
 
-// Rivers (Phase 3R.5, "curated rivers"): scan the world's placed hexes for
-// river SOURCES (js/gen/river.js isRiverSource) not yet traced, trace each all
-// the way to the sea (js/gen/river-trace.js), and record it in world.rivers[].
-// Idempotent and keyed by source id, so it's cheap to call after every
-// generation batch (only newly-revealed sources cost a trace) and once on
-// world load (so imported/migrated worlds rebuild their rivers from their
-// existing source hexes). A river is a full watercourse stored as a polyline
-// and rendered even across unexplored hexes — replacing the old per-hex
-// forward-growth model, which trapped rivers at the first local minimum and
-// only reached the coast ~10-15% of the time (see river-trace.js). Returns
-// true if it added any river (so the caller can persist the change).
+// Rivers (Phase 3R.5, "curated rivers"): find the world's river SOURCES
+// (js/gen/river.js isRiverSource) among its placed hexes, trace each to the sea
+// (js/gen/river-trace.js), and record them in world.rivers[]. Traces run in a
+// CANONICAL (sorted) order sharing one `claimed` set, so a tributary whose path
+// meets an earlier river JOINS it at the confluence instead of running its own
+// near-parallel line to the same coast — a dendritic network, not spaghetti.
+// Because the order is canonical (not generation order) the whole network is
+// deterministic and order-independent.
+//
+// Rebuilt whole (cheap — a few dozen sources, ~1ms each) whenever the SET of
+// sources changes, since adding one source can re-route which trunk others
+// join; skipped when the source set is unchanged and already in merged form.
+// Called after every generation batch and on world load (so imported/migrated
+// worlds get their rivers). Returns true if it (re)built, so the caller
+// persists. `world.riversMerged` marks the merged format, forcing a one-time
+// rebuild of any pre-merge world.
 function syncRivers(world) {
   if (!world) return false;
   if (!Array.isArray(world.rivers)) world.rivers = [];
-  const have = new Set(world.rivers.map((rv) => rv.id));
-  let added = false;
+  const sources = [];
   for (const hex of placedHexes(world)) {
     const { q, r } = hex.coords;
-    const id = riverId(q, r);
-    if (have.has(id)) continue;
-    if (!isRiverSource(world.seed, q, r, hex.terrain, hex.elevation)) continue;
-    const { path, reachedSea } = traceRiverToSea(world.seed, q, r);
-    world.rivers.push({ id, source: { q, r }, path, reachedSea });
-    have.add(id);
-    added = true;
+    if (isRiverSource(world.seed, q, r, hex.terrain, hex.elevation)) sources.push({ q, r });
   }
-  return added;
+  // Order-independent: sort by coordinate, not by when each hex was generated.
+  sources.sort((a, b) => (a.q - b.q) || (a.r - b.r));
+  const currentIds = new Set(sources.map((s) => riverId(s.q, s.r)));
+  const existingIds = new Set(world.rivers.map((rv) => rv.id));
+  const sameSet = currentIds.size === existingIds.size && [...currentIds].every((id) => existingIds.has(id));
+  if (sameSet && world.riversMerged) return false;
+
+  const claimed = new Set();
+  const claimedReachedSea = new Map(); // hexKey -> reachedSea of the river that first claimed it
+  const rivers = [];
+  for (const { q, r } of sources) {
+    const res = traceRiverToSea(world.seed, q, r, { claimed });
+    const end = res.path[res.path.length - 1];
+    const endKey = axialKey(end.q, end.r);
+    // A tributary reaches the sea iff the trunk it joins does (default true —
+    // trunks essentially always reach the sea; only a budget-fallback partial
+    // wouldn't, and that's vanishingly rare).
+    const reachedSea = res.reachedSea || (res.joined && (claimedReachedSea.get(endKey) ?? true));
+    for (const p of res.path) {
+      const k = axialKey(p.q, p.r);
+      claimed.add(k);
+      if (!claimedReachedSea.has(k)) claimedReachedSea.set(k, reachedSea);
+    }
+    rivers.push({ id: riverId(q, r), source: { q, r }, path: res.path, reachedSea });
+  }
+  world.rivers = rivers;
+  world.riversMerged = true;
+  return true;
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex

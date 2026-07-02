@@ -755,6 +755,19 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
     the `hex.riverEdges` field. `river.js` keeps only source detection (`isRiverSource`).
   - Verified in-browser: a Huge fill yields ~19-47 long winding rivers, all traced to
     sea; a coastal seed shows multiple rivers visibly flowing into a rendered Sea body.
+  - **Follow-up (immediate real-play — "a lot of rivers almost cross and look like
+    spaghetti"): tributary merging.** Independent traces from nearby sources found
+    near-identical lowest-pass routes to the same coast, so they ran near-parallel and
+    crossed. Fix: `syncRivers` traces sources in **canonical (sorted) order** sharing one
+    `claimed` set, and `traceRiverToSea` takes a `claimed` option — the trace terminates
+    on reaching a claimed hex (a **confluence**; the tributary joins that trunk and its
+    downstream is drawn once, not duplicated). This yields a dendritic network:
+    scratchpad measured **82% of rivers join a trunk, 81% less total line drawn**,
+    distinct river hexes 2391→667, ~7 sea-reaching trunks per large map. Deterministic
+    and order-independent (canonical order, not generation order); the network rebuilds
+    whenever the source set changes, and `world.riversMerged` forces a one-time rebuild
+    of any pre-merge world. Confirmed in-browser on the same seed as the spaghetti shot —
+    clean confluences, no parallel bundles.
 - Schema bumped to **v12** (top-level `rivers` array; backfilled empty on load and
   rebuilt from source hexes. The earlier v11 `riverEdges` field is left unused.).
 - **Tests (post-rework):** `test/river.test.js` now covers only source detection
@@ -764,8 +777,10 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   hexes are land, deterministic, stable `riverId`. `test/terrain-coherence.test.js`'s
   river integration tests rewritten to mirror `syncRivers` (registry built over a real
   fill, connected chains, >90% reach sea). `test/biome.test.js` keeps the
-  Lake-never-adjacent-to-Sea bay-rule regression. **260 `node --test test/*.test.js`
-  passing.**
+  Lake-never-adjacent-to-Sea bay-rule regression; the tracer suite also covers the
+  `claimed`-confluence early-termination (a tributary joining a trunk) and the
+  integration suite mirrors the merged canonical-order rebuild. **261 `node --test
+  test/*.test.js` passing.**
 - **Historical (pre-rework) v11 design, superseded above — kept for the record:**
   Schema was bumped to **v11** (stamp-only — `riverEdges` additive).
 - **Tests (pre-rework):** `test/river.test.js` (19 tests — source detection now covers BOTH

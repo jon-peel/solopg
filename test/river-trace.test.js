@@ -83,6 +83,26 @@ test("traceRiverToSea: only the terminating hex is ocean (the river runs over la
   }
 });
 
+test("traceRiverToSea: a `claimed` confluence terminates the trace early (tributary joins a trunk)", () => {
+  const seed = "trace-merge";
+  // Pick a source with a reasonably long path so there's a midpoint to claim.
+  let s = null, full = null;
+  for (const cand of sourcesIn(seed, 40)) {
+    const t = traceRiverToSea(seed, cand.q, cand.r);
+    if (t.path.length > 6) { s = cand; full = t; break; }
+  }
+  assert.ok(s && full, "expected a source with a long enough path");
+  // Claim a hex partway down the full path; a re-trace must stop there.
+  const cut = full.path[Math.floor(full.path.length / 2)];
+  const claimed = new Set([`${cut.q},${cut.r}`]);
+  const joinedTrace = traceRiverToSea(seed, s.q, s.r, { claimed });
+  assert.equal(joinedTrace.joined, true, "should report joining the claimed trunk");
+  assert.equal(joinedTrace.reachedSea, false, "a joined trace didn't itself reach ocean");
+  const end = joinedTrace.path[joinedTrace.path.length - 1];
+  assert.ok(claimed.has(`${end.q},${end.r}`), "the trace must terminate on the claimed confluence hex");
+  assert.ok(joinedTrace.path.length < full.path.length, "joining shortens the path vs the full run");
+});
+
 test("riverId: stable, coordinate-keyed", () => {
   assert.equal(riverId(3, -4), "river:3,-4");
   assert.equal(riverId(3, -4), riverId(3, -4));
