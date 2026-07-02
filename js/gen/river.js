@@ -113,10 +113,23 @@ function isLocalPeak(seed, q, r, elevationHere) {
   return neighbors(q, r).every((n) => elevationAt(seed, n.q, n.r) <= elevationHere);
 }
 
+// A lake can also SPONTANEOUSLY be a river's origin (real-play request:
+// "a lake can be an origin"). A spring-fed lake with no visible inflow still
+// drains somewhere. Rolled per lake hex, so a multi-hex lake cluster's
+// effective chance scales with its size — verified in the scratchpad that
+// 0.08 yields ~2-3 spontaneous lake-origin rivers per Huge (721-hex) fill,
+// clearly rarer than a mountain source but no longer never-seen. A lake that
+// already has a river flowing IN gets a much higher chance to also flow out
+// (rollLakeOutflow, below) — that's the "likelihood should increase with an
+// inflow" half of the request; this constant is only the from-nothing case.
+const LAKE_SOURCE_CHANCE = 0.08;
+
 /**
- * Whether (q, r) is a river source: a local Mountains peak that passes a
- * seeded density-chance roll. Pure function of (seed, q, r, terrain,
- * elevation) — no history dependence.
+ * Whether (q, r) spontaneously ORIGINATES a river from no inflow: a local
+ * Mountains peak, or a Lake, that passes its seeded density roll. Pure
+ * function of (seed, q, r, terrain, elevation) — no history dependence.
+ * (A Lake that RECEIVES an inflow is handled separately, with a higher
+ * outflow chance, in riverStateAt.)
  * @param {number|string} seed
  * @param {number} q
  * @param {number} r
@@ -125,6 +138,7 @@ function isLocalPeak(seed, q, r, elevationHere) {
  * @returns {boolean}
  */
 export function isRiverSource(seed, q, r, terrain, elevation) {
+  if (terrain === "Lake") return subRng(seed, "lake-source", q, r)() < LAKE_SOURCE_CHANCE;
   if (terrain !== "Mountains") return false;
   if (!isLocalPeak(seed, q, r, elevation)) return false;
   return subRng(seed, "river-source", q, r)() < RIVER_SOURCE_CHANCE;
@@ -224,10 +238,13 @@ export function riverStateAt(seed, q, r, terrain, elevation, incomingDirs) {
   const edges = [...incomingDirs];
   if (terrain === "Sea") return { riverEdges: edges, forceLake: false };
   if (terrain === "Lake") {
-    if (hasIncoming && rollLakeOutflow(seed, q, r, incomingDirs.length)) {
-      // Downhill when the terrain allows it; otherwise spill the rim (see
-      // overflowDirection — the lake IS the depression, so downhill is
-      // usually -1 here and outflow would otherwise never actually happen).
+    // A lake outflows when EITHER it received an inflow and passes the
+    // (high, compounding) outflow roll, OR it spontaneously originated a
+    // river with no inflow (isSource above — the "a lake can be an origin"
+    // case). Either way it exits by spilling its rim, since a lake sits in
+    // a depression (downhill is usually -1 for it).
+    const outflows = hasIncoming ? rollLakeOutflow(seed, q, r, incomingDirs.length) : isSource;
+    if (outflows) {
       let outDir = downhillDirection(seed, q, r);
       if (outDir === -1 || incomingDirs.includes(outDir)) {
         outDir = overflowDirection(seed, q, r, incomingDirs);

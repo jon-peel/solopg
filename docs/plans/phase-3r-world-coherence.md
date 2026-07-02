@@ -672,24 +672,45 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
      scan. Verified end-to-end in 5 fresh browser worlds (3 overlapping Huge fills
      each): every chain now reaches water or the exploration frontier; a single
      non-pristine-basin spill fallback appeared once across all runs.
+- **Fourth real-play round: lakes as river origins + a solid line.**
+  1. **A Lake can now SPONTANEOUSLY originate a river** (`isRiverSource` gained a Lake
+     branch, `LAKE_SOURCE_CHANCE = 0.08` per lake hex — so a multi-hex lake's effective
+     chance scales with its size). Verified ~1.9 lake-origin river chains per Huge
+     (721-hex) fill — clearly rarer than a mountain source, but no longer never-seen.
+     A lake exits the same way it does for an inflow: by spilling its rim
+     (`overflowDirection`), since a lake sits in a depression. `riverStateAt`'s Lake
+     branch was restructured so the outflow fires on EITHER a passed inflow-outflow roll
+     OR a spontaneous source — the old early-return meant a no-inflow lake never even
+     consulted `isSource`.
+  2. **The "inflow raises outflow likelihood" half was already mechanically present**
+     (`LAKE_OUTFLOW_CHANCE = 0.75`, compounding) but was invisible in practice; the
+     lake-origin fix and the earlier rim-overflow/stitch fixes together make it show:
+     ~7.3 pass-through lakes (inflow AND outflow) per Huge fill in simulation. No new
+     stitch code needed — a river reaching an already-placed empty lake already routes
+     through `riverStateAt`, which now rolls the outflow.
+  3. **Solid blue line** (`js/ui/map.js`): the river's dark outline pass is now drawn in
+     the river colour too, so the two width passes read as one solid light-blue stroke
+     instead of an outlined one. Verified in the browser.
 - Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
   until regenerated).
-- **Tests:** `test/river.test.js` (17 tests — `isRiverSource` gated on Mountains and
-  rare-not-universal across many seeds; `downhillDirection` always a valid index or -1,
-  and when valid the chosen neighbour is genuinely lower, verified both ways by scanning
-  real coordinates rather than hardcoded literals; `riverStateAt`'s full decision table —
-  no-op, terminate-at-water, land-with-real-downhill, forced-Lake depression, and a
-  qualifying source, all found by scanning rather than guessed coordinates. 4 tests added
-  for the redesign: Swamp is pass-through land not a terminus; a natural Lake with no
-  inflow never gets river data; a single inflow sometimes-not-always-not-never grows an
-  outflow; outflow chance strictly increases with more inflows).
-  `test/terrain-coherence.test.js` gained 3 integration tests mirroring the sea-contagion
-  pattern (deliberately not the shared order-independent `generateArea` helper, since
-  river propagation is history-dependent by design): rivers appear across a large area,
-  an edge toward an already-placed *later-generated* neighbour always connects to that
-  neighbour's matching incoming edge (the core propagation invariant), and every
-  non-sink river hex has an outgoing edge toward its own real downhill direction.
-  266 `node --test test/*.test.js` passing (stable across repeated runs).
+- **Tests:** `test/river.test.js` (19 tests — source detection now covers BOTH
+  Mountains-peak and spontaneous-Lake origins (only those two terrains ever source;
+  both rare-not-universal across many seeds); `downhillDirection` always a valid index
+  or -1, and when valid the chosen neighbour is genuinely lower, verified both ways by
+  scanning real coordinates rather than hardcoded literals; `riverStateAt`'s full
+  decision table — no-op, terminate-at-water, land-with-real-downhill, forced-Lake
+  depression, a qualifying mountain source, a non-source Lake staying inert, a
+  spring-fed Lake origin growing exactly one outflow, Swamp-as-pass-through-land, and
+  the inflow-outflow escape-hatch/compounding pair — all found by scanning rather than
+  guessed coordinates). `test/terrain-coherence.test.js` gained 3 integration tests
+  mirroring the sea-contagion pattern (deliberately not the shared order-independent
+  `generateArea` helper, since river propagation is history-dependent by design):
+  rivers appear across a large area, an edge toward an already-placed *later-generated*
+  neighbour always connects to that neighbour's matching incoming edge (the core
+  propagation invariant), and every non-sink river hex has an outgoing edge toward its
+  own real downhill direction. `test/biome.test.js` gained the Lake-never-adjacent-to-Sea
+  bay-rule regression. 269 `node --test test/*.test.js` passing (stable across repeated
+  runs).
 - Runs **before settlement sizing** so cities can key off rivers/estuaries (3R.6).
 
 ### 3R.6 — Settlements v2

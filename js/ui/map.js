@@ -356,8 +356,11 @@ function drawRiverEdges(cx, cy, q, r, riverEdges) {
   if (!riverEdges || !riverEdges.length) return;
 
   const strokeTwice = (draw) => {
-    // A dark outline first so the river reads over any terrain fill colour.
-    ctx.strokeStyle = "rgba(8,16,26,0.6)";
+    // Both passes are the river colour now (on request) — the wider "outline"
+    // pass just thickens the line into a single solid blue stroke rather than
+    // reading as an outline. Kept as two passes so the width is unchanged from
+    // the outlined version (a 5px core with rounded joins).
+    ctx.strokeStyle = RIVER_COLOR;
     ctx.lineWidth = 5 / camera.scale;
     draw();
     ctx.strokeStyle = RIVER_COLOR;

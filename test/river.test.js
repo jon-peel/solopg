@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { biomeAt, elevationAt } from "../js/gen/biome.js";
-import { isRiverSource, downhillDirection, riverStateAt } from "../js/gen/river.js";
+import { isRiverSource, downhillDirection, riverStateAt, overflowDirection } from "../js/gen/river.js";
 
 const NEIGHBOR_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 const FLOW_OCTAVES = 1; // must match river.js's own constant
@@ -19,15 +19,38 @@ function findCoord(seed, predicate, { qMax = 60, rMax = 60 } = {}) {
   return null;
 }
 
-test("isRiverSource: never true off Mountains, regardless of position", () => {
+test("isRiverSource: only Mountains and Lake can originate a river; all other terrains never do", () => {
+  // Mountains (a peak) and Lake (spontaneous spring-fed origin) are the two
+  // terrains that can source a river; everything else must always be false.
   for (let q = -20; q <= 20; q += 4) {
     for (let r = -20; r <= 20; r += 4) {
       const { terrain, elevation } = biomeAt("seed", q, r);
-      if (terrain !== "Mountains") {
+      if (terrain !== "Mountains" && terrain !== "Lake") {
         assert.equal(isRiverSource("seed", q, r, terrain, elevation), false);
       }
     }
   }
+});
+
+test("isRiverSource: a Lake can spontaneously originate a river — rare, not universal, not never", () => {
+  // Scan many Lake hexes across many seeds and confirm both outcomes occur:
+  // most lakes don't spring a river, but some do (the "a lake can be an
+  // origin" request). Deterministic per hex.
+  let lakes = 0, origins = 0;
+  for (let s = 0; s < 60; s++) {
+    const seed = `lakeorigin-${s}`;
+    for (let q = -20; q <= 20; q += 2) {
+      for (let r = -20; r <= 20; r += 2) {
+        const { terrain, elevation } = biomeAt(seed, q, r);
+        if (terrain !== "Lake") continue;
+        lakes++;
+        if (isRiverSource(seed, q, r, terrain, elevation)) origins++;
+      }
+    }
+  }
+  assert.ok(lakes > 50, `expected a reasonable Lake sample, got ${lakes}`);
+  assert.ok(origins > 0, "expected at least one spontaneous lake-origin across many seeds");
+  assert.ok(origins < lakes * 0.5, "expected lake origins to be a small minority of lakes");
 });
 
 test("isRiverSource: deterministic — same inputs always give the same answer", () => {
@@ -194,12 +217,31 @@ test("riverStateAt: Swamp is dry land to a river, not a terminus — an incoming
   assert.equal(state.forceLake, false);
 });
 
-test("riverStateAt: a natural Lake with no incoming edges never gets river data (it isn't a source)", () => {
-  const spot = findCoord("seed", (q, r) => biomeAt("seed", q, r).terrain === "Lake");
-  assert.ok(spot, "expected a Lake hex in the scanned range");
+test("riverStateAt: a non-source Lake with no incoming edges stays inert (no river data)", () => {
+  // Find a Lake that does NOT pass its spontaneous-source roll — it should
+  // produce no river data at all (never a forced Lake either; it's already
+  // water).
+  const spot = findCoord("seed", (q, r) => {
+    const { terrain, elevation } = biomeAt("seed", q, r);
+    return terrain === "Lake" && !isRiverSource("seed", q, r, terrain, elevation);
+  });
+  assert.ok(spot, "expected a non-source Lake hex in the scanned range");
   const { terrain, elevation } = biomeAt("seed", spot.q, spot.r);
   const state = riverStateAt("seed", spot.q, spot.r, terrain, elevation, []);
   assert.deepEqual(state, { riverEdges: [], forceLake: false });
+});
+
+test("riverStateAt: a source Lake with no incoming edges originates a river (an outflow edge, no forced-lake)", () => {
+  const spot = findCoord("seed", (q, r) => {
+    const { terrain, elevation } = biomeAt("seed", q, r);
+    return terrain === "Lake" && isRiverSource("seed", q, r, terrain, elevation)
+      && overflowDirection("seed", q, r, []) !== -1;
+  }, { qMax: 120, rMax: 120 });
+  assert.ok(spot, "expected a spontaneously-sourcing Lake with a rim to spill in the scanned range");
+  const { terrain, elevation } = biomeAt("seed", spot.q, spot.r);
+  const state = riverStateAt("seed", spot.q, spot.r, terrain, elevation, []);
+  assert.equal(state.forceLake, false);
+  assert.equal(state.riverEdges.length, 1, "a spring-fed lake origin has exactly one outgoing edge");
 });
 
 test("riverStateAt: Lake outflow — a single inflow usually (but not always) adds an outgoing edge", () => {

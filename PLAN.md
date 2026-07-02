@@ -173,14 +173,23 @@ upstream hex wasn't in the world yet (always true mid-stitch — buildRandomHex 
 its caller addHex-es), sending the cascade backward to die one hop in; every river in a real
 browser world was 1-2 hexes. Fix: thread the incoming direction (`cameFrom`) through the
 cascade and exclude it. Verified in 5 fresh browser worlds: every chain reaches water or the
-exploration frontier. **Next:
+exploration frontier.
+**Seventh revision (fourth real-play round):** (1) **a Lake can now spontaneously ORIGINATE a
+river** (`isRiverSource` Lake branch, `LAKE_SOURCE_CHANCE=0.08` per lake hex; ~1.9 lake-origin
+chains per Huge fill) — previously impossible, so lakes were never seen as sources;
+`riverStateAt`'s Lake branch was restructured so outflow fires on either a passed inflow roll or
+a spontaneous source. (2) The **inflow-raises-outflow-likelihood** half was already mechanically
+present (`LAKE_OUTFLOW_CHANCE=0.75`, compounding) but invisible; combined with the origin fix it
+now shows ~7.3 pass-through lakes (inflow AND outflow) per Huge fill. (3) **Solid blue river
+line** (`map.js`): the outline pass is now the river colour too, so it reads as one solid
+light-blue stroke — verified in-browser. **Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
 `elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
 Lake/Sea (v9, reworked in v10); 3R.5 adds `riverEdges` (v11).**
-**Schema v11. 267 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v11. 269 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
