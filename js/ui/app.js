@@ -23,7 +23,8 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
-import { riverStateAt, overflowDirection } from "../gen/river.js";
+import { isRiverSource } from "../gen/river.js";
+import { traceRiverToSea, riverId } from "../gen/river-trace.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -182,6 +183,10 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
+  // Rebuild river traces for a loaded/migrated world from its source hexes; if
+  // anything new was traced (e.g. a v11 world that had no `rivers`), persist it
+  // so the traces aren't recomputed on every load.
+  if (world && syncRivers(world)) await saveWorld(world);
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -1023,118 +1028,33 @@ function seaNeighborCount(q, r) {
   }).length;
 }
 
-// Which NEIGHBOR_DIRS sides already carry a river flowing INTO (q, r) from an
-// already-placed neighbour — feeds river propagation (js/gen/river.js). A
-// neighbour's edge in direction i points at (q, r) from OUR side i, which is
-// the neighbour's own opposite(i) = (i+3)%6 side.
-function incomingRiverEdges(q, r) {
-  const dirs = [];
-  neighbors(q, r).forEach((n, i) => {
-    const nh = getHex(current, n.q, n.r);
-    if (nh && nh.placed && nh.riverEdges && nh.riverEdges.includes((i + 3) % 6)) {
-      dirs.push(i);
-    }
-  });
-  return dirs;
-}
-
-// River stitching (3R.5 follow-up): a river's downhill edge sometimes points
-// at a neighbour that was ALREADY placed in an earlier "Generate Area" click
-// (or even earlier in the same one) — that neighbour never had a chance to
-// see the edge via incomingRiverEdges above, since it's a pure look-BACKWARD
-// scan at generation time. Left alone, this produces a visible one-hex river
-// stub with nowhere to go, or a river that just stops mid-field, even though
-// it "should" keep flowing to a lake/sea (reported after real play: rivers
-// that dead-end at another Mountains hex, or in Plains, for exactly this
-// reason).
-//
-// Fix: when a freshly-generated hex's river wants to continue into an
-// ALREADY-PLACED neighbour, extend the river into it — but PURELY as a
-// river-edge overlay: that neighbour's terrain/settlement/POIs are never
-// touched, even if riverStateAt would otherwise force a Lake (the neighbour
-// might already carry a settlement rolled for its original terrain; flooding
-// it retroactively would leave that inconsistent). This is a deliberate,
-// narrow exception to "never edit an already-placed hex" — scoped to
-// cosmetic river-edge data only. If the neighbour already carries its OWN
-// river, the stitch adds just the one incoming edge and stops: a tributary
-// confluence (the downstream continuation already exists), rather than the
-// old behaviour of stopping dead one hex short and leaving a visible gap.
-// Cascades forward a bounded number of hops so a whole already-explored
-// stretch can light up in one go.
-//
-// The hex's outgoing edge is found as its one edge NOT mirrored by the
-// matching neighbour edge (incoming edges are mirrored by construction) —
-// NOT via downhillDirection, which no longer identifies every exit: a lake's
-// outflow can leave via rim overflow (see js/gen/river.js), a direction
-// steepest-descent would never report.
-const RIVER_STITCH_MAX_HOPS = 30;
-// `skipDir` excludes the edge we KNOW is this hex's incoming (just pushed by
-// the cascade) — during a stitch the fresh source hex isn't in the world yet
-// (buildRandomHex stitches before its caller addHex-es), so that incoming
-// edge would otherwise look unmatched and send the cascade BACKWARD into a
-// not-yet-placed cell, killing it one hop in. (Found the hard way: a browser
-// world where every river was 1-2 hexes ending unmatched on placed land.)
-function unmatchedOutgoingDir(hex, skipDir) {
-  return hex.riverEdges.find((d) => {
-    if (d === skipDir) return false;
-    const n = neighbors(hex.coords.q, hex.coords.r)[d];
-    const nh = getHex(current, n.q, n.r);
-    return !(nh && nh.placed && nh.riverEdges && nh.riverEdges.includes((d + 3) % 6));
-  });
-}
-// A hex the GM has effectively never touched: no settlement, no POIs, no
-// name/note — safe to retroactively reshape (see the basin flip below).
-function isPristineHex(hex) {
-  return !(hex.settlement && hex.settlement.present)
-    && !(Array.isArray(hex.pois) && hex.pois.length)
-    && !hex.name && !hex.note;
-}
-
-function stitchRiverForward(hex) {
-  let cur = hex;
-  let cameFrom; // cur's incoming dir once the cascade is moving (see unmatchedOutgoingDir)
-  for (let hop = 0; hop < RIVER_STITCH_MAX_HOPS; hop++) {
-    if (!cur.riverEdges || !cur.riverEdges.length) return;
-    const outDir = unmatchedOutgoingDir(cur, cameFrom);
-    if (outDir === undefined) return; // fully connected already
-    const n = neighbors(cur.coords.q, cur.coords.r)[outDir];
-    const nh = getHex(current, n.q, n.r);
-    if (!nh || !nh.placed) return; // not yet placed — ordinary forward propagation covers it
-    const incomingDir = (outDir + 3) % 6;
-    if (nh.riverEdges && nh.riverEdges.length) {
-      nh.riverEdges.push(incomingDir); // tributary joins an existing river
-      return;
-    }
-    const state = riverStateAt(current.seed, n.q, n.r, nh.terrain, nh.elevation, [incomingDir]);
-    if (state.forceLake) {
-      // A landlocked basin. At generation time this hex would have BECOME a
-      // Lake; the stitcher's cosmetic-only rule used to just drop that, which
-      // left the river silently dead-ending on dry land — measured as a
-      // third of all rivers in a filled region, and the source of the
-      // repeated "rivers end in a forest" reports (spilling onward instead
-      // was also tried and measured: the water just spirals the pocket and
-      // merges back into itself). So, one further explicitly-gated
-      // extension of the exception: a PRISTINE basin hex (no settlement, no
-      // POIs, no GM name/note — nothing the GM has invested in) flips to
-      // Lake, terminating the river properly. A non-pristine basin keeps its
-      // terrain and the water spills its rim instead, detouring around the
-      // GM's content.
-      if (isPristineHex(nh)) {
-        nh.terrain = "Lake";
-        nh.terrainFeature = null;
-        nh.riverEdges = [incomingDir];
-        return;
-      }
-      const spill = overflowDirection(current.seed, n.q, n.r, [incomingDir]);
-      nh.riverEdges = spill === -1 ? [incomingDir] : [incomingDir, spill];
-      cur = nh;
-      cameFrom = incomingDir;
-      continue;
-    }
-    nh.riverEdges = state.riverEdges; // cosmetic only — terrain/settlement/pois stay exactly as generated
-    cur = nh;
-    cameFrom = incomingDir;
+// Rivers (Phase 3R.5, "curated rivers"): scan the world's placed hexes for
+// river SOURCES (js/gen/river.js isRiverSource) not yet traced, trace each all
+// the way to the sea (js/gen/river-trace.js), and record it in world.rivers[].
+// Idempotent and keyed by source id, so it's cheap to call after every
+// generation batch (only newly-revealed sources cost a trace) and once on
+// world load (so imported/migrated worlds rebuild their rivers from their
+// existing source hexes). A river is a full watercourse stored as a polyline
+// and rendered even across unexplored hexes — replacing the old per-hex
+// forward-growth model, which trapped rivers at the first local minimum and
+// only reached the coast ~10-15% of the time (see river-trace.js). Returns
+// true if it added any river (so the caller can persist the change).
+function syncRivers(world) {
+  if (!world) return false;
+  if (!Array.isArray(world.rivers)) world.rivers = [];
+  const have = new Set(world.rivers.map((rv) => rv.id));
+  let added = false;
+  for (const hex of placedHexes(world)) {
+    const { q, r } = hex.coords;
+    const id = riverId(q, r);
+    if (have.has(id)) continue;
+    if (!isRiverSource(world.seed, q, r, hex.terrain, hex.elevation)) continue;
+    const { path, reachedSea } = traceRiverToSea(world.seed, q, r);
+    world.rivers.push({ id, source: { q, r }, path, reachedSea });
+    have.add(id);
+    added = true;
   }
+  return added;
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
@@ -1149,7 +1069,6 @@ function buildDistantTargetHex(tables, q, r) {
     seed: current.seed,
     gen: 0,
     seaNeighborCount: seaNeighborCount(q, r),
-    incomingRiverEdges: incomingRiverEdges(q, r),
   });
   hex.gen = 0;
   hex.explored = false; // not yet visited; the intervening hexes are blank
@@ -1160,7 +1079,6 @@ function buildDistantTargetHex(tables, q, r) {
   const poi = generatePoi(tables, poiRng, { terrain: hex.terrain, index: 0, forceType: "dungeon" });
   poi.id = "poi:0";
   hex.pois = [poi];
-  stitchRiverForward(hex);
   return hex;
 }
 
@@ -1353,6 +1271,7 @@ async function onFollowClue(id) {
 }
 
 async function persistAndRefresh() {
+  syncRivers(current); // trace any newly-revealed river sources to the sea before persisting
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
@@ -1374,10 +1293,8 @@ function buildRandomHex(tables, q, r, gen) {
     seed: current.seed,
     gen,
     seaNeighborCount: seaNeighborCount(q, r),
-    incomingRiverEdges: incomingRiverEdges(q, r),
   });
   hex.gen = gen;
-  stitchRiverForward(hex);
   return hex;
 }
 

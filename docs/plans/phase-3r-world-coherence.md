@@ -714,9 +714,61 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   running mountains-to-coast within a fresh near-origin Huge fill. (The routing sweep
   was left un-applied: it was marginal and the combined-field variant risked spirals;
   the honest fix was making the sea exist where people generate.)
-- Schema bumped to **v11** (stamp-only — `riverEdges` is additive, absent on old hexes
-  until regenerated).
-- **Tests:** `test/river.test.js` (19 tests — source detection now covers BOTH
+- **Sixth real-play round: "not enough rivers reach the sea; discuss why before changing
+  more." The per-hex flow model was REPLACED with curated tracing.** Paused first, as
+  asked, and established that the ~10-15% reach-sea ceiling was **architectural, not a
+  tuning miss**: `elevation` and `continent` are independent noise fields, so "locally
+  downhill" wanders at random relative to the coast, and forward-growing rivers get
+  trapped in the countless local elevation minima long before descending to the sea.
+  Prototyped the user's first choice (give elevation a seaward slope so downhill trends
+  coastward) — it hit the **same ~14% wall** and banded mountains into unnatural
+  coast-parallel walls; five distinct emergent approaches all capped at ~10-15%. Since a
+  guaranteed sea-reaching river needs to know the whole basin — which forward growth
+  never has — the fix (the user chose it over reverting) is to **trace each source to
+  the sea up front**, the way most hexcrawl map tools do rivers.
+  - **`js/gen/river-trace.js` (new, pure):** `traceRiverToSea(seed, q, r)` runs a
+    **minimax "fill and spill"** (priority-flood) from the source — always expanding the
+    frontier reachable over the **lowest elevation pass** (the highest point you'd cross
+    to get there). That's literally how water fills each depression and spills its lowest
+    rim, repeatedly, until it escapes; the first ocean hex reached (target = `biome.js`'s
+    new **`isOceanAt`** gate, so the trace shares the exact rendered coastline) gives the
+    drainage route, reconstructed via parent pointers. Minimax on **elevation** (not
+    continent) follows the valleys and threads the lowest saddles, so a river almost
+    never crosses high ground (~14% of path hexes on Mountains/Hills, mostly the
+    legitimate source descent); continent-minimax cut across mountains a third of the
+    time. Pure function of `(seed, q, r)` — deterministic, placement-independent, with a
+    graceful partial fallback to the most-seaward frontier if the sea is beyond a large
+    expand budget. Scratchpad: **100% of ~380 sources reach the sea** across a dozen
+    maps, mean path ~110 hexes (median 70, p90 228), ~870 elevation samples/trace.
+  - **Registry:** rivers moved from per-hex `riverEdges` to a top-level
+    `world.rivers[]` (`{id, source:{q,r}, path:[{q,r}...], reachedSea}`), populated by
+    `js/ui/app.js`'s **`syncRivers`** after every generation batch and on world load —
+    idempotent, keyed by source id, so only newly-discovered sources cost a trace and
+    migrated worlds rebuild from their existing source hexes.
+  - **Rendering:** `js/ui/map.js`'s **`drawRivers`** draws each river as one smooth blue
+    polyline through the hex centres (midpoint-anchored quadratics), **including across
+    unexplored hexes** — so a river visibly runs to the coast even when the sea itself
+    hasn't been generated — with a bounding-box viewport cull. The per-hex renderer
+    (`drawRiverEdges`, hexside/center styles) is retired.
+  - **Removed:** the whole per-hex flow model — `downhillDirection`, `riverStateAt`,
+    lake-overflow, `overflowDirection`, `stitchRiverForward`/`incomingRiverEdges`, and
+    the `hex.riverEdges` field. `river.js` keeps only source detection (`isRiverSource`).
+  - Verified in-browser: a Huge fill yields ~19-47 long winding rivers, all traced to
+    sea; a coastal seed shows multiple rivers visibly flowing into a rendered Sea body.
+- Schema bumped to **v12** (top-level `rivers` array; backfilled empty on load and
+  rebuilt from source hexes. The earlier v11 `riverEdges` field is left unused.).
+- **Tests (post-rework):** `test/river.test.js` now covers only source detection
+  (Mountains-peak and spontaneous-Lake origins, rare-not-universal, deterministic,
+  non-peak Mountains gated out). New `test/river-trace.test.js`: the path is a connected
+  adjacent chain source-first, >95% reach the sea and terminate on an ocean hex, interior
+  hexes are land, deterministic, stable `riverId`. `test/terrain-coherence.test.js`'s
+  river integration tests rewritten to mirror `syncRivers` (registry built over a real
+  fill, connected chains, >90% reach sea). `test/biome.test.js` keeps the
+  Lake-never-adjacent-to-Sea bay-rule regression. **260 `node --test test/*.test.js`
+  passing.**
+- **Historical (pre-rework) v11 design, superseded above — kept for the record:**
+  Schema was bumped to **v11** (stamp-only — `riverEdges` additive).
+- **Tests (pre-rework):** `test/river.test.js` (19 tests — source detection now covers BOTH
   Mountains-peak and spontaneous-Lake origins (only those two terrains ever source;
   both rare-not-universal across many seeds); `downhillDirection` always a valid index
   or -1, and when valid the chosen neighbour is genuinely lower, verified both ways by

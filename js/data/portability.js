@@ -85,6 +85,11 @@ export function importWorld(json) {
  *   there's no context here to retroactively trace rivers through old hexes,
  *   so older hexes simply lack it (rendered as no river) until regenerated —
  *   just stamp the version.
+ * - v11 -> v12: rivers became a top-level `rivers` array (3R.5 "curated
+ *   rivers" rework). Backfill `rivers: []`; the app repopulates it from the
+ *   world's existing source hexes on load (app.js syncRivers), so migrated
+ *   worlds get their traced rivers back without a transform here. The old
+ *   per-hex `riverEdges` field is left as-is (unused going forward).
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -152,6 +157,12 @@ export function migrateWorld(data) {
     // hex `riverEdges` is additive (absent on old hexes, treated as no
     // river) — just stamp the version.
     data.schemaVersion = 11;
+  }
+  if (data.schemaVersion < 12) {
+    // top-level `rivers` array — backfill empty; app.js syncRivers rebuilds it
+    // from existing source hexes on load. Old per-hex `riverEdges` left as-is.
+    if (!Array.isArray(data.rivers)) data.rivers = [];
+    data.schemaVersion = 12;
   }
   return data;
 }

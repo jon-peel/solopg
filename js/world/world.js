@@ -37,7 +37,14 @@ import { axialKey } from "../core/hexgeo.js";
 // (0-5) marking which hex-sides carry a river segment, propagated forward
 // from mountain sources as neighbouring hexes are generated (js/gen/river.js).
 // Additive; older hexes simply have none until regenerated.
-export const SCHEMA_VERSION = 11;
+// v12: rivers became a top-level `rivers` array (Phase 3R.5 "curated rivers"
+// rework) — each `{ id, source:{q,r}, path:[{q,r}...], reachedSea }` is a full
+// watercourse traced from a source to the sea up front (js/gen/river-trace.js)
+// and rendered as a polyline, replacing the per-hex `riverEdges` growth model
+// (which never reliably reached the coast). Older worlds backfill `rivers: []`
+// and repopulate it from their existing source hexes on load (see app.js
+// syncRivers). The old per-hex `riverEdges` field is left unused going forward.
+export const SCHEMA_VERSION = 12;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
@@ -61,6 +68,11 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     // Adventure hooks (Phase 6) — seeds pointing at a hex/POI. A flat top-level
     // list because a hook spans tiles (origin ≠ target), so it isn't owned by one hex.
     hooks: [],
+    // Rivers (Phase 3R.5) — full watercourses traced from a source to the sea
+    // (js/gen/river-trace.js). A flat top-level list because a river spans
+    // dozens of tiles, isn't owned by one hex, and is drawn even across
+    // unexplored hexes. Populated incrementally as source hexes are discovered.
+    rivers: [],
     createdAt: now,
     updatedAt: now,
   };

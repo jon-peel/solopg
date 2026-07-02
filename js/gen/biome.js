@@ -215,6 +215,21 @@ function rawTerrainAt(seed, q, r) {
   return classifyLand(elevationAt(seed, q, r), moistureAt(seed, q, r));
 }
 
+/**
+ * Whether the ocean gate classifies (q, r) as open Sea — the coarse
+ * continent field (plus the origin land-bias) below OCEAN_THRESHOLD. This is
+ * the position-pure sea test (the same gate biomeAt/rawTerrainAt use, before
+ * sea-contagion or the bay rule), exported for js/gen/river-trace.js so a
+ * traced river targets exactly the coastline the map will actually render.
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @returns {boolean}
+ */
+export function isOceanAt(seed, q, r) {
+  return continentAt(seed, q, r) + originLandBias(q, r) < OCEAN_THRESHOLD;
+}
+
 function lakeRegionTouchesSea(seed, q, r) {
   const seen = new Set([axialKey(q, r)]);
   const queue = [{ q, r }];

@@ -10,7 +10,6 @@ import {
   pixelToAxialFractional,
   hexCorners,
   axialKey,
-  NEIGHBOR_DIRS,
 } from "../core/hexgeo.js";
 import { hashString } from "../core/rng.js";
 import { placedHexes } from "../world/world.js";
@@ -186,15 +185,17 @@ export function render() {
     } else if (simplified) {
       drawSimplifiedMarkers(c.x, c.y, hex);
     }
-    // Rivers (3R.5): drawn on top of terrain art/icons at every zoom, same as
-    // the hook rings below — a river is worth seeing even zoomed out.
-    drawRiverEdges(c.x, c.y, q, r, hex.riverEdges);
     // Hook destinations: pinned leads (a distinct pin) take precedence over the
     // amber "a lead exists here" ring; both visible at all zooms.
     const hk = axialKey(q, r);
     if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
   }
+
+  // 2a. Rivers (3R.5): one pass over the whole registry, on top of terrain art
+  //     at every zoom (a river is worth seeing even zoomed out), and drawn even
+  //     across unexplored hexes so it visibly reaches the sea.
+  drawRivers(minX, minY, maxX, maxY, margin);
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
@@ -299,122 +300,64 @@ function drawHookLine(a, b) {
   ctx.restore();
 }
 
-// Rivers (3R.5): hex.riverEdges holds NEIGHBOR_DIRS indices for the sides
-// carrying a river segment. A shared hex edge's midpoint is exactly the
-// midpoint between the two hexes' centres (true for any regular hex grid),
-// so each hex draws its own edges independently — no shared geometry lookup
-// needed, and it degrades gracefully to a short stub when only one side of a
-// boundary has registered the edge (the accepted order-dependent gap
-// documented in river.js).
-//
-// Two selectable styles (an experiment, on request — flip the const to
-// compare; both consume the identical riverEdges data):
-//  - "center": a pass-through hex (exactly 2 edges) draws ONE quadratic
-//    curve between the two side-midpoints using the hex's own CENTER as the
-//    control point — bends smoothly on a turn, degenerates to a perfectly
-//    straight line when the edges are opposite (the center is colinear).
-//    Sources (1 edge) and confluences (3+) draw center-to-midpoint spokes.
-//  - "hexside": the classic hex-wargame look — the river runs along the
-//    hex's own BORDER, following the rim (corner to corner) between its
-//    side-midpoints instead of cutting through the interior. Crossings still
-//    meet neighbours at the shared side-midpoint, so continuity across hexes
-//    is preserved. Ties (opposite sides — both rim arcs equal) pick a side
-//    deterministically from the hex coords, so it's stable frame to frame.
-const RIVER_STYLE = "center"; // "hexside" | "center"
+// Rivers (Phase 3R.5, "curated rivers"): each world.rivers[] entry is a full
+// watercourse traced from a source to the sea (js/gen/river-trace.js), stored
+// as `path` — an array of axial coords, source-first. We draw the whole thing
+// as ONE smooth blue polyline through the hex CENTRES, including across hexes
+// the GM hasn't generated yet, so a river reads as a complete, sea-reaching
+// watercourse rather than a stub that dies at the first pond (the whole point
+// of the rework). Solid blue, rounded joins; a cheap bounding-box cull skips
+// rivers entirely off-screen, and the canvas clips the rest, so a long river
+// only really costs its visible span.
 const RIVER_COLOR = "#6fd0f0";
+const RIVER_WIDTH = 3.4; // world px at scale 1 (before the /camera.scale divide)
 
-// The 12-point rim ring of a hex — side-midpoints and corners interleaved in
-// angular order — used by the hexside style to walk along the border.
-function rimRing(cx, cy, q, r) {
-  const pts = [];
-  NEIGHBOR_DIRS.forEach(([dq, dr], i) => {
-    const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
-    pts.push({ x: (cx + n.x) / 2, y: (cy + n.y) / 2, sideDir: i });
-  });
-  for (const c of hexCorners(cx, cy, HEX_SIZE)) pts.push({ x: c.x, y: c.y, sideDir: -1 });
-  pts.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
-  return pts;
-}
-
-// Rim points from ring index a to ring index b, walking the shorter way
-// around (12 positions); `preferForward` breaks the exact-opposite tie.
-function rimArc(ring, a, b, preferForward) {
-  const forward = (b - a + 12) % 12;
-  const backward = 12 - forward;
-  const goForward = forward < backward || (forward === backward && preferForward);
-  const step = goForward ? 1 : -1;
-  const count = goForward ? forward : backward;
-  const pts = [ring[a]];
-  for (let k = 1, idx = a; k <= count; k++) {
-    idx = (idx + step + 12) % 12;
-    pts.push(ring[idx]);
+// Smooth a polyline through its points: anchor each curve segment at the
+// midpoint between consecutive vertices and use the vertex itself as the
+// quadratic control point. Passes through the endpoints exactly and glides
+// through the interior, turning the hex-to-hex zig-zag into natural meanders.
+function strokeSmoothPath(pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1].x, pts[1].y);
+  } else {
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i].x + pts[i + 1].x) / 2;
+      const my = (pts[i].y + pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+    }
+    const last = pts[pts.length - 1];
+    ctx.quadraticCurveTo(pts[pts.length - 2].x, pts[pts.length - 2].y, last.x, last.y);
   }
-  return pts;
+  ctx.stroke();
 }
 
-function drawRiverEdges(cx, cy, q, r, riverEdges) {
-  if (!riverEdges || !riverEdges.length) return;
-
-  const strokeTwice = (draw) => {
-    // Both passes are the river colour now (on request) — the wider "outline"
-    // pass just thickens the line into a single solid blue stroke rather than
-    // reading as an outline. Kept as two passes so the width is unchanged from
-    // the outlined version (a 5px core with rounded joins).
-    ctx.strokeStyle = RIVER_COLOR;
-    ctx.lineWidth = 5 / camera.scale;
-    draw();
-    ctx.strokeStyle = RIVER_COLOR;
-    ctx.lineWidth = 2.4 / camera.scale;
-    draw();
-  };
-  const polyline = (pts) => {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
-    ctx.stroke();
-  };
-
+function drawRivers(minX, minY, maxX, maxY, margin) {
+  if (!world || !Array.isArray(world.rivers) || !world.rivers.length) return;
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-
-  if (RIVER_STYLE === "hexside" && riverEdges.length >= 2) {
-    // Connect this hex's river sides in ring order along the border; a chain
-    // of shorter arcs covers pass-through (2) and confluences (3+) alike.
-    const ring = rimRing(cx, cy, q, r);
-    const idxs = riverEdges
-      .map((dir) => ring.findIndex((p) => p.sideDir === dir))
-      .sort((x, y) => x - y);
-    const preferForward = hashString(`${q},${r}`) % 2 === 0;
-    strokeTwice(() => {
-      for (let k = 0; k + 1 < idxs.length; k++) polyline(rimArc(ring, idxs[k], idxs[k + 1], preferForward));
-    });
-  } else if (RIVER_STYLE === "center" && riverEdges.length === 2) {
-    const [a, b] = riverEdges.map((dir) => {
-      const [dq, dr] = NEIGHBOR_DIRS[dir];
-      const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
-      return { x: (cx + n.x) / 2, y: (cy + n.y) / 2 };
-    });
-    strokeTwice(() => {
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.quadraticCurveTo(cx, cy, b.x, b.y);
-      ctx.stroke();
-    });
-  } else {
-    // Single-edge stubs (source / terminus) and the center style's
-    // confluence fallback: straight center-to-midpoint spokes.
-    for (const dir of riverEdges) {
-      const [dq, dr] = NEIGHBOR_DIRS[dir];
-      const n = axialToPixel(q + dq, r + dr, HEX_SIZE);
-      const m = { x: (cx + n.x) / 2, y: (cy + n.y) / 2 };
-      strokeTwice(() => {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(m.x, m.y);
-        ctx.stroke();
-      });
+  ctx.strokeStyle = RIVER_COLOR;
+  ctx.lineWidth = RIVER_WIDTH / camera.scale;
+  for (const river of world.rivers) {
+    const path = river && river.path;
+    if (!path || path.length < 2) continue;
+    const pts = new Array(path.length);
+    let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+    for (let i = 0; i < path.length; i++) {
+      const c = axialToPixel(path[i].q, path[i].r, HEX_SIZE);
+      pts[i] = c;
+      if (c.x < bMinX) bMinX = c.x;
+      if (c.x > bMaxX) bMaxX = c.x;
+      if (c.y < bMinY) bMinY = c.y;
+      if (c.y > bMaxY) bMaxY = c.y;
     }
+    // Whole-river cull: skip if its bounding box misses the padded viewport.
+    if (bMaxX < minX - margin || bMinX > maxX + margin || bMaxY < minY - margin || bMinY > maxY + margin) {
+      continue;
+    }
+    strokeSmoothPath(pts);
   }
   ctx.restore();
 }
