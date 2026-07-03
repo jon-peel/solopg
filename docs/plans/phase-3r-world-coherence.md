@@ -295,6 +295,15 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   this sub-phase — 3R.3 implements the model against this baseline.
 
 ### 3R.3 — Terrain generation v2 ✅ done
+> ⚠️ **SUPERSEDED at schema v13 (the big pivot).** The elevation/moisture/continent
+> noise classifier described in 3R.3 and 3R.4 below, and the downhill river trace in
+> 3R.5, were **deleted** and replaced by a **neighbour-affinity hex oracle**
+> (`js/gen/affinity.js`) plus an **emergent terrain-cost drainage** river system
+> (`js/gen/rivers.js`). Hexes no longer carry `elevation`/`moisture`/`continent`/
+> `riverEdges`. The sub-sections below are kept as design history; for the CURRENT
+> terrain and river implementation see `PLAN.md` (the "TERRAIN REWRITE (v13)",
+> "Rivers v2", and "MANUAL rivers" log entries). 3R.6 (Settlements v2) builds on the
+> post-pivot world.
 - Implemented the 3R.2-chosen model: **elevation + moisture** as first-class per-hex
   fields (`hex.elevation`, `hex.moisture`, floats in `[0,1)`), each a **coordinate-hashed
   value-noise field** (`js/core/noise.js` — `valueNoise2D`/`fbm2D`, 3-octave FBM, no npm
@@ -432,6 +441,13 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   245 `node --test test/*.test.js` passing.
 
 ### 3R.5 — Rivers ✅ done
+> ⚠️ **SUPERSEDED at schema v13.** The elevation-downhill river design in this section
+> (`isRiverSource`/`downhillDirection`/`incomingRiverEdges`/per-hex `riverEdges`, propagated
+> like sea contagion) was **deleted** with the elevation field. Rivers are now an emergent
+> **terrain-cost drainage** overlay in `world.rivers[]`: `js/gen/rivers.js` floods a
+> cost-to-nearest-major-water field and traces deep-interior mountain sources down it, plus
+> **manual GM-drawn rivers** that auto-complete their open ends. Kept below as history; for the
+> CURRENT design see `PLAN.md` ("Rivers v2" + "MANUAL rivers").
 - **Model (your rules, encoded):** rivers **start in mountains** and flow **downhill**
   to a **lake or sea**; may flow **lake → lake → sea**; **never uphill** (never
   lake→mountain, never range→range); may pass **through their origin range** but route

@@ -37,8 +37,12 @@ function wireOnce() {
   if (wired || !el()) return;
   wired = true;
   scrim.addEventListener("pointerdown", () => closeRadial());
-  // Right-clicking again while open dismisses rather than showing the OS menu.
-  ringEl.addEventListener("contextmenu", (e) => e.preventDefault());
+  // Right-clicking while open steps back one level (or closes at the top),
+  // never the OS menu — the same gesture that opened the ring now navigates it.
+  ringEl.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (state) (state.stack.length > 1 ? back() : closeRadial());
+  });
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && state) (state.stack.length > 1 ? back() : closeRadial());
   });

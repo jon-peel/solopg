@@ -118,6 +118,45 @@ button:hover {
 #map-readout[hidden] {
   display: none;
 }
+/* River drawing toolbar (top-center): shown only while tracing a river. */
+#river-draw-bar {
+  position: absolute;
+  left: 50%;
+  top: 0.6rem;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--fg);
+  background: rgba(13, 15, 21, 0.9);
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(111, 208, 240, 0.55);
+  z-index: 6;
+}
+#river-draw-bar[hidden] {
+  display: none;
+}
+#river-draw-bar #river-draw-hint {
+  color: #6fd0f0;
+  margin-right: 0.2rem;
+}
+#river-draw-bar button {
+  font: inherit;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 0.12rem 0.5rem;
+  cursor: pointer;
+}
+#river-draw-bar button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+#river-draw-bar #btn-river-finish {
+  border-color: rgba(111, 208, 240, 0.6);
+}
 /* Scale bar (top-left): a day's march at the current zoom. Hover for rules. */
 #map-scale {
   position: absolute;

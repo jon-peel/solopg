@@ -23,7 +23,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
-import { computeRivers } from "../gen/rivers.js";
+import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -50,6 +50,7 @@ import {
   setLabelsEnabled,
   setHookMarks,
   setHookFocus,
+  setRiverDraft,
   zoomStep,
   recenter,
   pixelsPerMile,
@@ -123,6 +124,7 @@ let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
 let selectedHookId = null; // hook whose target/origin are highlighted on the map
+let riverDraftClicks = null; // manual-river drawing: clicked anchor hexes, or null when not drawing
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -958,6 +960,20 @@ function onSelectHook(id) {
 
 // Esc clears a hook highlight (takes priority over leaving the dungeon). Inert
 // while a ring is open (the ring owns Esc) or while typing in a field.
+// While tracing a river, Enter finishes, Esc cancels, Ctrl/Cmd+Z undoes a point.
+// Registered before the other key handlers so it wins those keys during a draw.
+function onRiverDraftKey(e) {
+  if (!riverDraftClicks) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  if (e.key === "Escape") onCancelDrawRiver();
+  else if (e.key === "Enter") onFinishDrawRiver();
+  else if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey)) onUndoRiverPoint();
+  else return;
+  e.stopImmediatePropagation();
+  e.preventDefault();
+}
+
 function onWorldKey(e) {
   if (e.key !== "Escape" || !selectedHookId || isRadialOpen()) return;
   const t = e.target;
@@ -1283,11 +1299,109 @@ function buildRandomHex(tables, q, r, gen) {
 }
 
 function onHexClick({ q, r }) {
+  if (riverDraftClicks) return addRiverPoint(q, r);
   selectCell(q, r);
 }
 
 function onEmptyCellClick({ q, r }) {
+  if (riverDraftClicks) return addRiverPoint(q, r);
   selectCell(q, r);
+}
+
+// --- Manual river drawing (Phase 3R.6) -----------------------------------
+// Trace a river by clicking hexes: consecutive clicks are joined by the
+// straight hex-line between them, so two clicks make a line and more clicks a
+// winding course. On finish it's stored as a `manual` river (js/gen/rivers.js);
+// its open ends auto-complete to a mountain source / the sea over time.
+
+// The full hex path from the clicked anchors (straight lines filled between).
+function riverDraftPath() {
+  if (!riverDraftClicks || !riverDraftClicks.length) return [];
+  const path = [];
+  const push = (c) => {
+    const last = path[path.length - 1];
+    if (!last || last.q !== c.q || last.r !== c.r) path.push({ q: c.q, r: c.r });
+  };
+  push(riverDraftClicks[0]);
+  for (let i = 1; i < riverDraftClicks.length; i++) {
+    const seg = axialLine(riverDraftClicks[i - 1].q, riverDraftClicks[i - 1].r, riverDraftClicks[i].q, riverDraftClicks[i].r);
+    for (let k = 1; k < seg.length; k++) push(seg[k]);
+  }
+  return path;
+}
+
+function refreshRiverDraft() {
+  setRiverDraft(riverDraftClicks ? riverDraftPath() : null);
+  $("river-draw-bar").hidden = !riverDraftClicks;
+}
+
+// The id of a GM-drawn (manual) river passing through (q, r), or null. Only
+// manual rivers are individually removable — auto rivers are derived.
+function manualRiverIdAt(q, r) {
+  if (!current) return null;
+  const k = axialKey(q, r);
+  for (const rv of current.rivers || []) {
+    if (rv.manual && rv.path.some((p) => axialKey(p.q, p.r) === k)) return rv.id;
+  }
+  return null;
+}
+
+async function onRemoveRiver(id) {
+  if (!current || !id) return;
+  current.rivers = (current.rivers || []).filter((rv) => rv.id !== id);
+  await persistAndRefresh(); // syncRivers keeps the rest; auto rivers re-derive
+  logLine("River removed.");
+}
+
+function onStartDrawRiver() {
+  if (!current || !selected) return;
+  riverDraftClicks = [{ q: selected.q, r: selected.r }];
+  refreshRiverDraft();
+  logLine("Drawing a river — click hexes to trace its course, then Finish.");
+}
+
+function addRiverPoint(q, r) {
+  if (!riverDraftClicks) return;
+  const last = riverDraftClicks[riverDraftClicks.length - 1];
+  if (last.q === q && last.r === r) return; // ignore a repeat click on the same hex
+  riverDraftClicks.push({ q, r });
+  refreshRiverDraft();
+}
+
+function onUndoRiverPoint() {
+  if (!riverDraftClicks) return;
+  if (riverDraftClicks.length > 1) riverDraftClicks.pop();
+  refreshRiverDraft();
+}
+
+function onCancelDrawRiver() {
+  riverDraftClicks = null;
+  refreshRiverDraft();
+}
+
+// Next id for a manual river: manual:<n>, monotonic across the world's rivers.
+function nextManualRiverId(world) {
+  let max = -1;
+  for (const rv of world.rivers || []) {
+    const m = /^manual:(\d+)$/.exec(rv.id || "");
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `manual:${max + 1}`;
+}
+
+async function onFinishDrawRiver() {
+  if (!current || !riverDraftClicks) return;
+  const path = riverDraftPath();
+  if (path.length < 2) { onCancelDrawRiver(); return; }
+  const terrainByKey = new Map();
+  for (const h of placedHexes(current)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  const river = buildManualRiver(nextManualRiverId(current), path, terrainByKey);
+  if (!Array.isArray(current.rivers)) current.rivers = [];
+  current.rivers.push(river);
+  riverDraftClicks = null;
+  refreshRiverDraft();
+  await persistAndRefresh(); // syncRivers completes the open ends + merges tributaries
+  logLine("River added.");
 }
 
 // Right-click: select the cell, then open the radial menu over it. The model is
@@ -1295,6 +1409,7 @@ function onEmptyCellClick({ q, r }) {
 // are shown disabled. Picks route through `radialDispatch` to existing handlers.
 function onContextMenu({ q, r, clientX, clientY }) {
   if (!current) return;
+  if (riverDraftClicks) return; // ignore right-click while tracing a river
   selectCell(q, r);
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
@@ -1309,6 +1424,7 @@ function onContextMenu({ q, r, clientX, clientY }) {
     terrains: Object.keys(TERRAIN_COLORS),
     pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
     dungeonSizes: dungeonSizes.map((s) => ({ label: s.size, value: s.size, title: s.blurb || "" })),
+    manualRiverHere: manualRiverIdAt(q, r),
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -1333,6 +1449,8 @@ function radialDispatch(id, value) {
     case "genHook": return onGenerateHook();
     case "readMap": return onReadMap();
     case "followTrail": return onStartChain();
+    case "drawRiver": return onStartDrawRiver();
+    case "removeRiver": return onRemoveRiver(value);
   }
 }
 
@@ -1434,11 +1552,15 @@ function wire() {
   $("btn-home").addEventListener("click", () => recenter());
   $("btn-help").addEventListener("click", () => toggleHelp());
   $("btn-help-close").addEventListener("click", () => toggleHelp(false));
+  $("btn-river-undo").addEventListener("click", onUndoRiverPoint);
+  $("btn-river-finish").addEventListener("click", onFinishDrawRiver);
+  $("btn-river-cancel").addEventListener("click", onCancelDrawRiver);
   $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
   $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
   $("help-overlay").addEventListener("click", (e) => {
     if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
   });
+  window.addEventListener("keydown", onRiverDraftKey); // river drawing intercepts Esc/Enter first
   window.addEventListener("keydown", onHelpKey); // Esc closes help before other handlers
   window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
   window.addEventListener("keydown", onDungeonKey);

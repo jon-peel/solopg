@@ -260,7 +260,7 @@ land. Files: new `js/gen/affinity.js`; `hex.js`/`app.js` rewired (`neighborTerra
 (elevation/moisture/continent no longer written — old worlds load as-is, terrain strings still
 render). Verified in-browser: a Huge fill renders clean coherent regions with real coastlines, big
 oceans, mountain highlands, and lakes; no console errors.
-**3R.6 — Rivers v2 (emergent major-water drainage, elevation-free).** With no height field, TERRAIN
+**Rivers v2 (still 3R.5 — emergent major-water drainage, elevation-free).** With no height field, TERRAIN
 is the routing cost. `js/gen/rivers.js` `computeRivers(seed, terrainByKey)` is a DERIVED overlay
 (recomputed from the revealed terrain by `app.js`'s `syncRivers` after every generation and on load,
 into `world.rivers[]`, rendered by the existing `drawRivers`): (1) find connected water bodies — a
@@ -282,14 +282,42 @@ only adds rivers for newly-revealed sources (new tributaries still merge into th
 paths via the seeded `claimed` set). A river, once formed, is permanent. Verified: expanding a world
 from 14→30 rivers dropped 0 and re-routed 0. Pre-v13 (elevation-based) rivers are cleared on migration
 so the new system rebuilds them.
-**Next: tune density/stream-order-width to taste (real-play); optional mountain ranges as features;
-then 3R.6b settlements v2 (river/coast size boosts now have real rivers to key off).**
+**MANUAL rivers (real-play request — "let me say a river flows through these hexes / from here to
+here", for expanding a live world or dropping in a pre-hexed adventure module).** A GM-drawn river is
+just a `world.rivers[]` entry flagged `manual:true` with `upstreamOpen`/`downstreamOpen` end-flags.
+`computeRivers` keeps it VERBATIM (append-only, like any river) and additionally COMPLETES its still-
+open ends against the current cost field: the downstream end extends by DESCENDING D to major water,
+the upstream end by ASCENDING D (inland) to a mountain — permanent once done, and it stays a stub
+until reachable (a module dropped in a pocket completes to the sea only once exploration connects it).
+Its hexes seed `claimed` so auto tributaries merge INTO it (a drawn trunk). `buildManualRiver` orients
+the drawn chain source-first and sets the open flags. **UI**: radial "River" (the old Reserved slot) →
+a draw mode where clicking hexes traces the course (consecutive clicks joined by the straight hex-line,
+so 2 clicks = "here to there", more = a winding course), a top-centre toolbar (Undo / Finish / Cancel;
+Enter / Esc / Ctrl-Z), and a dashed cyan preview (`map.js` `setRiverDraft`). Verified end-to-end in the
+browser: draw → Finish stores a `manual:` river that auto-completes both ends and renders as a normal
+blue river merged with the generated network; no console errors. **Follow-ups (real-play): (a) a
+still-OPEN end renders DASHED** (`map.js` `strokeRiver`/`strokeDashed` — the anchored middle solid, an
+unresolved end dashed, so "this end isn't connected yet" reads at a glance); **(b) Remove a manual
+river** — the radial "River" slot is a submenu (Draw always; Remove only when the hex lies on a manual
+river, keyed to its id), `onRemoveRiver` filters it out and re-derives (auto rivers unaffected).
+Both browser-verified (dashed render on an un-completable river; Remove takes a world 1→0 manual
+rivers).
+**Radial + water polish (real-play):** right-clicking anywhere while the radial ring is open now steps
+BACK one level (or closes at the top) instead of only suppressing the OS menu (`radial-menu.js`
+`contextmenu` → `back()`/`closeRadial()`); and open-water POI is now **extremely rare** — Water
+`poi.chance` 0.2 → 0.03 (`terrain-profile.js`), so Sea/Lake tiles are almost always empty (still no
+dungeons/settlements on water). Right-click-back browser-verified (into a submenu → right-click back to
+top → right-click closes); no console errors.
+**Next: 3R.6 — Settlements v2** (names, Keep/Fort martial overlay, sparser spacing / per-region cap,
+hamlet clusters, and river/coast size boosts — real rivers now exist to key off; see
+`docs/plans/phase-3r-world-coherence.md` §3R.6). Optional first: tune river density / stream-order width
+to taste, mountain ranges as features.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 232 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v13. 236 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -362,10 +390,10 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           noise.js (valueNoise2D, fbm2D — Phase 3R.3 deterministic coordinate-hashed value noise)
   /gen    hex.js (generateHex)   poi.js (generatePoi)
           terrain-profile.js (per-terrain rules + DUNGEON_THEME_BIAS, SHRINE/CAMP/LANDMARK bias+skin)
-          biome.js (biomeAt/classifyLand/elevationAt — Phase 3R.3/3R.4 elevation+moisture -> land terrain,
-                    `continent` coarse noise field gates Sea vs. running the land classifier)
-          river.js (isRiverSource/downhillDirection/riverStateAt — Phase 3R.5 mountain-to-sink rivers,
-                    propagated incrementally like sea contagion for performance, not analytically traced)
+          affinity.js (TERRAINS, terrainAt/neighborTerrainsOf — v13 neighbour-affinity hex oracle;
+                    a revealed hex rolls a weighted terrain biased by its already-revealed neighbours)
+          rivers.js (computeRivers/buildManualRiver — v13 emergent drainage: terrain-cost field to the
+                    nearest major water body, sources in deep-interior mountains; append-only + manual rivers)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
@@ -373,7 +401,7 @@ package.json                    dev-only: "type":"module", scripts: test / serve
                     chooseDistantTarget, hookName/hookDescription, HOOK_BUILD — Phase 6 adventure hooks)
   /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex; world.hooks)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
-  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks; radial dispatch)   map.js (canvas renderer + LOD + hook markers + river lines (3R.5); right-click → radial)
+  /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks; radial dispatch; syncRivers; manual-river draw mode)   map.js (canvas renderer + LOD + hook markers + river lines + draw-draft; right-click → radial)
           panel.js (selection UI + dungeon/room view + global hooks list)   dungeon-map.js (dungeon canvas: camera, grid)
           radial-model.js (pure fixed-slot menu model — Phase 7.1)   radial-menu.js (right-click ring overlay)
           terrain-style.js / terrain-art.js / poi-style.js (+ THEME_GLYPHS) / settlement-art.js
@@ -421,19 +449,15 @@ graph TD
   `pattern` ∈ known/distant/map/chain/opportunity/event/escort/return; `status` ∈ open/resolved/ignored.
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
-  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null, elevation, moisture, continent, riverEdges,
+  `{ key, coords:{q,r}, placed, terrain, terrainFeature|null,
   settlement, pois:[], explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations —
-  `name` shows as a map label. `elevation`/`moisture` (v8) and `continent` (v9, renamed from `basin` in
-  v10; floats in `[0,1)`) are the Phase 3R.3/3R.4 biome-classifier inputs — pure functions of
-  `(seed, q, r)`, always present regardless of how terrain was chosen. `continent` is a coarse,
-  continent-scale land/ocean **gate** (not flood-fill — this world is infinite/incrementally generated,
-  so there's no map edge to flood-fill from): below a threshold it's always Sea; otherwise the unchanged
-  land classifier runs, and its own low-elevation band means Lake. A smooth bias keeps the fixed world
-  origin `(0,0)` always land. `riverEdges` (v11) is an array of `NEIGHBOR_DIRS` indices (0-5) marking
-  which hex-sides carry a river segment — grown incrementally from mountain-peak sources as neighbouring
-  hexes are generated (`js/gen/river.js`), the same propagation shape as sea contagion, chosen for
-  performance (a fully analytical per-hex query measured ~28ms/hex, too slow for interactive area
-  generation; incremental propagation measures ~0.037ms/hex).
+  `name` shows as a map label. `terrain` (one of `affinity.js`'s `TERRAINS`: Sea/Lake/Swamp/Plains/
+  Forest/Hills/Mountains/Desert) is chosen by the **v13 neighbour-affinity hex oracle** — a weighted
+  roll biased by already-revealed neighbours (`terrainAt`), deliberately reveal-order-dependent (NOT a
+  pure function of `(seed,q,r)`). The old per-hex `elevation`/`moisture`/`continent`/`riverEdges` fields
+  (v8–v12) were **removed at v13** when the elevation classifier and per-hex river edges were deleted;
+  old saves load as-is (extra fields ignored). Rivers are no longer per-hex — they live in
+  `world.rivers[]` (see below), derived from the revealed terrain.
 - **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
   `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Lake/Sea).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
