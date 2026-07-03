@@ -64,9 +64,20 @@ export const DUNGEON_THEME_BIAS = {
 // Spread used when a terrain has no specific bias.
 const DEFAULT_THEME_BIAS = { Ruin: 3, "Cave complex": 2, "Forgotten tomb": 2, "Ruined fort": 1, "Beast den": 1 };
 
+// Lake/Sea (Phase 3R.4) share Water's settlement rule, POI weights, and
+// flavor text — no lake-vs-sea gameplay distinction yet (that's 3R.6's job
+// for coastal/river boosts). Rather than duplicating every Water-keyed
+// table below, terrain-keyed lookups normalize through this alias first.
+const WATER_ALIAS = { Lake: "Water", Sea: "Water" };
+
+/** Normalize a terrain for table lookups — Lake/Sea alias to Water. */
+export function biasKey(terrain) {
+  return WATER_ALIAS[terrain] || terrain;
+}
+
 /** Profile for a terrain (safe default for unknown terrain). */
 export function profileFor(terrain) {
-  return TERRAIN_PROFILE[terrain] || DEFAULT_PROFILE;
+  return TERRAIN_PROFILE[biasKey(terrain)] || DEFAULT_PROFILE;
 }
 
 /**
@@ -102,7 +113,7 @@ export function poiTypeTable(terrain) {
  * Entries: { weight, value: themeString }. Mirrors poiTypeTable.
  */
 export function dungeonThemeTable(terrain) {
-  const weights = DUNGEON_THEME_BIAS[terrain] || DEFAULT_THEME_BIAS;
+  const weights = DUNGEON_THEME_BIAS[biasKey(terrain)] || DEFAULT_THEME_BIAS;
   const entries = Object.entries(weights).map(([theme, weight]) => ({
     weight,
     value: theme,
@@ -127,7 +138,7 @@ const DEFAULT_SHRINE_FORM_BIAS = { "a weathered altar": 3, "a standing stone": 3
 
 /** Weighted shrine-form table for a terrain (mirrors dungeonThemeTable). */
 export function shrineFormTable(terrain) {
-  const weights = SHRINE_FORM_BIAS[terrain] || DEFAULT_SHRINE_FORM_BIAS;
+  const weights = SHRINE_FORM_BIAS[biasKey(terrain)] || DEFAULT_SHRINE_FORM_BIAS;
   const entries = Object.entries(weights).map(([form, weight]) => ({
     weight,
     value: form,
@@ -178,7 +189,7 @@ const DEFAULT_LANDMARK_FEATURE_BIAS = { "a great standing monolith": 2, "a ring 
 
 /** Weighted landmark-feature table for a terrain (mirrors shrineFormTable). */
 export function landmarkFeatureTable(terrain) {
-  const weights = LANDMARK_FEATURE_BIAS[terrain] || DEFAULT_LANDMARK_FEATURE_BIAS;
+  const weights = LANDMARK_FEATURE_BIAS[biasKey(terrain)] || DEFAULT_LANDMARK_FEATURE_BIAS;
   const entries = Object.entries(weights).map(([feature, weight]) => ({
     weight,
     value: feature,

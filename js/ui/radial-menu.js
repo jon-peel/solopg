@@ -13,8 +13,8 @@
 
 import { ringCenter } from "./radial-model.js";
 
-const BASE_R = 104; // base-ring radius (px)
-const OUTER_R = 178; // submenu-ring radius
+const BASE_R = 88; // base-ring radius (px) — shrunk from 104 to cut mouse travel to any slot
+const OUTER_R = 150; // submenu-ring radius — shrunk from 178, same reason
 const BASE_NODE = 56;
 const SUB_NODE = 50;
 const EDGE_PAD = OUTER_R + SUB_NODE; // keep the outer ring on-screen

@@ -11,11 +11,11 @@
 // its own terrain/POI art — these only label the menu.
 export const ACTION_GLYPH = {
   terrain: "🗺️", poi: "⭐", settlement: "🏠", hook: "🎣",
-  neighbors: "🧭", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
+  reserved: "·", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
 };
 export const TERRAIN_GLYPH = {
   Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️",
-  Swamp: "🐊", Desert: "🏜️", Water: "🌊",
+  Swamp: "🐊", Desert: "🏜️", Lake: "💧", Sea: "🌊",
 };
 export const POI_GLYPH = {
   dungeon: "🏰", shrine: "⛩️", camp: "⛺", landmark: "🗿", tower: "🗼",
@@ -31,10 +31,9 @@ const submenu = (id, glyph, label, { enabled = true, reason } = {}, children = [
 
 // Terrain submenu: Random (anchored nearest the cursor) + each terrain.
 function terrainChildren(terrains) {
-  return [
-    leaf("generate", "🎲", "Random", { anchor: true }),
-    ...terrains.map((t) => leaf("placeTerrain", TERRAIN_GLYPH[t] || "▮", t, { value: t })),
-  ];
+  // No "Random" leaf here — Generate (its own slot) already covers random
+  // single-hex generation, so Terrain/Place is just the explicit-pick list.
+  return terrains.map((t) => leaf("placeTerrain", TERRAIN_GLYPH[t] || "▮", t, { value: t }));
 }
 
 const shorten = (s, n = 16) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s);
@@ -76,6 +75,31 @@ function hookChildren(canGossip) {
   ];
 }
 
+// Generate submenu: Random (anchored, single hex — same "generate" id/handler
+// as before) + Small/Medium/Large (3R.1 "Area" tool, folded in here rather than
+// its own slot). Every size always fills EMPTY hexes only in the hex-radius
+// disc around the target (center included) — no overwrite option; a hex
+// that's already there just stays put. `value` is the plain radius number.
+const AREA_SIZES = [
+  { label: "Small", radius: 1 },
+  { label: "Medium", radius: 2 },
+  { label: "Large", radius: 3 },
+  { label: "Huge", radius: 15 }, // bulk-fill for testing/prep — up to 721 hexes in one go
+];
+
+function generateChildren(placed) {
+  return [
+    leaf("generate", "🎲", "Random", {
+      anchor: true,
+      ...(placed ? { enabled: false, reason: "Already here — use Regenerate" } : {}),
+    }),
+    ...AREA_SIZES.map(({ label, radius }) => {
+      const count = 1 + 3 * radius * (radius + 1);
+      return leaf("genArea", "🧭", label, { value: radius, title: `${label} — up to ${count} hexes` });
+    }),
+  ];
+}
+
 /**
  * Build the fixed-slot radial model for the cell under the cursor.
  * @param {object} state
@@ -84,7 +108,6 @@ function hookChildren(canGossip) {
  *   hasSettlement  {boolean}
  *   allowedSizes   {string[]} settlement sizes this terrain permits
  *   canGossip      {boolean} a settlement is present (town gossip)
- *   emptyNeighbors {number} count of not-yet-generated neighbours
  *   poiTypes       {string[]}
  *   terrains       {string[]}
  *   pois           {{id:string,name:string}[]} existing POIs on this hex (for Remove)
@@ -94,7 +117,7 @@ function hookChildren(canGossip) {
 export function buildRadialModel(state) {
   const {
     placed = false, terrain = null, hasSettlement = false,
-    allowedSizes = [], canGossip = false, emptyNeighbors = 0,
+    allowedSizes = [], canGossip = false,
     poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
   } = state || {};
 
@@ -108,22 +131,22 @@ export function buildRadialModel(state) {
       ? {}
       : { enabled: false, reason: `No settlement can sit on ${terrain}` };
 
-  // Neighbours: needs a placed hex with at least one empty neighbour.
-  const neighborsState = !placed
-    ? { enabled: false, reason: "Place this hex first" }
-    : emptyNeighbors > 0
-      ? {}
-      : { enabled: false, reason: "All neighbours already filled" };
-
   return [
     submenu("terrain", ACTION_GLYPH.terrain, placed ? "Terrain" : "Place", {}, terrainChildren(terrains)),
     submenu("poi", ACTION_GLYPH.poi, "POI", placed ? {} : needHex, poiChildren(poiTypes, pois, dungeonSizes)),
     submenu("settlement", ACTION_GLYPH.settlement, "Settlement", settlementState, settlementChildren(allowedSizes, hasSettlement)),
     submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
-    leaf("neighbors", ACTION_GLYPH.neighbors, "Neighbours", neighborsState),
+    // Generate: Random (single hex, gated like before) + Small/Medium/Large
+    // (3R.1 "Area" fill-empty, folded in here). The submenu itself is always
+    // enabled — Area sizes work regardless of whether the center is placed.
+    // Placed at the bottom slot (nearest the cursor for a typical downward
+    // right-click) since it's the most-used action.
+    submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
     leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
     leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
-    leaf("generate", ACTION_GLYPH.generate, "Generate", placed ? { enabled: false, reason: "Already here — use Regenerate" } : {}),
+    // Reserved — no action lives here yet (a future feature, e.g. travel,
+    // may claim it).
+    leaf("reserved", ACTION_GLYPH.reserved, "—", { enabled: false, reason: "Reserved for a future feature" }),
   ];
 }
 

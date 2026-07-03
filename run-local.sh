@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BRANCH="claude/project-overview-phases-9qf7gh"
+BRANCH="claude/phase-3r-planning-hxufh8"
 PORT="${1:-8000}"
 
 # Always operate on the repo this script lives in (so it serves index.html at root).
@@ -23,7 +23,7 @@ git reset --hard "origin/$BRANCH"
 
 echo
 echo "Running unit tests ..."
-if ! node --test; then
+if ! node --test test/*.test.js; then
   echo
   echo "Unit tests FAILED — not starting the server. Fix the failures above." >&2
   exit 1

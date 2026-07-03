@@ -192,6 +192,11 @@ export function render() {
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
   }
 
+  // 2a. Rivers (3R.5): one pass over the whole registry, on top of terrain art
+  //     at every zoom (a river is worth seeing even zoomed out), and drawn even
+  //     across unexplored hexes so it visibly reaches the sea.
+  drawRivers(minX, minY, maxX, maxY, margin);
+
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
   if (detail) {
@@ -292,6 +297,68 @@ function drawHookLine(a, b) {
   ctx.moveTo(pa.x, pa.y);
   ctx.lineTo(pb.x, pb.y);
   ctx.stroke();
+  ctx.restore();
+}
+
+// Rivers (Phase 3R.5, "curated rivers"): each world.rivers[] entry is a full
+// watercourse traced from a source to the sea (js/gen/river-trace.js), stored
+// as `path` — an array of axial coords, source-first. We draw the whole thing
+// as ONE smooth blue polyline through the hex CENTRES, including across hexes
+// the GM hasn't generated yet, so a river reads as a complete, sea-reaching
+// watercourse rather than a stub that dies at the first pond (the whole point
+// of the rework). Solid blue, rounded joins; a cheap bounding-box cull skips
+// rivers entirely off-screen, and the canvas clips the rest, so a long river
+// only really costs its visible span.
+const RIVER_COLOR = "#6fd0f0";
+const RIVER_WIDTH = 3.4; // world px at scale 1 (before the /camera.scale divide)
+
+// Smooth a polyline through its points: anchor each curve segment at the
+// midpoint between consecutive vertices and use the vertex itself as the
+// quadratic control point. Passes through the endpoints exactly and glides
+// through the interior, turning the hex-to-hex zig-zag into natural meanders.
+function strokeSmoothPath(pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1].x, pts[1].y);
+  } else {
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i].x + pts[i + 1].x) / 2;
+      const my = (pts[i].y + pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+    }
+    const last = pts[pts.length - 1];
+    ctx.quadraticCurveTo(pts[pts.length - 2].x, pts[pts.length - 2].y, last.x, last.y);
+  }
+  ctx.stroke();
+}
+
+function drawRivers(minX, minY, maxX, maxY, margin) {
+  if (!world || !Array.isArray(world.rivers) || !world.rivers.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = RIVER_COLOR;
+  ctx.lineWidth = RIVER_WIDTH / camera.scale;
+  for (const river of world.rivers) {
+    const path = river && river.path;
+    if (!path || path.length < 2) continue;
+    const pts = new Array(path.length);
+    let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+    for (let i = 0; i < path.length; i++) {
+      const c = axialToPixel(path[i].q, path[i].r, HEX_SIZE);
+      pts[i] = c;
+      if (c.x < bMinX) bMinX = c.x;
+      if (c.x > bMaxX) bMaxX = c.x;
+      if (c.y < bMinY) bMinY = c.y;
+      if (c.y > bMaxY) bMaxY = c.y;
+    }
+    // Whole-river cull: skip if its bounding box misses the padded viewport.
+    if (bMaxX < minX - margin || bMinX > maxX + margin || bMaxY < minY - margin || bMinY > maxY + margin) {
+      continue;
+    }
+    strokeSmoothPath(pts);
+  }
   ctx.restore();
 }
 

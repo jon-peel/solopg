@@ -12,7 +12,11 @@ export const TERRAIN_ART = {
   Mountains: [`${DIR}/mountains-1.svg`, `${DIR}/mountains-2.svg`],
   Swamp: [`${DIR}/swamp-1.svg`, `${DIR}/swamp-2.svg`],
   Desert: [`${DIR}/desert-1.svg`, `${DIR}/desert-2.svg`],
-  Water: [`${DIR}/water-1.svg`, `${DIR}/water-2.svg`],
+  // Lake/Sea (Phase 3R.4) share the old Water art as a placeholder — distinct
+  // pencil art per art-review convention (visual changes reviewed as files
+  // first) is a follow-up, not blocking this sub-phase.
+  Lake: [`${DIR}/water-1.svg`, `${DIR}/water-2.svg`],
+  Sea: [`${DIR}/water-1.svg`, `${DIR}/water-2.svg`],
 };
 
 /** Variant URLs for a terrain (empty array if none). */

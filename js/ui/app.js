@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, neighbors, axialLine } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -23,6 +23,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
+import { computeRivers } from "../gen/rivers.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -181,6 +182,7 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
+  if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -388,14 +390,6 @@ function onImportFile(e) {
   };
   reader.readAsText(file);
   e.target.value = ""; // allow re-importing the same file
-}
-
-// Terrain strings of a cell's existing placed neighbors (for weighting).
-function neighborTerrains(q, r) {
-  return neighbors(q, r)
-    .map((n) => getHex(current, n.q, n.r))
-    .filter((h) => h && h.placed)
-    .map((h) => h.terrain);
 }
 
 // --- selection + its right-panel actions ---------------------------------
@@ -1020,6 +1014,33 @@ function hookSubjects(world) {
   return subs;
 }
 
+// The terrains of a cell's already-placed neighbours — biases the affinity
+// terrain roll (js/gen/affinity.js): a hex tends to match its revealed
+// surroundings (mountains cluster, coastlines continue, etc).
+function neighborTerrains(q, r) {
+  const out = [];
+  for (const n of neighbors(q, r)) {
+    const h = getHex(current, n.q, n.r);
+    if (h && h.placed && h.terrain) out.push(h.terrain);
+  }
+  return out;
+}
+
+// Rivers (Phase 3R.6): a DERIVED overlay recomputed from the currently-revealed
+// terrain (js/gen/rivers.js — major-water drainage over the elevation-free
+// affinity world). Recompute after every generation batch and on world load;
+// world.rivers holds the traced polylines that map.js draws. Cheap (a Dijkstra
+// over the placed hexes + a few short descents), and order-dependent by design
+// like the terrain it sits on.
+function syncRivers(world) {
+  if (!world) return;
+  const terrainByKey = new Map();
+  for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  // Append-only: keep existing rivers, add rivers for newly-revealed sources
+  // (a river must never disappear when more terrain is generated).
+  world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : []);
+}
+
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
 // carries a forced dungeon POI as the hook's subject. Marked unexplored.
@@ -1029,9 +1050,9 @@ function buildDistantTargetHex(tables, q, r) {
     key: axialKey(q, r),
     coords: { q, r },
     placed: true,
-    neighborTerrains: neighborTerrains(q, r),
     seed: current.seed,
     gen: 0,
+    neighborTerrains: neighborTerrains(q, r),
   });
   hex.gen = 0;
   hex.explored = false; // not yet visited; the intervening hexes are blank
@@ -1234,6 +1255,7 @@ async function onFollowClue(id) {
 }
 
 async function persistAndRefresh() {
+  syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
@@ -1243,16 +1265,18 @@ async function persistAndRefresh() {
   refreshMapChrome();
 }
 
-// Build (in memory) a neighbor-weighted random hex at (q,r) for generation `gen`.
+// Build (in memory) a random hex at (q,r) for generation `gen` — terrain comes
+// from the neighbour-affinity roll (js/gen/affinity.js), biased by the terrains
+// of already-placed neighbours (order-dependent by design).
 function buildRandomHex(tables, q, r, gen) {
   const rng = subRng(current.seed, "hex", q, r, gen);
   const hex = generateHex(tables, rng, {
     key: axialKey(q, r),
     coords: { q, r },
     placed: true,
-    neighborTerrains: neighborTerrains(q, r),
     seed: current.seed,
     gen,
+    neighborTerrains: neighborTerrains(q, r),
   });
   hex.gen = gen;
   return hex;
@@ -1275,17 +1299,12 @@ function onContextMenu({ q, r, clientX, clientY }) {
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
   const hasSettlement = !!(placed && hex.settlement && hex.settlement.present);
-  let emptyNeighbors = 0;
-  if (placed) {
-    for (const n of neighbors(q, r)) if (!hasHexAt(current, n.q, n.r)) emptyNeighbors++;
-  }
   const model = buildRadialModel({
     placed,
     terrain: placed ? hex.terrain : null,
     hasSettlement,
     allowedSizes: placed ? allowedSizes(hex.terrain) : [],
     canGossip: hasSettlement,
-    emptyNeighbors,
     poiTypes: Object.keys(POI_GLYPHS),
     terrains: Object.keys(TERRAIN_COLORS),
     pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
@@ -1308,7 +1327,7 @@ function radialDispatch(id, value) {
     case "addRandomSettlement": return onAddRandomSettlement();
     case "addSettlement": return onAddSettlement(value);
     case "removeSettlement": return onRemoveSettlement();
-    case "neighbors": return onGenerateNeighbors();
+    case "genArea": return onGenerateArea(value);
     case "regenerate": return onRegenerate();
     case "deleteHex": return onDeleteHex();
     case "genHook": return onGenerateHook();
@@ -1352,21 +1371,27 @@ async function onPlaceTerrain(terrain) {
   }
 }
 
-async function onGenerateNeighbors() {
+// Batch-generate the empty hexes in the disc of `radius` around the selected
+// hex (3R.1 "Area" tool, folded into the "Generate" submenu) — the old
+// per-radius-1 "Neighbours" behaviour, generalized to any radius and to the
+// full disc (center included). Always fill-empty only; already-placed hexes
+// (including the center, if placed) are left untouched. One
+// persistAndRefresh() at the end regardless of area size.
+async function onGenerateArea(radius) {
   if (!current || !selected) return;
   try {
     const tables = await loadTables(HEX_TABLE_IDS);
     let added = 0;
-    for (const { q, r } of neighbors(selected.q, selected.r)) {
+    for (const { q, r } of hexDisc(selected.q, selected.r, radius)) {
       if (hasHexAt(current, q, r)) continue;
       addHex(current, buildRandomHex(tables, q, r, 0));
       added++;
     }
-    if (!added) return logLine("All neighbors already filled.");
+    if (!added) return logLine("No empty hexes in range.");
     await persistAndRefresh();
-    logLine(`Generated ${added} neighbor hex(es).`);
+    logLine(`Generated ${added} hex(es).`);
   } catch (err) {
-    logLine(`Generate error: ${err.message}`);
+    logLine(`Generate area error: ${err.message}`);
   }
 }
 

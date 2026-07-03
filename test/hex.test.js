@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { generateHex } from "../js/gen/hex.js";
+import { TERRAINS } from "../js/gen/affinity.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -86,21 +87,38 @@ test("no City in Desert (size capped at Town)", () => {
   assert.notEqual(hex.settlement.size, "City");
 });
 
-test("Swamp yields a terrain feature when rolled", () => {
+test("Swamp yields a terrain feature when forced (nested roll still resolves)", () => {
   const t = makeTables({
     id: "terrain",
-    entries: [{ value: "Swamp", roll: { table: "swamp-feature" } }],
+    entries: [{ value: "Swamp", roll: { table: "swamp-feature" } }, { value: "Plains" }],
   });
-  const hex = generateHex(t, mulberry32(1), opts());
+  // Terrain comes from the neighbour-affinity roll, not the rng stream; force
+  // it directly and confirm the nested swamp-feature roll still fires.
+  const hex = generateHex(t, mulberry32(1), opts({ terrain: "Swamp" }));
   assert.equal(hex.terrain, "Swamp");
   assert.equal(hex.terrainFeature, "Bog");
 });
 
-test("manual (forced) terrain skips the terrain roll", () => {
+test("manual (forced) terrain overrides the classifier; no nested feature outside Swamp", () => {
   const t = makeTables();
   const hex = generateHex(t, mulberry32(7), opts({ terrain: "Mountains" }));
   assert.equal(hex.terrain, "Mountains");
   assert.equal(hex.terrainFeature, null);
+});
+
+test("rolled terrain is one of the affinity terrains; no elevation/moisture fields", () => {
+  const t = makeTables();
+  const hex = generateHex(t, mulberry32(1), opts({ coords: { q: 5, r: 3 } }));
+  assert.ok(TERRAINS.includes(hex.terrain), `unexpected terrain ${hex.terrain}`);
+  assert.equal(hex.elevation, undefined); // elevation model removed (v13)
+  assert.equal(hex.moisture, undefined);
+  assert.equal(hex.continent, undefined);
+});
+
+test("neighbour terrains bias the affinity roll (surrounded by Sea -> Sea)", () => {
+  const t = makeTables();
+  const hex = generateHex(t, mulberry32(1), opts({ coords: { q: 5, r: 3 }, neighborTerrains: Array(6).fill("Sea") }));
+  assert.equal(hex.terrain, "Sea");
 });
 
 test("shipped weighted tables are valid", () => {

@@ -17,6 +17,7 @@ none has a detailed sub-plan yet (write one when it's picked up).
 | 7.11 | **Undo / redo** | M | History for destructive actions (Delete hex, Regenerate, Remove POI/settlement) — the radial put these one click away. Snapshot- or command-history based. |
 | 7.12 | **Print / GM-screen view** | M | A clean read-only / printable layout of the current hex or dungeon for at-the-table use. |
 | 7.13 | **Themes** | M | Light/dark and colour-blind-friendly palettes. Lower urgency since 7.2's content glyphs already helped colour-blind readability. |
+| 7.14 | **Radial: right-click steps back** | S | While the ring is open, right-clicking anywhere should step back one level (submenu → its parent, base ring → close) instead of just re-preventing the OS context menu. Mirrors the existing Escape-key behaviour (`radial-menu.js` `back()`/`closeRadial()`) but bound to `contextmenu` instead of `keydown`. |
 
 ## Notes per item
 

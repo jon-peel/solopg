@@ -8,33 +8,9 @@
 import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { subRng } from "../core/rng.js";
-import { TERRAIN_AFFINITY } from "./terrain-affinity.js";
+import { terrainAt } from "./affinity.js";
 import { profileFor, cappedSizeTable } from "./terrain-profile.js";
 import { generatePoi } from "./poi.js";
-
-/**
- * Build a terrain table biased toward neighbor terrains using an affinity
- * matrix (compatible terrains get a bonus, not just identical ones). Returns a
- * NEW table (never mutates the base); each entry is spread so its `roll` (e.g.
- * Swamp's nested swamp-feature roll) is preserved.
- * @param {object} baseTable canonical terrain table
- * @param {string[]} neighborTerrains terrain strings of existing neighbors
- * @param {{ affinity?: object, multiplier?: number }} [opts]
- * @returns {object} new table
- */
-export function weightedTerrainTable(baseTable, neighborTerrains = [], opts = {}) {
-  const affinity = opts.affinity || TERRAIN_AFFINITY;
-  const multiplier = opts.multiplier ?? 1;
-  const entries = baseTable.entries.map((e) => {
-    const base = "weight" in e ? e.weight : 1;
-    let bonus = 0;
-    for (const nbr of neighborTerrains) {
-      bonus += (affinity[nbr] && affinity[nbr][e.value]) || 0;
-    }
-    return { ...e, weight: base + bonus * multiplier };
-  });
-  return { id: baseTable.id, entries };
-}
 
 /**
  * Generate one hex from the given tables and random stream.
@@ -42,35 +18,38 @@ export function weightedTerrainTable(baseTable, neighborTerrains = [], opts = {}
  *   poi-types, poi-occupant, creatures, occupiers (and terrain sub-tables).
  * @param {() => number} rng a single stream consumed in a fixed order
  * @param {{ key?: string, coords?: object|null, placed?: boolean,
- *   neighborTerrains?: string[], terrainBias?: number,
- *   seed?: number|string, gen?: number }} [opts]
- *   seed+gen+coords seed per-POI sub-streams (order-stable).
+ *   terrain?: string, seed?: number|string, gen?: number, neighborTerrains?: string[] }} [opts]
+ *   seed+gen+coords seed per-POI sub-streams (order-stable). neighborTerrains
+ *   are the terrains of this hex's already-placed neighbours — they bias the
+ *   affinity terrain roll (js/gen/affinity.js); omit/[] for a hex revealed with
+ *   no placed neighbours.
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
   const resolve = makeResolver(tables);
 
-  // 1. Terrain. Either forced (manual placement) or rolled — when rolled, bias
-  //    toward neighbor terrains and resolve any nested feature (Swamp).
-  let terrain;
+  // 1. Terrain: forced (manual placement) or the neighbour-affinity roll — a
+  //    weighted dice roll biased by the terrains of already-revealed
+  //    neighbours (js/gen/affinity.js). No elevation/moisture: the world is a
+  //    hex oracle, each tile "anything until revealed", so terrain is
+  //    order-dependent by design (see the affinity module comment).
+  const coords = opts.coords || { q: 0, r: 0 };
+  const classified = terrainAt(opts.seed ?? 0, coords.q, coords.r, opts.neighborTerrains ?? []);
+  const terrain = opts.terrain || classified;
+
+  // Nested terrain feature (e.g. Swamp's swamp-feature roll) stays
+  // data-driven via data/terrain.json's entries[].roll — resolved directly
+  // against the chosen terrain's entry, not via a re-roll of the top table.
   let terrainFeature = null;
-  if (opts.terrain) {
-    terrain = opts.terrain;
-  } else {
-    const baseTerrain = tables.get("terrain");
-    const terrainTable =
-      opts.neighborTerrains && opts.neighborTerrains.length
-        ? weightedTerrainTable(baseTerrain, opts.neighborTerrains, {
-            multiplier: opts.terrainBias,
-          })
-        : baseTerrain;
-    const terrainRoll = rollTable(terrainTable, rng, { resolve });
-    terrain = terrainRoll.value;
-    terrainFeature = terrainRoll.sub ? terrainRoll.sub.value : null;
+  const terrainEntry = tables.get("terrain").entries.find((e) => e.value === terrain);
+  if (terrainEntry && terrainEntry.roll) {
+    const sub = rollTable(resolve(terrainEntry.roll.table), rng, { resolve });
+    terrainFeature = sub.value;
   }
 
   // Subsequent rolls (settlement, POIs) are gated by the chosen terrain's
-  // profile — so a manually-placed Water hex still gets no settlement, etc.
+  // profile (Lake/Sea alias to Water's — see terrain-profile.js biasKey) —
+  // so a manually-placed Lake/Sea hex still gets no settlement, etc.
   const profile = profileFor(terrain);
 
   // 2. Settlement: presence + size are gated by the terrain profile (e.g. no
@@ -105,7 +84,7 @@ export function generateHex(tables, rng, opts = {}) {
     key: opts.key ?? null,
     coords: opts.coords ?? null,
     placed: opts.placed ?? false,
-    terrain,
+    terrain, // neighbour-affinity roll (js/gen/affinity.js) — no elevation model
     terrainFeature,
     settlement,
     pois, // typed POI[] (Phase 3); empty array when none

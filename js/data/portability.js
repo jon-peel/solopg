@@ -70,6 +70,26 @@ export function importWorld(json) {
  * - v6 -> v7: hexes gained optional `name`/`note` annotations (Phase 7.5).
  *   Additive — older hexes simply have none, so there's nothing to transform;
  *   we just stamp the version.
+ * - v7 -> v8: hexes gained `elevation`/`moisture` fields (Phase 3R.3). Additive
+ *   and there's no rng/seed context here to retroactively sample them, so
+ *   older hexes simply lack both until regenerated — just stamp the version.
+ * - v8 -> v9: hexes gained a `basin` field, and generated water hexes now come
+ *   out as `terrain:"Lake"`/`"Sea"` instead of `"Water"` (Phase 3R.4). No
+ *   transform — old `Water` hexes still render/behave correctly (shared
+ *   profile/bias via biasKey()) — just stamp the version.
+ * - v9 -> v10: `basin` reworked into a real land/ocean gate, renamed
+ *   `continent` (3R.4 revision — real coastlines). No transform — old hexes'
+ *   `basin` field is simply unused going forward; `Lake`/`Sea` values are
+ *   unchanged — just stamp the version.
+ * - v10 -> v11: hexes gained a `riverEdges` array (Phase 3R.5). Additive and
+ *   there's no context here to retroactively trace rivers through old hexes,
+ *   so older hexes simply lack it (rendered as no river) until regenerated —
+ *   just stamp the version.
+ * - v11 -> v12: rivers became a top-level `rivers` array (3R.5 "curated
+ *   rivers" rework). Backfill `rivers: []`; the app repopulates it from the
+ *   world's existing source hexes on load (app.js syncRivers), so migrated
+ *   worlds get their traced rivers back without a transform here. The old
+ *   per-hex `riverEdges` field is left as-is (unused going forward).
  * @param {object} data
  * @returns {object} data (migrated)
  */
@@ -116,6 +136,41 @@ export function migrateWorld(data) {
   if (data.schemaVersion < 7) {
     // hex `name`/`note` are additive and default to none — just stamp the version.
     data.schemaVersion = 7;
+  }
+  if (data.schemaVersion < 8) {
+    // hex `elevation`/`moisture` are additive and default to absent on old
+    // hexes (no retrofit noise sample) — just stamp the version.
+    data.schemaVersion = 8;
+  }
+  if (data.schemaVersion < 9) {
+    // hex `basin` is additive (absent on old hexes); old `terrain:"Water"`
+    // hexes are left as-is — Lake/Sea's shared profile/bias alias covers them
+    // too — just stamp the version.
+    data.schemaVersion = 9;
+  }
+  if (data.schemaVersion < 10) {
+    // `basin` -> `continent` rename/rework; old hexes simply keep whatever
+    // `basin` value they had (unused going forward) — just stamp the version.
+    data.schemaVersion = 10;
+  }
+  if (data.schemaVersion < 11) {
+    // hex `riverEdges` is additive (absent on old hexes, treated as no
+    // river) — just stamp the version.
+    data.schemaVersion = 11;
+  }
+  if (data.schemaVersion < 12) {
+    // top-level `rivers` array — backfill empty. Old per-hex `riverEdges` left as-is.
+    if (!Array.isArray(data.rivers)) data.rivers = [];
+    data.schemaVersion = 12;
+  }
+  if (data.schemaVersion < 13) {
+    // Terrain switched to neighbour-affinity (js/gen/affinity.js); elevation/
+    // moisture/continent no longer written. Old hexes keep their fields (unused)
+    // and their terrain strings still render — just stamp the version. Drop any
+    // old elevation-based rivers; the derived major-water system (js/gen/rivers.js)
+    // recomputes them from the terrain on load.
+    data.rivers = [];
+    data.schemaVersion = 13;
   }
   return data;
 }

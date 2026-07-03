@@ -8,7 +8,8 @@ export const TERRAIN_COLORS = {
   Mountains: "#7d7f88",
   Swamp: "#4b5f49",
   Desert: "#d9c27a",
-  Water: "#3a6ea5",
+  Lake: "#4a8fc2", // lighter/more turquoise — inland fresh water (Phase 3R.4)
+  Sea: "#2c5a8c", // deeper blue — coastal/oceanic salt water (Phase 3R.4)
 };
 
 // 2–3 emoji variants per terrain, drawn over the color fill. Variant is chosen
@@ -20,7 +21,8 @@ export const TERRAIN_ICONS = {
   Mountains: ["🏔️", "🗻"],
   Swamp: ["🐊", "🌿"],
   Desert: ["🏜️", "🌵"],
-  Water: ["🌊", "💧"],
+  Lake: ["💧", "🏞️"],
+  Sea: ["🌊", "🐚"],
 };
 
 export const UNKNOWN_COLOR = "#3a3f4b";

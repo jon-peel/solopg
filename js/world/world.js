@@ -18,7 +18,38 @@ import { axialKey } from "../core/hexgeo.js";
 // point at a hex/POI. Older worlds backfill `hooks: []`. See migrateWorld.
 // v7: hexes gained optional GM annotations — `name` (a custom map label) and
 // `note` (freeform text). Additive; older hexes simply have none.
-export const SCHEMA_VERSION = 7;
+// v8: hexes gained first-class `elevation`/`moisture` fields (Phase 3R.3,
+// terrain generation v2) — a coordinate-hashed noise sample in [0,1) used by
+// the biome classifier (js/gen/biome.js) in place of the retired neighbour-
+// affinity terrain roll. Additive; older hexes simply have neither field
+// until regenerated.
+// v9: hexes gained a `basin` field, and generated Water hexes now come out as
+// `terrain:"Lake"` or `terrain:"Sea"` instead of `terrain:"Water"` (Phase
+// 3R.4) — Lake/Sea share Water's profile/bias tables via biasKey() in
+// terrain-profile.js, so old `Water` hexes keep rendering/behaving fine as-is
+// (no retrofit) until regenerated.
+// v10: `basin` renamed to `continent` and reworked into a real land/ocean gate
+// (3R.4 revision — fixing "inland seas"): Sea now forms genuinely large,
+// contiguous coastal bodies correlated with a continent-scale field, instead
+// of an independent per-hex label. Old hexes' `basin` field is simply unused
+// going forward (no retrofit); `Lake`/`Sea` terrain values are unchanged.
+// v11: hexes gained a `riverEdges` array (Phase 3R.5) — NEIGHBOR_DIRS indices
+// (0-5) marking which hex-sides carry a river segment, propagated forward
+// from mountain sources as neighbouring hexes are generated (js/gen/river.js).
+// Additive; older hexes simply have none until regenerated.
+// v12: rivers became a top-level `rivers` array (Phase 3R.5 "curated rivers"
+// rework) — a watercourse traced from a source to the sea, rendered as a
+// polyline. Superseded by v13's terrain rework (elevation removed).
+// v13: terrain generation switched from the elevation/moisture/continent noise
+// classifier (3R.3/3R.4, deleted) to a neighbour-affinity dice roll
+// (js/gen/affinity.js) — the world is now a hex oracle, each tile "anything
+// until revealed", order-dependent by design. Hexes no longer carry
+// `elevation`/`moisture`/`continent` (old hexes keep them, unused). Old worlds
+// load as-is (their terrain strings still render); only regenerated hexes use
+// the new roll. Rivers (3R.6) are a DERIVED overlay recomputed from the revealed
+// terrain (js/gen/rivers.js — major-water drainage, no elevation) into
+// `world.rivers[]`; no schema change (same `{id, source, path, ...}` shape).
+export const SCHEMA_VERSION = 13;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
@@ -42,6 +73,11 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     // Adventure hooks (Phase 6) — seeds pointing at a hex/POI. A flat top-level
     // list because a hook spans tiles (origin ≠ target), so it isn't owned by one hex.
     hooks: [],
+    // Rivers (Phase 3R.5) — full watercourses traced from a source to the sea
+    // (js/gen/river-trace.js). A flat top-level list because a river spans
+    // dozens of tiles, isn't owned by one hex, and is drawn even across
+    // unexplored hexes. Populated incrementally as source hexes are discovered.
+    rivers: [],
     createdAt: now,
     updatedAt: now,
   };

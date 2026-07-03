@@ -11,14 +11,13 @@ const base = (over = {}) => ({
   hasSettlement: false,
   allowedSizes: [],
   canGossip: false,
-  emptyNeighbors: 0,
   poiTypes: POI_TYPES,
   terrains: TERRAINS,
   ...over,
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "neighbors", "regenerate", "deleteHex", "generate"];
+const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "reserved"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -32,27 +31,50 @@ test("empty cell: Generate + Terrain + Hook enabled; build actions disabled with
   assert.equal(byId(m, "generate").enabled, true);
   assert.equal(byId(m, "terrain").enabled, true);
   assert.equal(byId(m, "hook").enabled, true);
-  for (const id of ["poi", "settlement", "neighbors", "regenerate", "deleteHex"]) {
+  for (const id of ["poi", "settlement", "regenerate", "deleteHex"]) {
     assert.equal(byId(m, id).enabled, false, `${id} should be disabled on an empty cell`);
     assert.ok(byId(m, id).reason, `${id} should carry a reason`);
   }
 });
 
-test("placed cell: build actions enabled; Generate disabled (use Regenerate)", () => {
-  const m = buildRadialModel(base({ placed: true, terrain: "Forest", allowedSizes: ["Thorp"], emptyNeighbors: 2 }));
-  for (const id of ["poi", "settlement", "neighbors", "regenerate", "deleteHex"]) {
+test("placed cell: build actions enabled; Generate stays enabled (Random child gates instead)", () => {
+  const m = buildRadialModel(base({ placed: true, terrain: "Forest", allowedSizes: ["Thorp"] }));
+  for (const id of ["poi", "settlement", "regenerate", "deleteHex"]) {
     assert.equal(byId(m, id).enabled, true, `${id} should be enabled on a placed cell`);
   }
-  assert.equal(byId(m, "generate").enabled, false);
-  assert.ok(byId(m, "generate").reason);
+  // The Generate submenu itself is always open (Area sizes work regardless of
+  // whether the center is placed); only its Random (single-hex) child gates.
+  assert.equal(byId(m, "generate").enabled, true);
 });
 
-test("Neighbours disabled (with reason) when the hex is fully surrounded", () => {
-  const surrounded = byId(buildRadialModel(base({ placed: true, terrain: "Plains", emptyNeighbors: 0 })), "neighbors");
-  assert.equal(surrounded.enabled, false);
-  assert.match(surrounded.reason, /already filled/i);
-  const open = byId(buildRadialModel(base({ placed: true, terrain: "Plains", emptyNeighbors: 1 })), "neighbors");
-  assert.equal(open.enabled, true);
+test("Reserved slot is always present and disabled, with a reason", () => {
+  for (const placed of [false, true]) {
+    const r = byId(buildRadialModel(base({ placed, terrain: placed ? "Plains" : null })), "reserved");
+    assert.equal(r.enabled, false);
+    assert.ok(r.reason);
+  }
+});
+
+test("Generate submenu: Random (anchored) gates on placed; Small/Medium/Large/Huge always fill-empty", () => {
+  const empty = byId(buildRadialModel(base()), "generate");
+  const emptyRandom = empty.children.find((c) => c.id === "generate");
+  assert.equal(emptyRandom.enabled, true);
+  assert.equal(emptyRandom.anchor, true);
+
+  const placed = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "generate");
+  const placedRandom = placed.children.find((c) => c.id === "generate");
+  assert.equal(placedRandom.enabled, false);
+  assert.ok(placedRandom.reason);
+
+  const sizes = placed.children.filter((c) => c.id === "genArea");
+  assert.equal(sizes.length, 4);
+  assert.deepEqual(sizes.map((c) => c.label), ["Small", "Medium", "Large", "Huge"]);
+  assert.deepEqual(sizes.map((c) => c.value), [1, 2, 3, 15]);
+  for (const size of sizes) {
+    assert.equal(size.kind, "leaf");
+    assert.equal(size.enabled, true);
+    assert.notEqual(size.danger, true); // no overwrite mode — nothing dangerous here
+  }
 });
 
 test("Settlement disabled where the terrain allows none (e.g. open water)", () => {
@@ -80,11 +102,16 @@ test("Hook submenu always present; gossip gates on a settlement", () => {
   assert.equal(town.children.find((c) => c.id === "genHook").enabled, true);
 });
 
-test("Terrain and POI submenus anchor their Random child for nearest-cursor placement", () => {
+test("Terrain submenu is the explicit-pick list only — no Random (Generate already covers that)", () => {
   const m = buildRadialModel(base({ placed: true, terrain: "Forest" }));
-  const terrainRandom = byId(m, "terrain").children.find((c) => c.anchor);
-  assert.equal(terrainRandom.id, "generate");
-  assert.equal(byId(m, "terrain").children.length, 1 + TERRAINS.length);
+  const terrainChildren = byId(m, "terrain").children;
+  assert.equal(terrainChildren.length, TERRAINS.length);
+  assert.ok(!terrainChildren.some((c) => c.anchor), "Terrain should have no anchored Random child");
+  assert.ok(terrainChildren.every((c) => c.id === "placeTerrain"));
+});
+
+test("POI submenu anchors its Random child for nearest-cursor placement", () => {
+  const m = buildRadialModel(base({ placed: true, terrain: "Forest" }));
   const poiRandom = byId(m, "poi").children.find((c) => c.anchor);
   assert.equal(poiRandom.id, "addRandomPoi");
 });
@@ -115,7 +142,7 @@ test("POI's dungeon stays a leaf (random size) when no sizes are supplied", () =
 
 // Regression: the ring must center on the clicked point, translated into the
 // host (#stage) box — not collapse to a fixed corner.
-const PAD = 228; // OUTER_R(178) + SUB_NODE(50), matching radial-menu.js
+const PAD = 200; // OUTER_R(150) + SUB_NODE(50), matching radial-menu.js
 const RECT = { left: 100, top: 50, width: 1000, height: 800 };
 
 test("ringCenter centers on the click, relative to the host box", () => {

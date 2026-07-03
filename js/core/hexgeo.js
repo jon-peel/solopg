@@ -89,6 +89,47 @@ export function neighbors(q, r) {
   return NEIGHBOR_DIRS.map(([dq, dr]) => ({ q: q + dq, r: r + dr }));
 }
 
+/**
+ * The hex ring at exactly `radius` steps from (q, r), in a fixed deterministic
+ * order — pure function of its inputs, independent of any caller iteration
+ * order. `radius` 0 returns just the center; `radius` 1 matches `neighbors()`
+ * as a set.
+ * @param {number} q
+ * @param {number} r
+ * @param {number} radius >= 0
+ * @returns {{q:number,r:number}[]} length 1 if radius===0, else 6*radius
+ */
+export function hexRing(q, r, radius) {
+  if (radius === 0) return [{ q, r }];
+  // Walk `radius` steps in NEIGHBOR_DIRS[4]'s direction to reach one corner of
+  // the ring, then walk `radius` steps in each of the 6 directions in turn.
+  let cq = q + NEIGHBOR_DIRS[4][0] * radius;
+  let cr = r + NEIGHBOR_DIRS[4][1] * radius;
+  const out = [];
+  for (const [dq, dr] of NEIGHBOR_DIRS) {
+    for (let step = 0; step < radius; step++) {
+      out.push({ q: cq, r: cr });
+      cq += dq;
+      cr += dr;
+    }
+  }
+  return out;
+}
+
+/**
+ * The filled hex disc of `radius` around (q, r): the center plus every ring
+ * from 1..radius, in deterministic ring-by-ring order.
+ * @param {number} q
+ * @param {number} r
+ * @param {number} radius >= 0
+ * @returns {{q:number,r:number}[]} length 1 + 3*radius*(radius+1)
+ */
+export function hexDisc(q, r, radius) {
+  const out = [{ q, r }];
+  for (let ring = 1; ring <= radius; ring++) out.push(...hexRing(q, r, ring));
+  return out;
+}
+
 /** Hex distance (cube metric) between two axial cells — the number of steps. */
 export function axialDistance(aq, ar, bq, br) {
   return (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
