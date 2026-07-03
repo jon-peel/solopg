@@ -308,16 +308,22 @@ BACK one level (or closes at the top) instead of only suppressing the OS menu (`
 `poi.chance` 0.2 → 0.03 (`terrain-profile.js`), so Sea/Lake tiles are almost always empty (still no
 dungeons/settlements on water). Right-click-back browser-verified (into a submenu → right-click back to
 top → right-click closes); no console errors.
-**Next: 3R.6 — Settlements v2** (names, Keep/Fort martial overlay, sparser spacing / per-region cap,
-hamlet clusters, and river/coast size boosts — real rivers now exist to key off; see
-`docs/plans/phase-3r-world-coherence.md` §3R.6). Optional first: tune river density / stream-order width
-to taste, mountain ranges as features.
+**3R.6 — Settlements v2 started: step A — spawn-density dial-down.** Auto-generation settlement
+chances (`terrain-profile.js` `TERRAIN_PROFILE`) were cut ~4× (Plains 0.45→0.10, Hills 0.35→0.07,
+Forest 0.30→0.06, Desert 0.20→0.04, Mountains/Swamp 0.15→0.03; DEFAULT 0.25→0.06), so settlements
+read as occasional landmarks (~30%→~10% of land hexes) and the coming river-town size boost stands
+out against a sparse baseline. Pure-data change at the single `generateHex` choke-point; no schema
+bump / migration (a generation-rule change — already-placed hexes keep their settlements, only new
+hexes use the lower rates). New node suite `settlement-density` pins the dialed-down band + ties the
+constants to real output. Remaining 3R.6: names, Keep/Fort martial overlay, min-spacing/per-region
+cap, hamlet clusters, and the river/coast size boosts — see `docs/plans/phase-3r-world-coherence.md`
+§3R.6. Optional aside: tune river density / stream-order width to taste, mountain ranges as features.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 236 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v13. 240 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -413,9 +419,9 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites, run as `test/*.test.js` (rng, dice, table, world, hexgeo, hex,
-          noise, biome, river, terrain-coherence, terrain-profile, terrain-art, settlement-art, poi,
-          migration, dungeon, dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a
-          diagnostic script
+          noise, biome, river, terrain-coherence, terrain-profile, settlement-density, terrain-art,
+          settlement-art, poi, migration, dungeon, dungeon-layout, feature-detail, tower, hooks);
+          stats-harness.js is a diagnostic script
           (not a suite — `node --test`'s directory-based discovery would otherwise pick up ANY
           file under test/, hence the explicit `*.test.js` glob), run via `node
           test/stats-harness.js [seed] [radius]` (3R.2 — terrain/settlement generation baseline)

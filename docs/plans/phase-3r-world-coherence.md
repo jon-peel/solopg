@@ -857,6 +857,15 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 
 ### 3R.6 — Settlements v2
 - **Document current types** (Thorp/Hamlet/Village/Town/City) — done above.
+- **Spawn-density dial-down (step A) ✅ done** — the flat per-hex settlement `chance`
+  (`terrain-profile.js` `TERRAIN_PROFILE`) was cut ~4× (Plains 0.45→0.10, Hills 0.35→0.07,
+  Forest 0.30→0.06, Desert 0.20→0.04, Mountains/Swamp 0.15→0.03; DEFAULT 0.25→0.06), taking the
+  land settlement rate from ~30% to ~10% so settlements read as occasional landmarks and the coming
+  river-town size boost stands out. Pure-data change at the single `generateHex` choke-point; no
+  schema/migration (already-placed hexes keep their settlements, only new hexes use the lower
+  rates). Node suite `settlement-density.test.js` pins the dialed-down band + ties the constants to
+  real `generateHex` output. (The min-spacing / per-region cap below is a separate, still-open
+  step — do it only if the flat dial-down alone still clumps.)
 - **Add Keep/Fort** — a **martial variant** rather than a new size tier (recommend: a
   Village-equivalent "footprint" with a `kind: "keep"` overlay so sizing/roads treat
   it consistently). To confirm which band and whether it's a separate spawn or a
