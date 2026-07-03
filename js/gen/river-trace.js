@@ -21,9 +21,13 @@
 // "fill and spill": a priority-flood outward from the source that always
 // expands the frontier hex reachable over the LOWEST pass (the highest
 // elevation you'd have to cross to get there). That's exactly how water fills
-// each depression and spills over its lowest rim, repeatedly, until it
-// escapes to the ocean — so the FIRST ocean hex it reaches gives the natural
-// drainage route, reconstructed via parent pointers.
+// each depression and spills over its lowest rim, repeatedly, until it reaches
+// WATER — so the first Sea or Lake hex it touches gives the natural drainage
+// route, reconstructed via parent pointers. (It terminates at the first water
+// of ANY kind, not just open ocean: an earlier ocean-gate-only version routed
+// straight through rendered lakes/bays and back onto land — "mountain → across
+// the sea → inland → ends in a lake" — because the raw gate doesn't recognise
+// lakes or bay-flipped Sea. A river ends where it meets water.)
 //
 // Minimax on ELEVATION (not continent) is deliberate: it follows the low
 // ground and threads the lowest saddles between ranges, so a traced river
@@ -31,17 +35,17 @@
 // Mountains/Hills — and most of THAT is the legitimate descent out of the
 // source range itself). Minimax on the continent field instead cut straight
 // across mountains a third of the time (continent is blind to terrain
-// height), which looked broken. Verified in the scratchpad: 100% of ~380
-// sources reach the sea across a dozen maps, mean path ~110 hexes, at ~870
-// elevation samples per trace (paid once, when a source is first discovered).
+// height), which looked broken. Verified in the scratchpad: every source
+// reaches a water sink, at ~870 elevation samples per trace (paid once, when a
+// source is first discovered).
 //
 // The result is stored in world.rivers[] (see js/world/world.js) and rendered
 // as a blue polyline over the map — including across unexplored hexes — so a
-// river is visibly a real, sea-reaching watercourse rather than a stub that
-// dies at the first pond.
+// river is visibly a real watercourse from its mountain (or lake) source down
+// to the water it drains into.
 
 import { neighbors, axialKey } from "../core/hexgeo.js";
-import { elevationAt, isOceanAt } from "./biome.js";
+import { elevationAt, isOceanAt, isWaterAt } from "./biome.js";
 
 // Flow uses fewer octaves than terrain classification (NOISE_OPTS.octaves=3):
 // a smoothed field so the descent tracks the real landform slope instead of
@@ -56,6 +60,32 @@ const FLOW_OCTAVES = 1;
 // than not appearing at all. In scratchpad testing every one of ~380 sources
 // reached the sea well under this cap (max ~6100 expansions).
 const MAX_EXPAND = 20000;
+
+// Bound on the source's-own-water-body flood-fill (below). A Lake source starts
+// IN water, so it must be allowed to cross its own lake before terminating at
+// the FIRST OTHER water it reaches; without this a lake source would "end"
+// instantly at its own neighbouring lake hex. Natural lakes are small (the
+// bay-rule cap is 48), so this only bounds a pathological giant lake.
+const WATER_BODY_CAP = 96;
+
+// The connected body of water containing (sq, sr), as a set of axialKeys —
+// empty-ish (just the start) for a dry Mountains source, the lake cluster for a
+// Lake source. Bounded flood-fill over isWaterAt; pure and deterministic.
+function sourceWaterBody(seed, sq, sr) {
+  const startKey = axialKey(sq, sr);
+  const body = new Set([startKey]);
+  if (!isWaterAt(seed, sq, sr)) return body; // dry source: only itself is exempt
+  const queue = [{ q: sq, r: sr }];
+  while (queue.length && body.size <= WATER_BODY_CAP) {
+    const cur = queue.shift();
+    for (const n of neighbors(cur.q, cur.r)) {
+      const nk = axialKey(n.q, n.r);
+      if (body.has(nk)) continue;
+      if (isWaterAt(seed, n.q, n.r)) { body.add(nk); queue.push(n); }
+    }
+  }
+  return body;
+}
 
 // Minimal binary min-heap keyed by numeric `pri`. Ties resolve by insertion
 // order, which is deterministic (fixed neighbour iteration order), keeping the
@@ -100,9 +130,14 @@ function flowElevation(seed, q, r) {
 }
 
 /**
- * Trace a river from a source at (sq, sr) to the nearest ocean hex via a
- * minimax elevation fill-and-spill (see the module comment). Pure function of
- * (seed, sq, sr) — deterministic and independent of which hexes are placed.
+ * Trace a river from a source at (sq, sr) to the first body of WATER it reaches
+ * — a Sea or a Lake — via a minimax elevation fill-and-spill (see the module
+ * comment). A river ENDS the moment it touches water: it never routes through a
+ * lake/bay and back onto land, so you don't get "mountain → across the sea →
+ * inland → ends in a lake" (a real-play bug of the ocean-gate-only version). A
+ * Lake source is allowed to cross its OWN lake first (sourceWaterBody), exiting
+ * to the next water body downhill. Pure function of (seed, sq, sr) —
+ * deterministic and independent of which hexes are placed.
  * @param {number|string} seed world seed
  * @param {number} sq source axial q
  * @param {number} sr source axial r
@@ -112,17 +147,21 @@ function flowElevation(seed, q, r) {
  *   is a tributary joining that trunk), so rivers form a dendritic network
  *   instead of running near-parallel to the same coast. Confluence detection is
  *   how the caller (app.js syncRivers) prevents "spaghetti" — see there.
- * @returns {{ path: {q:number,r:number}[], reachedSea: boolean, joined: boolean }}
- *   path from the source (inclusive) to the terminating hex (inclusive): an
- *   ocean hex (reachedSea), a claimed confluence hex (joined), or — on the rare
- *   budget-exhausted case — the most-seaward frontier reached (neither). path
- *   always has length >= 1 (the source itself).
+ * @returns {{ path: {q:number,r:number}[], reachedWater: boolean, joined: boolean }}
+ *   path from the source (inclusive) to the terminating hex (inclusive): a water
+ *   (Sea/Lake) hex (reachedWater), a claimed confluence hex (joined), or — on
+ *   the rare budget-exhausted case — the most-seaward frontier reached
+ *   (neither). path always has length >= 1 (the source itself).
  */
 export function traceRiverToSea(seed, sq, sr, { maxExpand = MAX_EXPAND, claimed = null } = {}) {
   const startKey = axialKey(sq, sr);
   // If the source itself is already ocean (shouldn't happen for a Mountain/Lake
   // source, but guard anyway), the "river" is a single point.
-  if (isOceanAt(seed, sq, sr)) return { path: [{ q: sq, r: sr }], reachedSea: true, joined: false };
+  if (isOceanAt(seed, sq, sr)) return { path: [{ q: sq, r: sr }], reachedWater: true, joined: false };
+
+  // The source's own water body — a Lake source must cross it before it can
+  // terminate at the FIRST OTHER water hex (a dry source's body is just itself).
+  const sourceBody = sourceWaterBody(seed, sq, sr);
 
   const bestPass = new Map([[startKey, flowElevation(seed, sq, sr)]]);
   const parent = new Map([[startKey, null]]);
@@ -156,19 +195,21 @@ export function traceRiverToSea(seed, sq, sr, { maxExpand = MAX_EXPAND, claimed 
     if (cur.pri > bestPass.get(ck)) continue; // stale heap entry
     expanded++;
 
-    if (isOceanAt(seed, cur.q, cur.r)) {
-      return { path: reconstruct(ck), reachedSea: true, joined: false };
+    // Terminate at the first WATER hex (Sea or Lake) outside the source's own
+    // body — a river ends where it meets water, it doesn't flow through it.
+    if (!sourceBody.has(ck) && isWaterAt(seed, cur.q, cur.r)) {
+      return { path: reconstruct(ck), reachedWater: true, joined: false };
     }
     // A confluence with an earlier river: join it here and stop (this river is
     // a tributary; its downstream is that trunk's, already drawn). Never the
     // start hex itself (a source sitting on an existing river still traces its
     // one step off it before joining).
     if (claimed && ck !== startKey && claimed.has(ck)) {
-      return { path: reconstruct(ck), reachedSea: false, joined: true };
+      return { path: reconstruct(ck), reachedWater: false, joined: true };
     }
     if (cur.pri < fallbackPass) { fallbackPass = cur.pri; fallbackKey = ck; }
     if (expanded > maxExpand) {
-      return { path: reconstruct(fallbackKey), reachedSea: false, joined: false };
+      return { path: reconstruct(fallbackKey), reachedWater: false, joined: false };
     }
 
     for (const n of neighbors(cur.q, cur.r)) {
@@ -181,9 +222,9 @@ export function traceRiverToSea(seed, sq, sr, { maxExpand = MAX_EXPAND, claimed 
       }
     }
   }
-  // Frontier exhausted without reaching ocean (extremely unlikely under the
+  // Frontier exhausted without reaching water (extremely unlikely under the
   // budget) — return the partial path to the most-seaward hex found.
-  return { path: reconstruct(fallbackKey), reachedSea: false, joined: false };
+  return { path: reconstruct(fallbackKey), reachedWater: false, joined: false };
 }
 
 /** Stable registry id for the river sourced at (q, r). */

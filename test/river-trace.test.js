@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { biomeAt, isOceanAt } from "../js/gen/biome.js";
+import { biomeAt, isWaterAt } from "../js/gen/biome.js";
 import { isRiverSource } from "../js/gen/river.js";
 import { traceRiverToSea, riverId } from "../js/gen/river-trace.js";
 import { axialDistance } from "../js/core/hexgeo.js";
@@ -40,25 +40,24 @@ test("traceRiverToSea: the path is a connected chain of adjacent hexes, source f
   }
 });
 
-test("traceRiverToSea: reaches the sea, terminating on an ocean hex", () => {
-  // Across several seeds, every source's trace should reach the sea (the whole
-  // point of the rework) and end ON an ocean hex.
+test("traceRiverToSea: terminates on a WATER hex (Sea or Lake), and only there", () => {
+  // Every source's trace should end at a water body (the whole point) and end
+  // ON a water hex — never routing through water and back onto land.
   let total = 0, reached = 0;
   for (let s = 0; s < 6; s++) {
     const seed = `trace-reach-${s}`;
     for (const src of sourcesIn(seed, 40)) {
       total++;
       const res = traceRiverToSea(seed, src.q, src.r);
-      if (res.reachedSea) {
+      if (res.reachedWater) {
         reached++;
         const end = res.path[res.path.length - 1];
-        assert.ok(isOceanAt(seed, end.q, end.r), "a reached-sea river must end on an ocean hex");
+        assert.ok(isWaterAt(seed, end.q, end.r), "a reached-water river must end on a water hex");
       }
     }
   }
   assert.ok(total > 0, "expected sources across the sampled seeds");
-  // The architecture guarantees ~100%; allow a tiny margin for any budget edge.
-  assert.ok(reached / total > 0.95, `expected >95% of rivers to reach the sea, got ${reached}/${total}`);
+  assert.ok(reached / total > 0.95, `expected >95% of rivers to reach water, got ${reached}/${total}`);
 });
 
 test("traceRiverToSea: deterministic — same (seed, source) yields an identical path", () => {
@@ -70,15 +69,19 @@ test("traceRiverToSea: deterministic — same (seed, source) yields an identical
   assert.deepEqual(a, b);
 });
 
-test("traceRiverToSea: only the terminating hex is ocean (the river runs over land until it arrives)", () => {
+test("traceRiverToSea: the river runs over land until it meets water — no interior water hex (the through-water bug)", () => {
   const seed = "trace-land";
   const sources = sourcesIn(seed, 40);
-  for (const s of sources.slice(0, 8)) {
-    const { path, reachedSea } = traceRiverToSea(seed, s.q, s.r);
-    if (!reachedSea) continue;
+  for (const s of sources.slice(0, 12)) {
+    const { path, reachedWater } = traceRiverToSea(seed, s.q, s.r);
+    if (!reachedWater) continue;
+    // Interior hexes (everything but the mouth) must be land — a Mountains
+    // source never starts in water, so no hex before the terminus is water.
+    // (Lake sources cross their own lake, so skip those for this check.)
+    if (isWaterAt(seed, path[0].q, path[0].r)) continue;
     for (let i = 0; i < path.length - 1; i++) {
-      assert.equal(isOceanAt(seed, path[i].q, path[i].r), false,
-        `interior hex (${path[i].q},${path[i].r}) should be land, not ocean`);
+      assert.equal(isWaterAt(seed, path[i].q, path[i].r), false,
+        `interior hex (${path[i].q},${path[i].r}) should be land, not water`);
     }
   }
 });
@@ -97,7 +100,7 @@ test("traceRiverToSea: a `claimed` confluence terminates the trace early (tribut
   const claimed = new Set([`${cut.q},${cut.r}`]);
   const joinedTrace = traceRiverToSea(seed, s.q, s.r, { claimed });
   assert.equal(joinedTrace.joined, true, "should report joining the claimed trunk");
-  assert.equal(joinedTrace.reachedSea, false, "a joined trace didn't itself reach ocean");
+  assert.equal(joinedTrace.reachedWater, false, "a joined trace didn't itself reach water");
   const end = joinedTrace.path[joinedTrace.path.length - 1];
   assert.ok(claimed.has(`${end.q},${end.r}`), "the trace must terminate on the claimed confluence hex");
   assert.ok(joinedTrace.path.length < full.path.length, "joining shortens the path vs the full run");

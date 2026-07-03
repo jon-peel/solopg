@@ -768,6 +768,28 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
     whenever the source set changes, and `world.riversMerged` forces a one-time rebuild
     of any pre-merge world. Confirmed in-browser on the same seed as the spaghetti shot —
     clean confluences, no parallel bundles.
+  - **Follow-up (real-play — "a river should terminate as soon as it touches a water
+    cell"): terminate at first water.** Rivers routed THROUGH rendered lakes/bays and back
+    onto land ("mountain → across the sea → inland → ends in a lake") because the trace
+    only recognised the raw ocean GATE (`isOceanAt`), not lakes or bay-flipped Sea —
+    measured **80% of paths crossed a rendered-water hex before ending**. Fix: `biome.js`
+    exports `isWaterAt` (Sea OR fresh Lake, pure/position-based), and `traceRiverToSea`
+    terminates at the first water hex OUTSIDE the source's own water body — a bounded
+    `sourceWaterBody` flood-fill lets a Lake source cross its own lake before ending at the
+    next water downhill. Result: **0% cross water**; median length 87→~8-11 hexes, ~17% end
+    at the sea and ~83% at an inland lake (the nearest natural sink). `reachedSea` renamed
+    `reachedWater` throughout; `world.riversFormat` (now 3) stamps the tracing logic version
+    and forces a one-time rebuild when it changes. Tradeoff surfaced to the user: this
+    shortens rivers and most now end at lakes rather than the sea — a "flow through lakes,
+    stop only at the sea" variant is a one-line change if longer sea-reaching rivers are
+    wanted. Two design ideas the user floated were also assessed: (a) WFC + probabilistic
+    elevation mesh — rejected (the downhill-to-water constraint is already free from the
+    pure elevation field; WFC needs a bounded, order-dependent solve, the opposite of our
+    determinism — but the "grey out invalid tiles during manual placement" nugget is worth
+    keeping as a local check later); (b) "retro rivers" (simple hexes, draw rivers later) —
+    already essentially our architecture (derived `world.rivers[]` layer over river-free
+    hexes); if drawing across unexplored land is undesirable, clip the RENDER to explored
+    hexes rather than changing the deterministic trace.
 - Schema bumped to **v12** (top-level `rivers` array; backfilled empty on load and
   rebuilt from source hexes. The earlier v11 `riverEdges` field is left unused.).
 - **Tests (post-rework):** `test/river.test.js` now covers only source detection

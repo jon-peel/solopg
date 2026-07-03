@@ -230,6 +230,25 @@ export function isOceanAt(seed, q, r) {
   return continentAt(seed, q, r) + originLandBias(q, r) < OCEAN_THRESHOLD;
 }
 
+/**
+ * Whether (q, r) is any body of WATER — Sea (the ocean gate) OR a fresh Lake
+ * (the low-elevation/low-moisture band). Pure and computable at any coordinate
+ * (placed or not), exported for js/gen/river-trace.js so a river terminates at
+ * the first water it touches instead of routing THROUGH a lake/bay and on to
+ * the raw ocean gate. Note it doesn't run the bay flood-fill or sea contagion
+ * (both history/cluster dependent) — but a bay-flipped hex is classifyLand-Lake
+ * anyway, so it still reads as water here; only the exact Sea-vs-Lake label
+ * would differ, which doesn't matter for "stop at water".
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @returns {boolean}
+ */
+export function isWaterAt(seed, q, r) {
+  if (isOceanAt(seed, q, r)) return true;
+  return classifyLand(elevationAt(seed, q, r), moistureAt(seed, q, r)) === "Lake";
+}
+
 function lakeRegionTouchesSea(seed, q, r) {
   const seen = new Set([axialKey(q, r)]);
   const queue = [{ q, r }];

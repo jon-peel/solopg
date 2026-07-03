@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createWorld, addHex, placedHexes, getHex } from "../js/world/world.js";
 import { generateHex } from "../js/gen/hex.js";
-import { isOceanAt } from "../js/gen/biome.js";
+import { isWaterAt } from "../js/gen/biome.js";
 import { isRiverSource } from "../js/gen/river.js";
 import { traceRiverToSea, riverId } from "../js/gen/river-trace.js";
 import { subRng } from "../js/core/rng.js";
@@ -233,18 +233,18 @@ function generateAreaWithRivers(seed, radius) {
   }
   sources.sort((a, b) => (a.q - b.q) || (a.r - b.r));
   const claimed = new Set();
-  const claimedReachedSea = new Map();
+  const claimedReachedWater = new Map();
   for (const { q, r } of sources) {
     const res = traceRiverToSea(seed, q, r, { claimed });
     const end = res.path[res.path.length - 1];
     const endKey = axialKey(end.q, end.r);
-    const reachedSea = res.reachedSea || (res.joined && (claimedReachedSea.get(endKey) ?? true));
+    const reachedWater = res.reachedWater || (res.joined && (claimedReachedWater.get(endKey) ?? true));
     for (const p of res.path) {
       const k = axialKey(p.q, p.r);
       claimed.add(k);
-      if (!claimedReachedSea.has(k)) claimedReachedSea.set(k, reachedSea);
+      if (!claimedReachedWater.has(k)) claimedReachedWater.set(k, reachedWater);
     }
-    world.rivers.push({ id: riverId(q, r), source: { q, r }, path: res.path, reachedSea, joined: res.joined });
+    world.rivers.push({ id: riverId(q, r), source: { q, r }, path: res.path, reachedWater, joined: res.joined });
   }
   return { world };
 }
@@ -268,12 +268,13 @@ test("rivers: every traced river is a connected chain from its source hex", () =
   }
 });
 
-test("rivers: tributaries merge — most rivers END at either the sea or another river (a confluence), not mid-land", () => {
-  const { world } = generateAreaWithRivers(2, 40);
+test("rivers: every river ENDS at water or a confluence — never mid-land, and never runs through water", () => {
+  const seed = 2;
+  const { world } = generateAreaWithRivers(seed, 40);
   assert.ok(world.rivers.length > 0, "expected traced rivers");
-  // The mouth of each river is either an ocean hex (a true sea outlet) or a hex
-  // that belongs to a DIFFERENT river (a confluence). A merged network has no
-  // rivers dead-ending on open land except the rare budget-fallback partial.
+  // The mouth of each river is either a water hex (Sea/Lake) or a hex belonging
+  // to a DIFFERENT river (a confluence). No river dead-ends on open land except
+  // the rare budget-fallback partial.
   const onSomeRiver = new Map(); // hexKey -> owning river id
   for (const rv of world.rivers) for (const p of rv.path) {
     const k = axialKey(p.q, p.r);
@@ -283,12 +284,20 @@ test("rivers: tributaries merge — most rivers END at either the sea or another
   for (const rv of world.rivers) {
     const end = rv.path[rv.path.length - 1];
     const endKey = axialKey(end.q, end.r);
-    const atSea = isOceanAt(2, end.q, end.r);
+    const atWater = isWaterAt(seed, end.q, end.r);
     const atConfluence = rv.joined && onSomeRiver.get(endKey) !== rv.id;
-    if (atSea || atConfluence) good++;
+    if (atWater || atConfluence) good++;
+    // And the river must not have flowed THROUGH water to get there: no interior
+    // hex is water, unless the source itself sits in a lake (it crosses its own).
+    if (!isWaterAt(seed, rv.path[0].q, rv.path[0].r)) {
+      for (let i = 0; i < rv.path.length - 1; i++) {
+        assert.equal(isWaterAt(seed, rv.path[i].q, rv.path[i].r), false,
+          `river ${rv.id} flows through water at interior hex (${rv.path[i].q},${rv.path[i].r})`);
+      }
+    }
   }
   assert.ok(good / world.rivers.length > 0.9,
-    `expected >90% of rivers to end at sea or a confluence, got ${good}/${world.rivers.length}`);
+    `expected >90% of rivers to end at water or a confluence, got ${good}/${world.rivers.length}`);
 });
 
 test("order-independence: forward vs. reverse fill order give identical per-hex terrain", () => {

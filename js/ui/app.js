@@ -1039,11 +1039,13 @@ function seaNeighborCount(q, r) {
 //
 // Rebuilt whole (cheap — a few dozen sources, ~1ms each) whenever the SET of
 // sources changes, since adding one source can re-route which trunk others
-// join; skipped when the source set is unchanged and already in merged form.
-// Called after every generation batch and on world load (so imported/migrated
-// worlds get their rivers). Returns true if it (re)built, so the caller
-// persists. `world.riversMerged` marks the merged format, forcing a one-time
-// rebuild of any pre-merge world.
+// join; skipped when the source set is unchanged and already at the current
+// format. Called after every generation batch and on world load (so
+// imported/migrated worlds get their rivers). Returns true if it (re)built, so
+// the caller persists. `world.riversFormat` stamps the tracing logic version,
+// forcing a one-time rebuild whenever that logic changes under an existing
+// world (e.g. unmerged → merged → terminate-at-water).
+const RIVERS_FORMAT = 3; // 1: independent traces  2: tributary merging  3: terminate at first water
 function syncRivers(world) {
   if (!world) return false;
   if (!Array.isArray(world.rivers)) world.rivers = [];
@@ -1057,28 +1059,28 @@ function syncRivers(world) {
   const currentIds = new Set(sources.map((s) => riverId(s.q, s.r)));
   const existingIds = new Set(world.rivers.map((rv) => rv.id));
   const sameSet = currentIds.size === existingIds.size && [...currentIds].every((id) => existingIds.has(id));
-  if (sameSet && world.riversMerged) return false;
+  if (sameSet && world.riversFormat === RIVERS_FORMAT) return false;
 
   const claimed = new Set();
-  const claimedReachedSea = new Map(); // hexKey -> reachedSea of the river that first claimed it
+  const claimedReachedWater = new Map(); // hexKey -> reachedWater of the river that first claimed it
   const rivers = [];
   for (const { q, r } of sources) {
     const res = traceRiverToSea(world.seed, q, r, { claimed });
     const end = res.path[res.path.length - 1];
     const endKey = axialKey(end.q, end.r);
-    // A tributary reaches the sea iff the trunk it joins does (default true —
-    // trunks essentially always reach the sea; only a budget-fallback partial
+    // A tributary reaches water iff the trunk it joins does (default true — a
+    // trunk essentially always ends at water; only a budget-fallback partial
     // wouldn't, and that's vanishingly rare).
-    const reachedSea = res.reachedSea || (res.joined && (claimedReachedSea.get(endKey) ?? true));
+    const reachedWater = res.reachedWater || (res.joined && (claimedReachedWater.get(endKey) ?? true));
     for (const p of res.path) {
       const k = axialKey(p.q, p.r);
       claimed.add(k);
-      if (!claimedReachedSea.has(k)) claimedReachedSea.set(k, reachedSea);
+      if (!claimedReachedWater.has(k)) claimedReachedWater.set(k, reachedWater);
     }
-    rivers.push({ id: riverId(q, r), source: { q, r }, path: res.path, reachedSea });
+    rivers.push({ id: riverId(q, r), source: { q, r }, path: res.path, reachedWater });
   }
   world.rivers = rivers;
-  world.riversMerged = true;
+  world.riversFormat = RIVERS_FORMAT;
   return true;
 }
 

@@ -229,7 +229,18 @@ rivers join a trunk, 81% less line drawn**, distinct river hexes 2391→667, wit
 trunks per large map. Order-independent (canonical, not generation order); the whole network rebuilds
 when the source set changes (`world.riversMerged` forces a one-time rebuild of pre-merge worlds).
 Confirmed in-browser on the same seed as the spaghetti shot — clean confluences, no parallel bundles.
-**Next:
+**Follow-up (real-play — "a river should terminate as soon as it touches a water cell"): terminate at
+first water.** Rivers were routing THROUGH rendered lakes/bays and back onto land ("mountain → across
+the sea → inland → ends in a lake"), because the trace only recognised the raw ocean GATE
+(`isOceanAt`), not lakes or bay-flipped Sea — measured **80% of paths crossed a rendered-water hex
+before ending**. Fix: `biome.js` gains `isWaterAt` (Sea OR Lake, pure), and `traceRiverToSea`
+terminates at the first water hex outside the source's own body (`sourceWaterBody` flood-fill lets a
+Lake source cross its own lake first). Now **0% cross water**; median river length 87→~8-11 hexes,
+~17% end at sea / ~83% at an inland lake (the natural nearest sink). `reachedSea`→`reachedWater`
+throughout; `world.riversFormat` version stamp (now 3) forces a one-time rebuild of existing worlds.
+Verified in-browser on the coastal seed — rivers stop cleanly at the water's edge. (Tradeoff noted to
+the user: this shortens rivers and most now end at lakes; a "flow through lakes, stop only at the sea"
+variant is a one-line change if longer sea-reaching rivers are preferred.) **Next:
 3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
 Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
 in-app custom tables were dropped).
@@ -237,7 +248,7 @@ in-app custom tables were dropped).
 `elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
 Lake/Sea (v9, reworked in v10); 3R.5 first added per-hex `riverEdges` (v11), then reworked rivers
 into a top-level `world.rivers[]` traced-path registry (v12, per-hex `riverEdges` retired).**
-**Schema v12. 261 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v12 (rivers `reachedWater` + `world.riversFormat` stamp are additive, no bump). 261 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
