@@ -1036,7 +1036,9 @@ function syncRivers(world) {
   if (!world) return;
   const terrainByKey = new Map();
   for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
-  world.rivers = computeRivers(world.seed, terrainByKey);
+  // Append-only: keep existing rivers, add rivers for newly-revealed sources
+  // (a river must never disappear when more terrain is generated).
+  world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : []);
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex

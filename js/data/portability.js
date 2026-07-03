@@ -166,9 +166,10 @@ export function migrateWorld(data) {
   if (data.schemaVersion < 13) {
     // Terrain switched to neighbour-affinity (js/gen/affinity.js); elevation/
     // moisture/continent no longer written. Old hexes keep their fields (unused)
-    // and their terrain strings still render — just stamp the version. Rivers
-    // stay whatever they were (empty going forward until the emergent rework).
-    if (!Array.isArray(data.rivers)) data.rivers = [];
+    // and their terrain strings still render — just stamp the version. Drop any
+    // old elevation-based rivers; the derived major-water system (js/gen/rivers.js)
+    // recomputes them from the terrain on load.
+    data.rivers = [];
     data.schemaVersion = 13;
   }
   return data;

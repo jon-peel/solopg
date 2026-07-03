@@ -81,6 +81,24 @@ test("computeRivers: deterministic for the same (seed, terrain)", () => {
   assert.deepEqual(computeRivers("rv-d", terr), computeRivers("rv-d", terr));
 });
 
+test("computeRivers: append-only — revealing more terrain never drops or changes an existing river", () => {
+  const seed = "rv-mono";
+  // A smaller revealed area, then a superset (ring fill shares the inner hexes,
+  // so terrain is identical there — like generating more around what exists).
+  const small = terrainArea(seed, 22);
+  const big = terrainArea(seed, 34);
+  const r1 = computeRivers(seed, small);
+  assert.ok(r1.length > 0, "expected rivers in the smaller area");
+  const r2 = computeRivers(seed, big, r1); // pass r1 as existing, like syncRivers does
+  assert.ok(r2.length >= r1.length, "the network only grows");
+  const byId = new Map(r2.map((rv) => [rv.id, rv]));
+  for (const rv of r1) {
+    const kept = byId.get(rv.id);
+    assert.ok(kept, `river ${rv.id} disappeared after revealing more terrain`);
+    assert.deepEqual(kept.path, rv.path, `river ${rv.id} was re-routed (its path changed)`);
+  }
+});
+
 test("computeRivers: no rivers when there is no major water to drain to", () => {
   // An all-land area (no Sea/Lake) has no sink, so no rivers.
   const terr = new Map();

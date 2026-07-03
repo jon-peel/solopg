@@ -76,14 +76,22 @@ class MinHeap {
 }
 
 /**
- * Compute the river network over a set of revealed hexes. Pure function of
- * (seed, terrain map): the same inputs always give the same rivers.
+ * Extend the river network over the currently-revealed hexes. APPEND-ONLY:
+ * every river in `existingRivers` is kept verbatim, and only NEW rivers (from
+ * sources that don't already have one) are added. This is deliberate — a river
+ * must never disappear or re-route when the GM reveals more terrain (revealing
+ * elsewhere shifts the cost field, which would otherwise silently drop or move
+ * existing rivers). New rivers still merge INTO existing ones at confluences
+ * (the existing paths seed the `claimed` set).
  * @param {number|string} seed world seed
  * @param {Map<string,string>} terrainByKey axialKey -> terrain, for every
  *   placed hex (only these coordinates exist to the router).
+ * @param {{ id:string, source:{q:number,r:number}, path:{q:number,r:number}[] }[]} [existingRivers]
+ *   rivers already on the world; kept as-is.
  * @returns {{ id:string, source:{q:number,r:number}, path:{q:number,r:number}[], reachedWater:boolean }[]}
+ *   existingRivers followed by any newly-formed ones.
  */
-export function computeRivers(seed, terrainByKey) {
+export function computeRivers(seed, terrainByKey, existingRivers = []) {
   const T = (q, r) => terrainByKey.get(axialKey(q, r));
   const coords = [];
   for (const key of terrainByKey.keys()) coords.push(parseKey(key));
@@ -123,10 +131,19 @@ export function computeRivers(seed, terrainByKey) {
     }
   }
 
+  // Keep every existing river verbatim (append-only — see the docstring), and
+  // seed the `claimed` set with their hexes so new tributaries merge into them.
+  const rivers = existingRivers.slice();
+  const existingIds = new Set(existingRivers.map((rv) => rv.id));
+  const claimed = new Set();
+  for (const rv of existingRivers) for (const p of rv.path) claimed.add(axialKey(p.q, p.r));
+
   // 3. Sources: deep-interior Mountains that are a local D-max and pass the roll.
+  // Skip any source that already has a river (its path is frozen).
   const sources = [];
   for (const { q, r } of coords) {
     if (T(q, r) !== "Mountains") continue;
+    if (existingIds.has(`river:${q},${r}`)) continue;
     const d = D.get(axialKey(q, r));
     if (d === undefined || d < MIN_SOURCE_D) continue;
     if (!neighbors(q, r).every((n) => (D.get(axialKey(n.q, n.r)) ?? -1) <= d)) continue;
@@ -136,9 +153,7 @@ export function computeRivers(seed, terrainByKey) {
   // Biggest (deepest) rivers first, so smaller tributaries merge INTO them.
   sources.sort((a, b) => (b.d - a.d) || (a.q - b.q) || (a.r - b.r));
 
-  // 4. Trace each source down D to major water, merging at confluences.
-  const claimed = new Set();
-  const rivers = [];
+  // 4. Trace each NEW source down D to major water, merging at confluences.
   for (const s of sources) {
     const path = [{ q: s.q, r: s.r }];
     const seen = new Set([axialKey(s.q, s.r)]);

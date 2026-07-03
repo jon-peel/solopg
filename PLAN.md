@@ -275,6 +275,13 @@ each source **down** the field to major water, canonical order + shared `claimed
 placed area, so a river only forms where a source can reach a real coast through generated hexes.
 Order-dependent by design; cheap (one Dijkstra + short descents). Verified in-browser: ~26 long rivers
 (up to 32 hexes) winding from the mountains to the coast/great-lake, big sea collecting the most.
+**APPEND-ONLY (real-play bug — "existing rivers sometimes disappear when generating a new area"):**
+recomputing the whole network each generation let the shifting cost field drop/re-route existing
+rivers. Fixed: `computeRivers(seed, terrain, existingRivers)` keeps every existing river VERBATIM and
+only adds rivers for newly-revealed sources (new tributaries still merge into the frozen existing
+paths via the seeded `claimed` set). A river, once formed, is permanent. Verified: expanding a world
+from 14→30 rivers dropped 0 and re-routed 0. Pre-v13 (elevation-based) rivers are cleared on migration
+so the new system rebuilds them.
 **Next: tune density/stream-order-width to taste (real-play); optional mountain ranges as features;
 then 3R.6b settlements v2 (river/coast size boosts now have real rivers to key off).**
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
@@ -282,7 +289,7 @@ then 3R.6b settlements v2 (river/coast size boosts now have real rivers to key o
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 231 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v13. 232 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
