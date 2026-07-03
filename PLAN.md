@@ -255,18 +255,34 @@ wins decisively (lone-hex ~3-4%, tuned in the scratchpad); cross terms encode gr
 (mountains→hills→forest→plains, desert shuns forest / likes mountain ridges); Sea↔Lake is a hard
 forbid (no coastal lakes). Sea/Lake need no continent gate — Sea's strong self-affinity makes big
 coastal bodies, Lake's weak self-affinity keeps it small and inland. The origin `(0,0)` still spawns
-land. **Rivers are OFF for now** (`world.rivers` stays `[]`) pending an emergent, endpoint-triggered
-rework (rivers/ranges as *features over* the affinity terrain — the agreed next direction). Files:
-new `js/gen/affinity.js`; `hex.js`/`app.js` rewired (`neighborTerrains` replaces `seaNeighborCount`);
-**deleted** `biome.js`, `river.js`, `river-trace.js`; schema **v13** (elevation/moisture/continent no
-longer written — old worlds load as-is, terrain strings still render). Verified in-browser: a Huge
-fill renders clean coherent regions with real coastlines, big oceans, mountain highlands, and lakes;
-no console errors. **Next: emergent rivers (+ optional ranges) as features; then 3R.6 settlements v2.**
+land. Files: new `js/gen/affinity.js`; `hex.js`/`app.js` rewired (`neighborTerrains` replaces
+`seaNeighborCount`); **deleted** `biome.js`, `river.js`, `river-trace.js`; schema **v13**
+(elevation/moisture/continent no longer written — old worlds load as-is, terrain strings still
+render). Verified in-browser: a Huge fill renders clean coherent regions with real coastlines, big
+oceans, mountain highlands, and lakes; no console errors.
+**3R.6 — Rivers v2 (emergent major-water drainage, elevation-free).** With no height field, TERRAIN
+is the routing cost. `js/gen/rivers.js` `computeRivers(seed, terrainByKey)` is a DERIVED overlay
+(recomputed from the revealed terrain by `app.js`'s `syncRivers` after every generation and on load,
+into `world.rivers[]`, rendered by the existing `drawRivers`): (1) find connected water bodies — a
+**major** body (sea / large lake, size ≥ 20) is a real sink, small ponds are pass-through; (2) flood
+a **cost-to-major-water field** outward (cheap swamp/plains/small-lake, dear hills, dearest mountains)
+— "terrain as elevation", monotonically decreasing to water so a river always arrives and never
+climbs a mountain; (3) **sources** = deep-interior Mountains (cost ≥ 40 from major water, a local
+maximum, past a seeded roll) → long cross-country rivers, and because a big sea owns a big watershed
+it naturally collects **more** rivers (sea size drives river count, per real-play request); (4) trace
+each source **down** the field to major water, canonical order + shared `claimed` set so tributaries
+**merge** at confluences. Fork **(i) revealed-only**: the field floods from major water in the
+placed area, so a river only forms where a source can reach a real coast through generated hexes.
+Order-dependent by design; cheap (one Dijkstra + short descents). Verified in-browser: ~26 long rivers
+(up to 32 hexes) winding from the mountains to the coast/great-lake, big sea collecting the most.
+**Next: tune density/stream-order-width to taste (real-play); optional mountain ranges as features;
+then 3R.6b settlements v2 (river/coast size boosts now have real rivers to key off).**
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
-rivers (neighbour-affinity terrain, `js/gen/affinity.js`).**
-**Schema v13. 226 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
+major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
+**Schema v13. 231 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

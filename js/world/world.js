@@ -44,10 +44,11 @@ import { axialKey } from "../core/hexgeo.js";
 // classifier (3R.3/3R.4, deleted) to a neighbour-affinity dice roll
 // (js/gen/affinity.js) — the world is now a hex oracle, each tile "anything
 // until revealed", order-dependent by design. Hexes no longer carry
-// `elevation`/`moisture`/`continent` (old hexes keep them, unused). The
-// elevation-based river system was removed with it; `rivers` stays `[]` pending
-// an emergent-river rework. Old worlds load as-is (their terrain strings still
-// render); only regenerated hexes use the new roll.
+// `elevation`/`moisture`/`continent` (old hexes keep them, unused). Old worlds
+// load as-is (their terrain strings still render); only regenerated hexes use
+// the new roll. Rivers (3R.6) are a DERIVED overlay recomputed from the revealed
+// terrain (js/gen/rivers.js — major-water drainage, no elevation) into
+// `world.rivers[]`; no schema change (same `{id, source, path, ...}` shape).
 export const SCHEMA_VERSION = 13;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.

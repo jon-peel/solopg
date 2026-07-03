@@ -23,6 +23,7 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
+import { computeRivers } from "../gen/rivers.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -181,6 +182,7 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
+  if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -1024,9 +1026,18 @@ function neighborTerrains(q, r) {
   return out;
 }
 
-// Rivers are being reworked (emergent, endpoint-triggered — a later stage). The
-// old elevation-based trace was removed along with the elevation model, so
-// world.rivers stays empty for now and the map draws no rivers.
+// Rivers (Phase 3R.6): a DERIVED overlay recomputed from the currently-revealed
+// terrain (js/gen/rivers.js — major-water drainage over the elevation-free
+// affinity world). Recompute after every generation batch and on world load;
+// world.rivers holds the traced polylines that map.js draws. Cheap (a Dijkstra
+// over the placed hexes + a few short descents), and order-dependent by design
+// like the terrain it sits on.
+function syncRivers(world) {
+  if (!world) return;
+  const terrainByKey = new Map();
+  for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  world.rivers = computeRivers(world.seed, terrainByKey);
+}
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
@@ -1242,6 +1253,7 @@ async function onFollowClue(id) {
 }
 
 async function persistAndRefresh() {
+  syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
