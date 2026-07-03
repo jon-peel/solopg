@@ -39,7 +39,7 @@ export const TERRAIN_PROFILE = {
   },
   Water: {
     settlement: null, // no settlements on open water
-    poi: { chance: 0.2, weights: { landmark: 2, shrine: 1 } }, // no dungeon on open water
+    poi: { chance: 0.03, weights: { landmark: 2, shrine: 1 } }, // extremely rare; no dungeon on open water
   },
 };
 
