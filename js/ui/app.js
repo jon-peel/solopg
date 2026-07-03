@@ -23,8 +23,6 @@ import {
   removeHex,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
-import { isRiverSource } from "../gen/river.js";
-import { traceRiverToSea, riverId } from "../gen/river-trace.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -183,10 +181,6 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
-  // Rebuild river traces for a loaded/migrated world from its source hexes; if
-  // anything new was traced (e.g. a v11 world that had no `rivers`), persist it
-  // so the traces aren't recomputed on every load.
-  if (world && syncRivers(world)) await saveWorld(world);
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -1018,71 +1012,21 @@ function hookSubjects(world) {
   return subs;
 }
 
-// How many of a cell's existing placed neighbours are already Sea — feeds
-// coastline contagion (js/gen/biome.js): placing/finding a Sea hex makes
-// nearby future generation more likely to continue the coast.
-function seaNeighborCount(q, r) {
-  return neighbors(q, r).filter((n) => {
+// The terrains of a cell's already-placed neighbours — biases the affinity
+// terrain roll (js/gen/affinity.js): a hex tends to match its revealed
+// surroundings (mountains cluster, coastlines continue, etc).
+function neighborTerrains(q, r) {
+  const out = [];
+  for (const n of neighbors(q, r)) {
     const h = getHex(current, n.q, n.r);
-    return h && h.placed && h.terrain === "Sea";
-  }).length;
+    if (h && h.placed && h.terrain) out.push(h.terrain);
+  }
+  return out;
 }
 
-// Rivers (Phase 3R.5, "curated rivers"): find the world's river SOURCES
-// (js/gen/river.js isRiverSource) among its placed hexes, trace each to the sea
-// (js/gen/river-trace.js), and record them in world.rivers[]. Traces run in a
-// CANONICAL (sorted) order sharing one `claimed` set, so a tributary whose path
-// meets an earlier river JOINS it at the confluence instead of running its own
-// near-parallel line to the same coast — a dendritic network, not spaghetti.
-// Because the order is canonical (not generation order) the whole network is
-// deterministic and order-independent.
-//
-// Rebuilt whole (cheap — a few dozen sources, ~1ms each) whenever the SET of
-// sources changes, since adding one source can re-route which trunk others
-// join; skipped when the source set is unchanged and already at the current
-// format. Called after every generation batch and on world load (so
-// imported/migrated worlds get their rivers). Returns true if it (re)built, so
-// the caller persists. `world.riversFormat` stamps the tracing logic version,
-// forcing a one-time rebuild whenever that logic changes under an existing
-// world (e.g. unmerged → merged → terminate-at-water).
-const RIVERS_FORMAT = 3; // 1: independent traces  2: tributary merging  3: terminate at first water
-function syncRivers(world) {
-  if (!world) return false;
-  if (!Array.isArray(world.rivers)) world.rivers = [];
-  const sources = [];
-  for (const hex of placedHexes(world)) {
-    const { q, r } = hex.coords;
-    if (isRiverSource(world.seed, q, r, hex.terrain, hex.elevation)) sources.push({ q, r });
-  }
-  // Order-independent: sort by coordinate, not by when each hex was generated.
-  sources.sort((a, b) => (a.q - b.q) || (a.r - b.r));
-  const currentIds = new Set(sources.map((s) => riverId(s.q, s.r)));
-  const existingIds = new Set(world.rivers.map((rv) => rv.id));
-  const sameSet = currentIds.size === existingIds.size && [...currentIds].every((id) => existingIds.has(id));
-  if (sameSet && world.riversFormat === RIVERS_FORMAT) return false;
-
-  const claimed = new Set();
-  const claimedReachedWater = new Map(); // hexKey -> reachedWater of the river that first claimed it
-  const rivers = [];
-  for (const { q, r } of sources) {
-    const res = traceRiverToSea(world.seed, q, r, { claimed });
-    const end = res.path[res.path.length - 1];
-    const endKey = axialKey(end.q, end.r);
-    // A tributary reaches water iff the trunk it joins does (default true — a
-    // trunk essentially always ends at water; only a budget-fallback partial
-    // wouldn't, and that's vanishingly rare).
-    const reachedWater = res.reachedWater || (res.joined && (claimedReachedWater.get(endKey) ?? true));
-    for (const p of res.path) {
-      const k = axialKey(p.q, p.r);
-      claimed.add(k);
-      if (!claimedReachedWater.has(k)) claimedReachedWater.set(k, reachedWater);
-    }
-    rivers.push({ id: riverId(q, r), source: { q, r }, path: res.path, reachedWater });
-  }
-  world.rivers = rivers;
-  world.riversFormat = RIVERS_FORMAT;
-  return true;
-}
+// Rivers are being reworked (emergent, endpoint-triggered — a later stage). The
+// old elevation-based trace was removed along with the elevation model, so
+// world.rivers stays empty for now and the map draws no rivers.
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
@@ -1095,7 +1039,7 @@ function buildDistantTargetHex(tables, q, r) {
     placed: true,
     seed: current.seed,
     gen: 0,
-    seaNeighborCount: seaNeighborCount(q, r),
+    neighborTerrains: neighborTerrains(q, r),
   });
   hex.gen = 0;
   hex.explored = false; // not yet visited; the intervening hexes are blank
@@ -1298,7 +1242,6 @@ async function onFollowClue(id) {
 }
 
 async function persistAndRefresh() {
-  syncRivers(current); // trace any newly-revealed river sources to the sea before persisting
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
@@ -1309,8 +1252,8 @@ async function persistAndRefresh() {
 }
 
 // Build (in memory) a random hex at (q,r) for generation `gen` — terrain comes
-// from the elevation/moisture biome classifier (Phase 3R.3), a pure function
-// of (seed, q, r), not a neighbor-weighted roll.
+// from the neighbour-affinity roll (js/gen/affinity.js), biased by the terrains
+// of already-placed neighbours (order-dependent by design).
 function buildRandomHex(tables, q, r, gen) {
   const rng = subRng(current.seed, "hex", q, r, gen);
   const hex = generateHex(tables, rng, {
@@ -1319,7 +1262,7 @@ function buildRandomHex(tables, q, r, gen) {
     placed: true,
     seed: current.seed,
     gen,
-    seaNeighborCount: seaNeighborCount(q, r),
+    neighborTerrains: neighborTerrains(q, r),
   });
   hex.gen = gen;
   return hex;

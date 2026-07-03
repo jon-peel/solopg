@@ -1,5 +1,19 @@
 # Phase 3R — World Coherence (revisit of Phase 3: terrain & POI rules)
 
+> **⚠️ SUPERSEDED at the terrain layer (v13 rewrite).** Sub-phases 3R.3/3R.4
+> (elevation/moisture/continent noise classifier) and 3R.5 (curated river
+> trace) described below were **deleted** and replaced by a **neighbour-affinity
+> dice roll** (`js/gen/affinity.js`): the world is now a hex ORACLE — every
+> un-revealed hex is a superposition that collapses on reveal to a weighted roll
+> biased by its already-revealed neighbours. This deliberately drops strict
+> `(seed,q,r)` determinism (terrain is now reveal-order-dependent) in exchange
+> for the oracle model and for letting features shape terrain. Elevation/
+> moisture/continent are gone; Sea/Lake emerge from self-affinity (no continent
+> gate); rivers are temporarily OFF pending an emergent, endpoint-triggered
+> rework (rivers/ranges as *features over* the affinity terrain). Schema **v13**.
+> See PLAN.md's "TERRAIN REWRITE" entry. The 3R.3–3R.5 detail below is kept for
+> history; the classifier/river code it references no longer exists.
+
 **Status: 📋 planning only.** No code in this pass. Every sub-phase carries its
 own **research/design step** — external research is done *there*, not now.
 

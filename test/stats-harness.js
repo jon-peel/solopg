@@ -1,8 +1,9 @@
 // Stats harness — a diagnostic, NOT part of `node --test` (it prints a
 // report, it doesn't assert). Generates a large area under the REAL engine
-// (js/gen/hex.js's generateHex — the elevation/moisture biome classifier as
-// of Phase 3R.3) and reports terrain distribution, biome clump-size / lone-hex
-// rate, and settlement spacing.
+// (js/gen/hex.js's generateHex — the neighbour-affinity terrain roll,
+// js/gen/affinity.js) and reports terrain distribution, clump-size / lone-hex
+// rate, and settlement spacing. Fills ring-by-ring from the origin so each hex
+// sees its inner neighbours, matching how the app reveals terrain.
 //
 // Usage: node test/stats-harness.js [seed] [radius]
 //   seed   default 1        any string/number (subRng seed)
@@ -37,12 +38,18 @@ function generateArea(seed, radius) {
   const world = createWorld({ name: "stats-harness", seed });
   for (const { q, r } of hexDisc(0, 0, radius)) {
     const rng = subRng(seed, "hex", q, r, 0);
+    const neighborTerrains = [];
+    for (const n of neighbors(q, r)) {
+      const h = world.hexes[axialKey(n.q, n.r)];
+      if (h && h.terrain) neighborTerrains.push(h.terrain);
+    }
     const hex = generateHex(tables, rng, {
       key: axialKey(q, r),
       coords: { q, r },
       placed: true,
       seed,
       gen: 0,
+      neighborTerrains,
     });
     hex.gen = 0;
     addHex(world, hex);

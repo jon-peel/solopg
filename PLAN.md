@@ -240,15 +240,33 @@ Lake source cross its own lake first). Now **0% cross water**; median river leng
 throughout; `world.riversFormat` version stamp (now 3) forces a one-time rebuild of existing worlds.
 Verified in-browser on the coastal seed — rivers stop cleanly at the water's edge. (Tradeoff noted to
 the user: this shortens rivers and most now end at lakes; a "flow through lakes, stop only at the sea"
-variant is a one-line change if longer sea-reaching rivers are preferred.) **Next:
-3R.6** (settlements v2 — names, Keep/Fort, river/coast size boosts) **or more
-Phase 7** (search, undo, print/GM view, themes — see [phase-7-backlog.md](docs/plans/phase-7-backlog.md);
-in-app custom tables were dropped).
-**Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 adds
-`elevation`/`moisture` (v8); 3R.4 adds `continent` (renamed from `basin`) and splits Water into
-Lake/Sea (v9, reworked in v10); 3R.5 first added per-hex `riverEdges` (v11), then reworked rivers
-into a top-level `world.rivers[]` traced-path registry (v12, per-hex `riverEdges` retired).**
-**Schema v12 (rivers `reachedWater` + `world.riversFormat` stamp are additive, no bump). 261 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+variant is a one-line change if longer sea-reaching rivers are preferred.)
+**TERRAIN REWRITE (v13 — the big pivot, on request): elevation is gone; the world is a hex ORACLE.**
+After many rounds, the direction changed at the root. The elevation/moisture/continent noise
+classifier (3R.3/3R.4) and the curated river trace (3R.5) were **deleted** and replaced by a
+**neighbour-affinity dice roll** (`js/gen/affinity.js`): every un-revealed hex is a superposition;
+on reveal it collapses to a weighted roll biased by its already-revealed neighbours. This
+**deliberately gives up strict `(seed,q,r)` determinism** — a hex's terrain now depends on reveal
+order — an intentional trade the user chose: it matches the oracle metaphor and lets features shape
+terrain. The weight model is **additive** — `weight[T] = SPAWN[T]·spawnScale(n) + Σ AFFINITY[N][T]` —
+with a spawn term that DECAYS as a hex gains neighbours (seed at the frontier, conform in the
+interior → clean regions, not speckle). SELF-affinity is cranked ~2.5× so the majority neighbour
+wins decisively (lone-hex ~3-4%, tuned in the scratchpad); cross terms encode gradients
+(mountains→hills→forest→plains, desert shuns forest / likes mountain ridges); Sea↔Lake is a hard
+forbid (no coastal lakes). Sea/Lake need no continent gate — Sea's strong self-affinity makes big
+coastal bodies, Lake's weak self-affinity keeps it small and inland. The origin `(0,0)` still spawns
+land. **Rivers are OFF for now** (`world.rivers` stays `[]`) pending an emergent, endpoint-triggered
+rework (rivers/ranges as *features over* the affinity terrain — the agreed next direction). Files:
+new `js/gen/affinity.js`; `hex.js`/`app.js` rewired (`neighborTerrains` replaces `seaNeighborCount`);
+**deleted** `biome.js`, `river.js`, `river-trace.js`; schema **v13** (elevation/moisture/continent no
+longer written — old worlds load as-is, terrain strings still render). Verified in-browser: a Huge
+fill renders clean coherent regions with real coastlines, big oceans, mountain highlands, and lakes;
+no console errors. **Next: emergent rivers (+ optional ranges) as features; then 3R.6 settlements v2.**
+**Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
+`elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
+`world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
+rivers (neighbour-affinity terrain, `js/gen/affinity.js`).**
+**Schema v13. 226 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

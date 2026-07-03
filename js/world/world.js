@@ -38,13 +38,17 @@ import { axialKey } from "../core/hexgeo.js";
 // from mountain sources as neighbouring hexes are generated (js/gen/river.js).
 // Additive; older hexes simply have none until regenerated.
 // v12: rivers became a top-level `rivers` array (Phase 3R.5 "curated rivers"
-// rework) — each `{ id, source:{q,r}, path:[{q,r}...], reachedSea }` is a full
-// watercourse traced from a source to the sea up front (js/gen/river-trace.js)
-// and rendered as a polyline, replacing the per-hex `riverEdges` growth model
-// (which never reliably reached the coast). Older worlds backfill `rivers: []`
-// and repopulate it from their existing source hexes on load (see app.js
-// syncRivers). The old per-hex `riverEdges` field is left unused going forward.
-export const SCHEMA_VERSION = 12;
+// rework) — a watercourse traced from a source to the sea, rendered as a
+// polyline. Superseded by v13's terrain rework (elevation removed).
+// v13: terrain generation switched from the elevation/moisture/continent noise
+// classifier (3R.3/3R.4, deleted) to a neighbour-affinity dice roll
+// (js/gen/affinity.js) — the world is now a hex oracle, each tile "anything
+// until revealed", order-dependent by design. Hexes no longer carry
+// `elevation`/`moisture`/`continent` (old hexes keep them, unused). The
+// elevation-based river system was removed with it; `rivers` stays `[]` pending
+// an emergent-river rework. Old worlds load as-is (their terrain strings still
+// render); only regenerated hexes use the new roll.
+export const SCHEMA_VERSION = 13;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

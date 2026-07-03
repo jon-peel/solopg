@@ -159,10 +159,17 @@ export function migrateWorld(data) {
     data.schemaVersion = 11;
   }
   if (data.schemaVersion < 12) {
-    // top-level `rivers` array — backfill empty; app.js syncRivers rebuilds it
-    // from existing source hexes on load. Old per-hex `riverEdges` left as-is.
+    // top-level `rivers` array — backfill empty. Old per-hex `riverEdges` left as-is.
     if (!Array.isArray(data.rivers)) data.rivers = [];
     data.schemaVersion = 12;
+  }
+  if (data.schemaVersion < 13) {
+    // Terrain switched to neighbour-affinity (js/gen/affinity.js); elevation/
+    // moisture/continent no longer written. Old hexes keep their fields (unused)
+    // and their terrain strings still render — just stamp the version. Rivers
+    // stay whatever they were (empty going forward until the emergent rework).
+    if (!Array.isArray(data.rivers)) data.rivers = [];
+    data.schemaVersion = 13;
   }
   return data;
 }

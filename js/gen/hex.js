@@ -8,7 +8,7 @@
 import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { subRng } from "../core/rng.js";
-import { biomeAt } from "./biome.js";
+import { terrainAt } from "./affinity.js";
 import { profileFor, cappedSizeTable } from "./terrain-profile.js";
 import { generatePoi } from "./poi.js";
 
@@ -18,32 +18,24 @@ import { generatePoi } from "./poi.js";
  *   poi-types, poi-occupant, creatures, occupiers (and terrain sub-tables).
  * @param {() => number} rng a single stream consumed in a fixed order
  * @param {{ key?: string, coords?: object|null, placed?: boolean,
- *   terrain?: string, seed?: number|string, gen?: number, seaNeighborCount?: number }} [opts]
- *   seed+gen+coords seed per-POI sub-streams (order-stable). seaNeighborCount
- *   feeds sea-coastline contagion (js/gen/biome.js) — how many of this hex's
- *   already-placed neighbours are Sea; omit/0 for the pure position-based roll.
- *   Rivers are no longer a per-hex field — a river source detected here (see
- *   js/gen/river.js isRiverSource) is traced to the sea and stored in
- *   world.rivers[] by the caller (app.js), not on the hex.
+ *   terrain?: string, seed?: number|string, gen?: number, neighborTerrains?: string[] }} [opts]
+ *   seed+gen+coords seed per-POI sub-streams (order-stable). neighborTerrains
+ *   are the terrains of this hex's already-placed neighbours — they bias the
+ *   affinity terrain roll (js/gen/affinity.js); omit/[] for a hex revealed with
+ *   no placed neighbours.
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
   const resolve = makeResolver(tables);
 
-  // 1. Terrain. Elevation/moisture (Phase 3R.3) are ALWAYS computed from
-  //    (seed, coords) alone — a pure function of position, so it's the same
-  //    regardless of forced/rolled terrain or fill order. Terrain is forced
-  //    (manual placement) or the classifier's pick from those fields (which
-  //    may itself factor in nearby Sea neighbours — see seaNeighborCount).
+  // 1. Terrain: forced (manual placement) or the neighbour-affinity roll — a
+  //    weighted dice roll biased by the terrains of already-revealed
+  //    neighbours (js/gen/affinity.js). No elevation/moisture: the world is a
+  //    hex oracle, each tile "anything until revealed", so terrain is
+  //    order-dependent by design (see the affinity module comment).
   const coords = opts.coords || { q: 0, r: 0 };
-  const { elevation, moisture, continent, terrain: classified } =
-    biomeAt(opts.seed ?? 0, coords.q, coords.r, opts.seaNeighborCount ?? 0);
+  const classified = terrainAt(opts.seed ?? 0, coords.q, coords.r, opts.neighborTerrains ?? []);
   const terrain = opts.terrain || classified;
-
-  // Rivers (Phase 3R.5) are no longer a per-hex field. If this hex is a river
-  // SOURCE (js/gen/river.js isRiverSource), the caller traces its full path to
-  // the sea and records it in world.rivers[] — see app.js syncRivers. Nothing
-  // to store on the hex itself.
 
   // Nested terrain feature (e.g. Swamp's swamp-feature roll) stays
   // data-driven via data/terrain.json's entries[].roll — resolved directly
@@ -92,11 +84,8 @@ export function generateHex(tables, rng, opts = {}) {
     key: opts.key ?? null,
     coords: opts.coords ?? null,
     placed: opts.placed ?? false,
-    terrain,
+    terrain, // neighbour-affinity roll (js/gen/affinity.js) — no elevation model
     terrainFeature,
-    elevation, // [0,1) — Phase 3R.3; feeds sea level and river sourcing (3R.5)
-    moisture, // [0,1) — Phase 3R.3
-    continent, // [0,1) — Phase 3R.4; the land/ocean gate behind the Lake-vs-Sea split (not flood-fill)
     settlement,
     pois, // typed POI[] (Phase 3); empty array when none
     explored: true,
