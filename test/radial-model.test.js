@@ -17,7 +17,7 @@ const base = (over = {}) => ({
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "reserved"];
+const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "drawRiver"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -47,11 +47,11 @@ test("placed cell: build actions enabled; Generate stays enabled (Random child g
   assert.equal(byId(m, "generate").enabled, true);
 });
 
-test("Reserved slot is always present and disabled, with a reason", () => {
+test("Draw-river slot is always present and enabled (a river can start anywhere)", () => {
   for (const placed of [false, true]) {
-    const r = byId(buildRadialModel(base({ placed, terrain: placed ? "Plains" : null })), "reserved");
-    assert.equal(r.enabled, false);
-    assert.ok(r.reason);
+    const r = byId(buildRadialModel(base({ placed, terrain: placed ? "Plains" : null })), "drawRiver");
+    assert.equal(r.id, "drawRiver");
+    assert.equal(r.enabled, true);
   }
 });
 

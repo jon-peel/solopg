@@ -282,6 +282,20 @@ only adds rivers for newly-revealed sources (new tributaries still merge into th
 paths via the seeded `claimed` set). A river, once formed, is permanent. Verified: expanding a world
 from 14→30 rivers dropped 0 and re-routed 0. Pre-v13 (elevation-based) rivers are cleared on migration
 so the new system rebuilds them.
+**MANUAL rivers (real-play request — "let me say a river flows through these hexes / from here to
+here", for expanding a live world or dropping in a pre-hexed adventure module).** A GM-drawn river is
+just a `world.rivers[]` entry flagged `manual:true` with `upstreamOpen`/`downstreamOpen` end-flags.
+`computeRivers` keeps it VERBATIM (append-only, like any river) and additionally COMPLETES its still-
+open ends against the current cost field: the downstream end extends by DESCENDING D to major water,
+the upstream end by ASCENDING D (inland) to a mountain — permanent once done, and it stays a stub
+until reachable (a module dropped in a pocket completes to the sea only once exploration connects it).
+Its hexes seed `claimed` so auto tributaries merge INTO it (a drawn trunk). `buildManualRiver` orients
+the drawn chain source-first and sets the open flags. **UI**: radial "River" (the old Reserved slot) →
+a draw mode where clicking hexes traces the course (consecutive clicks joined by the straight hex-line,
+so 2 clicks = "here to there", more = a winding course), a top-centre toolbar (Undo / Finish / Cancel;
+Enter / Esc / Ctrl-Z), and a dashed cyan preview (`map.js` `setRiverDraft`). Verified end-to-end in the
+browser: draw → Finish stores a `manual:` river that auto-completes both ends and renders as a normal
+blue river merged with the generated network; no console errors.
 **Next: tune density/stream-order-width to taste (real-play); optional mountain ranges as features;
 then 3R.6b settlements v2 (river/coast size boosts now have real rivers to key off).**
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
@@ -289,7 +303,7 @@ then 3R.6b settlements v2 (river/coast size boosts now have real rivers to key o
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 232 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v13. 236 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

@@ -36,6 +36,13 @@
         <!-- Top-left: scale bar (a day's march, 12/18/24 mi); hover for rules. -->
         <div id="map-scale" hidden></div>
         <div id="travel-tip" hidden></div>
+        <!-- River drawing toolbar (top-center); shown only while drawing a river. -->
+        <div id="river-draw-bar" hidden>
+          <span id="river-draw-hint">Click hexes to trace a river</span>
+          <button id="btn-river-undo" type="button" title="Remove the last point">Undo</button>
+          <button id="btn-river-finish" type="button" title="Save the river (Enter)">Finish</button>
+          <button id="btn-river-cancel" type="button" title="Discard (Esc)">Cancel</button>
+        </div>
         <!-- Bottom-right map controls. -->
         <div id="map-controls">
           <button id="btn-zoom-in" title="Zoom in">＋</button>

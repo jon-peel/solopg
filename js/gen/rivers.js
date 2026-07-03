@@ -131,19 +131,25 @@ export function computeRivers(seed, terrainByKey, existingRivers = []) {
     }
   }
 
-  // Keep every existing river verbatim (append-only — see the docstring), and
-  // seed the `claimed` set with their hexes so new tributaries merge into them.
-  const rivers = existingRivers.slice();
-  const existingIds = new Set(existingRivers.map((rv) => rv.id));
+  // Keep every existing river verbatim (append-only — see the docstring). A
+  // MANUAL river (GM-drawn) additionally has its still-OPEN ends completed here
+  // as terrain allows: the downstream end extends by descending D to major
+  // water, the upstream end by ascending D (inland) to a mountain — permanent
+  // once done. Everything already drawn stays put; we only ever extend an open
+  // end. Every river's hexes seed `claimed` so auto tributaries merge in.
+  const rivers = existingRivers.map((rv) => (rv.manual ? completeManualRiver(rv, D, isMajor, T) : rv));
+  const existingIds = new Set(rivers.map((rv) => rv.id));
+  const manualSourceKeys = new Set(rivers.filter((rv) => rv.manual).map((rv) => axialKey(rv.path[0].q, rv.path[0].r)));
   const claimed = new Set();
-  for (const rv of existingRivers) for (const p of rv.path) claimed.add(axialKey(p.q, p.r));
+  for (const rv of rivers) for (const p of rv.path) claimed.add(axialKey(p.q, p.r));
 
   // 3. Sources: deep-interior Mountains that are a local D-max and pass the roll.
-  // Skip any source that already has a river (its path is frozen).
+  // Skip any source that already has a river (its path is frozen), including a
+  // manual river's own source hex (so it doesn't spawn a duplicate auto river).
   const sources = [];
   for (const { q, r } of coords) {
     if (T(q, r) !== "Mountains") continue;
-    if (existingIds.has(`river:${q},${r}`)) continue;
+    if (existingIds.has(`river:${q},${r}`) || manualSourceKeys.has(axialKey(q, r))) continue;
     const d = D.get(axialKey(q, r));
     if (d === undefined || d < MIN_SOURCE_D) continue;
     if (!neighbors(q, r).every((n) => (D.get(axialKey(n.q, n.r)) ?? -1) <= d)) continue;
@@ -180,4 +186,100 @@ export function computeRivers(seed, terrainByKey, existingRivers = []) {
     }
   }
   return rivers;
+}
+
+// Extend a manual river's still-open ends against the current cost field. Only
+// ever APPENDS/PREPENDS (never shortens or re-routes the drawn hexes); returns
+// the same object if nothing could be completed yet.
+function completeManualRiver(rv, D, isMajor, T) {
+  let path = rv.path;
+  let upstreamOpen = rv.upstreamOpen;
+  let downstreamOpen = rv.downstreamOpen;
+  if (!upstreamOpen && !downstreamOpen) return rv;
+  const occupied = new Set(path.map((p) => axialKey(p.q, p.r)));
+  let changed = false;
+
+  if (downstreamOpen) {
+    const tail = path[path.length - 1];
+    const ext = descendToWater(D, isMajor, tail, occupied);
+    if (ext) { path = path.concat(ext); for (const e of ext) occupied.add(axialKey(e.q, e.r)); downstreamOpen = false; changed = true; }
+  }
+  if (upstreamOpen) {
+    const head = path[0];
+    const ext = ascendToMountain(D, T, head, occupied);
+    if (ext) { path = ext.concat(path); upstreamOpen = false; changed = true; }
+  }
+  if (!changed) return rv;
+  return { ...rv, path, upstreamOpen, downstreamOpen, source: { q: path[0].q, r: path[0].r }, reachedWater: !downstreamOpen };
+}
+
+// From `start`, descend the cost field to the FIRST major-water hex it can
+// reach, returning the hexes to append (excluding start), or null if major
+// water isn't reachable from here yet (D undefined / no descent).
+function descendToWater(D, isMajor, start, occupied) {
+  if (D.get(axialKey(start.q, start.r)) === undefined) return null;
+  const ext = [];
+  const seen = new Set(occupied);
+  let cur = start;
+  for (let step = 0; step < 2000; step++) {
+    let best = null; let bestD = D.get(axialKey(cur.q, cur.r)) ?? Infinity; let water = null;
+    for (const n of neighbors(cur.q, cur.r)) {
+      if (isMajor(n.q, n.r)) { water = { q: n.q, r: n.r }; break; }
+      const nk = axialKey(n.q, n.r); const nd = D.get(nk);
+      if (nd === undefined || seen.has(nk)) continue;
+      if (nd < bestD) { bestD = nd; best = { q: n.q, r: n.r }; }
+    }
+    if (water) { ext.push(water); return ext; }
+    if (!best) return null;
+    ext.push(best); seen.add(axialKey(best.q, best.r)); cur = best;
+  }
+  return null;
+}
+
+// From `start`, ascend the cost field (inland, toward higher cost) to the FIRST
+// Mountains hex, returning the hexes to prepend (mountain-first ... nearest
+// start), or null if no mountain is reachable this way yet (edge/unrevealed).
+function ascendToMountain(D, T, start, occupied) {
+  const ext = [];
+  const seen = new Set(occupied);
+  let cur = start;
+  for (let step = 0; step < 2000; step++) {
+    let best = null; let bestD = -Infinity;
+    for (const n of neighbors(cur.q, cur.r)) {
+      const nk = axialKey(n.q, n.r); const nd = D.get(nk);
+      if (nd === undefined || seen.has(nk)) continue; // unplaced or visited
+      if (nd > bestD) { bestD = nd; best = { q: n.q, r: n.r }; }
+    }
+    if (!best) return null;
+    ext.push(best); seen.add(axialKey(best.q, best.r)); cur = best;
+    if (T(best.q, best.r) === "Mountains") { ext.reverse(); return ext; }
+  }
+  return null;
+}
+
+/**
+ * Build a manual (GM-drawn) river from an ordered chain of hexes. Orients it so
+ * path[0] is the upstream/source end and the last hex is the downstream/mouth
+ * end (reversing the drawn order if it clearly runs mouth→source), and marks
+ * which ends are still OPEN — i.e. not yet anchored to a mountain (upstream) or
+ * to water (downstream). computeRivers completes those open ends as terrain
+ * allows. The drawn hexes themselves are never moved.
+ * @param {string} id stable unique id for this river
+ * @param {{q:number,r:number}[]} drawnPath ordered, connected chain of hexes
+ * @param {Map<string,string>} terrainByKey axialKey -> terrain
+ * @returns {{ id:string, manual:true, source:{q,r}, path:{q,r}[], upstreamOpen:boolean, downstreamOpen:boolean, reachedWater:boolean }}
+ */
+export function buildManualRiver(id, drawnPath, terrainByKey) {
+  const T = (q, r) => terrainByKey.get(axialKey(q, r));
+  let path = drawnPath.map((p) => ({ q: p.q, r: p.r }));
+  const firstT = T(path[0].q, path[0].r);
+  const lastT = T(path[path.length - 1].q, path[path.length - 1].r);
+  // Orient upstream-first: reverse if the tail is the mountain end or the head
+  // is the water end. A plain mid-land segment keeps the drawn order.
+  if (lastT === "Mountains" || WATER.has(firstT)) path = path.reverse();
+  const head = path[0];
+  const tail = path[path.length - 1];
+  const upstreamOpen = T(head.q, head.r) !== "Mountains";
+  const downstreamOpen = !WATER.has(T(tail.q, tail.r));
+  return { id, manual: true, source: { q: head.q, r: head.r }, path, upstreamOpen, downstreamOpen, reachedWater: !downstreamOpen };
 }

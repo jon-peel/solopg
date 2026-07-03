@@ -11,7 +11,7 @@
 // its own terrain/POI art — these only label the menu.
 export const ACTION_GLYPH = {
   terrain: "🗺️", poi: "⭐", settlement: "🏠", hook: "🎣",
-  reserved: "·", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
+  river: "🏞️", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
 };
 export const TERRAIN_GLYPH = {
   Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️",
@@ -144,9 +144,9 @@ export function buildRadialModel(state) {
     submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
     leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
     leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
-    // Reserved — no action lives here yet (a future feature, e.g. travel,
-    // may claim it).
-    leaf("reserved", ACTION_GLYPH.reserved, "—", { enabled: false, reason: "Reserved for a future feature" }),
+    // Draw a manual river starting from this hex: click hexes to trace its
+    // course; open ends auto-complete to a mountain source / the sea.
+    leaf("drawRiver", ACTION_GLYPH.river, "River"),
   ];
 }
 

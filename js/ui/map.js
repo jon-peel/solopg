@@ -44,6 +44,7 @@ let hoverKey = null; // axialKey of `hovered`, to skip redundant re-renders
 let lastPpm = null; // last pixels-per-mile emitted to onView (fire only on change)
 let hookTargets = new Set(); // axial keys "q,r" of open, unpinned hook destinations
 let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destinations
+let riverDraft = null; // in-progress manual river being drawn: [{q,r}, ...] | null
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -196,6 +197,7 @@ export function render() {
   //     at every zoom (a river is worth seeing even zoomed out), and drawn even
   //     across unexplored hexes so it visibly reaches the sea.
   drawRivers(minX, minY, maxX, maxY, margin);
+  drawRiverDraft(); // the manual river being traced (if any), on top
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
@@ -359,6 +361,36 @@ function drawRivers(minX, minY, maxX, maxY, margin) {
     }
     strokeSmoothPath(pts);
   }
+  ctx.restore();
+}
+
+/** Set (or clear) the in-progress manual river being traced; re-renders. */
+export function setRiverDraft(points) {
+  riverDraft = Array.isArray(points) && points.length ? points : null;
+  render();
+}
+
+// The manual river being drawn: a dashed bright line through the clicked hex
+// centres, with a dot on each point so the GM sees exactly what's captured.
+function drawRiverDraft() {
+  if (!riverDraft || !riverDraft.length) return;
+  const pts = riverDraft.map((p) => axialToPixel(p.q, p.r, HEX_SIZE));
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#bff0ff";
+  ctx.lineWidth = RIVER_WIDTH / camera.scale;
+  if (pts.length >= 2) {
+    ctx.setLineDash([6 / camera.scale, 4 / camera.scale]);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = "#bff0ff";
+  const rr = 3.2 / camera.scale;
+  for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, rr, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
 }
 
