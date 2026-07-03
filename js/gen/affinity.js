@@ -52,7 +52,7 @@ const DECAY = 0.9;
 // AFFINITY[neighbourTerrain][candidateTerrain] — additive. Diagonal (self) is
 // cranked ~2.5x a natural level for clean regions; a -999 is a hard forbid.
 const AFFINITY = {
-  Sea:       { Sea: 35, Swamp: 1, Plains: -1, Forest: -1.5, Hills: -2, Mountains: -3, Desert: -1.5, Lake: -999 },
+  Sea:       { Sea: 38, Swamp: 1, Plains: -1, Forest: -1.5, Hills: -2, Mountains: -3, Desert: -1.5, Lake: -999 },
   Lake:      { Lake: 18, Swamp: 1.4, Plains: 0.5, Forest: 0.5, Sea: -999 },
   Swamp:     { Swamp: 13, Lake: 1.2, Plains: 1, Forest: 1, Sea: 1, Desert: -2, Mountains: -2 },
   Plains:    { Plains: 20, Forest: 2.5, Hills: 2, Desert: 1, Swamp: 0.5, Mountains: -3, Lake: 0.3 },
