@@ -65,6 +65,15 @@ function settlementChildren(allowedSizes, hasSettlement) {
   return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes];
 }
 
+// River submenu: Draw always; Remove only when this hex lies on a GM-drawn
+// (manual) river — auto-generated rivers aren't individually removable.
+function riverChildren(manualRiverHere) {
+  return [
+    leaf("drawRiver", "🏞️", "Draw"),
+    ...(manualRiverHere ? [leaf("removeRiver", "🗑️", "Remove", { value: manualRiverHere, danger: true })] : []),
+  ];
+}
+
 // Hook submenu: gossip is heard only in a settlement; a found map / trail works
 // anywhere — so the parent is always enabled, only "Generate hook" gates.
 function hookChildren(canGossip) {
@@ -119,6 +128,7 @@ export function buildRadialModel(state) {
     placed = false, terrain = null, hasSettlement = false,
     allowedSizes = [], canGossip = false,
     poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
+    manualRiverHere = null,
   } = state || {};
 
   const needHex = { enabled: false, reason: "Place terrain on this hex first" };
@@ -144,9 +154,10 @@ export function buildRadialModel(state) {
     submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
     leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
     leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
-    // Draw a manual river starting from this hex: click hexes to trace its
-    // course; open ends auto-complete to a mountain source / the sea.
-    leaf("drawRiver", ACTION_GLYPH.river, "River"),
+    // River: Draw a manual river from this hex (click hexes to trace a course;
+    // open ends auto-complete to a mountain source / the sea), and Remove one
+    // that already passes through this hex.
+    submenu("river", ACTION_GLYPH.river, "River", {}, riverChildren(manualRiverHere)),
   ];
 }
 

@@ -17,7 +17,7 @@ const base = (over = {}) => ({
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "drawRiver"];
+const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "river"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -47,12 +47,15 @@ test("placed cell: build actions enabled; Generate stays enabled (Random child g
   assert.equal(byId(m, "generate").enabled, true);
 });
 
-test("Draw-river slot is always present and enabled (a river can start anywhere)", () => {
-  for (const placed of [false, true]) {
-    const r = byId(buildRadialModel(base({ placed, terrain: placed ? "Plains" : null })), "drawRiver");
-    assert.equal(r.id, "drawRiver");
-    assert.equal(r.enabled, true);
-  }
+test("River slot: always offers Draw; offers Remove only on a hex with a manual river", () => {
+  const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "river");
+  assert.equal(plain.kind, "submenu");
+  assert.deepEqual(plain.children.map((c) => c.id), ["drawRiver"]); // just Draw
+  const withRiver = byId(buildRadialModel(base({ placed: true, terrain: "Plains", manualRiverHere: "manual:0" })), "river");
+  const ids = withRiver.children.map((c) => c.id);
+  assert.deepEqual(ids, ["drawRiver", "removeRiver"]);
+  const rm = withRiver.children.find((c) => c.id === "removeRiver");
+  assert.equal(rm.value, "manual:0");
 });
 
 test("Generate submenu: Random (anchored) gates on placed; Small/Medium/Large/Huge always fill-empty", () => {

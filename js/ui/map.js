@@ -319,6 +319,7 @@ const RIVER_WIDTH = 3.4; // world px at scale 1 (before the /camera.scale divide
 // quadratic control point. Passes through the endpoints exactly and glides
 // through the interior, turning the hex-to-hex zig-zag into natural meanders.
 function strokeSmoothPath(pts) {
+  if (!pts || pts.length < 2) return; // nothing to draw (e.g. a 1-point middle segment)
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   if (pts.length === 2) {
@@ -359,8 +360,34 @@ function drawRivers(minX, minY, maxX, maxY, margin) {
     if (bMaxX < minX - margin || bMinX > maxX + margin || bMaxY < minY - margin || bMinY > maxY + margin) {
       continue;
     }
-    strokeSmoothPath(pts);
+    strokeRiver(pts, river);
   }
+  ctx.restore();
+}
+
+// Draw one river: solid, except a MANUAL river's still-open end(s) — not yet
+// anchored to a mountain source / the sea — render dashed to signal "this end
+// is unresolved; it'll complete as you explore".
+function strokeRiver(pts, river) {
+  if (!river.manual || (!river.upstreamOpen && !river.downstreamOpen)) { strokeSmoothPath(pts); return; }
+  const n = pts.length;
+  const cap = Math.min(4, Math.max(1, Math.floor(n / 2)));
+  const upEnd = river.upstreamOpen ? cap : 0; // pts[0..upEnd] is the open head
+  const downStart = river.downstreamOpen ? n - cap : n; // pts[downStart..] the open tail
+  if (upEnd >= downStart) { strokeDashed(pts); return; } // short / fully unresolved
+  strokeSmoothPath(pts.slice(upEnd, downStart)); // anchored middle, solid
+  if (river.upstreamOpen) strokeDashed(pts.slice(0, upEnd + 1));
+  if (river.downstreamOpen) strokeDashed(pts.slice(downStart - 1));
+}
+
+function strokeDashed(pts) {
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.setLineDash([7 / camera.scale, 5 / camera.scale]);
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
   ctx.restore();
 }
 

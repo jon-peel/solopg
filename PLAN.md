@@ -295,7 +295,13 @@ a draw mode where clicking hexes traces the course (consecutive clicks joined by
 so 2 clicks = "here to there", more = a winding course), a top-centre toolbar (Undo / Finish / Cancel;
 Enter / Esc / Ctrl-Z), and a dashed cyan preview (`map.js` `setRiverDraft`). Verified end-to-end in the
 browser: draw → Finish stores a `manual:` river that auto-completes both ends and renders as a normal
-blue river merged with the generated network; no console errors.
+blue river merged with the generated network; no console errors. **Follow-ups (real-play): (a) a
+still-OPEN end renders DASHED** (`map.js` `strokeRiver`/`strokeDashed` — the anchored middle solid, an
+unresolved end dashed, so "this end isn't connected yet" reads at a glance); **(b) Remove a manual
+river** — the radial "River" slot is a submenu (Draw always; Remove only when the hex lies on a manual
+river, keyed to its id), `onRemoveRiver` filters it out and re-derives (auto rivers unaffected).
+Both browser-verified (dashed render on an un-completable river; Remove takes a world 1→0 manual
+rivers).
 **Next: tune density/stream-order-width to taste (real-play); optional mountain ranges as features;
 then 3R.6b settlements v2 (river/coast size boosts now have real rivers to key off).**
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added

@@ -1335,6 +1335,24 @@ function refreshRiverDraft() {
   $("river-draw-bar").hidden = !riverDraftClicks;
 }
 
+// The id of a GM-drawn (manual) river passing through (q, r), or null. Only
+// manual rivers are individually removable — auto rivers are derived.
+function manualRiverIdAt(q, r) {
+  if (!current) return null;
+  const k = axialKey(q, r);
+  for (const rv of current.rivers || []) {
+    if (rv.manual && rv.path.some((p) => axialKey(p.q, p.r) === k)) return rv.id;
+  }
+  return null;
+}
+
+async function onRemoveRiver(id) {
+  if (!current || !id) return;
+  current.rivers = (current.rivers || []).filter((rv) => rv.id !== id);
+  await persistAndRefresh(); // syncRivers keeps the rest; auto rivers re-derive
+  logLine("River removed.");
+}
+
 function onStartDrawRiver() {
   if (!current || !selected) return;
   riverDraftClicks = [{ q: selected.q, r: selected.r }];
@@ -1406,6 +1424,7 @@ function onContextMenu({ q, r, clientX, clientY }) {
     terrains: Object.keys(TERRAIN_COLORS),
     pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
     dungeonSizes: dungeonSizes.map((s) => ({ label: s.size, value: s.size, title: s.blurb || "" })),
+    manualRiverHere: manualRiverIdAt(q, r),
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -1431,6 +1450,7 @@ function radialDispatch(id, value) {
     case "readMap": return onReadMap();
     case "followTrail": return onStartChain();
     case "drawRiver": return onStartDrawRiver();
+    case "removeRiver": return onRemoveRiver(value);
   }
 }
 
