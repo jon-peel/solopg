@@ -11,6 +11,9 @@ import {
   SIZE_ORDER,
   KNOWN_TERRAINS,
   biasKey,
+  isLargeSize,
+  suppressLargeSizes,
+  LARGE_SUPPRESSION,
 } from "../js/gen/terrain-profile.js";
 import { THEME_GLYPHS } from "../js/ui/poi-style.js";
 
@@ -51,6 +54,35 @@ test("Desert caps at Town; Mountains/Swamp at Hamlet", () => {
   assert.equal(TERRAIN_PROFILE.Desert.settlement.maxSize, "Town");
   assert.equal(TERRAIN_PROFILE.Mountains.settlement.maxSize, "Hamlet");
   assert.equal(TERRAIN_PROFILE.Swamp.settlement.maxSize, "Hamlet");
+});
+
+test("isLargeSize: Town/City are large; Village and smaller are not", () => {
+  assert.ok(isLargeSize("Town") && isLargeSize("City"));
+  for (const s of ["Thorp", "Hamlet", "Village"]) assert.ok(!isLargeSize(s), `${s} is not large`);
+});
+
+test("shipped settlement-size skews small: Town+City ~10% of weight, Thorp+Hamlet the majority (3R.6 B)", () => {
+  const table = JSON.parse(readFileSync("./data/settlement-size.json", "utf8"));
+  const w = Object.fromEntries(table.entries.map((e) => [e.value.size, e.weight]));
+  const total = Object.values(w).reduce((a, b) => a + b, 0);
+  const largeFrac = (w.Town + w.City) / total;
+  assert.ok(largeFrac >= 0.08 && largeFrac <= 0.12, `large weight fraction ${largeFrac} outside 8–12%`);
+  assert.ok((w.Thorp + w.Hamlet) / total > 0.5, "Thorp+Hamlet should be the majority");
+});
+
+test("suppressLargeSizes scales only large weights by factor**count, never mutating or zeroing", () => {
+  const base = cappedSizeTable(sizeTable, "City"); // full [Thorp..City], weight 1 each here
+  const snapshot = JSON.parse(JSON.stringify(base));
+  const out = suppressLargeSizes(base, 2);
+  const bw = Object.fromEntries(base.entries.map((e) => [e.value.size, e.weight ?? 1]));
+  const ow = Object.fromEntries(out.entries.map((e) => [e.value.size, e.weight ?? 1]));
+  for (const s of ["Thorp", "Hamlet", "Village"]) assert.equal(ow[s], bw[s], `${s} weight changed`);
+  for (const s of ["Town", "City"]) {
+    assert.ok(Math.abs(ow[s] - bw[s] * LARGE_SUPPRESSION ** 2) < 1e-9, `${s} not scaled`);
+    assert.ok(ow[s] > 0, `${s} weight must stay > 0 (clustering possible, just rare)`);
+  }
+  assert.deepEqual(base, snapshot); // input untouched
+  assert.equal(suppressLargeSizes(base, 0), base); // no-op at count 0
 });
 
 test("cappedSizeTable excludes oversized sizes and never mutates base", () => {

@@ -29,7 +29,7 @@ import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
 import { describeFeature, featureName, FEATURE_BUILD, FEATURE_TYPES } from "../gen/feature-detail.js";
 import { getRoomState, withRoomState } from "../world/dungeon-state.js";
-import { profileFor, SIZE_ORDER } from "../gen/terrain-profile.js";
+import { profileFor, SIZE_ORDER, isLargeSize } from "../gen/terrain-profile.js";
 import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
 import {
   listWorlds,
@@ -1042,6 +1042,22 @@ function neighborTerrains(q, r) {
   return out;
 }
 
+// Radius (in hexes ≈ a day's travel at 6 miles/hex) within which an existing
+// large settlement soft-suppresses a new one — see generateHex/suppressLargeSizes.
+const LARGE_SPACING = 4;
+
+// How many large (Town/City) settlements already sit within a day's travel of
+// (q,r). Feeds generateHex's nearbyLargeCount so big settlements rarely cluster.
+function nearbyLargeCount(q, r) {
+  let count = 0;
+  for (const c of hexDisc(q, r, LARGE_SPACING)) {
+    if (c.q === q && c.r === r) continue;
+    const h = getHex(current, c.q, c.r);
+    if (h && h.placed && h.settlement && h.settlement.present && isLargeSize(h.settlement.size)) count++;
+  }
+  return count;
+}
+
 // Rivers (Phase 3R.6): a DERIVED overlay recomputed from the currently-revealed
 // terrain (js/gen/rivers.js — major-water drainage over the elevation-free
 // affinity world). Recompute after every generation batch and on world load;
@@ -1293,6 +1309,7 @@ function buildRandomHex(tables, q, r, gen) {
     seed: current.seed,
     gen,
     neighborTerrains: neighborTerrains(q, r),
+    nearbyLargeCount: nearbyLargeCount(q, r),
   });
   hex.gen = gen;
   return hex;
@@ -1480,6 +1497,7 @@ async function onPlaceTerrain(terrain) {
       terrain,
       seed: current.seed,
       gen: 0,
+      nearbyLargeCount: nearbyLargeCount(q, r),
     });
     hex.gen = 0;
     addHex(current, hex);

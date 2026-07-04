@@ -13,33 +13,36 @@ import { TERRAIN_COLORS } from "../ui/terrain-style.js";
 export const SIZE_ORDER = ["Thorp", "Hamlet", "Village", "Town", "City"];
 
 // Settlement `chance` is the per-hex spawn probability at auto-generation
-// (rolled once in generateHex). Dialed down ~4x in 3R.6 (Settlements v2, step A)
-// so settlements read as occasional landmarks rather than a carpet — and so the
-// later river-town size boost stands out against a sparse baseline. Relative
-// habitability ordering is preserved (Plains most, Mountains/Swamp least).
+// (rolled once in generateHex). Dialed down in 3R.6 (Settlements v2): step A
+// cut the old 0.15–0.45 rates ~4x, step B took them to ~1/3 again ("very
+// sparse", ~11–16 settlements in a Huge fill) so settlements read as genuine
+// landmarks and the default map stays open for the later river-town step to
+// populate. Relative habitability ordering is preserved (Plains most,
+// Mountains/Swamp least). `maxSize` caps large sizes per terrain; the size mix
+// itself lives in data/settlement-size.json (skewed small in step B).
 export const TERRAIN_PROFILE = {
   Forest: {
-    settlement: { chance: 0.06, maxSize: "City" },
+    settlement: { chance: 0.02, maxSize: "City" },
     poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, camp: 2, landmark: 1, tower: 1 } },
   },
   Plains: {
-    settlement: { chance: 0.1, maxSize: "City" },
+    settlement: { chance: 0.033, maxSize: "City" },
     poi: { chance: 0.4, weights: { dungeon: 4, camp: 3, shrine: 2, landmark: 2, tower: 1 } },
   },
   Hills: {
-    settlement: { chance: 0.07, maxSize: "Town" },
+    settlement: { chance: 0.024, maxSize: "Town" },
     poi: { chance: 0.55, weights: { dungeon: 8, tower: 2, shrine: 1 } },
   },
   Mountains: {
-    settlement: { chance: 0.03, maxSize: "Hamlet" },
+    settlement: { chance: 0.01, maxSize: "Hamlet" },
     poi: { chance: 0.6, weights: { dungeon: 9, tower: 2, shrine: 1 } },
   },
   Swamp: {
-    settlement: { chance: 0.03, maxSize: "Hamlet" },
+    settlement: { chance: 0.01, maxSize: "Hamlet" },
     poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, landmark: 1 } },
   },
   Desert: {
-    settlement: { chance: 0.04, maxSize: "Town" },
+    settlement: { chance: 0.013, maxSize: "Town" },
     poi: { chance: 0.45, weights: { dungeon: 7, shrine: 3, landmark: 2, tower: 1 } },
   },
   Water: {
@@ -49,9 +52,47 @@ export const TERRAIN_PROFILE = {
 };
 
 const DEFAULT_PROFILE = {
-  settlement: { chance: 0.06, maxSize: "City" },
+  settlement: { chance: 0.02, maxSize: "City" },
   poi: { chance: 0.4, weights: { dungeon: 2, landmark: 1 } },
 };
+
+// "Large" settlements — bigger than a Village. These are the ones the user wants
+// SPARSE and non-clustering (a hex = 6 miles; big towns a day's travel = ~4
+// hexes apart, unless there's a reason like a river/coast — that reason lands in
+// the later rivers step). Villages and smaller cluster freely.
+export const LARGE_SIZES = new Set(["Town", "City"]);
+
+/** True if `size` is a large settlement (Town/City). */
+export function isLargeSize(size) {
+  return LARGE_SIZES.has(size);
+}
+
+// Per-neighbour weight multiplier applied to Town/City in a hex's size roll for
+// EACH already-placed large settlement within a day's travel. Soft, not a hard
+// cutoff: a big settlement near another very probably rolls smaller instead, but
+// the weight never reaches 0 — a cluster stays POSSIBLE, just rare (the user's
+// "anything possible, use probability to make it very rare"). ~0.15 per
+// neighbour → one big neighbour drops the ~10% large chance to ~1.5%.
+export const LARGE_SUPPRESSION = 0.15;
+
+/**
+ * Return a NEW settlement-size table with Town/City weights scaled down by
+ * LARGE_SUPPRESSION**nearbyLargeCount (small sizes untouched; never mutates the
+ * input; weights stay > 0 so large is always still possible). nearbyLargeCount
+ * 0 returns an equivalent table unchanged in effect.
+ * @param {object} sizeTable canonical settlement-size table (value.size)
+ * @param {number} nearbyLargeCount count of large settlements within a day's travel
+ */
+export function suppressLargeSizes(sizeTable, nearbyLargeCount) {
+  if (!nearbyLargeCount) return sizeTable;
+  const factor = LARGE_SUPPRESSION ** nearbyLargeCount;
+  return {
+    id: sizeTable.id,
+    entries: sizeTable.entries.map((e) =>
+      isLargeSize(e.value.size) ? { ...e, weight: (e.weight ?? 1) * factor } : e,
+    ),
+  };
+}
 
 // Which dungeon themes a terrain leans toward. Theme names must exist in
 // data/dungeon-theme.json (the canonical manifest). A terrain with no entry

@@ -858,14 +858,26 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 ### 3R.6 — Settlements v2
 - **Document current types** (Thorp/Hamlet/Village/Town/City) — done above.
 - **Spawn-density dial-down (step A) ✅ done** — the flat per-hex settlement `chance`
-  (`terrain-profile.js` `TERRAIN_PROFILE`) was cut ~4× (Plains 0.45→0.10, Hills 0.35→0.07,
-  Forest 0.30→0.06, Desert 0.20→0.04, Mountains/Swamp 0.15→0.03; DEFAULT 0.25→0.06), taking the
-  land settlement rate from ~30% to ~10% so settlements read as occasional landmarks and the coming
-  river-town size boost stands out. Pure-data change at the single `generateHex` choke-point; no
-  schema/migration (already-placed hexes keep their settlements, only new hexes use the lower
-  rates). Node suite `settlement-density.test.js` pins the dialed-down band + ties the constants to
-  real `generateHex` output. (The min-spacing / per-region cap below is a separate, still-open
-  step — do it only if the flat dial-down alone still clumps.)
+  (`terrain-profile.js` `TERRAIN_PROFILE`) was cut ~4× from the pre-3R.6 rates, taking the land
+  settlement rate from ~30% to ~10%. (Step B below took it further — see there for current numbers.)
+  Pure-data change at the single `generateHex` choke-point; no schema/migration. Node suite
+  `settlement-density.test.js` pins the band + ties the constants to real `generateHex` output.
+- **Sparser + size-tiered (step B) ✅ done** — after play feedback ("too many settlements; big ones
+  cluster"), chances went to "very sparse" (~1/3 again: Plains 0.033, Hills 0.024, Forest 0.02,
+  Desert 0.013, Mountains/Swamp 0.01; DEFAULT 0.02 — a Huge fill now ~7–16 settlements, down from
+  ~33–47), and big settlements were made sparse + non-clustering. Model (a hex = 6 miles; a day =
+  ~4 hexes): (1) `data/settlement-size.json` reskewed so Town+City is ~10% of the roll (was ~20%),
+  Thorp/Hamlet dominant; (2) **soft proximity suppression** — `generateHex` takes `nearbyLargeCount`
+  (existing Town/City within 4 hexes, from `app.js`'s `nearbyLargeCount(q,r)`, mirroring
+  `neighborTerrains`) and scales the Town/City size-roll weights by `LARGE_SUPPRESSION(0.15)**count`
+  (`suppressLargeSizes`/`isLargeSize`). A big settlement near another *usually* rolls smaller, but
+  the weight never reaches 0 — a cluster stays **possible, just rare** (the user's "anything
+  possible; use probability to make it very rare"). Nothing is demoted/removed post-hoc, and the rng
+  stream is unchanged (reweight only) so determinism/POI rolls hold. No schema/migration. Measured
+  end-to-end: 0–2 large per Huge fill, none within a day of each other. **Forward hook:** the rivers
+  step will pass a bypass (e.g. `nearbyLargeCount: 0` on-river) so clusters form where a river/coast
+  gives a reason. This SUPERSEDES the min-spacing / per-region-cap idea below (a soft probabilistic
+  penalty was preferred over a hard geometric cap).
 - **Add Keep/Fort** — a **martial variant** rather than a new size tier (recommend: a
   Village-equivalent "footprint" with a `kind: "keep"` overlay so sizing/roads treat
   it consistently). To confirm which band and whether it's a separate spawn or a

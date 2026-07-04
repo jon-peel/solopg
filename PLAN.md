@@ -308,22 +308,33 @@ BACK one level (or closes at the top) instead of only suppressing the OS menu (`
 `poi.chance` 0.2 → 0.03 (`terrain-profile.js`), so Sea/Lake tiles are almost always empty (still no
 dungeons/settlements on water). Right-click-back browser-verified (into a submenu → right-click back to
 top → right-click closes); no console errors.
-**3R.6 — Settlements v2 started: step A — spawn-density dial-down.** Auto-generation settlement
-chances (`terrain-profile.js` `TERRAIN_PROFILE`) were cut ~4× (Plains 0.45→0.10, Hills 0.35→0.07,
-Forest 0.30→0.06, Desert 0.20→0.04, Mountains/Swamp 0.15→0.03; DEFAULT 0.25→0.06), so settlements
-read as occasional landmarks (~30%→~10% of land hexes) and the coming river-town size boost stands
-out against a sparse baseline. Pure-data change at the single `generateHex` choke-point; no schema
-bump / migration (a generation-rule change — already-placed hexes keep their settlements, only new
-hexes use the lower rates). New node suite `settlement-density` pins the dialed-down band + ties the
-constants to real output. Remaining 3R.6: names, Keep/Fort martial overlay, min-spacing/per-region
-cap, hamlet clusters, and the river/coast size boosts — see `docs/plans/phase-3r-world-coherence.md`
-§3R.6. Optional aside: tune river density / stream-order width to taste, mountain ranges as features.
+**3R.6 — Settlements v2 started: steps A+B — sparser, size-tiered settlements.** **A** cut the
+auto-generation settlement chances (`terrain-profile.js` `TERRAIN_PROFILE`) ~4× from the pre-3R.6
+rates; **B** then took them to "very sparse" (~1/3 again: Plains 0.033, Hills 0.024, Forest 0.02,
+Desert 0.013, Mountains/Swamp 0.01; DEFAULT 0.02) — a Huge (r15) fill drops from ~33–47 settlements
+to ~7–16, so settlements read as genuine landmarks and the map stays open for the later river-town
+step. **B** also made *big* settlements sparse and non-clustering per the user's model (a hex = 6
+miles; big towns a day's travel = ~4 hexes apart, unless there's a reason — that reason arrives with
+rivers): (1) `data/settlement-size.json` reskewed so Town+City is ~10% of the roll (was ~20%),
+Thorp/Hamlet dominate; (2) a **soft proximity suppression** — `generateHex` takes a `nearbyLargeCount`
+(existing Town/City within 4 hexes, computed by `app.js`'s new `nearbyLargeCount(q,r)` helper,
+mirroring `neighborTerrains`) and multiplies the Town/City size-roll weights by
+`LARGE_SUPPRESSION(0.15)**count` (`terrain-profile.js` `suppressLargeSizes`/`isLargeSize`). Big
+settlements near another therefore *usually* roll smaller, but the weight never hits 0 — a cluster is
+possible, just rare. Nothing is demoted/removed after the fact ("leave the settlement alone; use
+probability"), and the rng stream is unchanged (reweight only) so determinism/POI rolls hold. No
+schema bump / migration (generation-rule + data change; placed hexes keep their settlements).
+Measured end-to-end: 0–2 large per Huge fill, none within a day of each other. Forward hook: the
+rivers step passes a bypass so on-river/coast clusters can form. Remaining 3R.6: names, Keep/Fort
+martial overlay, hamlet clusters, and the river/coast size boosts — see
+`docs/plans/phase-3r-world-coherence.md` §3R.6. Optional aside: tune river density / stream-order
+width to taste, mountain ranges as features.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 240 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v13. 244 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
