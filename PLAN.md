@@ -344,12 +344,20 @@ Constants tuned in the scratchpad (adjacency of near-river settlements ~doubled,
 seeds; 0 rivers lost, no path bloat); `app.js`'s `syncRivers` builds `settlementsByKey`. No schema
 change. `test/rivers.test.js` covers the pull, the bounded reach, inertness without settlements, and
 determinism.
+**Water flooding retune (play feedback — "some parts of the map are flooded"; `js/gen/affinity.js`).**
+Measured across 40 seeds, Sea averaged **31%** of the map (median 30%, up to **90%**) — 24/40 maps
+were >25% water. Sea's frontier spawn (`SPAWN.Sea` 2 → **0.8**) and self-affinity (`AFFINITY.Sea.Sea`
+38 → **28**) were dialed down so water is a **coastal minority** (now median **~10%**, mean ~14%, worst
+~40%; flooded maps 24→8 of 40) while oceans stay coherent and ~75% of maps still get a major sea (real
+coastlines + river sinks). Lake left as-is (already ~3%). All affinity properties hold (origin land,
+Sea/Lake forbid, Sea still conforms decisively, lone-hex <8%); a new `affinity.test.js` sweep guards
+the water mean/median so a future bump can't silently re-flood the world.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 248 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v13. 249 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

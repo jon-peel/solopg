@@ -349,6 +349,13 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   old worlds right now).
 
 ### 3R.4 — Water v2: fresh vs salt, coastlines ✅ done
+> **Note (post-v13):** the continent-gate coastline mechanics below were part of the
+> elevation-era design; the v13 terrain rewrite folded Sea/Lake into the neighbour-affinity
+> oracle (`js/gen/affinity.js`). A later **flooding retune** (play feedback — Sea was averaging
+> ~31% of the map, up to 90%) cut Sea's spawn (`SPAWN.Sea` 2→0.8) and self-affinity
+> (`AFFINITY.Sea.Sea` 38→28), bringing water to a coastal minority (~10% median, worst ~40%;
+> flooded maps 24→8 of 40) while keeping coherent oceans on ~75% of maps. Guarded by an
+> `affinity.test.js` water-fraction sweep.
 - Split **Water → Lake (fresh) + Sea (salt)** as done — confirmed "Lake"/"Sea" over
   "Fresh"/"Salt". Implemented as **two full terrain values**, not a `Water` + subtype
   field: reading every consumer showed rendering (`terrain-style.js`, `terrain-art.js`)

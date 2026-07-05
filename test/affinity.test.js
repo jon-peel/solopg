@@ -78,6 +78,24 @@ test("area: a Lake is never adjacent to a Sea in a generated map (the forbid hol
   assert.equal(adjacent, 0, `expected no lake adjacent to sea, found ${adjacent}`);
 });
 
+test("area: water is a coastal minority, not a flood (Sea spawn dialed down)", () => {
+  // Sea used to average ~a third of the map (up to 90% on bad seeds); the spawn
+  // rate was cut so water is a coastal minority. Guard the mean/median across a
+  // representative seed sweep so a future bump can't silently re-flood the world.
+  const fracs = [];
+  for (let s = 0; s < 30; s++) {
+    const map = generateArea(s, 16);
+    let water = 0;
+    for (const t of map.values()) if (WATER_TERRAINS.has(t)) water++;
+    fracs.push(water / map.size);
+  }
+  fracs.sort((a, b) => a - b);
+  const mean = fracs.reduce((a, b) => a + b, 0) / fracs.length;
+  const median = fracs[fracs.length >> 1];
+  assert.ok(mean < 0.2, `mean water too high (re-flooded?): ${(100 * mean).toFixed(1)}%`);
+  assert.ok(median < 0.15, `median water too high: ${(100 * median).toFixed(1)}%`);
+});
+
 test("area: coherent (low lone-hex rate) and every terrain appears", () => {
   const counts = {}; let total = 0, lone = 0;
   for (let s = 0; s < 4; s++) {
