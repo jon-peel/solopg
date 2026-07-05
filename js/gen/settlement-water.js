@@ -14,7 +14,8 @@
 // town in the mountains, a great estuary port).
 
 import { SIZE_ORDER } from "./terrain-profile.js";
-import { neighbors, axialKey } from "../core/hexgeo.js";
+import { neighbors, axialKey, parseKey } from "../core/hexgeo.js";
+import { subRng } from "../core/rng.js";
 
 /** Move a size up `tiers` steps along SIZE_ORDER, capped at the largest (City). */
 export function raiseSize(size, tiers) {
@@ -47,6 +48,104 @@ export function settlementWaterContext(q, r, riverKeys, terrainByKey) {
     if (terrainByKey.get(nk) === "Sea") coast = true;
   }
   return { riverside, coast, estuary: riverside && coast };
+}
+
+// --- generate NEW settlements at water (3R.6) ------------------------------
+// Separate from the size boost below: water bodies SEED settlements. Scattered
+// small ones run ALONG a river's course; where a river MEETS the water (its
+// mouth on the sea or a big lake) is the "double whammy" — a City most of the
+// time; big lakes get a shore City, and even a small lake sometimes does.
+//
+// Deterministic + IDEMPOTENT: each hex is decided at most once (marked
+// `waterSeeded`), so the repeated syncRivers calls never duplicate, and a
+// settlement a GM deletes is not resurrected. Runs BEFORE applyWaterBoosts, so a
+// seeded river hamlet then also gets the +1 riverside bump.
+const RIVER_SETTLE_CHANCE = 0.06;   // per mid-course river hex -> a small settlement
+const RIVER_HAMLET_FRAC = 0.7;      // else a Village
+const MOUTH_CITY_CHANCE = 0.8;      // river mouth (meets major water) -> City, else Town
+const BIG_LAKE_SIZE = 12;           // a lake this big always earns a shore City
+const SMALL_LAKE_CITY_CHANCE = 0.3; // a smaller lake sometimes does
+const WATER = new Set(["Sea", "Lake"]);
+
+// Place (or promote an existing settlement up to) `size` at hex, once. Honours
+// the decided-flag so it never double-places or resurrects a deleted one.
+function seedAt(hex, size) {
+  if (!hex || WATER.has(hex.terrain) || hex.waterSeeded) return;
+  hex.waterSeeded = true;
+  const s = hex.settlement;
+  if (s && s.present) {
+    const base = s.baseSize ?? s.size;
+    if (SIZE_ORDER.indexOf(size) > SIZE_ORDER.indexOf(base)) s.baseSize = size; // promote
+    return;
+  }
+  hex.settlement = { present: true, size, baseSize: size };
+}
+
+/**
+ * Generate new settlements at water: scattered along rivers, a City at each river
+ * mouth (double whammy), and shore Cities on lakes (big always, small sometimes).
+ * MUTATES the hexes in `hexByKey`. Idempotent (see the note above).
+ * @param {Map<string,object>} hexByKey axialKey -> hex object
+ * @param {{path:{q:number,r:number}[]}[]} rivers world.rivers
+ * @param {Map<string,string>} terrainByKey axialKey -> terrain
+ * @param {number|string} seed world seed
+ */
+export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
+  // 1. Water bodies (connected Sea/Lake) — size, sea-or-lake, land shore keys.
+  const bodyOf = new Map(), size = new Map(), isSea = new Map(), shore = new Map(), canon = new Map();
+  let bid = 0;
+  for (const [key, hex] of hexByKey) {
+    if (!WATER.has(hex.terrain) || bodyOf.has(key)) continue;
+    const stack = [key]; bodyOf.set(key, bid); let n = 0; const sh = new Set(); let mn = key;
+    isSea.set(bid, hex.terrain === "Sea");
+    while (stack.length) {
+      const k = stack.pop(); n++; if (k < mn) mn = k;
+      const { q, r } = parseKey(k);
+      for (const nb of neighbors(q, r)) {
+        const nk = axialKey(nb.q, nb.r); const nh = hexByKey.get(nk);
+        if (!nh) continue;
+        if (WATER.has(nh.terrain)) { if (!bodyOf.has(nk)) { bodyOf.set(nk, bid); stack.push(nk); } }
+        else sh.add(nk);
+      }
+    }
+    size.set(bid, n); shore.set(bid, sh); canon.set(bid, mn); bid++;
+  }
+
+  // 2. River mouths (double whammy): each river's tail, if it meets water -> City.
+  const mouthKeys = new Set();
+  for (const rv of rivers || []) {
+    const path = rv && rv.path;
+    if (!path || !path.length) continue;
+    const tail = path[path.length - 1];
+    if (!neighbors(tail.q, tail.r).some((nb) => WATER.has(terrainByKey.get(axialKey(nb.q, nb.r))))) continue;
+    mouthKeys.add(axialKey(tail.q, tail.r));
+    const city = subRng(seed, "mouthcity", tail.q, tail.r)() < MOUTH_CITY_CHANCE;
+    seedAt(hexByKey.get(axialKey(tail.q, tail.r)), city ? "City" : "Town");
+  }
+
+  // 3. Scattered settlements along the river course (mouths already handled).
+  for (const rv of rivers || []) {
+    for (const p of rv.path || []) {
+      const k = axialKey(p.q, p.r);
+      if (mouthKeys.has(k)) continue;
+      if (subRng(seed, "riversettle", p.q, p.r)() >= RIVER_SETTLE_CHANCE) continue;
+      const sz = subRng(seed, "riversize", p.q, p.r)() < RIVER_HAMLET_FRAC ? "Hamlet" : "Village";
+      seedAt(hexByKey.get(k), sz);
+    }
+  }
+
+  // 4. Lake shore Cities — big lakes always, small lakes sometimes (sea handled
+  //    only via river mouths, above, so we don't carpet the coast).
+  for (const [id, sh] of shore) {
+    if (isSea.get(id) || !sh.size) continue;
+    const shoreHexes = [...sh].map((k) => hexByKey.get(k)).filter((h) => h && !WATER.has(h.terrain));
+    if (!shoreHexes.length) continue;
+    const big = size.get(id) >= BIG_LAKE_SIZE;
+    if (!big && subRng(seed, "lakecity", canon.get(id))() >= SMALL_LAKE_CITY_CHANCE) continue;
+    const settled = shoreHexes.find((h) => h.settlement && h.settlement.present);
+    const target = settled || shoreHexes.sort((a, b) => (axialKey(a.coords.q, a.coords.r) < axialKey(b.coords.q, b.coords.r) ? -1 : 1))[0];
+    seedAt(target, "City");
+  }
 }
 
 /**

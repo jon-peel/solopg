@@ -24,7 +24,7 @@ import {
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
-import { applyWaterBoosts } from "../gen/settlement-water.js";
+import { applyWaterBoosts, seedWaterSettlements } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -1079,9 +1079,14 @@ function syncRivers(world) {
   // (a river must never disappear when more terrain is generated). New rivers
   // are pulled toward nearby settlements (see computeRivers' gravity note).
   world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : [], settlementsByKey);
-  // Civilisation follows water: bump settlements on/beside a river, on the coast,
-  // or at a river mouth. Idempotent (re-derived from each settlement's baseSize),
-  // so it never compounds across the repeated syncRivers calls.
+  // Civilisation follows water. First SEED new settlements at water — scattered
+  // along rivers, a City at each river mouth (double whammy), shore Cities on
+  // lakes — then BUMP every settlement by its river/coast context. Both are
+  // idempotent (a decided-flag / baseSize re-derivation), so the repeated
+  // syncRivers calls never duplicate or compound.
+  const hexByKey = new Map();
+  for (const h of placedHexes(world)) hexByKey.set(axialKey(h.coords.q, h.coords.r), h);
+  seedWaterSettlements(hexByKey, world.rivers, terrainByKey, world.seed);
   applyWaterBoosts(placedHexes(world), world.rivers, terrainByKey);
 }
 

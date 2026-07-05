@@ -390,12 +390,21 @@ terrain's normal maxSize (the water is the reason — a river-valley town, a gre
 `settlement.waterBoost` tag ("estuary"/"river"/"coast") shows in the panel ("… · on a river"). No
 schema change (additive fields, no migration per the no-back-compat directive). Measured on Huge fills:
 watered regions shift up ~a tier (Hamlets→Villages, the odd estuary City), landlocked seeds unchanged.
+**Water settlement GENERATION (3R.6, distinct from the boost above).** Water bodies now *seed NEW*
+settlements (`settlement-water.js` `seedWaterSettlements`, run by `syncRivers` before the boost):
+scattered **small settlements along a river's course** (`RIVER_SETTLE_CHANCE` per mid-course hex),
+a **City at each river MOUTH** where it meets the sea or a big lake (the "double whammy",
+`MOUTH_CITY_CHANCE` 0.8 → City else Town), and **shore Cities on lakes** (big lakes always ≥
+`BIG_LAKE_SIZE`; small lakes sometimes, `SMALL_LAKE_CITY_CHANCE`). Deterministic + **idempotent** via
+a per-hex `waterSeeded` decided-flag — the repeated `syncRivers` calls never duplicate, and a
+settlement a GM deletes is **not resurrected**. Measured: a Huge fill goes from ~14 to ~21
+settlements with **~4 Cities** (was ~0.8), all clustered at water; landlocked seeds barely change.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v14. 264 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v14. 268 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -477,7 +486,8 @@ package.json                    dev-only: "type":"module", scripts: test / serve
                     nearest major water body, sources in deep-interior mountains; append-only + manual rivers
                     + settlement gravity: new traces bend toward nearby towns, size-weighted)
           settlement-name.js (settlementName — derived seeded place-name; terrain-flavored, martial for keeps)
-          settlement-water.js (applyWaterBoosts — river/coast/estuary settlement size boost; idempotent via baseSize)
+          settlement-water.js (applyWaterBoosts — river/coast/estuary size boost; seedWaterSettlements —
+                    generate settlements along rivers + City at mouths/lakes; idempotent via baseSize/waterSeeded)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")

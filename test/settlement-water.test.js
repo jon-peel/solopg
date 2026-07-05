@@ -5,6 +5,7 @@ import {
   waterBoostTiers,
   settlementWaterContext,
   applyWaterBoosts,
+  seedWaterSettlements,
 } from "../js/gen/settlement-water.js";
 import { axialKey, neighbors } from "../js/core/hexgeo.js";
 
@@ -70,4 +71,67 @@ test("applyWaterBoosts: a settlement that loses its water context reverts to bas
   applyWaterBoosts([hex], [], terr); // no rivers now -> back to base Hamlet
   assert.equal(hex.settlement.size, "Hamlet");
   assert.equal(hex.settlement.waterBoost, null);
+});
+
+// --- seedWaterSettlements: generate NEW settlements at water ----------------
+
+test("seedWaterSettlements: a river mouth on the sea seeds a City/Town (double whammy)", () => {
+  const hexByKey = new Map([
+    [axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains" }], // land tail = mouth
+    [axialKey(1, 0), { coords: { q: 1, r: 0 }, terrain: "Sea" }],
+  ]);
+  const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(1, 0), "Sea"]]);
+  const rivers = [{ path: [{ q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }] }];
+  seedWaterSettlements(hexByKey, rivers, terr, "s");
+  const mouth = hexByKey.get(axialKey(0, 0));
+  assert.ok(mouth.settlement && mouth.settlement.present, "mouth should be settled");
+  assert.ok(["City", "Town"].includes(mouth.settlement.size), `mouth size ${mouth.settlement.size}`);
+  assert.ok(mouth.waterSeeded);
+});
+
+test("seedWaterSettlements: a big lake earns a shore City", () => {
+  const hexByKey = new Map();
+  const terr = new Map();
+  for (let q = 0; q < 4; q++) for (let r = 0; r < 4; r++) { // 16-hex lake (>= BIG_LAKE_SIZE)
+    hexByKey.set(axialKey(q, r), { coords: { q, r }, terrain: "Lake" });
+    terr.set(axialKey(q, r), "Lake");
+  }
+  hexByKey.set(axialKey(-1, 0), { coords: { q: -1, r: 0 }, terrain: "Plains" }); // its only land shore
+  terr.set(axialKey(-1, 0), "Plains");
+  seedWaterSettlements(hexByKey, [], terr, "s");
+  const shore = hexByKey.get(axialKey(-1, 0));
+  assert.ok(shore.settlement && shore.settlement.present && shore.settlement.size === "City", "big lake -> shore City");
+});
+
+test("seedWaterSettlements: scatters small settlements along a river's course", () => {
+  const hexByKey = new Map();
+  const terr = new Map();
+  const path = [];
+  for (let q = 0; q < 100; q++) { // a long dry river (no water sink -> all mid-course)
+    hexByKey.set(axialKey(q, 0), { coords: { q, r: 0 }, terrain: "Plains" });
+    terr.set(axialKey(q, 0), "Plains");
+    path.push({ q, r: 0 });
+  }
+  seedWaterSettlements(hexByKey, [{ path }], terr, "s");
+  const settled = [...hexByKey.values()].filter((h) => h.settlement && h.settlement.present);
+  assert.ok(settled.length > 0 && settled.length < 100, `expected some scattered settlements, got ${settled.length}`);
+  for (const h of settled) assert.ok(["Hamlet", "Village"].includes(h.settlement.size), `course size ${h.settlement.size}`);
+});
+
+test("seedWaterSettlements: idempotent, and a deleted seed is not resurrected", () => {
+  const make = () => new Map([
+    [axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains" }],
+    [axialKey(1, 0), { coords: { q: 1, r: 0 }, terrain: "Sea" }],
+  ]);
+  const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(1, 0), "Sea"]]);
+  const rivers = [{ path: [{ q: -1, r: 0 }, { q: 0, r: 0 }] }];
+  const hbk = make();
+  seedWaterSettlements(hbk, rivers, terr, "s");
+  const first = hbk.get(axialKey(0, 0)).settlement.size;
+  seedWaterSettlements(hbk, rivers, terr, "s"); // re-run: unchanged
+  assert.equal(hbk.get(axialKey(0, 0)).settlement.size, first);
+  // GM deletes it -> re-run must not resurrect (decided-flag)
+  hbk.get(axialKey(0, 0)).settlement = { present: false };
+  seedWaterSettlements(hbk, rivers, terr, "s");
+  assert.equal(hbk.get(axialKey(0, 0)).settlement.present, false, "deleted seed stays deleted");
 });

@@ -923,6 +923,14 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   sync, so it never compounds. May exceed the terrain maxSize (water is the reason). A `waterBoost` tag
   surfaces in the panel. Node-tested. (Delivered as deterministic tier bumps rather than a "City chance"
   roll — cleaner and idempotent; a seeded probability is a one-liner if preferred.)
+- **Water settlement GENERATION ✅ done** (the "generate NEW settlements, not just boost" half) —
+  `settlement-water.js` `seedWaterSettlements`, run by `syncRivers` before the boost: scattered small
+  settlements **along a river's course**, a **City at each river mouth** (double whammy — where it
+  meets the sea or a big lake), and **shore Cities on lakes** (big always, small sometimes).
+  Deterministic + idempotent via a per-hex `waterSeeded` decided-flag (no duplicates on the repeated
+  syncs; a GM-deleted seed isn't resurrected). Measured: ~14→~21 settlements and ~4 Cities per Huge
+  fill (was ~0.8), all clustered at water. Node-tested. Tunable: `RIVER_SETTLE_CHANCE`,
+  `MOUTH_CITY_CHANCE`, `BIG_LAKE_SIZE`, `SMALL_LAKE_CITY_CHANCE`.
 - Schema: no bump needed — `kind`, `baseSize`, `waterBoost` are all additive fields (no migration, per
   the no-back-compat directive); `name` is derived, not stored.
 
