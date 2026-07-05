@@ -464,7 +464,7 @@ function drawDetailMarkers(cx, cy, hex) {
   if (hex.settlement && hex.settlement.present) {
     const sx = cx + off;
     const sy = cy - off;
-    const url = settlementArt(hex.settlement.size);
+    const url = settlementArt(hex.settlement.size, hex.settlement.kind);
     const img = url ? tileImage(url) : null;
     if (img && img.complete && img.naturalWidth > 0) {
       const side = HEX_SIZE * 1.0;
@@ -473,7 +473,7 @@ function drawDetailMarkers(cx, cy, hex) {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = `${size}px sans-serif`;
-      drawMarker(sx, sy, settlementMark(hex.settlement.size), size, "#fff");
+      drawMarker(sx, sy, settlementMark(hex.settlement.size, hex.settlement.kind), size, "#fff");
     }
   }
 
@@ -521,7 +521,7 @@ function drawSimplifiedMarkers(cx, cy, hex) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
-    drawMarker(cx, cy, settlementMark(hex.settlement.size), size, "#fff");
+    drawMarker(cx, cy, settlementMark(hex.settlement.size, hex.settlement.kind), size, "#fff");
   }
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
   if (pois.length) {

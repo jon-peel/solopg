@@ -58,16 +58,23 @@ test("Desert caps at Town; Mountains/Swamp at Hamlet", () => {
 
 test("isLargeSize: Town/City are large; Village and smaller are not", () => {
   assert.ok(isLargeSize("Town") && isLargeSize("City"));
-  for (const s of ["Thorp", "Hamlet", "Village"]) assert.ok(!isLargeSize(s), `${s} is not large`);
+  for (const s of ["Hamlet", "Village"]) assert.ok(!isLargeSize(s), `${s} is not large`);
 });
 
-test("shipped settlement-size skews small: Town+City ~10% of weight, Thorp+Hamlet the majority (3R.6 B)", () => {
+test("Thorp is gone; Hamlet is the smallest tier", () => {
+  assert.equal(SIZE_ORDER[0], "Hamlet");
+  assert.ok(!SIZE_ORDER.includes("Thorp"));
+  const table = JSON.parse(readFileSync("./data/settlement-size.json", "utf8"));
+  assert.ok(!table.entries.some((e) => e.value.size === "Thorp"), "no Thorp in the size table");
+});
+
+test("shipped settlement-size skews small: Town+City ~10% of weight, Hamlet the majority (3R.6)", () => {
   const table = JSON.parse(readFileSync("./data/settlement-size.json", "utf8"));
   const w = Object.fromEntries(table.entries.map((e) => [e.value.size, e.weight]));
   const total = Object.values(w).reduce((a, b) => a + b, 0);
   const largeFrac = (w.Town + w.City) / total;
   assert.ok(largeFrac >= 0.08 && largeFrac <= 0.12, `large weight fraction ${largeFrac} outside 8–12%`);
-  assert.ok((w.Thorp + w.Hamlet) / total > 0.5, "Thorp+Hamlet should be the majority");
+  assert.ok(w.Hamlet / total > 0.5, "Hamlet (smallest tier) should be the majority");
 });
 
 test("suppressLargeSizes scales only large weights by factor**count, never mutating or zeroing", () => {
@@ -89,7 +96,7 @@ test("cappedSizeTable excludes oversized sizes and never mutates base", () => {
   const snapshot = JSON.parse(JSON.stringify(sizeTable));
   const capped = cappedSizeTable(sizeTable, "Town");
   const sizes = capped.entries.map((e) => e.value.size);
-  assert.deepEqual(sizes, ["Thorp", "Hamlet", "Village", "Town"]);
+  assert.deepEqual(sizes, ["Hamlet", "Village", "Town"]);
   assert.ok(!sizes.includes("City"));
   assert.deepEqual(sizeTable, snapshot); // unchanged
 });

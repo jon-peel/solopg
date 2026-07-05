@@ -49,7 +49,10 @@ import { axialKey } from "../core/hexgeo.js";
 // the new roll. Rivers (3R.6) are a DERIVED overlay recomputed from the revealed
 // terrain (js/gen/rivers.js — major-water drainage, no elevation) into
 // `world.rivers[]`; no schema change (same `{id, source, path, ...}` shape).
-export const SCHEMA_VERSION = 13;
+// v14: the Thorp size tier was dropped (near-identical to Hamlet); a settlement
+// can now carry a martial `kind: "keep"` (fortified site, any size). Migration
+// remaps old Thorp settlements to Hamlet; `kind` is additive (absent = normal).
+export const SCHEMA_VERSION = 14;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

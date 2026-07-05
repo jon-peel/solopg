@@ -8,7 +8,7 @@ import { mulberry32 } from "../js/core/rng.js";
 
 const FULL_SIZE = {
   id: "settlement-size",
-  entries: ["Thorp", "Hamlet", "Village", "Town", "City"].map((size) => ({
+  entries: ["Hamlet", "Village", "Town", "City"].map((size) => ({
     value: { size },
   })),
 };

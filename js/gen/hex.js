@@ -72,6 +72,12 @@ export function generateHex(tables, rng, opts = {}) {
       const sizeTable = capped && suppressLargeSizes(capped, opts.nearbyLargeCount ?? 0);
       if (sizeTable) {
         settlement = { present: true, size: rollTable(sizeTable, rng).value.size };
+        // Martial KEEP overlay (terrain-biased, rare). Rolled from its own
+        // sub-stream so it never shifts the main rng / downstream POI rolls.
+        const keepChance = profile.settlement.keepChance ?? 0;
+        if (keepChance > 0 && subRng(opts.seed ?? 0, "keep", coords.q, coords.r, opts.gen ?? 0)() < keepChance) {
+          settlement.kind = "keep";
+        }
       }
     }
   }

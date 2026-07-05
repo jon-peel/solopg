@@ -398,7 +398,9 @@ export function renderSelectionPanel(model) {
     if (hex.settlement && hex.settlement.present) {
       const div = document.createElement("div");
       div.className = "log-line";
-      div.textContent = `Settlement: ${hex.settlement.size}`;
+      div.textContent = hex.settlement.kind === "keep"
+        ? `Settlement: ${hex.settlement.size} — Keep (fortified)`
+        : `Settlement: ${hex.settlement.size}`;
       sel.appendChild(div);
     }
     renderPoiSection(sel, hex, model);

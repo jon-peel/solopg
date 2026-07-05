@@ -141,6 +141,16 @@ test("migrateWorld upgrades v6 -> v7: stamps the version, preserves hex annotati
   assert.equal(w.hexes["0,0"].note, "Toll bridge; the reeve is a smuggler.");
 });
 
+test("migrateWorld upgrades v13 -> v14: Thorp settlements become Hamlet", () => {
+  const v13 = { ...v2World(), schemaVersion: 13 };
+  v13.hexes["0,0"].settlement = { present: true, size: "Thorp" };
+  v13.hexes["1,0"] = { key: "1,0", coords: { q: 1, r: 0 }, placed: true, terrain: "Plains", settlement: { present: true, size: "City" }, pois: [] };
+  const w = migrateWorld(v13);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION);
+  assert.equal(w.hexes["0,0"].settlement.size, "Hamlet", "Thorp remapped to Hamlet");
+  assert.equal(w.hexes["1,0"].settlement.size, "City", "other sizes untouched");
+});
+
 test("hex name/note round-trip through export/import", () => {
   const world = createWorld({ name: "Annotated", seed: 1 });
   world.hexes["1,-2"] = { key: "1,-2", coords: { q: 1, r: -2 }, placed: true, terrain: "Hills", pois: [], name: "Greywatch", note: "lookout" };

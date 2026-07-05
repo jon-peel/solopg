@@ -93,9 +93,9 @@ test("open water never auto-generates a settlement", () => {
 // nearbyLargeCount softly suppresses a hex rolling large — same rng stream, only
 // the size-table weights change, so the SAME forced size roll yields a large
 // size with no big neighbours and a small one when big settlements are near.
-// Capped Plains table [Thorp16,Hamlet12,Village8,Town3,City1] (total 40): a size
-// draw of u=0.95 → target 38.0 → Town (large). At count 2 the Town/City weights
-// are ×0.15^2, total ≈ 36.09 → target 34.29 → Village (small).
+// Capped Plains table [Hamlet22,Village13,Town3,City1] (total 39): a size draw of
+// u=0.95 → target 37.05 → Town (large). At count 2 the Town/City weights are
+// ×0.15^2, total ≈ 35.09 → target 33.3 → Village (small).
 test("nearbyLargeCount suppresses large sizes without shifting the rng stream", () => {
   const tables = makeTables();
   // forced: presence passes (0.0 < chance), size draw 0.95, POI absent (0.99).
@@ -105,4 +105,32 @@ test("nearbyLargeCount suppresses large sizes without shifting the rng stream", 
   assert.ok(isLargeSize(near0.settlement.size));
   assert.equal(near2.settlement.size, "Village");
   assert.ok(!isLargeSize(near2.settlement.size));
+});
+
+// --- martial Keep overlay (kind) -------------------------------------------
+// The keep roll is a separate sub-stream keyed by coords, so it varies across
+// hexes; force a settlement present and sweep coords to sample the rate.
+function keepRateAmongPresent(tables, terrain, n) {
+  let keep = 0, present = 0;
+  for (let s = 0; s < n; s++) {
+    const hex = generateHex(tables, forced([0.0, 0.1, 0.99]), opts({ terrain, key: `${s},0`, coords: { q: s, r: 0 } }));
+    if (hex.settlement.present) { present++; if (hex.settlement.kind === "keep") keep++; }
+  }
+  return present ? keep / present : 0;
+}
+
+test("a settlement can be a martial Keep — terrain-biased, only when present", () => {
+  const tables = makeTables();
+  const hills = keepRateAmongPresent(tables, "Hills", 2000);   // keepChance 0.35
+  const plains = keepRateAmongPresent(tables, "Plains", 2000); // keepChance 0.10
+  assert.ok(Math.abs(hills - 0.35) < 0.06, `Hills keep rate ${hills}`);
+  assert.ok(Math.abs(plains - 0.1) < 0.05, `Plains keep rate ${plains}`);
+  assert.ok(hills > plains, "frontier Hills fortify more than heartland Plains");
+});
+
+test("no keep (or kind) when no settlement is present", () => {
+  const tables = makeTables();
+  const none = generateHex(tables, forced([0.99]), opts({ terrain: "Plains" })); // presence fails
+  assert.equal(none.settlement.present, false);
+  assert.equal(none.settlement.kind, undefined);
 });

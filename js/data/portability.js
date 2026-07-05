@@ -172,5 +172,13 @@ export function migrateWorld(data) {
     data.rivers = [];
     data.schemaVersion = 13;
   }
+  if (data.schemaVersion < 14) {
+    // Thorp tier dropped — remap any Thorp settlement to Hamlet (the new
+    // smallest). `kind` (keep/fort) is additive, nothing to backfill.
+    for (const hex of Object.values(data.hexes || {})) {
+      if (hex.settlement && hex.settlement.size === "Thorp") hex.settlement.size = "Hamlet";
+    }
+    data.schemaVersion = 14;
+  }
   return data;
 }
