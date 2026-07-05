@@ -375,6 +375,10 @@ synchronously. Shown in the panel ("Settlement: Brackholt (Town)") and on the ma
 (auto-labelling every town cluttered the map — a GM's explicit `hex.name` still labels always).
 `panel.js` gets `seed` via the selection model; `map.js` uses `world.seed`. No schema change.
 Node-tested (determinism, shape, keep/terrain flavor, regen).
+**Settled-tile rendering (play feedback, done in small steps).** At the detail zoom a settled tile
+now **skips the terrain motif** and draws its **settlement icon big and centred** (the `HEX_SIZE·1.9`
+footprint the terrain motif used), instead of the terrain glyph + a small corner marker — terrain
+still reads from the fill colour; unsettled tiles keep their motif (`map.js`).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based

@@ -468,25 +468,25 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
   ctx.fillText(glyph, cx, cy);
 }
 
-// Detail tier: settlement sketch top-right (corner-marker fallback until the SVG
-// loads) + POI emoji badge bottom-right (glyph for 1, count for >1).
+// Detail tier: settlement sketch centered + enlarged (it stands in for the
+// terrain motif, which is skipped on settled tiles; corner-marker fallback until
+// the SVG loads) + POI emoji badge bottom-right (glyph for 1, count for >1).
 function drawDetailMarkers(cx, cy, hex) {
   const off = HEX_SIZE * 0.5;
   const size = HEX_SIZE * 0.44;
 
   if (hex.settlement && hex.settlement.present) {
-    const sx = cx + off;
-    const sy = cy - off;
     const url = settlementArt(hex.settlement.size, hex.settlement.kind);
     const img = url ? tileImage(url) : null;
     if (img && img.complete && img.naturalWidth > 0) {
-      const side = HEX_SIZE * 1.0;
-      ctx.drawImage(img, sx - side / 2, sy - side / 2, side, side);
+      const side = HEX_SIZE * 1.9; // same footprint the terrain motif used
+      ctx.drawImage(img, cx - side / 2, cy - side / 2, side, side);
     } else {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = `${size}px sans-serif`;
-      drawMarker(sx, sy, settlementMark(hex.settlement.size, hex.settlement.kind), size, "#fff");
+      const ms = HEX_SIZE * 0.85;
+      ctx.font = `${ms}px sans-serif`;
+      drawMarker(cx, cy, settlementMark(hex.settlement.size, hex.settlement.kind), ms, "#fff");
     }
   }
 
