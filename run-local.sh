@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BRANCH="claude/phase-3r-planning-hxufh8"
+BRANCH="claude/project-docs-review-r7vwlq"
 PORT="${1:-8000}"
 
 # Always operate on the repo this script lives in (so it serves index.html at root).
