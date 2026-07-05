@@ -4,8 +4,8 @@
 export const TERRAIN_COLORS = {
   Forest: "#2f6b3a",
   Plains: "#9bbd5a",
-  Hills: "#b08d4f",
-  Mountains: "#7d7f88",
+  Hills: "#8c9e71", // a grey-green midpoint of Plains + Mountains, so the
+  Mountains: "#7d7f88", // Mountains→Hills→Plains band reads as an elevation gradient
   Swamp: "#4b5f49",
   Desert: "#d9c27a",
   Lake: "#4a8fc2", // lighter/more turquoise — inland fresh water (Phase 3R.4)

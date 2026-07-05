@@ -951,10 +951,10 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   `manual` flag; re-stitch edges).
 - **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, optional
   region labels; legend + LOD updates. (Rivers' line rendering already shipped in 3R.5,
-  pulled forward on request — see that section.) **Requested tweak:** recolour
-  Hills as a blend of Mountains' grey and Plains' green (`terrain-style.js`
-  `TERRAIN_COLORS`) so the Mountains→Hills→Plains elevation band reads as a visual
-  gradient, reinforcing the 3R.3 biome-coherence work.
+  pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
+  Hills recoloured `#b08d4f` → **`#8c9e71`** (`terrain-style.js` `TERRAIN_COLORS`), a grey-green
+  midpoint of Mountains grey + Plains green, so the Mountains→Hills→Plains band reads as an
+  elevation gradient.
 - **Migration/compat** for pre-3R worlds. **Performance** pass (large-area gen stays
   snappy). Final **tuning** against the 3R.2 metrics.
 
