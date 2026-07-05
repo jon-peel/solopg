@@ -888,8 +888,8 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   gives a reason. This SUPERSEDES the min-spacing / per-region-cap idea below (a soft probabilistic
   penalty was preferred over a hard geometric cap).
 - **Keep/Fort + drop Thorp ✅ done** — Thorp (near-identical to Hamlet) was removed; Hamlet is now
-  the smallest tier (size table reweighted, `SIZE_ORDER` trimmed, schema **v13→v14** with a
-  Thorp→Hamlet migration). **Keep/Fort** landed as the recommended `kind: "keep"` **martial overlay**
+  the smallest tier (size table reweighted, `SIZE_ORDER` trimmed, schema **v13→v14**, stamp-only —
+  no back-compat migration, per the user's no-back-compat directive). **Keep/Fort** landed as the recommended `kind: "keep"` **martial overlay**
   (any size, not a new tier), rolled from its own `subRng` sub-stream conditional on the settlement
   roll and terrain-biased via `TERRAIN_PROFILE.settlement.keepChance` (Mountains 0.4 … Plains 0.1 →
   ~0–2 per Huge fill). New `keep.svg` sketch + rook (♜) marker; `settlementArt/Mark(size, kind)`;

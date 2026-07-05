@@ -173,11 +173,12 @@ export function migrateWorld(data) {
     data.schemaVersion = 13;
   }
   if (data.schemaVersion < 14) {
-    // Thorp tier dropped — remap any Thorp settlement to Hamlet (the new
-    // smallest). `kind` (keep/fort) is additive, nothing to backfill.
-    for (const hex of Object.values(data.hexes || {})) {
-      if (hex.settlement && hex.settlement.size === "Thorp") hex.settlement.size = "Hamlet";
-    }
+    // Thorp tier dropped + optional settlement.kind ("keep") added. Per the
+    // no-back-compat policy (see PLAN.md "No backward-compatibility burden"), we
+    // do NOT transform old data — just stamp the version. An old world with Thorp
+    // settlements still loads (Thorp renders via the fallback marker); if it looks
+    // off, start a fresh world. Restore a real migration here only once there's
+    // save data worth protecting.
     data.schemaVersion = 14;
   }
   return data;

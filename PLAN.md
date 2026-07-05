@@ -355,7 +355,8 @@ the water mean/median so a future bump can't silently re-flood the world.
 **Keep/Fort + Thorp removal (3R.6).** The **Thorp** tier was dropped (it was near-identical to
 Hamlet — now the smallest tier); `data/settlement-size.json` reweighted (Hamlet 22 / Village 13 /
 Town 3 / City 1, Town+City still ~10%), `SIZE_ORDER` trimmed, `thorp.svg` deleted, schema **v13→v14**
-with a migration remapping old Thorp settlements to Hamlet. **Keep/Fort** is a rare **martial overlay**
+(stamp-only — **no back-compat migration**, per the user directive; old worlds may show stale Thorps,
+the fix is "New World"). **Keep/Fort** is a rare **martial overlay**
 (`settlement.kind = "keep"`), NOT a size tier — a settlement of any size can be a keep. It's rolled
 from its own `subRng` sub-stream (never shifts the main rng / POI rolls), conditional on the
 already-rare settlement roll and terrain-biased by `TERRAIN_PROFILE.settlement.keepChance`
@@ -403,15 +404,18 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **14**) lives in `js/world/world.js`.
-  `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
-  load. Bump + add a migration step whenever the persisted shape changes.
-- **No backward-compatibility burden right now.** Pre-release, with no real worlds worth
-  preserving: don't write migrations for old export formats, don't worry about whether cached
-  IndexedDB data matches the current shape — a schema/shape change can just break old worlds; the
-  fix is to start a new one. Skip defensive fallbacks/back-compat shims for data shape changes for
-  the same reason. **Revisit this once there's real save data worth protecting** — this note
-  itself should be removed at that point.
+- **Schema version.** `SCHEMA_VERSION` (currently **14**) lives in `js/world/world.js`. Bump it
+  when the persisted shape changes — it marks the current shape and guards `importWorld` against
+  loading a *newer* world into an older app. `migrateWorld()` in `js/data/portability.js` runs on
+  import and load. Per the no-back-compat policy below, a schema bump gets only a **version STAMP**
+  (`if (data.schemaVersion < N) data.schemaVersion = N;`), **not** a data-transform step.
+- **⛔ NO backward-compatibility. (User directive — do not violate.)** Pre-release, the user would
+  rather **throw away every world and start over on every test** than carry back-compat code. So:
+  **do not write migration transforms**, `kind`/shape backfills, or defensive fallbacks for old
+  data shapes. When the persisted shape changes, bump `SCHEMA_VERSION` and stamp it — old worlds may
+  render wrong or break, and the fix is "New World". This is deliberate: such code is unneeded weight
+  right now. **The user will explicitly say when this changes** (once they have real save data worth
+  protecting); only then do we add real migrations and revisit this note.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
   [canonical schema](#canonical-table-schema). *Rules* (per-terrain settlement caps / POI weights,
   terrain coherence via elevation+moisture) are small pure JS consts/functions
