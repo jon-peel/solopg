@@ -14,35 +14,36 @@ export const SIZE_ORDER = ["Thorp", "Hamlet", "Village", "Town", "City"];
 
 // Settlement `chance` is the per-hex spawn probability at auto-generation
 // (rolled once in generateHex). Dialed down in 3R.6 (Settlements v2): step A
-// cut the old 0.15–0.45 rates ~4x, step B took them to ~1/3 again ("very
-// sparse", ~11–16 settlements in a Huge fill) so settlements read as genuine
-// landmarks and the default map stays open for the later river-town step to
-// populate. Relative habitability ordering is preserved (Plains most,
-// Mountains/Swamp least). `maxSize` caps large sizes per terrain; the size mix
-// itself lives in data/settlement-size.json (skewed small in step B).
+// cut the old 0.15–0.45 rates ~4x; step B took them to "very sparse"; a further
+// play-feedback retune (~30% again, with Desert cut hardest as harsh oasis-only
+// country) lands here — a Huge fill now holds ~5–11 settlements, so they read as
+// genuine landmarks and the map stays open for the later river-town step.
+// Habitability ordering: Plains most, then Hills/Forest, then Mountains/Swamp,
+// with Desert the least settled. `maxSize` caps large sizes per terrain; the
+// size mix itself lives in data/settlement-size.json (skewed small in step B).
 export const TERRAIN_PROFILE = {
   Forest: {
-    settlement: { chance: 0.02, maxSize: "City" },
+    settlement: { chance: 0.014, maxSize: "City" },
     poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, camp: 2, landmark: 1, tower: 1 } },
   },
   Plains: {
-    settlement: { chance: 0.033, maxSize: "City" },
+    settlement: { chance: 0.022, maxSize: "City" },
     poi: { chance: 0.4, weights: { dungeon: 4, camp: 3, shrine: 2, landmark: 2, tower: 1 } },
   },
   Hills: {
-    settlement: { chance: 0.024, maxSize: "Town" },
+    settlement: { chance: 0.016, maxSize: "Town" },
     poi: { chance: 0.55, weights: { dungeon: 8, tower: 2, shrine: 1 } },
   },
   Mountains: {
-    settlement: { chance: 0.01, maxSize: "Hamlet" },
+    settlement: { chance: 0.007, maxSize: "Hamlet" },
     poi: { chance: 0.6, weights: { dungeon: 9, tower: 2, shrine: 1 } },
   },
   Swamp: {
-    settlement: { chance: 0.01, maxSize: "Hamlet" },
+    settlement: { chance: 0.007, maxSize: "Hamlet" },
     poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, landmark: 1 } },
   },
   Desert: {
-    settlement: { chance: 0.013, maxSize: "Town" },
+    settlement: { chance: 0.006, maxSize: "Town" },
     poi: { chance: 0.45, weights: { dungeon: 7, shrine: 3, landmark: 2, tower: 1 } },
   },
   Water: {
@@ -52,7 +53,7 @@ export const TERRAIN_PROFILE = {
 };
 
 const DEFAULT_PROFILE = {
-  settlement: { chance: 0.02, maxSize: "City" },
+  settlement: { chance: 0.014, maxSize: "City" },
   poi: { chance: 0.4, weights: { dungeon: 2, landmark: 1 } },
 };
 

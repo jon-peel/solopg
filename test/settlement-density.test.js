@@ -15,23 +15,24 @@ import { TERRAIN_PROFILE, isLargeSize } from "../js/gen/terrain-profile.js";
 
 const LAND = ["Forest", "Plains", "Hills", "Mountains", "Swamp", "Desert"];
 
-test("every land settlement chance is very sparse (<= 0.04; Plains <= 0.033)", () => {
+test("every land settlement chance is very sparse (<= 0.03; Plains <= 0.022; Desert <= 0.008)", () => {
   for (const t of LAND) {
     const c = TERRAIN_PROFILE[t].settlement.chance;
-    assert.ok(c > 0 && c <= 0.04, `${t} chance ${c} outside the very-sparse band`);
+    assert.ok(c > 0 && c <= 0.03, `${t} chance ${c} outside the very-sparse band`);
   }
-  assert.ok(TERRAIN_PROFILE.Plains.settlement.chance <= 0.033);
+  assert.ok(TERRAIN_PROFILE.Plains.settlement.chance <= 0.022);
+  assert.ok(TERRAIN_PROFILE.Desert.settlement.chance <= 0.008, "Desert is oasis-only (harshest)");
   assert.equal(TERRAIN_PROFILE.Water.settlement, null); // still none on open water
 });
 
-test("habitability ordering preserved (Plains most, Mountains/Swamp least)", () => {
+test("habitability ordering: Plains most, Desert least (harsh), Mountains≈Swamp between", () => {
   const c = Object.fromEntries(LAND.map((t) => [t, TERRAIN_PROFILE[t].settlement.chance]));
   const maxLand = Math.max(...Object.values(c));
   const minLand = Math.min(...Object.values(c));
   assert.equal(c.Plains, maxLand, "Plains should be the most-settled land terrain");
-  assert.equal(c.Mountains, minLand);
-  assert.equal(c.Swamp, minLand);
-  assert.ok(c.Plains > c.Hills && c.Hills > c.Forest && c.Forest > c.Desert && c.Desert > c.Mountains);
+  assert.equal(c.Desert, minLand, "Desert should be the least-settled land terrain");
+  assert.equal(c.Mountains, c.Swamp);
+  assert.ok(c.Plains > c.Hills && c.Hills > c.Forest && c.Forest > c.Mountains && c.Mountains > c.Desert);
 });
 
 // --- Statistical: the constant drives real generateHex output. -------------

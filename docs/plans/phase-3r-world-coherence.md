@@ -863,9 +863,11 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   Pure-data change at the single `generateHex` choke-point; no schema/migration. Node suite
   `settlement-density.test.js` pins the band + ties the constants to real `generateHex` output.
 - **Sparser + size-tiered (step B) ✅ done** — after play feedback ("too many settlements; big ones
-  cluster"), chances went to "very sparse" (~1/3 again: Plains 0.033, Hills 0.024, Forest 0.02,
-  Desert 0.013, Mountains/Swamp 0.01; DEFAULT 0.02 — a Huge fill now ~7–16 settlements, down from
-  ~33–47), and big settlements were made sparse + non-clustering. Model (a hex = 6 miles; a day =
+  cluster"), chances went to "very sparse", then a further retune (still too many overall; too many
+  in desert) landed at Plains 0.022, Hills 0.016, Forest 0.014, Mountains/Swamp 0.007, Desert 0.006
+  (Desert now the harshest — oasis-only, ~0–1 settlements even across dozens of desert hexes;
+  DEFAULT 0.014) — a Huge fill now ~5–11 settlements, down from ~33–47 — and big settlements were
+  made sparse + non-clustering. Model (a hex = 6 miles; a day =
   ~4 hexes): (1) `data/settlement-size.json` reskewed so Town+City is ~10% of the roll (was ~20%),
   Thorp/Hamlet dominant; (2) **soft proximity suppression** — `generateHex` takes `nearbyLargeCount`
   (existing Town/City within 4 hexes, from `app.js`'s `nearbyLargeCount(q,r)`, mirroring

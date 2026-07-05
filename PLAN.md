@@ -310,10 +310,10 @@ dungeons/settlements on water). Right-click-back browser-verified (into a submen
 top → right-click closes); no console errors.
 **3R.6 — Settlements v2 started: steps A+B — sparser, size-tiered settlements.** **A** cut the
 auto-generation settlement chances (`terrain-profile.js` `TERRAIN_PROFILE`) ~4× from the pre-3R.6
-rates; **B** then took them to "very sparse" (~1/3 again: Plains 0.033, Hills 0.024, Forest 0.02,
-Desert 0.013, Mountains/Swamp 0.01; DEFAULT 0.02) — a Huge (r15) fill drops from ~33–47 settlements
-to ~7–16, so settlements read as genuine landmarks and the map stays open for the later river-town
-step. **B** also made *big* settlements sparse and non-clustering per the user's model (a hex = 6
+rates; **B** then took them to "very sparse" and a follow-up play-feedback retune landed at Plains
+0.022, Hills 0.016, Forest 0.014, Mountains/Swamp 0.007, Desert 0.006 (Desert harshest — oasis-only;
+DEFAULT 0.014) — a Huge (r15) fill drops from ~33–47 settlements to ~5–11, so settlements read as
+genuine landmarks and the map stays open for the later river-town step. **B** also made *big* settlements sparse and non-clustering per the user's model (a hex = 6
 miles; big towns a day's travel = ~4 hexes apart, unless there's a reason — that reason arrives with
 rivers): (1) `data/settlement-size.json` reskewed so Town+City is ~10% of the roll (was ~20%),
 Thorp/Hamlet dominate; (2) a **soft proximity suppression** — `generateHex` takes a `nearbyLargeCount`
