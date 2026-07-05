@@ -894,8 +894,13 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   roll and terrain-biased via `TERRAIN_PROFILE.settlement.keepChance` (Mountains 0.4 … Plains 0.1 →
   ~0–2 per Huge fill). New `keep.svg` sketch + rook (♜) marker; `settlementArt/Mark(size, kind)`;
   node-tested. Naming (keep vs fort vs watchtower) can come with the Names sub-step.
-- **Names** — settlements have none today. Add a seeded name generator (new tables),
-  reusing the existing hex `name`/notes plumbing where sensible.
+- **Names ✅ done** — every settlement gets an evocative seeded name
+  (`js/gen/settlement-name.js` `settlementName(seed, q, r, gen, {kind, terrain})`), **derived not
+  stored** (pure function of coords → no schema field; manual settlements named for free; regen
+  reshuffles). Prefix + terrain-flavored ending (Brackholt/Westercrag/Fenmoor), martial style for
+  keeps (Fort Marsh, Dun Keep), stutter-guarded. Element lists are JS consts (render path needs them
+  sync). Rendered as the default map label (GM `hex.name` still overrides) + panel line. Node-tested.
+  (Ended up NOT reusing the hex-name field for storage — deriving is cleaner and needs no plumbing.)
 - **Sparser spacing** — replace/augment the flat per-hex chance with a **minimum
   spacing / per-region cap** (Poisson-disc-style rejection or a density budget), and
   retune the high Plains 0.45. Objective target from the 3R.2 spacing metric.

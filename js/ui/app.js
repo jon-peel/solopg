@@ -415,6 +415,7 @@ function renderSelection() {
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
+    seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
     selectedPoiId,
     onSelectPoi,

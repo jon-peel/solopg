@@ -21,6 +21,7 @@ import {
 import { glyphForPoi } from "./poi-style.js";
 import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
+import { settlementName } from "../gen/settlement-name.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -494,7 +495,15 @@ function drawDetailMarkers(cx, cy, hex) {
     drawMarker(cx - off, cy + off, "🗒", size, "#fff");
   }
 
-  if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
+  // Label: the GM's hex name if set, else the settlement's derived name (so
+  // named towns read on the map at the detail zoom). Both gated by labelsEnabled.
+  if (labelsEnabled) {
+    const label = hex.name
+      || (hex.settlement && hex.settlement.present
+        ? settlementName(world.seed, hex.coords.q, hex.coords.r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain })
+        : null);
+    if (label) drawHexLabel(cx, cy, label);
+  }
 }
 
 // A user's hex name, as a small pill below the hex (legible over terrain art).

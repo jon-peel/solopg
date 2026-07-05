@@ -364,12 +364,22 @@ already-rare settlement roll and terrain-biased by `TERRAIN_PROFILE.settlement.k
 Render: new `assets/settlement/keep.svg` (stone tower + battlements + pennant); `settlementArt`/
 `settlementMark` take an optional `kind` and return the keep sketch / a rook glyph (♜) at any size;
 `map.js` passes `hex.settlement.kind` in both LOD tiers; panel shows "— Keep (fortified)".
+**Settlement names (3R.6).** Every settlement now has an evocative seeded name (`js/gen/settlement-name.js`
+`settlementName(seed, q, r, gen, {kind, terrain})`) — **DERIVED, not stored** (a pure function of
+coords, so no schema field, and a manually-placed settlement is named for free; regenerating a hex
+reshuffles it). Prefix + ending composition with **terrain-flavored** suffixes (Brackholt in forest,
+Westercrag in mountains, Fenmoor in swamp) and a distinct **martial** style for keeps (Fort Marsh, Dun
+Keep, Stonemote); a guard prevents prefix/suffix stutters ("Fenfen"). Element lists are JS consts
+(like the `SHRINE_SETTING`/`CAMP_SETTING` flavor arrays), since the render path needs them
+synchronously. Shown as the default **map label** (a GM `hex.name` still overrides) and in the panel
+("Settlement: Brackholt (Town)"). `panel.js` gets `seed` via the selection model; `map.js` uses
+`world.seed`. No schema change. Node-tested (determinism, shape, keep/terrain flavor, regen).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v14. 255 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v14. 259 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -450,6 +460,7 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           rivers.js (computeRivers/buildManualRiver — v13 emergent drainage: terrain-cost field to the
                     nearest major water body, sources in deep-interior mountains; append-only + manual rivers
                     + settlement gravity: new traces bend toward nearby towns, size-weighted)
+          settlement-name.js (settlementName — derived seeded place-name; terrain-flavored, martial for keeps)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
@@ -469,9 +480,9 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites, run as `test/*.test.js` (rng, dice, table, world, hexgeo, hex,
-          noise, biome, river, terrain-coherence, terrain-profile, settlement-density, terrain-art,
-          settlement-art, poi, migration, dungeon, dungeon-layout, feature-detail, tower, hooks);
-          stats-harness.js is a diagnostic script
+          noise, biome, river, terrain-coherence, terrain-profile, settlement-density,
+          settlement-name, terrain-art, settlement-art, poi, migration, dungeon, dungeon-layout,
+          feature-detail, tower, hooks); stats-harness.js is a diagnostic script
           (not a suite — `node --test`'s directory-based discovery would otherwise pick up ANY
           file under test/, hence the explicit `*.test.js` glob), run via `node
           test/stats-harness.js [seed] [radius]` (3R.2 — terrain/settlement generation baseline)

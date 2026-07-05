@@ -3,6 +3,7 @@
 import { glyphForPoi } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
+import { settlementName } from "../gen/settlement-name.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -394,13 +395,18 @@ export function renderSelectionPanel(model) {
       div.textContent = line;
       sel.appendChild(div);
     }
-    // Settlement as a plain info line (controls are on the radial menu).
+    // Settlement as a plain info line (controls are on the radial menu). The
+    // name is derived from the seed + coords (settlement-name.js), so it needs no
+    // stored field; a GM hex `name` annotation, if set, still labels the map.
     if (hex.settlement && hex.settlement.present) {
       const div = document.createElement("div");
       div.className = "log-line";
-      div.textContent = hex.settlement.kind === "keep"
-        ? `Settlement: ${hex.settlement.size} — Keep (fortified)`
-        : `Settlement: ${hex.settlement.size}`;
+      const name = settlementName(model.seed, coord.q, coord.r, hex.gen, {
+        kind: hex.settlement.kind,
+        terrain: hex.terrain,
+      });
+      const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
+      div.textContent = `Settlement: ${name} (${kindLabel})`;
       sel.appendChild(div);
     }
     renderPoiSection(sel, hex, model);
