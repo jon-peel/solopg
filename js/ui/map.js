@@ -223,6 +223,16 @@ export function render() {
   if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
     strokeHex(c.x, c.y, "rgba(230,232,238,0.35)", 2);
+    // Reveal a settlement's name on hover (names are hidden by default). A GM's
+    // own hex name takes precedence; drawn on top of everything else here.
+    const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
+    if (detail && hh && hh.placed) {
+      const label = hh.name
+        || (hh.settlement && hh.settlement.present
+          ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain })
+          : null);
+      if (label) drawHexLabel(c.x, c.y, label);
+    }
   }
 
   // 3. Selection highlight (works for empty or filled cells).
@@ -495,15 +505,10 @@ function drawDetailMarkers(cx, cy, hex) {
     drawMarker(cx - off, cy + off, "🗒", size, "#fff");
   }
 
-  // Label: the GM's hex name if set, else the settlement's derived name (so
-  // named towns read on the map at the detail zoom). Both gated by labelsEnabled.
-  if (labelsEnabled) {
-    const label = hex.name
-      || (hex.settlement && hex.settlement.present
-        ? settlementName(world.seed, hex.coords.q, hex.coords.r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain })
-        : null);
-    if (label) drawHexLabel(cx, cy, label);
-  }
+  // Only a GM's explicit hex name labels the map by default. A settlement's
+  // derived name is shown on HOVER only (see the hover pass in render()) — auto
+  // labels on every town cluttered the map.
+  if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
 }
 
 // A user's hex name, as a small pill below the hex (legible over terrain art).
