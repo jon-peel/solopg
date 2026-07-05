@@ -182,7 +182,9 @@ export function render() {
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
     if (detail) {
-      drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
+      // On a settled tile, skip the terrain motif — the settlement marker stands
+      // in for it (terrain still reads from the hex fill colour).
+      if (!(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
       drawDetailMarkers(c.x, c.y, hex);
     } else if (simplified) {
       drawSimplifiedMarkers(c.x, c.y, hex);
