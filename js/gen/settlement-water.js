@@ -63,8 +63,9 @@ export function settlementWaterContext(q, r, riverKeys, terrainByKey) {
 const RIVER_SETTLE_CHANCE = 0.06;   // per mid-course river hex -> a small settlement
 const RIVER_HAMLET_FRAC = 0.7;      // else a Village
 const MOUTH_CITY_CHANCE = 0.8;      // river mouth (meets major water) -> City, else Town
-const BIG_LAKE_SIZE = 12;           // a lake this big always earns a shore City
-const SMALL_LAKE_CITY_CHANCE = 0.3; // a smaller lake sometimes does
+const MIN_LAKE_FOR_CITY = 3;        // 1-2 hex puddles never earn a city
+const BIG_LAKE_SIZE = 6;            // a real lake (>= this) always earns a shore City
+const SMALL_LAKE_CITY_CHANCE = 0.4; // a smaller lake (3-5 hexes) sometimes does
 const WATER = new Set(["Sea", "Lake"]);
 
 // Place (or promote an existing settlement up to) `size` at hex, once. Honours
@@ -134,17 +135,29 @@ export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
     }
   }
 
-  // 4. Lake shore Cities — big lakes always, small lakes sometimes (sea handled
-  //    only via river mouths, above, so we don't carpet the coast).
+  // 4. Lake shore Cities — a real lake always earns one, a small one sometimes;
+  //    1-2 hex puddles never do, and the sea gets cities only via river mouths
+  //    (above), so we don't carpet the coast.
   for (const [id, sh] of shore) {
-    if (isSea.get(id) || !sh.size) continue;
+    if (isSea.get(id) || size.get(id) < MIN_LAKE_FOR_CITY) continue;
     const shoreHexes = [...sh].map((k) => hexByKey.get(k)).filter((h) => h && !WATER.has(h.terrain));
     if (!shoreHexes.length) continue;
     const big = size.get(id) >= BIG_LAKE_SIZE;
     if (!big && subRng(seed, "lakecity", canon.get(id))() >= SMALL_LAKE_CITY_CHANCE) continue;
+    // Already has a shore City (a river mouth, or a prior run)? Done — idempotent.
+    if (shoreHexes.some((h) => h.settlement && h.settlement.present && h.settlement.size === "City")) continue;
+    // Guarantee the city: PROMOTE an existing shore settlement (even a seeded
+    // river village — a lakeside town becomes the lake's city), else place a
+    // fresh City on the canonical shore hex.
     const settled = shoreHexes.find((h) => h.settlement && h.settlement.present);
-    const target = settled || shoreHexes.sort((a, b) => (axialKey(a.coords.q, a.coords.r) < axialKey(b.coords.q, b.coords.r) ? -1 : 1))[0];
-    seedAt(target, "City");
+    if (settled) {
+      settled.settlement.size = "City";
+      settled.settlement.baseSize = "City";
+      settled.waterSeeded = true;
+    } else {
+      const t = shoreHexes.sort((a, b) => (axialKey(a.coords.q, a.coords.r) < axialKey(b.coords.q, b.coords.r) ? -1 : 1))[0];
+      seedAt(t, "City");
+    }
   }
 }
 
