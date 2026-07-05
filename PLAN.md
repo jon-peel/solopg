@@ -371,9 +371,13 @@ reshuffles it). Prefix + ending composition with **terrain-flavored** suffixes (
 Westercrag in mountains, Fenmoor in swamp) and a distinct **martial** style for keeps (Fort Marsh, Dun
 Keep, Stonemote); a guard prevents prefix/suffix stutters ("Fenfen"). Element lists are JS consts
 (like the `SHRINE_SETTING`/`CAMP_SETTING` flavor arrays), since the render path needs them
-synchronously. Shown as the default **map label** (a GM `hex.name` still overrides) and in the panel
-("Settlement: Brackholt (Town)"). `panel.js` gets `seed` via the selection model; `map.js` uses
-`world.seed`. No schema change. Node-tested (determinism, shape, keep/terrain flavor, regen).
+synchronously. Shown in the panel ("Settlement: Brackholt (Town)") and on the map **on hover only**
+(auto-labelling every town cluttered the map — a GM's explicit `hex.name` still labels always).
+`panel.js` gets `seed` via the selection model; `map.js` uses `world.seed`. No schema change.
+Node-tested (determinism, shape, keep/terrain flavor, regen).
+**Settled-tile rendering (play feedback).** At the detail zoom a settled tile now drops the terrain
+motif and draws its **settlement icon big and centred** (the `HEX_SIZE·1.9` footprint a terrain motif
+used) — terrain still reads from the fill colour; unsettled tiles keep their motif (`map.js`).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based

@@ -182,7 +182,10 @@ export function render() {
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
     if (detail) {
-      drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
+      // On a settled tile the settlement icon takes the centre (drawn big by
+      // drawDetailMarkers), so skip the terrain motif — terrain still reads from
+      // the hex fill colour.
+      if (!(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
       drawDetailMarkers(c.x, c.y, hex);
     } else if (simplified) {
       drawSimplifiedMarkers(c.x, c.y, hex);
@@ -223,6 +226,16 @@ export function render() {
   if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
     strokeHex(c.x, c.y, "rgba(230,232,238,0.35)", 2);
+    // Reveal a settlement's name on hover (names are hidden by default). A GM's
+    // own hex name takes precedence; drawn on top of everything else here.
+    const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
+    if (detail && hh && hh.placed) {
+      const label = hh.name
+        || (hh.settlement && hh.settlement.present
+          ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain })
+          : null);
+      if (label) drawHexLabel(c.x, c.y, label);
+    }
   }
 
   // 3. Selection highlight (works for empty or filled cells).
@@ -456,25 +469,25 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
   ctx.fillText(glyph, cx, cy);
 }
 
-// Detail tier: settlement sketch top-right (corner-marker fallback until the SVG
-// loads) + POI emoji badge bottom-right (glyph for 1, count for >1).
+// Detail tier: settlement sketch centered + enlarged (it owns the tile, replacing
+// the terrain motif; corner-marker fallback until the SVG loads) + POI emoji badge
+// bottom-right (glyph for 1, count for >1).
 function drawDetailMarkers(cx, cy, hex) {
   const off = HEX_SIZE * 0.5;
   const size = HEX_SIZE * 0.44;
 
   if (hex.settlement && hex.settlement.present) {
-    const sx = cx + off;
-    const sy = cy - off;
     const url = settlementArt(hex.settlement.size, hex.settlement.kind);
     const img = url ? tileImage(url) : null;
     if (img && img.complete && img.naturalWidth > 0) {
-      const side = HEX_SIZE * 1.0;
-      ctx.drawImage(img, sx - side / 2, sy - side / 2, side, side);
+      const side = HEX_SIZE * 1.9; // same footprint as a terrain motif
+      ctx.drawImage(img, cx - side / 2, cy - side / 2, side, side);
     } else {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = `${size}px sans-serif`;
-      drawMarker(sx, sy, settlementMark(hex.settlement.size, hex.settlement.kind), size, "#fff");
+      const ms = HEX_SIZE * 0.85;
+      ctx.font = `${ms}px sans-serif`;
+      drawMarker(cx, cy, settlementMark(hex.settlement.size, hex.settlement.kind), ms, "#fff");
     }
   }
 
@@ -495,15 +508,10 @@ function drawDetailMarkers(cx, cy, hex) {
     drawMarker(cx - off, cy + off, "🗒", size, "#fff");
   }
 
-  // Label: the GM's hex name if set, else the settlement's derived name (so
-  // named towns read on the map at the detail zoom). Both gated by labelsEnabled.
-  if (labelsEnabled) {
-    const label = hex.name
-      || (hex.settlement && hex.settlement.present
-        ? settlementName(world.seed, hex.coords.q, hex.coords.r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain })
-        : null);
-    if (label) drawHexLabel(cx, cy, label);
-  }
+  // Only a GM's explicit hex name labels the map by default. A settlement's
+  // derived name is shown on HOVER only (see the hover pass in render()) — auto
+  // labels on every town cluttered the map.
+  if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
 }
 
 // A user's hex name, as a small pill below the hex (legible over terrain art).
