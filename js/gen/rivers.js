@@ -63,7 +63,7 @@ const SOURCE_CHANCE = 0.7;
 // 0 and the pick reduces to plain steepest descent (an equal-cost step can only
 // win when a settlement pulls it), so unsettled country is unchanged.
 const PULL_K = 4; // attraction weight vs. one unit of cost-field D (tuned in the scratchpad)
-const PULL_SIZE_WEIGHT = { Thorp: 1, Hamlet: 1.5, Village: 2.5, Town: 4, City: 7 };
+const PULL_SIZE_WEIGHT = { Hamlet: 1.5, Village: 2.5, Town: 4, City: 7 };
 // Reach (hexes ≈ 6 miles each): a City (and up) pulls from a day's ride; smaller
 // settlements only a couple of hexes ("a hex or two, not far out of the way").
 const pullRadius = (size) => (size === "City" ? 3 : 2);

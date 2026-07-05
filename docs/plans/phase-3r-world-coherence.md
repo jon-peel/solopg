@@ -887,10 +887,13 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   step will pass a bypass (e.g. `nearbyLargeCount: 0` on-river) so clusters form where a river/coast
   gives a reason. This SUPERSEDES the min-spacing / per-region-cap idea below (a soft probabilistic
   penalty was preferred over a hard geometric cap).
-- **Add Keep/Fort** — a **martial variant** rather than a new size tier (recommend: a
-  Village-equivalent "footprint" with a `kind: "keep"` overlay so sizing/roads treat
-  it consistently). To confirm which band and whether it's a separate spawn or a
-  reskin.
+- **Keep/Fort + drop Thorp ✅ done** — Thorp (near-identical to Hamlet) was removed; Hamlet is now
+  the smallest tier (size table reweighted, `SIZE_ORDER` trimmed, schema **v13→v14** with a
+  Thorp→Hamlet migration). **Keep/Fort** landed as the recommended `kind: "keep"` **martial overlay**
+  (any size, not a new tier), rolled from its own `subRng` sub-stream conditional on the settlement
+  roll and terrain-biased via `TERRAIN_PROFILE.settlement.keepChance` (Mountains 0.4 … Plains 0.1 →
+  ~0–2 per Huge fill). New `keep.svg` sketch + rook (♜) marker; `settlementArt/Mark(size, kind)`;
+  node-tested. Naming (keep vs fort vs watchtower) can come with the Names sub-step.
 - **Names** — settlements have none today. Add a seeded name generator (new tables),
   reusing the existing hex `name`/notes plumbing where sensible.
 - **Sparser spacing** — replace/augment the flat per-hex chance with a **minimum

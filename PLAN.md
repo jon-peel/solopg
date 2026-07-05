@@ -332,7 +332,7 @@ width to taste, mountain ranges as features.
 **River→settlement gravity (side step, on request).** A river tracing past a settlement now bends to
 pass CLOSE to it (the screenshot case: a river skirting two hexes from a town). `computeRivers` takes
 a `settlementsByKey` map and stamps a size-weighted, radius-limited **attraction field** around each
-settlement (`PULL_SIZE_WEIGHT` Thorp1…City7; reach `pullRadius` = **3 for City, 2 for Town-and-smaller**
+settlement (`PULL_SIZE_WEIGHT` Hamlet1.5…City7; reach `pullRadius` = **3 for City, 2 for Town-and-smaller**
 — "a hex or two, and toward the bigger one when two compete"). The trace's per-step pick maximizes
 `PULL_K(4)·attraction − D`, choosing among **non-climbing** neighbours only (D never increases), so a
 river still always reaches water — it just takes the downhill branch (or an equal-cost sidestep)
@@ -352,12 +352,23 @@ were >25% water. Sea's frontier spawn (`SPAWN.Sea` 2 → **0.8**) and self-affin
 coastlines + river sinks). Lake left as-is (already ~3%). All affinity properties hold (origin land,
 Sea/Lake forbid, Sea still conforms decisively, lone-hex <8%); a new `affinity.test.js` sweep guards
 the water mean/median so a future bump can't silently re-flood the world.
+**Keep/Fort + Thorp removal (3R.6).** The **Thorp** tier was dropped (it was near-identical to
+Hamlet — now the smallest tier); `data/settlement-size.json` reweighted (Hamlet 22 / Village 13 /
+Town 3 / City 1, Town+City still ~10%), `SIZE_ORDER` trimmed, `thorp.svg` deleted, schema **v13→v14**
+with a migration remapping old Thorp settlements to Hamlet. **Keep/Fort** is a rare **martial overlay**
+(`settlement.kind = "keep"`), NOT a size tier — a settlement of any size can be a keep. It's rolled
+from its own `subRng` sub-stream (never shifts the main rng / POI rolls), conditional on the
+already-rare settlement roll and terrain-biased by `TERRAIN_PROFILE.settlement.keepChance`
+(Mountains 0.4, Hills/Desert 0.35, Swamp 0.2, Forest 0.12, Plains 0.1 → ~0–2 keeps per Huge fill).
+Render: new `assets/settlement/keep.svg` (stone tower + battlements + pennant); `settlementArt`/
+`settlementMark` take an optional `kind` and return the keep sketch / a rook glyph (♜) at any size;
+`map.js` passes `hex.settlement.kind` in both LOD tiers; panel shows "— Keep (fortified)".
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 249 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v14. 255 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -392,7 +403,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **11**) lives in `js/world/world.js`.
+- **Schema + migration.** `SCHEMA_VERSION` (currently **14**) lives in `js/world/world.js`.
   `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
   load. Bump + add a migration step whenever the persisted shape changes.
 - **No backward-compatibility burden right now.** Pre-release, with no real worlds worth
@@ -499,8 +510,9 @@ graph TD
   (v8–v12) were **removed at v13** when the elevation classifier and per-hex river edges were deleted;
   old saves load as-is (extra fields ignored). Rivers are no longer per-hex — they live in
   `world.rivers[]` (see below), derived from the revealed terrain.
-- **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
-  `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Lake/Sea).
+- **settlement:** `{ present:false }` or `{ present:true, size, kind? }` where size ∈
+  `Hamlet, Village, Town, City` (capped per terrain; none on Lake/Sea; Thorp dropped at v14).
+  Optional `kind:"keep"` is a rare terrain-biased **martial overlay** (a fortified site, any size).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
   `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`. **Dungeon** POIs carry a
   terrain-biased `detail.theme` (drives the map glyph) and gain a generated interior at
