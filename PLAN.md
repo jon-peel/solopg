@@ -329,12 +329,27 @@ rivers step passes a bypass so on-river/coast clusters can form. Remaining 3R.6:
 martial overlay, hamlet clusters, and the river/coast size boosts — see
 `docs/plans/phase-3r-world-coherence.md` §3R.6. Optional aside: tune river density / stream-order
 width to taste, mountain ranges as features.
+**River→settlement gravity (side step, on request).** A river tracing past a settlement now bends to
+pass CLOSE to it (the screenshot case: a river skirting two hexes from a town). `computeRivers` takes
+a `settlementsByKey` map and stamps a size-weighted, radius-limited **attraction field** around each
+settlement (`PULL_SIZE_WEIGHT` Thorp1…City7; reach `pullRadius` = **3 for City, 2 for Town-and-smaller**
+— "a hex or two, and toward the bigger one when two compete"). The trace's per-step pick maximizes
+`PULL_K(4)·attraction − D`, choosing among **non-climbing** neighbours only (D never increases), so a
+river still always reaches water — it just takes the downhill branch (or an equal-cost sidestep)
+nearest a town; away from settlements attraction is 0 and it reduces to plain steepest descent
+(unsettled country unchanged). A **steepest-descent fallback** re-traces any source whose gravity pass
+dead-ends, so a river is never lost. Applies to **newly-traced** rivers only — existing/manual rivers
+stay frozen (append-only), so this won't re-bend an already-drawn river next to a newly-dropped town.
+Constants tuned in the scratchpad (adjacency of near-river settlements ~doubled, 21→38 of 55 over 10
+seeds; 0 rivers lost, no path bloat); `app.js`'s `syncRivers` builds `settlementsByKey`. No schema
+change. `test/rivers.test.js` covers the pull, the bounded reach, inertness without settlements, and
+determinism.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 244 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v13. 248 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -410,7 +425,8 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           affinity.js (TERRAINS, terrainAt/neighborTerrainsOf — v13 neighbour-affinity hex oracle;
                     a revealed hex rolls a weighted terrain biased by its already-revealed neighbours)
           rivers.js (computeRivers/buildManualRiver — v13 emergent drainage: terrain-cost field to the
-                    nearest major water body, sources in deep-interior mountains; append-only + manual rivers)
+                    nearest major water body, sources in deep-interior mountains; append-only + manual rivers
+                    + settlement gravity: new traces bend toward nearby towns, size-weighted)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")

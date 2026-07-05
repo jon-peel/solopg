@@ -892,6 +892,14 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 - **Hamlet clusters** — a large settlement seeds a few **farming hamlets** in nearby
   hexes (a "breadbasket"). Needs region/chunk generation (3R.2 model) to place the
   cluster coherently.
+- **River→settlement gravity (side step) ✅ done** — a river tracing past a settlement now bends to
+  pass close to it. `computeRivers` takes a `settlementsByKey` map and biases the descent trace with a
+  size-weighted, radius-limited attraction (`PULL_SIZE_WEIGHT`, `pullRadius` = 3 for City, 2 for
+  Town-and-smaller), picking among non-climbing neighbours only so rivers still always reach water; a
+  steepest-descent fallback means no river is ever lost, and away from towns it's plain steepest
+  descent. New/auto traces only (existing/manual frozen). Tuned in the scratchpad (near-river
+  settlement adjacency ~doubled); node-tested. This is distinct from the size boost below (routing,
+  not sizing).
 - **River/coast boosts (ordering-dependent):** a settlement **on a river** gets a
   size boost; a **river-mouth/estuary** hex gets a boosted chance of a **City** and a
   larger settlement. Enforce order: water → rivers → **then** settlement sizing.

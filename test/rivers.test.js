@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeRivers, buildManualRiver } from "../js/gen/rivers.js";
 import { terrainAt, neighborTerrainsOf } from "../js/gen/affinity.js";
-import { hexDisc, neighbors, axialKey } from "../js/core/hexgeo.js";
+import { hexDisc, neighbors, axialKey, parseKey, axialDistance } from "../js/core/hexgeo.js";
 
 const WATER = new Set(["Sea", "Lake"]);
 
@@ -104,6 +104,76 @@ test("computeRivers: no rivers when there is no major water to drain to", () => 
   const terr = new Map();
   for (const { q, r } of hexDisc(0, 0, 12)) terr.set(axialKey(q, r), "Mountains");
   assert.equal(computeRivers("x", terr).length, 0);
+});
+
+// --- settlement gravity (rivers bend toward towns) ----------------------
+
+const WATER2 = new Set(["Sea", "Lake"]);
+function minDistToRivers(rivers, q, r) {
+  let m = Infinity;
+  for (const rv of rivers) for (const p of rv.path) { const d = axialDistance(q, r, p.q, p.r); if (d < m) m = d; }
+  return m;
+}
+// A placed, non-water hex exactly `dist` from `center` that the baseline network
+// stays >= `dist` away from (so any pull is measurable).
+function spotAtDist(terr, rivers, center, dist) {
+  for (const c of hexDisc(center.q, center.r, dist)) {
+    if (axialDistance(center.q, center.r, c.q, c.r) !== dist) continue;
+    const t = terr.get(axialKey(c.q, c.r));
+    if (!t || WATER2.has(t)) continue;
+    if (minDistToRivers(rivers, c.q, c.r) < dist) continue;
+    return { q: c.q, r: c.r };
+  }
+  return null;
+}
+const longest = (rivers) => [...rivers].sort((a, b) => b.path.length - a.path.length)[0];
+
+test("settlement gravity: no settlements => identical to plain steepest descent", () => {
+  const terr = terrainArea("grav-inert", 30);
+  assert.deepEqual(computeRivers("grav-inert", terr, [], new Map()), computeRivers("grav-inert", terr));
+});
+
+test("settlement gravity: a City bends a nearby river to pass adjacent, losing no rivers", () => {
+  const seed = "grav-3";
+  const terr = terrainArea(seed, 34);
+  const base = computeRivers(seed, terr);
+  const rv = longest(base);
+  const mid = rv.path[Math.floor(rv.path.length / 2)];
+  const g = spotAtDist(terr, base, mid, 2);
+  assert.ok(g, "found a hex 2 off the river to plant a city");
+  assert.ok(minDistToRivers(base, g.q, g.r) >= 2, "baseline river is >= 2 away");
+  const grav = computeRivers(seed, terr, [], new Map([[axialKey(g.q, g.r), "City"]]));
+  assert.ok(minDistToRivers(grav, g.q, g.r) <= 1, "the city pulls a river onto/adjacent to it");
+  assert.ok(grav.length >= base.length, "no river is lost to the pull");
+});
+
+test("settlement gravity: a settlement far from every river changes nothing (bounded reach)", () => {
+  const seed = "grav-3";
+  const terr = terrainArea(seed, 34);
+  const base = computeRivers(seed, terr);
+  // a hex >= 5 from all rivers — outside even a City's radius-3 reach
+  let far = null;
+  for (const key of terr.keys()) {
+    const t = terr.get(key);
+    if (!t || WATER2.has(t)) continue;
+    const { q, r } = parseKey(key);
+    if (minDistToRivers(base, q, r) >= 5) { far = { q, r }; break; }
+  }
+  assert.ok(far, "found a hex far from all rivers");
+  const grav = computeRivers(seed, terr, [], new Map([[axialKey(far.q, far.r), "City"]]));
+  assert.deepEqual(grav, base, "a settlement out of pull range leaves the network untouched");
+});
+
+test("settlement gravity: deterministic for the same (seed, terrain, settlements)", () => {
+  const seed = "grav-2";
+  const terr = terrainArea(seed, 28);
+  const rv = longest(computeRivers(seed, terr));
+  const mid = rv.path[Math.floor(rv.path.length / 2)];
+  const settlements = new Map([[axialKey(mid.q, mid.r), "Town"]]);
+  assert.deepEqual(
+    computeRivers(seed, terr, [], settlements),
+    computeRivers(seed, terr, [], settlements),
+  );
 });
 
 // --- manual (GM-drawn) rivers -------------------------------------------

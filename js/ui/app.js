@@ -1067,10 +1067,16 @@ function nearbyLargeCount(q, r) {
 function syncRivers(world) {
   if (!world) return;
   const terrainByKey = new Map();
-  for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  const settlementsByKey = new Map(); // key -> size, so new rivers bend toward towns
+  for (const h of placedHexes(world)) {
+    const key = axialKey(h.coords.q, h.coords.r);
+    terrainByKey.set(key, h.terrain);
+    if (h.settlement && h.settlement.present) settlementsByKey.set(key, h.settlement.size);
+  }
   // Append-only: keep existing rivers, add rivers for newly-revealed sources
-  // (a river must never disappear when more terrain is generated).
-  world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : []);
+  // (a river must never disappear when more terrain is generated). New rivers
+  // are pulled toward nearby settlements (see computeRivers' gravity note).
+  world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : [], settlementsByKey);
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
