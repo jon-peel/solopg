@@ -30,6 +30,7 @@ const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
 const DETAIL_PX = 26; // at/above: pencil sketches + corner markers (drop to small view sooner)
 const MARK_MIN_PX = 7; // below: nothing; between: simplified dots
+const TERRAIN_ICON_ALPHA = 0.45; // terrain motifs recede into the background; settlements stay opaque
 
 let canvas = null;
 let ctx = null;
@@ -448,6 +449,10 @@ function tileImage(url) {
 }
 
 function drawTerrainIcon(cx, cy, terrain, q, r) {
+  // Semi-transparent so the motif recedes into the tile (settlement icons, drawn
+  // fully opaque, stand out against it). Restored before returning.
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = prevAlpha * TERRAIN_ICON_ALPHA;
   // Deterministic variant per cell so it's stable without storing it.
   const variants = artFor(terrain);
   if (variants.length) {
@@ -456,16 +461,19 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
     if (img.complete && img.naturalWidth > 0) {
       const side = HEX_SIZE * 1.9;
       ctx.drawImage(img, cx - side / 2, cy - side / 2, side, side);
+      ctx.globalAlpha = prevAlpha;
       return;
     }
     // else fall through to the emoji until the SVG has loaded
   }
   const glyph = iconForTerrain(terrain, hashString(`${q},${r}`) % 2);
-  if (!glyph) return;
-  ctx.font = `${HEX_SIZE * 0.9}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(glyph, cx, cy);
+  if (glyph) {
+    ctx.font = `${HEX_SIZE * 0.9}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(glyph, cx, cy);
+  }
+  ctx.globalAlpha = prevAlpha;
 }
 
 // Detail tier: settlement sketch centered + enlarged (it stands in for the
