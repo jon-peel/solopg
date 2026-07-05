@@ -379,12 +379,23 @@ Node-tested (determinism, shape, keep/terrain flavor, regen).
 now **skips the terrain motif** and draws its **settlement icon big and centred** (the `HEX_SIZE·1.9`
 footprint the terrain motif used), instead of the terrain glyph + a small corner marker — terrain
 still reads from the fill colour; unsettled tiles keep their motif (`map.js`).
+**River/coast size boosts (3R.6).** Civilisation follows water: a settlement **on/beside a river** or
+**on the coast** (sea-adjacent) is bumped **+1** size tier, and one at a **river mouth / estuary**
+(both) **+2** — the "reason to grow/cluster" the generation-time size-suppression left room for. New
+pure `js/gen/settlement-water.js` (`applyWaterBoosts`/`settlementWaterContext`/`raiseSize`), called by
+`app.js`'s `syncRivers` right after `computeRivers`. **Idempotent by construction**: the rolled size is
+captured once as `settlement.baseSize` and the effective `size` is always re-derived from base + the
+current water context, so the repeated `syncRivers` calls never compound. The boost MAY exceed a
+terrain's normal maxSize (the water is the reason — a river-valley town, a great estuary port). A
+`settlement.waterBoost` tag ("estuary"/"river"/"coast") shows in the panel ("… · on a river"). No
+schema change (additive fields, no migration per the no-back-compat directive). Measured on Huge fills:
+watered regions shift up ~a tier (Hamlets→Villages, the odd estuary City), landlocked seeds unchanged.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v14. 259 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v14. 264 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -466,6 +477,7 @@ package.json                    dev-only: "type":"module", scripts: test / serve
                     nearest major water body, sources in deep-interior mountains; append-only + manual rivers
                     + settlement gravity: new traces bend toward nearby towns, size-weighted)
           settlement-name.js (settlementName — derived seeded place-name; terrain-flavored, martial for keeps)
+          settlement-water.js (applyWaterBoosts — river/coast/estuary settlement size boost; idempotent via baseSize)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
@@ -486,8 +498,8 @@ package.json                    dev-only: "type":"module", scripts: test / serve
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites, run as `test/*.test.js` (rng, dice, table, world, hexgeo, hex,
           noise, biome, river, terrain-coherence, terrain-profile, settlement-density,
-          settlement-name, terrain-art, settlement-art, poi, migration, dungeon, dungeon-layout,
-          feature-detail, tower, hooks); stats-harness.js is a diagnostic script
+          settlement-name, settlement-water, terrain-art, settlement-art, poi, migration, dungeon,
+          dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a diagnostic script
           (not a suite — `node --test`'s directory-based discovery would otherwise pick up ANY
           file under test/, hence the explicit `*.test.js` glob), run via `node
           test/stats-harness.js [seed] [radius]` (3R.2 — terrain/settlement generation baseline)

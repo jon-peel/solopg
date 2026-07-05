@@ -406,7 +406,8 @@ export function renderSelectionPanel(model) {
         terrain: hex.terrain,
       });
       const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
-      div.textContent = `Settlement: ${name} (${kindLabel})`;
+      const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];
+      div.textContent = `Settlement: ${name} (${kindLabel})${water ? ` · ${water}` : ""}`;
       sel.appendChild(div);
     }
     renderPoiSection(sel, hex, model);

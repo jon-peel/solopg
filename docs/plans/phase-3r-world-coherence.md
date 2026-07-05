@@ -915,10 +915,16 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   descent. New/auto traces only (existing/manual frozen). Tuned in the scratchpad (near-river
   settlement adjacency ~doubled); node-tested. This is distinct from the size boost below (routing,
   not sizing).
-- **River/coast boosts (ordering-dependent):** a settlement **on a river** gets a
-  size boost; a **river-mouth/estuary** hex gets a boosted chance of a **City** and a
-  larger settlement. Enforce order: water → rivers → **then** settlement sizing.
-- Schema: settlement `kind` (keep/fort), `name`, and river/coast linkage; migration.
+- **River/coast boosts ✅ done** — a settlement **on/beside a river** or **on the coast** (sea-adjacent)
+  is bumped **+1** size tier; a **river-mouth/estuary** (both) gets **+2** (→ Towns/Cities). New pure
+  `js/gen/settlement-water.js` (`applyWaterBoosts`), run by `syncRivers` right after `computeRivers`
+  (enforcing the water → rivers → **then** sizing order). **Idempotent**: the rolled size is captured
+  once as `settlement.baseSize` and the effective `size` is re-derived from base + water context each
+  sync, so it never compounds. May exceed the terrain maxSize (water is the reason). A `waterBoost` tag
+  surfaces in the panel. Node-tested. (Delivered as deterministic tier bumps rather than a "City chance"
+  roll — cleaner and idempotent; a seeded probability is a one-liner if preferred.)
+- Schema: no bump needed — `kind`, `baseSize`, `waterBoost` are all additive fields (no migration, per
+  the no-back-compat directive); `name` is derived, not stored.
 
 ### 3R.7 — Roads
 - **Connect settlements**, weighted by size — a **gravity model**: desirability ∝
