@@ -24,7 +24,7 @@ import {
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
-import { applyWaterBoosts, seedWaterSettlements } from "../gen/settlement-water.js";
+import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
@@ -1087,6 +1087,11 @@ function syncRivers(world) {
   const hexByKey = new Map();
   for (const h of placedHexes(world)) hexByKey.set(axialKey(h.coords.q, h.coords.r), h);
   seedWaterSettlements(hexByKey, world.rivers, terrainByKey, world.seed);
+  applyWaterBoosts(placedHexes(world), world.rivers, terrainByKey);
+  // Then sprinkle a few farming hamlets around the large (now final-sized)
+  // settlements and re-run the (idempotent) boost so a riverside one is sized
+  // consistently this same sync.
+  seedHamletClusters(hexByKey, world.seed);
   applyWaterBoosts(placedHexes(world), world.rivers, terrainByKey);
 }
 

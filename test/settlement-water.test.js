@@ -6,6 +6,7 @@ import {
   settlementWaterContext,
   applyWaterBoosts,
   seedWaterSettlements,
+  seedHamletClusters,
 } from "../js/gen/settlement-water.js";
 import { axialKey, neighbors } from "../js/core/hexgeo.js";
 
@@ -152,4 +153,71 @@ test("seedWaterSettlements: idempotent, and a deleted seed is not resurrected", 
   hbk.get(shoreKey).settlement = { present: false };
   seedWaterSettlements(hbk, [], terr, "s");
   assert.equal(hbk.get(shoreKey).settlement.present, false, "deleted seed stays deleted");
+});
+
+// --- seedHamletClusters: a sprinkling of farming hamlets around big towns ----
+
+test("seedHamletClusters: sprinkles Hamlets on farmland around a large settlement", () => {
+  const nbs = neighbors(0, 0);
+  const settledNb = nbs[1]; // a farmland neighbour that already has a Village
+  const build = () => {
+    const m = new Map([[axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains", settlement: { present: true, size: "City" } }]]);
+    nbs.forEach((nb, i) => {
+      const terrain = i === 0 ? "Mountains" : "Plains"; // nbs[0] non-farmland: never a hamlet
+      const hex = { coords: { q: nb.q, r: nb.r }, terrain };
+      if (i === 1) hex.settlement = { present: true, size: "Village" };
+      m.set(axialKey(nb.q, nb.r), hex);
+    });
+    return m;
+  };
+
+  let placed = 0;
+  for (let s = 0; s < 60; s++) {
+    const m = build();
+    seedHamletClusters(m, "seed" + s);
+    const mtn = m.get(axialKey(nbs[0].q, nbs[0].r));
+    assert.ok(!mtn.settlement || !mtn.settlement.present, "non-farmland neighbour stays wild");
+    assert.equal(m.get(axialKey(settledNb.q, settledNb.r)).settlement.size, "Village", "existing settlement not overridden");
+    assert.equal(m.get(axialKey(0, 0)).settlement.size, "City", "anchor unchanged");
+    for (let i = 2; i < nbs.length; i++) {
+      const h = m.get(axialKey(nbs[i].q, nbs[i].r));
+      if (h.settlement && h.settlement.present) { assert.equal(h.settlement.size, "Hamlet"); placed++; }
+    }
+  }
+  assert.ok(placed > 0, "across seeds, some farmland neighbours become Hamlets");
+});
+
+test("seedHamletClusters: only large (Town/City) settlements anchor a cluster", () => {
+  const m = new Map([[axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains", settlement: { present: true, size: "Village" } }]]);
+  for (const nb of neighbors(0, 0)) m.set(axialKey(nb.q, nb.r), { coords: { q: nb.q, r: nb.r }, terrain: "Plains" });
+  for (let s = 0; s < 40; s++) seedHamletClusters(m, "x" + s);
+  const clustered = [...m.values()].filter((h) => !(h.coords.q === 0 && h.coords.r === 0) && h.settlement && h.settlement.present);
+  assert.equal(clustered.length, 0, "a Village anchors no farming hamlets");
+});
+
+test("seedHamletClusters: idempotent, and a deleted hamlet is not resurrected", () => {
+  const build = () => {
+    const m = new Map([[axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains", settlement: { present: true, size: "City" } }]]);
+    for (const nb of neighbors(0, 0)) m.set(axialKey(nb.q, nb.r), { coords: { q: nb.q, r: nb.r }, terrain: "Plains" });
+    return m;
+  };
+  // Find a seed that actually sprinkles a hamlet (chance is low, so sweep).
+  let seed = null, m = null, placedKey = null;
+  for (let s = 0; s < 300 && !seed; s++) {
+    const cand = build();
+    seedHamletClusters(cand, "id" + s);
+    for (const nb of neighbors(0, 0)) {
+      const h = cand.get(axialKey(nb.q, nb.r));
+      if (h.settlement && h.settlement.present) { seed = "id" + s; m = cand; placedKey = axialKey(nb.q, nb.r); break; }
+    }
+  }
+  assert.ok(seed, "found a seed that sprinkles a hamlet");
+  const count = () => [...m.values()].filter((h) => h.settlement && h.settlement.present).length;
+  const before = count();
+  seedHamletClusters(m, seed); // re-run: unchanged
+  assert.equal(count(), before, "re-run adds no new hamlets");
+  // GM deletes a hamlet -> re-run must not resurrect (decided-flag)
+  m.get(placedKey).settlement = { present: false };
+  seedHamletClusters(m, seed);
+  assert.equal(m.get(placedKey).settlement.present, false, "deleted hamlet stays deleted");
 });

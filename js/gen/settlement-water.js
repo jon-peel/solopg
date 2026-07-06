@@ -13,7 +13,7 @@
 // exceed a terrain's normal maxSize — the water IS the reason (a river-valley
 // town in the mountains, a great estuary port).
 
-import { SIZE_ORDER } from "./terrain-profile.js";
+import { SIZE_ORDER, isLargeSize } from "./terrain-profile.js";
 import { neighbors, axialKey, parseKey } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
 
@@ -180,6 +180,44 @@ export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
       const t = shoreHexes.sort((a, b) => (axialKey(a.coords.q, a.coords.r) < axialKey(b.coords.q, b.coords.r) ? -1 : 1))[0];
       seedAt(t, "City");
     }
+  }
+}
+
+// --- farming hamlet clusters (3R.6) ----------------------------------------
+// A light SPRINKLING: a large settlement (Town/City) is a market for a few
+// farming hamlets in the arable land ringing it — a "breadbasket". Kept sparse
+// on purpose: a low per-neighbour chance, farmland terrain only, the immediate
+// ring only. Runs AFTER the water passes so anchors are already their final,
+// boosted size. Deterministic + IDEMPOTENT via a per-hex `clusterSeeded`
+// decided-flag — repeated syncs never duplicate and a GM-deleted hamlet is not
+// resurrected. Like the rest of settlement placement it's mildly order-dependent
+// (two nearby anchors contending for a shared neighbour), an accepted tradeoff.
+const CLUSTER_HAMLET_CHANCE = 0.2; // per farmland neighbour of a large settlement (kept a sprinkling)
+const FARMLAND = new Set(["Plains", "Hills"]);
+
+/**
+ * Sprinkle a few farming Hamlets in the farmland immediately around each large
+ * (Town/City) settlement. MUTATES hexes in `hexByKey`. Idempotent (see above).
+ * @param {Map<string,object>} hexByKey axialKey -> hex object
+ * @param {number|string} seed world seed
+ */
+export function seedHamletClusters(hexByKey, seed) {
+  // Snapshot the anchors first — the Hamlets we place must not themselves anchor.
+  const anchors = [];
+  for (const hex of hexByKey.values()) {
+    const s = hex.settlement;
+    if (s && s.present && isLargeSize(s.size)) anchors.push(hex);
+  }
+  for (const hex of anchors) {
+    const { q, r } = hex.coords;
+    neighbors(q, r).forEach((nb, i) => {
+      const nh = hexByKey.get(axialKey(nb.q, nb.r));
+      if (!nh || !FARMLAND.has(nh.terrain) || nh.clusterSeeded) return;
+      if (subRng(seed, "cluster", q, r, i)() >= CLUSTER_HAMLET_CHANCE) return;
+      nh.clusterSeeded = true; // decided — even if it's already settled (we don't override)
+      if (nh.settlement && nh.settlement.present) return;
+      nh.settlement = { present: true, size: "Hamlet", baseSize: "Hamlet" };
+    });
   }
 }
 

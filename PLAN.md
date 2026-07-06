@@ -403,12 +403,19 @@ Deterministic + **idempotent** via a per-hex `waterSeeded` decided-flag — the 
 calls never duplicate, and a settlement a GM deletes is **not resurrected**. Measured over 8 Huge
 seeds: mouths settle ~58% (mostly City, the odd Town, ~18% keeps), and river courses carry a healthy
 scatter of Villages and **Towns**; landlocked seeds barely change.
+**Hamlet clusters (3R.6).** A large (Town/City) settlement now sprinkles a few **farming Hamlets** in
+the arable land (Plains/Hills) of its immediate ring — a "breadbasket". A deliberate **sprinkling**:
+`seedHamletClusters` (`settlement-water.js`, run by `syncRivers` after the water passes so anchors are
+final-sized, then a second idempotent `applyWaterBoosts`) rolls `CLUSTER_HAMLET_CHANCE` 0.2 per
+farmland neighbour, so ~half of big towns get a hamlet or two and the rest stand alone (~3.6 per Huge
+fill). Deterministic + idempotent via a per-hex `clusterSeeded` decided-flag (no duplicates; a deleted
+hamlet isn't resurrected); never overrides an existing settlement.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v14. 268 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v14. 271 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
