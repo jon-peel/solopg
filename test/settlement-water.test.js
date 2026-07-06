@@ -75,18 +75,20 @@ test("applyWaterBoosts: a settlement that loses its water context reverts to bas
 
 // --- seedWaterSettlements: generate NEW settlements at water ----------------
 
-test("seedWaterSettlements: a river mouth on the sea seeds a City/Town (double whammy)", () => {
+test("seedWaterSettlements: a river mouth settles the last LAND hex, not the water sink", () => {
   const hexByKey = new Map([
-    [axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains" }], // land tail = mouth
-    [axialKey(1, 0), { coords: { q: 1, r: 0 }, terrain: "Sea" }],
+    [axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains" }], // last LAND hex = mouth
+    [axialKey(1, 0), { coords: { q: 1, r: 0 }, terrain: "Sea" }],    // the water sink
   ]);
   const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(1, 0), "Sea"]]);
-  const rivers = [{ path: [{ q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }] }];
+  // computeRivers ENDS the path on the water sink hex, so the mouth is the last land hex.
+  const rivers = [{ path: [{ q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }] }];
   seedWaterSettlements(hexByKey, rivers, terr, "s");
   const mouth = hexByKey.get(axialKey(0, 0));
-  assert.ok(mouth.settlement && mouth.settlement.present, "mouth should be settled");
+  assert.ok(mouth.settlement && mouth.settlement.present, "the LAND mouth should be settled");
   assert.ok(["City", "Town"].includes(mouth.settlement.size), `mouth size ${mouth.settlement.size}`);
-  assert.ok(mouth.waterSeeded);
+  const sink = hexByKey.get(axialKey(1, 0));
+  assert.ok(!sink.settlement || !sink.settlement.present, "the water sink must never be settled");
 });
 
 test("seedWaterSettlements: a big lake earns a shore City", () => {

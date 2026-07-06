@@ -112,16 +112,28 @@ export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
     size.set(bid, n); shore.set(bid, sh); canon.set(bid, mn); bid++;
   }
 
-  // 2. River mouths (double whammy): each river's tail, if it meets water -> City.
+  // 2. River mouths — where a river MEETS water. TEST: place a FORT (keep) here
+  //    100% of the time. The keep's tower icon is unmistakable, so generating a
+  //    world and spotting forts at every river-meets-water point verifies the
+  //    whole mechanism fires end-to-end. (Revert to the City/Town roll —
+  //    MOUTH_CITY_CHANCE — once confirmed.)
   const mouthKeys = new Set();
   for (const rv of rivers || []) {
     const path = rv && rv.path;
     if (!path || !path.length) continue;
-    const tail = path[path.length - 1];
-    if (!neighbors(tail.q, tail.r).some((nb) => WATER.has(terrainByKey.get(axialKey(nb.q, nb.r))))) continue;
-    mouthKeys.add(axialKey(tail.q, tail.r));
-    const city = subRng(seed, "mouthcity", tail.q, tail.r)() < MOUTH_CITY_CHANCE;
-    seedAt(hexByKey.get(axialKey(tail.q, tail.r)), city ? "City" : "Town");
+    // A river's path ENDS on the water sink (a Sea/Lake hex — computeRivers pushes
+    // it as the last element), so the mouth is the last LAND hex, adjacent to it.
+    let mouth = null;
+    for (let i = path.length - 1; i >= 0; i--) {
+      if (!WATER.has(terrainByKey.get(axialKey(path[i].q, path[i].r)))) { mouth = path[i]; break; }
+    }
+    if (!mouth) continue;
+    if (!neighbors(mouth.q, mouth.r).some((nb) => WATER.has(terrainByKey.get(axialKey(nb.q, nb.r))))) continue;
+    const k = axialKey(mouth.q, mouth.r);
+    mouthKeys.add(k);
+    const hex = hexByKey.get(k);
+    seedAt(hex, "City");
+    if (hex && hex.settlement && hex.settlement.present) hex.settlement.kind = "keep"; // FORT marker (test)
   }
 
   // 3. Scattered settlements along the river course (mouths already handled).
