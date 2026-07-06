@@ -203,6 +203,10 @@ export function render() {
   drawRivers(minX, minY, maxX, maxY, margin);
   drawRiverDraft(); // the manual river being traced (if any), on top
 
+  // 2a′. Roads (3R.7): tiered tan network linking settlements, on top of rivers
+  //      so a crossing reads as a bridge/ford.
+  drawRoads(minX, minY, maxX, maxY, margin);
+
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
   if (detail) {
@@ -328,6 +332,18 @@ function drawHookLine(a, b) {
 const RIVER_COLOR = "#6fd0f0";
 const RIVER_WIDTH = 3.4; // world px at scale 1 (before the /camera.scale divide)
 
+// Roads (3R.7): tiered tan polylines linking settlements. Tier 1 highways
+// (City–City) are widest, tier 3 tracks/spurs thinnest and dashed. A dark casing
+// under the fill lifts them off the terrain. Widths are world px at scale 1.
+const ROAD_TIERS = {
+  1: { width: 4.4, color: "#d9b25c" }, // highway (City–City)
+  2: { width: 2.9, color: "#c39a54" }, // road
+  3: { width: 1.7, color: "#b58f5a", dash: [6, 5] }, // track / spur
+};
+const ROAD_CASING = "#4a3a1f";
+const ROAD_END_TRIM = 0.5; // pull each end back this fraction of its last segment,
+                           // so the centred settlement icon sits cleanly where the road arrives
+
 // Smooth a polyline through its points: anchor each curve segment at the
 // midpoint between consecutive vertices and use the vertex itself as the
 // quadratic control point. Passes through the endpoints exactly and glides
@@ -403,6 +419,62 @@ function strokeDashed(pts) {
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.stroke();
   ctx.restore();
+}
+
+function lerpPt(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
+
+// Roads (3R.7): one pass over world.roads[], drawn on top of rivers so a crossing
+// reads as a bridge. Each is a smoothed tan polyline through hex centres, tiered
+// by width/colour, with a dark casing under the fill for contrast. Whole-road
+// bounding-box cull like rivers; endpoints trimmed half a segment so the centred
+// settlement icon stays clean where the road arrives.
+function drawRoads(minX, minY, maxX, maxY, margin) {
+  if (!world || !Array.isArray(world.roads) || !world.roads.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const road of world.roads) {
+    const path = road && road.path;
+    if (!path || path.length < 2) continue;
+    const pts = new Array(path.length);
+    let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+    for (let i = 0; i < path.length; i++) {
+      const c = axialToPixel(path[i].q, path[i].r, HEX_SIZE);
+      pts[i] = c;
+      if (c.x < bMinX) bMinX = c.x;
+      if (c.x > bMaxX) bMaxX = c.x;
+      if (c.y < bMinY) bMinY = c.y;
+      if (c.y > bMaxY) bMaxY = c.y;
+    }
+    if (bMaxX < minX - margin || bMinX > maxX + margin || bMaxY < minY - margin || bMinY > maxY + margin) {
+      continue;
+    }
+    // Trim both ends back toward their neighbour so the town icon stays clean.
+    pts[0] = lerpPt(pts[0], pts[1], ROAD_END_TRIM);
+    pts[pts.length - 1] = lerpPt(pts[pts.length - 1], pts[pts.length - 2], ROAD_END_TRIM);
+    strokeRoad(pts, road);
+  }
+  ctx.restore();
+}
+
+function strokeRoad(pts, road) {
+  const spec = ROAD_TIERS[road.tier] || ROAD_TIERS[2];
+  const w = spec.width / camera.scale;
+  if (spec.dash) { // tracks/spurs: a single dashed line, no casing
+    ctx.save();
+    ctx.setLineDash(spec.dash.map((d) => d / camera.scale));
+    ctx.strokeStyle = spec.color;
+    ctx.lineWidth = w;
+    strokeSmoothPath(pts);
+    ctx.restore();
+    return;
+  }
+  ctx.strokeStyle = ROAD_CASING; // dark casing first...
+  ctx.lineWidth = w + 1.8 / camera.scale;
+  strokeSmoothPath(pts);
+  ctx.strokeStyle = spec.color; // ...then the tan fill on top
+  ctx.lineWidth = w;
+  strokeSmoothPath(pts);
 }
 
 /** Set (or clear) the in-progress manual river being traced; re-renders. */

@@ -24,6 +24,7 @@ import {
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
+import { computeRoads } from "../gen/roads.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -186,6 +187,7 @@ async function setCurrent(world) {
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
+  if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -1095,6 +1097,30 @@ function syncRivers(world) {
   applyWaterBoosts(placedHexes(world), world.rivers, terrainByKey);
 }
 
+// Rebuild the road overlay (Phase 3R.7) from the current terrain, settlements,
+// and rivers. Runs AFTER syncRivers so settlements are their final, boosted size
+// and the river valleys exist for roads to hug. Append-only like rivers — a
+// built road is kept verbatim (js/gen/roads.js), so revealing more terrain only
+// EXTENDS the network, never re-routes it. world.roads holds the tiered polylines
+// that map.js draws.
+function syncRoads(world) {
+  if (!world) return;
+  const terrainByKey = new Map();
+  const settlementsByKey = new Map(); // key -> size, so roads link the big places
+  for (const h of placedHexes(world)) {
+    const key = axialKey(h.coords.q, h.coords.r);
+    terrainByKey.set(key, h.terrain);
+    if (h.settlement && h.settlement.present) settlementsByKey.set(key, h.settlement.size);
+  }
+  world.roads = computeRoads(
+    world.seed,
+    terrainByKey,
+    settlementsByKey,
+    world.rivers,
+    Array.isArray(world.roads) ? world.roads : [],
+  );
+}
+
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
 // carries a forced dungeon POI as the hook's subject. Marked unexplored.
@@ -1310,6 +1336,7 @@ async function onFollowClue(id) {
 
 async function persistAndRefresh() {
   syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
+  syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();

@@ -181,5 +181,12 @@ export function migrateWorld(data) {
     // save data worth protecting.
     data.schemaVersion = 14;
   }
+  if (data.schemaVersion < 15) {
+    // top-level `roads` array (Phase 3R.7) — a derived overlay like `rivers`,
+    // recomputed from terrain + settlements on load. Backfill empty; syncRoads
+    // repopulates it (see world.js:83 note).
+    if (!Array.isArray(data.roads)) data.roads = [];
+    data.schemaVersion = 15;
+  }
   return data;
 }

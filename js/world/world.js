@@ -52,7 +52,10 @@ import { axialKey } from "../core/hexgeo.js";
 // v14: the Thorp size tier was dropped (near-identical to Hamlet); a settlement
 // can now carry a martial `kind: "keep"` (fortified site, any size). Migration
 // remaps old Thorp settlements to Hamlet; `kind` is additive (absent = normal).
-export const SCHEMA_VERSION = 14;
+// v15: a top-level `roads` array (Phase 3R.7) — a DERIVED overlay like `rivers`,
+// recomputed from terrain + settlements (js/gen/roads.js — gravity trunk network)
+// into `world.roads[]`. Migration backfills `roads: []`; syncRoads repopulates it.
+export const SCHEMA_VERSION = 15;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
@@ -81,6 +84,11 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     // dozens of tiles, isn't owned by one hex, and is drawn even across
     // unexplored hexes. Populated incrementally as source hexes are discovered.
     rivers: [],
+    // Roads (Phase 3R.7) — a derived gravity trunk network linking settlements
+    // (js/gen/roads.js). Like rivers, a flat top-level list (a road spans many
+    // tiles, isn't owned by one hex), recomputed by syncRoads as the world grows;
+    // append-only so a built road never re-routes.
+    roads: [],
     createdAt: now,
     updatedAt: now,
   };

@@ -947,27 +947,32 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   the no-back-compat directive); `name` is derived, not stored.
 
 ### 3R.7 — Roads
-- **Connect settlements**, weighted by size — a **gravity model**: desirability ∝
-  `sizeA·sizeB / distance^k`; build a road when it clears a threshold. Larger
-  settlements "pull" roads from further away.
-- **Routing / pathfinding** — least-cost path over hexes:
-  - **Mountains** = high cost → route **around** a range when the detour ≤ *n* tiles;
-    if going around costs more than *n*, **cut through**, but the range **inflates the
-    effective distance** (so a long range can make the link fail the gravity threshold
-    entirely — exactly your "act as though further away").
-  - **Deserts** = very high cost → roads **almost never**; allow a rare **ancient dead-
-    straight road** that ignores terrain cost.
-- **Tiers/sizes** — from the gravity weight: **ancient wide paved roads** between major
-  cities down to local tracks. Render by width/style.
-- **Spurs / side roads** — a small settlement near an existing road links to it with a
-  short **spur** instead of a full long-haul road.
-- **Timing** — your proposal: when a settlement is generated, evaluate it against every
-  existing settlement **largest → smallest** and decide each link. *(This is close to a
-  known technique — a greedy gravity/Steiner network; the research step compares
-  incremental-per-settlement vs a batch network pass, and how to keep either
-  deterministic under area generation.)*
-- Represent as hex-path / hex-side edges (tiered). Node-tested: connectivity, mountain
-  avoidance-then-cut-through, desert suppression, spur behaviour.
+**Confirmed feel:** trunk + spurs; roads hug river valleys; tiered by importance.
+- **Trunk network ✅ done (step 1)** — a derived `world.roads[]` overlay
+  (`js/gen/roads.js` `computeRoads`, run by `syncRoads` after `syncRivers`; append-only/frozen like
+  rivers). The big settlements (Town/City) are linked into a **minimum-spanning forest** (union-find →
+  a clean tree, never a mesh), ordered best-first by a gravity weight `sizeA·sizeB/effDist²` that also
+  sets tiers. Measured over 8 Huge seeds: ~4 roads/fill, ~82% of big settlements on the network.
+- **Routing / pathfinding ✅ done** — **A\*** least-cost path over a road-tuned terrain cost
+  (`ROAD_COST` Plains 1 … Mountains 8, Desert 10; Sea/Lake impassable). A link is committed only if its
+  route's **effective distance ≤ `MAX_EFF_DIST`** (16): on open ground effDist ≈ hex distance so the
+  big places connect; **mountains** inflate it so the road routes **around** a range unless the detour
+  blows the cap (then the link fails — "act as though further away"); **desert** likewise inflates it,
+  so roads almost never cross it; **water** is unreachable. River-adjacent hexes get a **valley
+  discount** so roads hug rivers and cross at fords. *(The rare ancient dead-straight desert road is
+  deferred to step 2.)*
+- **Tiers/sizes ✅ done** — City-touching links render as **highways** (tier 1, widest), Town–Town as
+  **roads** (tier 2); tier 3 tracks are the spurs. `map.js` `drawRoads` draws tiered tan polylines with
+  a dark casing, on top of rivers (crossings read as bridges), endpoints trimmed so the town icon stays
+  clean.
+- **Spurs / side roads — step 2 (pending)** — a small settlement near an existing road links to it with
+  a short tier-3 **spur** instead of a full long-haul road.
+- **Timing** — settled on a **batch spanning-forest** recompute each `syncRoads`, kept deterministic +
+  append-only (built roads frozen; only new links added as the world grows). Order-dependent like the
+  terrain/rivers it sits on.
+- Represented as `{id, a, b, tier, path}` hex-path edges. Node-tested: connectivity/threshold,
+  mountain avoidance-then-block, water impassability, valley-hug discount, append-only/determinism,
+  no-mesh spanning tree. Shared `MinHeap` extracted to `js/core/minheap.js`. Schema **v15**.
 
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning
 - Wire the full **deterministic region pipeline**: terrain → water/coastline → rivers

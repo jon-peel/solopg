@@ -412,12 +412,27 @@ sits on water so fewer neighbours are eligible; the higher rate compensates). Me
 ringed / ~1.3 farms each vs towns ~52% / ~0.9 each; ~6 cluster hamlets per Huge fill overall, a third
 of big towns still standing alone. Deterministic + idempotent via a per-hex `clusterSeeded` decided-flag (no duplicates; a deleted
 hamlet isn't resurrected); never overrides an existing settlement.
+**3R.7 — Roads, step 1 (trunk network).** A derived `world.roads[]` overlay (the sibling of
+`world.rivers[]`), recomputed by `syncRoads` after `syncRivers`. `js/gen/roads.js` `computeRoads`
+links the **big settlements (Town/City)** into a **minimum-spanning forest**: candidate pairs are
+routed with **A\*** over a road-tuned terrain cost field (`ROAD_COST` — Plains 1 … Mountains 8,
+Desert 10, Sea/Lake impassable), river-adjacent hexes get a **valley discount** (roads hug rivers,
+cross at fords), and a link is committed only if its route is **practical** (effective distance ≤
+`MAX_EFF_DIST` 16 — a mountain wall or desert inflates it past the cap so the road routes AROUND or
+the link fails; water is unreachable). Union-find keeps it a clean **tree, no mesh**; a gravity weight
+(`sizeA·sizeB/effDist²`) only orders the forest and picks **tiers** (City-touching = highway t1,
+Town–Town = road t2). **Append-only/frozen** like rivers (a built road never re-routes) and
+deterministic. Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing, on top of
+rivers (crossings read as bridges), endpoints trimmed so the town icon stays clean. Measured over 8
+Huge seeds: ~4 roads/fill, **~82% of big settlements on the network**, mostly highways. Shared
+`MinHeap` extracted to `js/core/minheap.js` (reused by rivers + roads). Spurs + desert polish are
+step 2. Schema **v15** (backfill `roads: []`, stamp-only migration).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
-major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v14. 272 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+major-water drainage overlay (`js/gen/rivers.js`), no schema change; 3R.7 adds `world.roads[]` (v15).**
+**Schema v15. 286 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

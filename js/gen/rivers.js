@@ -31,6 +31,7 @@
 
 import { neighbors, axialKey, parseKey, hexDisc, axialDistance } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
+import { MinHeap } from "../core/minheap.js";
 
 const WATER = new Set(["Sea", "Lake"]);
 
@@ -67,29 +68,6 @@ const PULL_SIZE_WEIGHT = { Hamlet: 1.5, Village: 2.5, Town: 4, City: 7 };
 // Reach (hexes ≈ 6 miles each): a City (and up) pulls from a day's ride; smaller
 // settlements only a couple of hexes ("a hex or two, not far out of the way").
 const pullRadius = (size) => (size === "City" ? 3 : 2);
-
-// Minimal binary min-heap keyed by numeric `d`.
-class MinHeap {
-  constructor() { this.a = []; }
-  get size() { return this.a.length; }
-  push(item) {
-    const a = this.a; a.push(item); let i = a.length - 1;
-    while (i > 0) { const p = (i - 1) >> 1; if (a[p].d <= a[i].d) break; [a[p], a[i]] = [a[i], a[p]]; i = p; }
-  }
-  pop() {
-    const a = this.a; const top = a[0]; const last = a.pop();
-    if (a.length) {
-      a[0] = last; let i = 0;
-      for (;;) {
-        const l = 2 * i + 1, r = 2 * i + 2; let m = i;
-        if (l < a.length && a[l].d < a[m].d) m = l;
-        if (r < a.length && a[r].d < a[m].d) m = r;
-        if (m === i) break; [a[m], a[i]] = [a[i], a[m]]; i = m;
-      }
-    }
-    return top;
-  }
-}
 
 /**
  * Extend the river network over the currently-revealed hexes. APPEND-ONLY:
