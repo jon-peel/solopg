@@ -22,6 +22,7 @@ import { glyphForPoi } from "./poi-style.js";
 import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
+import { computeRegions } from "../gen/regions.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -48,6 +49,7 @@ let hookTargets = new Set(); // axial keys "q,r" of open, unpinned hook destinat
 let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destinations
 let riverDraft = null; // in-progress manual river being drawn: [{q,r}, ...] | null
 let roadDraft = null;  // in-progress manual road being drawn: [{q,r}, ...] | null
+let regionCache = { seed: null, count: -1, regions: [] }; // memoised named regions (js/gen/regions.js)
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -72,6 +74,7 @@ export function attachMap(canvasEl, cbs = {}) {
 
 export function setWorld(w) {
   world = w;
+  regionCache = { seed: null, count: -1, regions: [] }; // invalidate named regions for the new world
   render();
 }
 
@@ -193,6 +196,10 @@ export function render() {
     if (detail && !(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
     visible.push({ hex, c });
   }
+
+  // 1b. Region names (3R.8): faint engraved labels over the terrain tracts, under
+  //     the water/road network and markers.
+  drawRegionLabels(minX, minY, maxX, maxY, margin);
 
   // 2a. Rivers then roads — both UNDER the markers below, and roads OVER rivers so
   //     a crossing reads as a bridge (solid trunk) or ford (dashed spur). Roads
@@ -325,6 +332,53 @@ function drawHookLine(a, b) {
   ctx.moveTo(pa.x, pa.y);
   ctx.lineTo(pb.x, pb.y);
   ctx.stroke();
+  ctx.restore();
+}
+
+// Named regions (3R.8): memoise the flood-filled regions per (seed, hex count) so
+// we only recompute when the world grows, not every frame.
+function regionsForWorld() {
+  if (!world) return [];
+  const hexes = placedHexes(world);
+  if (regionCache.seed === world.seed && regionCache.count === hexes.length) return regionCache.regions;
+  const terrainByKey = new Map();
+  for (const h of hexes) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  // Only the substantial tracts get named (keeps the map from drowning in labels).
+  regionCache = { seed: world.seed, count: hexes.length, regions: computeRegions(world.seed, terrainByKey, { minSize: 16 }) };
+  return regionCache.regions;
+}
+
+// Faint, cartographic region names engraved across the terrain (a light italic
+// serif, letter-spaced, sized to the region). Gated by the Labels toggle; culled
+// per-centroid. Font scales with the map (world px) so it reads as part of it.
+const REGION_LABEL_ALPHA = 0.34;
+function drawRegionLabels(minX, minY, maxX, maxY, margin) {
+  if (!labelsEnabled || !world) return;
+  const regions = regionsForWorld();
+  if (!regions.length) return;
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  // Biggest first, and skip any label whose centre falls too near one already
+  // placed — the larger tract keeps its name, so labels don't pile up.
+  const drawn = [];
+  for (const reg of [...regions].sort((a, b) => b.size - a.size)) {
+    const c = axialToPixel(reg.cq, reg.cr, HEX_SIZE);
+    if (c.x < minX - margin || c.x > maxX + margin || c.y < minY - margin || c.y > maxY + margin) continue;
+    const fontWorld = Math.max(HEX_SIZE * 0.85, Math.min(HEX_SIZE * 2.8, Math.sqrt(reg.size) * HEX_SIZE * 0.5));
+    const gap = fontWorld * 1.3;
+    if (drawn.some((d) => Math.abs(d.x - c.x) < (d.gap + gap) * 0.5 && Math.abs(d.y - c.y) < (d.gap + gap) * 0.35)) continue;
+    drawn.push({ x: c.x, y: c.y, gap });
+    ctx.font = `italic ${fontWorld}px Georgia, 'Times New Roman', serif`;
+    ctx.letterSpacing = `${fontWorld * 0.14}px`;
+    ctx.lineWidth = Math.max(1, fontWorld * 0.07);
+    ctx.strokeStyle = `rgba(18, 14, 8, ${REGION_LABEL_ALPHA * 0.55})`; // dark outline for legibility
+    ctx.fillStyle = `rgba(246, 239, 224, ${REGION_LABEL_ALPHA})`;
+    ctx.strokeText(reg.name, c.x, c.y);
+    ctx.fillText(reg.name, c.x, c.y);
+  }
+  ctx.letterSpacing = "0px"; // reset — letterSpacing persists on the context
   ctx.restore();
 }
 

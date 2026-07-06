@@ -448,12 +448,19 @@ by straight hex-lines, Undo/Finish/Cancel bar, Enter/Esc/Ctrl-Z keys) was **gene
 auto network so settlements spur onto it). `map.js` `setRoadDraft`/`drawRoadDraft` preview it as a
 dashed tan line. Verified end-to-end over the DevTools protocol (Draw → Road → trace → Finish renders a
 manual road). Only a desert-polish pass (rare ancient dead-straight road) remains optional.
+**Named regions (3R.8).** The big terrain tracts now carry faint engraved names ("the Marrowwood",
+"the Wolf Sloughs", "the Iron Thicket"). `js/gen/regions.js` `computeRegions` flood-fills connected
+same-terrain clumps ≥ 16 hexes and names each by a pure `regionName(seed, terrain, anchorKey)` (a
+seeded prefix + a terrain-flavoured collective noun — Peaks/Marches/Wood/Downs/Sands/Sea…). DERIVED,
+not stored: `map.js` memoises them per (seed, hex-count) and draws each at its centroid as a light
+italic serif, letter-spaced, sized to the region, **biggest-first with greedy de-overlap** so labels
+don't pile up; gated by the **Labels** toggle, under the water/road/marker layers. Node-tested.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change; 3R.7 adds `world.roads[]` (v15).**
-**Schema v15. 289 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v15. 294 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

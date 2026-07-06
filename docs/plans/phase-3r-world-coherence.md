@@ -999,8 +999,13 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Regeneration policy** — whole-region regenerate; single-hex re-roll inside a
   coherent region without breaking coastlines/rivers/roads (respect the `locked`/
   `manual` flag; re-stitch edges).
-- **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, optional
-  region labels; legend + LOD updates. (Rivers' line rendering already shipped in 3R.5,
+- **Region labels ✅ done** — the big terrain tracts carry faint engraved names ("the Marrowwood",
+  "the Wolf Sloughs"). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain clumps
+  (≥ 16 hexes) and names each via a seeded `regionName(seed, terrain, anchorKey)` (prefix + terrain
+  collective noun). Derived, not stored: `map.js` memoises per (seed, hex-count) and draws them at each
+  centroid as a light italic serif, biggest-first with greedy de-overlap, gated by the Labels toggle.
+- **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels (✅ above);
+  legend + LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
   pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
   Hills recoloured `#b08d4f` → **`#8c9e71`** (`terrain-style.js` `TERRAIN_COLORS`), a grey-green
   midpoint of Mountains grey + Plains green, so the Mountains→Hills→Plains band reads as an
