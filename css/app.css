@@ -446,6 +446,40 @@ button:hover {
   padding: 0.25rem 0.5rem;
 }
 
+/* New World dropdown: a button that reveals a small size menu below it. */
+.menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 8rem;
+  padding: 4px;
+  gap: 2px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.dropdown-menu[hidden] {
+  display: none;
+}
+.dropdown-menu button {
+  width: 100%;
+  text-align: left;
+  border-color: transparent;
+  background: transparent;
+}
+.dropdown-menu button:hover {
+  background: #2b3140;
+  border-color: var(--accent);
+}
+
 /* Thin separator between command-bar groups. */
 .bar-divider {
   width: 1px;

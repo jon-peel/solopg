@@ -14,7 +14,16 @@
         <select id="world-select"></select>
       </label>
       <span class="spacer"></span>
-      <button id="btn-new">New World</button>
+      <span class="menu-wrap">
+        <button id="btn-new" aria-haspopup="true" aria-expanded="false">New World ▾</button>
+        <div id="new-world-menu" class="dropdown-menu" hidden>
+          <button type="button" data-radius="">Empty</button>
+          <button type="button" data-radius="1">Small</button>
+          <button type="button" data-radius="2">Medium</button>
+          <button type="button" data-radius="3">Large</button>
+          <button type="button" data-radius="15">Huge</button>
+        </div>
+      </span>
       <button id="btn-save">Save</button>
       <button id="btn-delete">Delete</button>
       <button id="btn-export">Export</button>

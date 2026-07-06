@@ -205,16 +205,58 @@ async function setCurrent(world) {
   await refreshWorldList();
 }
 
-async function onNewWorld() {
+// Create a new world. `fillRadius` (from the New World dropdown) optionally
+// pre-fills a hex disc of that radius around the origin — Empty (null), Small (1),
+// Medium (2), Large (3), Huge (15) — running the full terrain/water/settlement/
+// road pipeline via setCurrent's sync passes.
+async function onNewWorld(fillRadius = null) {
   // No blocking prompt(): browsers can suppress repeated dialogs (the "prevent
   // this page from creating more dialogs" box), which silently broke this
   // button. Create with a default name; rename inline via the panel title.
   const worlds = await listWorlds();
-  const world = await saveWorld(createWorld({ name: defaultWorldName(worlds) }));
-  await setCurrent(world);
+  const world = createWorld({ name: defaultWorldName(worlds) });
+  let filled = 0;
+  if (fillRadius) {
+    current = world; // buildRandomHex reads `current` for neighbour affinity + spacing
+    const tables = await loadTables(HEX_TABLE_IDS);
+    for (const { q, r } of hexDisc(0, 0, fillRadius)) {
+      if (hasHexAt(current, q, r)) continue;
+      addHex(current, buildRandomHex(tables, q, r, 0));
+      filled++;
+    }
+    syncRivers(current);
+    syncRoads(current); // persist the derived overlays with the world
+  }
+  const saved = await saveWorld(world);
+  await setCurrent(saved);
   selectCell(0, 0); // land the GM on the origin, ready to right-click
   recenterOn(0, 0);
-  logLine("Created and saved.");
+  logLine(filled ? `Created a new world (${filled} hexes).` : "Created and saved.");
+}
+
+// The New World button opens a small dropdown (Empty / Small / Medium / Large /
+// Huge); picking a size creates the world pre-filled to that hex radius.
+function wireNewWorldMenu() {
+  const btn = $("btn-new");
+  const menu = $("new-world-menu");
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+  };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(menu.hidden);
+  });
+  menu.addEventListener("click", (e) => {
+    const opt = e.target.closest("button[data-radius]");
+    if (!opt) return;
+    setOpen(false);
+    const raw = opt.dataset.radius;
+    onNewWorld(raw ? Number(raw) : null);
+  });
+  // Dismiss on an outside click or Escape.
+  document.addEventListener("click", (e) => { if (!menu.hidden && !e.target.closest("#new-world-menu, #btn-new")) setOpen(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
 }
 
 // --- map chrome (hover readout, scale, empty-state prompt, help) ---------
@@ -1602,7 +1644,7 @@ async function onDeleteHex() {
 }
 
 function wire() {
-  $("btn-new").addEventListener("click", onNewWorld);
+  wireNewWorldMenu();
   $("btn-save").addEventListener("click", onSave);
   $("btn-delete").addEventListener("click", onDelete);
   $("btn-export").addEventListener("click", onExport);
