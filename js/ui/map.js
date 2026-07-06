@@ -170,6 +170,11 @@ export function render() {
   const onScreen = HEX_SIZE * camera.scale;
   const detail = iconsEnabled && onScreen >= DETAIL_PX;
   const simplified = iconsEnabled && onScreen >= MARK_MIN_PX && onScreen < DETAIL_PX;
+  // Two passes so the water/road network layers correctly: first the hex FILLS +
+  // terrain motifs (background), then rivers + roads, then the settlement/POI/hook
+  // MARKERS on top — so a town icon sits cleanly ON the network, not under it. The
+  // first pass collects the visible hexes so the marker pass reuses its cull.
+  const visible = [];
   for (const hex of placedHexes(world)) {
     const { q, r } = hex.coords;
     const c = axialToPixel(q, r, HEX_SIZE);
@@ -182,30 +187,31 @@ export function render() {
       continue;
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
-    if (detail) {
-      // On a settled tile, skip the terrain motif — the settlement marker stands
-      // in for it (terrain still reads from the hex fill colour).
-      if (!(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
-      drawDetailMarkers(c.x, c.y, hex);
-    } else if (simplified) {
-      drawSimplifiedMarkers(c.x, c.y, hex);
-    }
+    // Terrain motif is background (under the network); a settled tile skips it —
+    // its settlement marker (drawn later, over the roads) stands in for it.
+    if (detail && !(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
+    visible.push({ hex, c });
+  }
+
+  // 2a. Rivers then roads — both UNDER the markers below, and roads OVER rivers so
+  //     a crossing reads as a bridge (solid trunk) or ford (dashed spur). Roads
+  //     are nudged off-centre so one running along a river sits beside it rather
+  //     than hiding it (see drawRoads).
+  drawRivers(minX, minY, maxX, maxY, margin);
+  drawRiverDraft(); // the manual river being traced (if any), on top
+  drawRoads(minX, minY, maxX, maxY, margin);
+
+  // 2a″. Markers on placed hexes (settlement/POI + hook rings), on top of the
+  //      water/road network so the icons stay legible.
+  for (const { hex, c } of visible) {
+    if (detail) drawDetailMarkers(c.x, c.y, hex);
+    else if (simplified) drawSimplifiedMarkers(c.x, c.y, hex);
     // Hook destinations: pinned leads (a distinct pin) take precedence over the
     // amber "a lead exists here" ring; both visible at all zooms.
-    const hk = axialKey(q, r);
+    const hk = axialKey(hex.coords.q, hex.coords.r);
     if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
   }
-
-  // 2a. Rivers (3R.5): one pass over the whole registry, on top of terrain art
-  //     at every zoom (a river is worth seeing even zoomed out), and drawn even
-  //     across unexplored hexes so it visibly reaches the sea.
-  drawRivers(minX, minY, maxX, maxY, margin);
-  drawRiverDraft(); // the manual river being traced (if any), on top
-
-  // 2a′. Roads (3R.7): tiered tan network linking settlements, on top of rivers
-  //      so a crossing reads as a bridge/ford.
-  drawRoads(minX, minY, maxX, maxY, margin);
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
@@ -343,6 +349,8 @@ const ROAD_TIERS = {
 const ROAD_CASING = "#4a3a1f";
 const ROAD_END_TRIM = 0.5; // pull each end back this fraction of its last segment,
                            // so the centred settlement icon sits cleanly where the road arrives
+const ROAD_OFFSET = HEX_SIZE * 0.2; // world px: nudge roads off hex-centre (perpendicular to
+                                    // travel) so a road along a river sits beside it, not on it
 
 // Smooth a polyline through its points: anchor each curve segment at the
 // midpoint between consecutive vertices and use the vertex itself as the
@@ -423,6 +431,23 @@ function strokeDashed(pts) {
 
 function lerpPt(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
 
+// Shift a polyline sideways by `off` world px (perpendicular to the local travel
+// direction, to the left of a->b). Used so a road hugging a river valley draws
+// beside the river instead of on top of it.
+function offsetPolyline(pts, off) {
+  if (!off || pts.length < 2) return pts;
+  const out = new Array(pts.length);
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    let tx = b.x - a.x, ty = b.y - a.y;
+    const len = Math.hypot(tx, ty) || 1;
+    tx /= len; ty /= len;
+    out[i] = { x: pts[i].x - ty * off, y: pts[i].y + tx * off }; // left-normal
+  }
+  return out;
+}
+
 // Roads (3R.7): one pass over world.roads[], drawn on top of rivers so a crossing
 // reads as a bridge. Each is a smoothed tan polyline through hex centres, tiered
 // by width/colour, with a dark casing under the fill for contrast. Whole-road
@@ -449,10 +474,11 @@ function drawRoads(minX, minY, maxX, maxY, margin) {
     if (bMaxX < minX - margin || bMinX > maxX + margin || bMaxY < minY - margin || bMinY > maxY + margin) {
       continue;
     }
-    // Trim both ends back toward their neighbour so the town icon stays clean.
+    // Trim both ends back toward their neighbour so the town icon stays clean,
+    // then nudge the whole line off-centre so it sits beside any river it follows.
     pts[0] = lerpPt(pts[0], pts[1], ROAD_END_TRIM);
     pts[pts.length - 1] = lerpPt(pts[pts.length - 1], pts[pts.length - 2], ROAD_END_TRIM);
-    strokeRoad(pts, road);
+    strokeRoad(offsetPolyline(pts, ROAD_OFFSET), road);
   }
   ctx.restore();
 }
