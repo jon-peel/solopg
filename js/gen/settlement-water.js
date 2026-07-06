@@ -13,7 +13,7 @@
 // exceed a terrain's normal maxSize — the water IS the reason (a river-valley
 // town in the mountains, a great estuary port).
 
-import { SIZE_ORDER, isLargeSize } from "./terrain-profile.js";
+import { SIZE_ORDER } from "./terrain-profile.js";
 import { neighbors, axialKey, parseKey } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
 
@@ -192,7 +192,11 @@ export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
 // decided-flag — repeated syncs never duplicate and a GM-deleted hamlet is not
 // resurrected. Like the rest of settlement placement it's mildly order-dependent
 // (two nearby anchors contending for a shared neighbour), an accepted tradeoff.
-const CLUSTER_HAMLET_CHANCE = 0.4; // per farmland neighbour of a large settlement (kept a sprinkling)
+// Per-farmland-neighbour chance, BY anchor size (a City earns more farms than a
+// Town — and a City more often sits on water, so fewer of its neighbours are
+// even eligible, which the higher rate compensates for). The keys also define
+// which sizes anchor a cluster at all (Town/City; a Village never does).
+const CLUSTER_HAMLET_CHANCE = { Town: 0.35, City: 0.45 };
 const FARMLAND = new Set(["Plains", "Hills"]);
 
 /**
@@ -206,14 +210,15 @@ export function seedHamletClusters(hexByKey, seed) {
   const anchors = [];
   for (const hex of hexByKey.values()) {
     const s = hex.settlement;
-    if (s && s.present && isLargeSize(s.size)) anchors.push(hex);
+    if (s && s.present && CLUSTER_HAMLET_CHANCE[s.size] != null) anchors.push(hex);
   }
   for (const hex of anchors) {
     const { q, r } = hex.coords;
+    const chance = CLUSTER_HAMLET_CHANCE[hex.settlement.size];
     neighbors(q, r).forEach((nb, i) => {
       const nh = hexByKey.get(axialKey(nb.q, nb.r));
       if (!nh || !FARMLAND.has(nh.terrain) || nh.clusterSeeded) return;
-      if (subRng(seed, "cluster", q, r, i)() >= CLUSTER_HAMLET_CHANCE) return;
+      if (subRng(seed, "cluster", q, r, i)() >= chance) return;
       nh.clusterSeeded = true; // decided — even if it's already settled (we don't override)
       if (nh.settlement && nh.settlement.present) return;
       nh.settlement = { present: true, size: "Hamlet", baseSize: "Hamlet" };

@@ -187,6 +187,25 @@ test("seedHamletClusters: sprinkles Hamlets on farmland around a large settlemen
   assert.ok(placed > 0, "across seeds, some farmland neighbours become Hamlets");
 });
 
+test("seedHamletClusters: a City seeds farms more often than a Town", () => {
+  const build = (size) => {
+    const m = new Map([[axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains", settlement: { present: true, size } }]]);
+    for (const nb of neighbors(0, 0)) m.set(axialKey(nb.q, nb.r), { coords: { q: nb.q, r: nb.r }, terrain: "Plains" });
+    return m;
+  };
+  const totalFarms = (size) => {
+    let n = 0;
+    for (let s = 0; s < 400; s++) {
+      const m = build(size);
+      seedHamletClusters(m, "rate" + s);
+      for (const nb of neighbors(0, 0)) { const h = m.get(axialKey(nb.q, nb.r)); if (h.settlement && h.settlement.present) n++; }
+    }
+    return n;
+  };
+  const town = totalFarms("Town"), city = totalFarms("City");
+  assert.ok(city > town, `a City (${city}) should out-farm a Town (${town}) over the same sample`);
+});
+
 test("seedHamletClusters: only large (Town/City) settlements anchor a cluster", () => {
   const m = new Map([[axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains", settlement: { present: true, size: "Village" } }]]);
   for (const nb of neighbors(0, 0)) m.set(axialKey(nb.q, nb.r), { coords: { q: nb.q, r: nb.r }, terrain: "Plains" });
