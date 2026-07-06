@@ -24,7 +24,7 @@ import {
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
-import { computeRoads } from "../gen/roads.js";
+import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -53,6 +53,7 @@ import {
   setHookMarks,
   setHookFocus,
   setRiverDraft,
+  setRoadDraft,
   zoomStep,
   recenter,
   pixelsPerMile,
@@ -126,7 +127,8 @@ let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
 let selectedHookId = null; // hook whose target/origin are highlighted on the map
-let riverDraftClicks = null; // manual-river drawing: clicked anchor hexes, or null when not drawing
+let draftClicks = null; // manual river/road drawing: clicked anchor hexes, or null when not drawing
+let draftKind = null;   // "river" | "road" — what the active draft builds
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -1006,15 +1008,15 @@ function onSelectHook(id) {
 
 // Esc clears a hook highlight (takes priority over leaving the dungeon). Inert
 // while a ring is open (the ring owns Esc) or while typing in a field.
-// While tracing a river, Enter finishes, Esc cancels, Ctrl/Cmd+Z undoes a point.
-// Registered before the other key handlers so it wins those keys during a draw.
-function onRiverDraftKey(e) {
-  if (!riverDraftClicks) return;
+// While tracing a river/road, Enter finishes, Esc cancels, Ctrl/Cmd+Z undoes a
+// point. Registered before the other key handlers so it wins those keys mid-draw.
+function onDraftKey(e) {
+  if (!draftClicks) return;
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-  if (e.key === "Escape") onCancelDrawRiver();
-  else if (e.key === "Enter") onFinishDrawRiver();
-  else if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey)) onUndoRiverPoint();
+  if (e.key === "Escape") onCancelDraft();
+  else if (e.key === "Enter") onFinishDraft();
+  else if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey)) onUndoDraftPoint();
   else return;
   e.stopImmediatePropagation();
   e.preventDefault();
@@ -1407,50 +1409,59 @@ function buildRandomHex(tables, q, r, gen) {
 }
 
 function onHexClick({ q, r }) {
-  if (riverDraftClicks) return addRiverPoint(q, r);
+  if (draftClicks) return addDraftPoint(q, r);
   selectCell(q, r);
 }
 
 function onEmptyCellClick({ q, r }) {
-  if (riverDraftClicks) return addRiverPoint(q, r);
+  if (draftClicks) return addDraftPoint(q, r);
   selectCell(q, r);
 }
 
-// --- Manual river drawing (Phase 3R.6) -----------------------------------
-// Trace a river by clicking hexes: consecutive clicks are joined by the
-// straight hex-line between them, so two clicks make a line and more clicks a
-// winding course. On finish it's stored as a `manual` river (js/gen/rivers.js);
-// its open ends auto-complete to a mountain source / the sea over time.
+// --- Manual river / road drawing (Phase 3R.6 / 3R.7) ---------------------
+// Trace a river OR a road by clicking hexes: consecutive clicks are joined by
+// the straight hex-line between them, so two clicks make a line and more clicks
+// a winding course. `draftKind` ("river" | "road") says which the active draft
+// is; on Finish it's stored as a `manual` river (js/gen/rivers.js — open ends
+// auto-complete to a mountain source / the sea) or a `manual` road
+// (js/gen/roads.js — kept verbatim, seeds the auto road network).
 
 // The full hex path from the clicked anchors (straight lines filled between).
-function riverDraftPath() {
-  if (!riverDraftClicks || !riverDraftClicks.length) return [];
+function draftPath() {
+  if (!draftClicks || !draftClicks.length) return [];
   const path = [];
   const push = (c) => {
     const last = path[path.length - 1];
     if (!last || last.q !== c.q || last.r !== c.r) path.push({ q: c.q, r: c.r });
   };
-  push(riverDraftClicks[0]);
-  for (let i = 1; i < riverDraftClicks.length; i++) {
-    const seg = axialLine(riverDraftClicks[i - 1].q, riverDraftClicks[i - 1].r, riverDraftClicks[i].q, riverDraftClicks[i].r);
+  push(draftClicks[0]);
+  for (let i = 1; i < draftClicks.length; i++) {
+    const seg = axialLine(draftClicks[i - 1].q, draftClicks[i - 1].r, draftClicks[i].q, draftClicks[i].r);
     for (let k = 1; k < seg.length; k++) push(seg[k]);
   }
   return path;
 }
 
-function refreshRiverDraft() {
-  setRiverDraft(riverDraftClicks ? riverDraftPath() : null);
-  $("river-draw-bar").hidden = !riverDraftClicks;
+function refreshDraft() {
+  const pts = draftClicks ? draftPath() : null;
+  setRiverDraft(draftKind === "river" ? pts : null);
+  setRoadDraft(draftKind === "road" ? pts : null);
+  $("draw-bar").hidden = !draftClicks;
+  if (draftClicks) $("draw-hint").textContent = `Click hexes to trace a ${draftKind}`;
 }
 
-// The id of a GM-drawn (manual) river passing through (q, r), or null. Only
-// manual rivers are individually removable — auto rivers are derived.
+// The id of a GM-drawn (manual) river / road passing through (q, r), or null.
+// Only manual ones are individually removable — the auto overlays are derived.
 function manualRiverIdAt(q, r) {
   if (!current) return null;
   const k = axialKey(q, r);
-  for (const rv of current.rivers || []) {
-    if (rv.manual && rv.path.some((p) => axialKey(p.q, p.r) === k)) return rv.id;
-  }
+  for (const rv of current.rivers || []) if (rv.manual && rv.path.some((p) => axialKey(p.q, p.r) === k)) return rv.id;
+  return null;
+}
+function manualRoadIdAt(q, r) {
+  if (!current) return null;
+  const k = axialKey(q, r);
+  for (const rd of current.roads || []) if (rd.manual && rd.path.some((p) => axialKey(p.q, p.r) === k)) return rd.id;
   return null;
 }
 
@@ -1460,56 +1471,72 @@ async function onRemoveRiver(id) {
   await persistAndRefresh(); // syncRivers keeps the rest; auto rivers re-derive
   logLine("River removed.");
 }
+async function onRemoveRoad(id) {
+  if (!current || !id) return;
+  current.roads = (current.roads || []).filter((rd) => rd.id !== id);
+  await persistAndRefresh(); // syncRoads keeps manual roads; the auto network re-derives
+  logLine("Road removed.");
+}
 
-function onStartDrawRiver() {
+function onStartDrawRiver() { startDraft("river"); }
+function onStartDrawRoad() { startDraft("road"); }
+function startDraft(kind) {
   if (!current || !selected) return;
-  riverDraftClicks = [{ q: selected.q, r: selected.r }];
-  refreshRiverDraft();
-  logLine("Drawing a river — click hexes to trace its course, then Finish.");
+  draftKind = kind;
+  draftClicks = [{ q: selected.q, r: selected.r }];
+  refreshDraft();
+  logLine(`Drawing a ${kind} — click hexes to trace its course, then Finish.`);
 }
 
-function addRiverPoint(q, r) {
-  if (!riverDraftClicks) return;
-  const last = riverDraftClicks[riverDraftClicks.length - 1];
+function addDraftPoint(q, r) {
+  if (!draftClicks) return;
+  const last = draftClicks[draftClicks.length - 1];
   if (last.q === q && last.r === r) return; // ignore a repeat click on the same hex
-  riverDraftClicks.push({ q, r });
-  refreshRiverDraft();
+  draftClicks.push({ q, r });
+  refreshDraft();
 }
 
-function onUndoRiverPoint() {
-  if (!riverDraftClicks) return;
-  if (riverDraftClicks.length > 1) riverDraftClicks.pop();
-  refreshRiverDraft();
+function onUndoDraftPoint() {
+  if (!draftClicks) return;
+  if (draftClicks.length > 1) draftClicks.pop();
+  refreshDraft();
 }
 
-function onCancelDrawRiver() {
-  riverDraftClicks = null;
-  refreshRiverDraft();
+function onCancelDraft() {
+  draftClicks = null;
+  draftKind = null;
+  refreshDraft();
 }
 
-// Next id for a manual river: manual:<n>, monotonic across the world's rivers.
-function nextManualRiverId(world) {
+// Next id for a manual overlay entry: manual:<n>, monotonic across the list.
+function nextManualId(list) {
   let max = -1;
-  for (const rv of world.rivers || []) {
-    const m = /^manual:(\d+)$/.exec(rv.id || "");
+  for (const item of list || []) {
+    const m = /^manual:(\d+)$/.exec(item.id || "");
     if (m) max = Math.max(max, Number(m[1]));
   }
   return `manual:${max + 1}`;
 }
 
-async function onFinishDrawRiver() {
-  if (!current || !riverDraftClicks) return;
-  const path = riverDraftPath();
-  if (path.length < 2) { onCancelDrawRiver(); return; }
-  const terrainByKey = new Map();
-  for (const h of placedHexes(current)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
-  const river = buildManualRiver(nextManualRiverId(current), path, terrainByKey);
-  if (!Array.isArray(current.rivers)) current.rivers = [];
-  current.rivers.push(river);
-  riverDraftClicks = null;
-  refreshRiverDraft();
-  await persistAndRefresh(); // syncRivers completes the open ends + merges tributaries
-  logLine("River added.");
+async function onFinishDraft() {
+  if (!current || !draftClicks) return;
+  const path = draftPath();
+  const kind = draftKind;
+  if (path.length < 2) { onCancelDraft(); return; }
+  if (kind === "river") {
+    const terrainByKey = new Map();
+    for (const h of placedHexes(current)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+    if (!Array.isArray(current.rivers)) current.rivers = [];
+    current.rivers.push(buildManualRiver(nextManualId(current.rivers), path, terrainByKey));
+  } else {
+    if (!Array.isArray(current.roads)) current.roads = [];
+    current.roads.push(buildManualRoad(nextManualId(current.roads), path));
+  }
+  draftClicks = null;
+  draftKind = null;
+  refreshDraft();
+  await persistAndRefresh(); // syncRivers/syncRoads integrate the new manual overlay
+  logLine(kind === "river" ? "River added." : "Road added.");
 }
 
 // Right-click: select the cell, then open the radial menu over it. The model is
@@ -1517,7 +1544,7 @@ async function onFinishDrawRiver() {
 // are shown disabled. Picks route through `radialDispatch` to existing handlers.
 function onContextMenu({ q, r, clientX, clientY }) {
   if (!current) return;
-  if (riverDraftClicks) return; // ignore right-click while tracing a river
+  if (draftClicks) return; // ignore right-click while tracing a river/road
   selectCell(q, r);
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
@@ -1533,6 +1560,7 @@ function onContextMenu({ q, r, clientX, clientY }) {
     pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
     dungeonSizes: dungeonSizes.map((s) => ({ label: s.size, value: s.size, title: s.blurb || "" })),
     manualRiverHere: manualRiverIdAt(q, r),
+    manualRoadHere: manualRoadIdAt(q, r),
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -1559,6 +1587,8 @@ function radialDispatch(id, value) {
     case "followTrail": return onStartChain();
     case "drawRiver": return onStartDrawRiver();
     case "removeRiver": return onRemoveRiver(value);
+    case "drawRoad": return onStartDrawRoad();
+    case "removeRoad": return onRemoveRoad(value);
   }
 }
 
@@ -1661,15 +1691,15 @@ function wire() {
   $("btn-home").addEventListener("click", () => recenter());
   $("btn-help").addEventListener("click", () => toggleHelp());
   $("btn-help-close").addEventListener("click", () => toggleHelp(false));
-  $("btn-river-undo").addEventListener("click", onUndoRiverPoint);
-  $("btn-river-finish").addEventListener("click", onFinishDrawRiver);
-  $("btn-river-cancel").addEventListener("click", onCancelDrawRiver);
+  $("btn-draw-undo").addEventListener("click", onUndoDraftPoint);
+  $("btn-draw-finish").addEventListener("click", onFinishDraft);
+  $("btn-draw-cancel").addEventListener("click", onCancelDraft);
   $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
   $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
   $("help-overlay").addEventListener("click", (e) => {
     if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
   });
-  window.addEventListener("keydown", onRiverDraftKey); // river drawing intercepts Esc/Enter first
+  window.addEventListener("keydown", onDraftKey); // river/road drawing intercepts Esc/Enter first
   window.addEventListener("keydown", onHelpKey); // Esc closes help before other handlers
   window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
   window.addEventListener("keydown", onDungeonKey);

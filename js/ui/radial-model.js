@@ -11,7 +11,7 @@
 // its own terrain/POI art — these only label the menu.
 export const ACTION_GLYPH = {
   terrain: "🗺️", poi: "⭐", settlement: "🏠", hook: "🎣",
-  river: "🏞️", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
+  draw: "✏️", river: "🏞️", road: "🛣️", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
 };
 export const TERRAIN_GLYPH = {
   Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️",
@@ -65,12 +65,15 @@ function settlementChildren(allowedSizes, hasSettlement) {
   return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes];
 }
 
-// River submenu: Draw always; Remove only when this hex lies on a GM-drawn
-// (manual) river — auto-generated rivers aren't individually removable.
-function riverChildren(manualRiverHere) {
+// Draw submenu: trace a manual River or Road; plus a Remove entry for whichever
+// GM-drawn (manual) river/road this hex lies on (auto-generated ones aren't
+// individually removable — they're derived overlays).
+function drawChildren(manualRiverHere, manualRoadHere) {
   return [
-    leaf("drawRiver", "🏞️", "Draw"),
-    ...(manualRiverHere ? [leaf("removeRiver", "🗑️", "Remove", { value: manualRiverHere, danger: true })] : []),
+    leaf("drawRiver", ACTION_GLYPH.river, "River"),
+    leaf("drawRoad", ACTION_GLYPH.road, "Road"),
+    ...(manualRiverHere ? [leaf("removeRiver", "🗑️", "Remove river", { value: manualRiverHere, danger: true })] : []),
+    ...(manualRoadHere ? [leaf("removeRoad", "🗑️", "Remove road", { value: manualRoadHere, danger: true })] : []),
   ];
 }
 
@@ -128,7 +131,7 @@ export function buildRadialModel(state) {
     placed = false, terrain = null, hasSettlement = false,
     allowedSizes = [], canGossip = false,
     poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
-    manualRiverHere = null,
+    manualRiverHere = null, manualRoadHere = null,
   } = state || {};
 
   const needHex = { enabled: false, reason: "Place terrain on this hex first" };
@@ -154,10 +157,10 @@ export function buildRadialModel(state) {
     submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
     leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
     leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
-    // River: Draw a manual river from this hex (click hexes to trace a course;
-    // open ends auto-complete to a mountain source / the sea), and Remove one
-    // that already passes through this hex.
-    submenu("river", ACTION_GLYPH.river, "River", {}, riverChildren(manualRiverHere)),
+    // Draw: trace a manual river (open ends auto-complete to a source / the sea)
+    // or a manual road (kept verbatim, joins the auto network) from this hex, and
+    // Remove one that already passes through this hex.
+    submenu("draw", ACTION_GLYPH.draw, "Draw", {}, drawChildren(manualRiverHere, manualRoadHere)),
   ];
 }
 

@@ -985,8 +985,12 @@ long roads — most settlements connected, some with several roads, an interesti
   (one component), long city links, crossroad spurs, reach-cap isolation, water impassability, mountain
   avoidance, valley-hug discount, corridor merging, determinism + manual-kept, hub multi-connection.
   Shared `MinHeap` in `js/core/minheap.js`. Schema **v15**.
-- **Remaining polish (not blocking):** the **"Rivers" draw menu → rename + a "Draw road"** manual tool
-  (mirroring Draw river); a **desert pass** (rare ancient dead-straight road). Bridges/ports + full
+- **Manual draw ✅ done** — the radial "River" menu became a **Draw** submenu (River / Road, + Remove
+  river/road where a manual one runs). The river-draft plumbing was generalised to a `draftKind`, so
+  Finish builds a `manual` river or a `manual` road (`buildManualRoad` — a solid tier-2 road kept
+  verbatim by `computeRoads`, seeding the auto network); `map.js` previews it as a dashed tan line.
+  Verified end-to-end over the DevTools protocol.
+- **Remaining polish (not blocking):** a **desert pass** (rare ancient dead-straight road). Bridges/ports + full
   manual-draw integration still slated for 3R.8.
 
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning

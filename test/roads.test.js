@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeRoads } from "../js/gen/roads.js";
+import { computeRoads, buildManualRoad } from "../js/gen/roads.js";
 import { axialKey } from "../js/core/hexgeo.js";
 
 // A filled axial box of one terrain, with per-hex overrides (keyed by axialKey).
@@ -154,6 +154,22 @@ test("computeRoads: nearby routes merge onto a shared corridor instead of parall
   }
   assert.ok(tries > 0, "the lower village built a road");
   assert.ok(merged >= Math.floor(tries * 0.7), `nearby routes share hexes most of the time (${merged}/${tries})`);
+});
+
+test("buildManualRoad: a GM-drawn road is kept verbatim and seeds the auto network", () => {
+  const path = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }, { q: 3, r: 0 }];
+  const road = buildManualRoad("manual:0", path);
+  assert.equal(road.manual, true);
+  assert.equal(road.tier, 2);
+  assert.deepEqual(road.a, { q: 0, r: 0 });
+  assert.deepEqual(road.b, { q: 3, r: 0 });
+  assert.equal(road.path.length, 4);
+  // A village beside the drawn road spurs onto it (the manual road is on the network).
+  const terr = boardRect(-1, 4, -2, 2);
+  const roads = computeRoads("s", terr, settlements([[1, 1, "Village"]]), [], [road]);
+  assert.ok(roads.includes(road), "manual road kept verbatim");
+  const spur = roads.find((r) => r.a.q === 1 && r.a.r === 1);
+  assert.ok(spur && spur.junction, "the village spurs onto the manual road at a crossroad");
 });
 
 test("computeRoads: a central city becomes a hub with several roads", () => {

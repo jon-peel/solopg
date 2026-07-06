@@ -250,3 +250,17 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
   }
   return roads;
 }
+
+/**
+ * Build a manual (GM-drawn) road from an ordered chain of hexes. Manual roads are
+ * kept verbatim by computeRoads (never re-routed) and seed the auto network — a
+ * settlement can spur onto one at a crossroad. Rendered as a solid tier-2 road.
+ * @param {string} id stable unique id for this road
+ * @param {{q:number,r:number}[]} drawnPath ordered, connected chain of hexes
+ * @returns {{id:string,manual:true,a:{q,r},b:{q,r},tier:number,path:{q,r}[],junction:boolean}}
+ */
+export function buildManualRoad(id, drawnPath) {
+  const path = drawnPath.map((p) => ({ q: p.q, r: p.r }));
+  const a = path[0], b = path[path.length - 1];
+  return { id, manual: true, a: { q: a.q, r: a.r }, b: { q: b.q, r: b.r }, tier: 2, path, junction: false };
+}

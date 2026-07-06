@@ -439,14 +439,21 @@ merge into one line; drawn **lowest-tier-first** so a shared segment reads as th
 crossroad end is left long to meet the road it joins, a settlement end trimmed so its icon stays clean. Measured over 8 Huge seeds:
 ~15 roads/fill, **all big settlements in ONE connected network + ~90% of ALL settlements** on it (the
 rest the intended isolated few). Shared `MinHeap` extracted to
-`js/core/minheap.js` (reused by rivers + roads). Remaining: the "Rivers" draw menu → rename + **Draw
-road** (manual), and a desert-polish pass. Schema **v15** (backfill `roads: []`, stamp-only migration).
+`js/core/minheap.js` (reused by rivers + roads). Schema **v15** (backfill `roads: []`, stamp-only migration).
+**Manual draw (3R.7).** The radial "River" menu became a **Draw** submenu (River / Road, + Remove
+river/road where a manual one runs). The river-draft plumbing (`js/ui/app.js` — clicked anchors joined
+by straight hex-lines, Undo/Finish/Cancel bar, Enter/Esc/Ctrl-Z keys) was **generalised** to a
+`draftKind` ("river"|"road"): Finish builds a `manual` river (`buildManualRiver`) or a `manual` road
+(`js/gen/roads.js` `buildManualRoad` — a solid tier-2 road kept verbatim by `computeRoads`, seeding the
+auto network so settlements spur onto it). `map.js` `setRoadDraft`/`drawRoadDraft` preview it as a
+dashed tan line. Verified end-to-end over the DevTools protocol (Draw → Road → trace → Finish renders a
+manual road). Only a desert-polish pass (rare ancient dead-straight road) remains optional.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change; 3R.7 adds `world.roads[]` (v15).**
-**Schema v15. 288 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v15. 289 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
