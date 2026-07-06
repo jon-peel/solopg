@@ -344,7 +344,7 @@ const RIVER_WIDTH = 3.4; // world px at scale 1 (before the /camera.scale divide
 const ROAD_TIERS = {
   1: { width: 4.4, color: "#d9b25c" }, // highway (City–City)
   2: { width: 2.9, color: "#c39a54" }, // road
-  3: { width: 1.7, color: "#b58f5a", dash: [6, 5] }, // track / spur
+  3: { width: 2.6, color: "#c69a58", dash: [7, 4] }, // track / spur (dashed = ford)
 };
 const ROAD_CASING = "#4a3a1f";
 const ROAD_END_TRIM = 0.5; // pull each end back this fraction of its last segment,
@@ -487,21 +487,17 @@ function drawRoads(minX, minY, maxX, maxY, margin) {
 function strokeRoad(pts, road) {
   const spec = ROAD_TIERS[road.tier] || ROAD_TIERS[2];
   const w = spec.width / camera.scale;
-  if (spec.dash) { // tracks/spurs: a single dashed line, no casing
-    ctx.save();
-    ctx.setLineDash(spec.dash.map((d) => d / camera.scale));
-    ctx.strokeStyle = spec.color;
-    ctx.lineWidth = w;
-    strokeSmoothPath(pts);
-    ctx.restore();
-    return;
-  }
+  ctx.save();
+  // A dashed track gets the same dark casing as a solid road (dashed too), so its
+  // dashes read clearly against the terrain instead of washing out.
+  if (spec.dash) ctx.setLineDash(spec.dash.map((d) => d / camera.scale));
   ctx.strokeStyle = ROAD_CASING; // dark casing first...
   ctx.lineWidth = w + 1.8 / camera.scale;
   strokeSmoothPath(pts);
   ctx.strokeStyle = spec.color; // ...then the tan fill on top
   ctx.lineWidth = w;
   strokeSmoothPath(pts);
+  ctx.restore();
 }
 
 /** Set (or clear) the in-progress manual river being traced; re-renders. */
