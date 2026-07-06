@@ -406,9 +406,9 @@ scatter of Villages and **Towns**; landlocked seeds barely change.
 **Hamlet clusters (3R.6).** A large (Town/City) settlement now sprinkles a few **farming Hamlets** in
 the arable land (Plains/Hills) of its immediate ring — a "breadbasket". A deliberate **sprinkling**:
 `seedHamletClusters` (`settlement-water.js`, run by `syncRivers` after the water passes so anchors are
-final-sized, then a second idempotent `applyWaterBoosts`) rolls `CLUSTER_HAMLET_CHANCE` 0.2 per
-farmland neighbour, so ~half of big towns get a hamlet or two and the rest stand alone (~3.6 per Huge
-fill). Deterministic + idempotent via a per-hex `clusterSeeded` decided-flag (no duplicates; a deleted
+final-sized, then a second idempotent `applyWaterBoosts`) rolls `CLUSTER_HAMLET_CHANCE` 0.4 per
+farmland neighbour, so ~two-thirds of big towns get a hamlet or two and the rest stand alone (~6 per
+Huge fill). Deterministic + idempotent via a per-hex `clusterSeeded` decided-flag (no duplicates; a deleted
 hamlet isn't resurrected); never overrides an existing settlement.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12

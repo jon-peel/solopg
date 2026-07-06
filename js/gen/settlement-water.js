@@ -192,7 +192,7 @@ export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
 // decided-flag — repeated syncs never duplicate and a GM-deleted hamlet is not
 // resurrected. Like the rest of settlement placement it's mildly order-dependent
 // (two nearby anchors contending for a shared neighbour), an accepted tradeoff.
-const CLUSTER_HAMLET_CHANCE = 0.2; // per farmland neighbour of a large settlement (kept a sprinkling)
+const CLUSTER_HAMLET_CHANCE = 0.4; // per farmland neighbour of a large settlement (kept a sprinkling)
 const FARMLAND = new Set(["Plains", "Hills"]);
 
 /**

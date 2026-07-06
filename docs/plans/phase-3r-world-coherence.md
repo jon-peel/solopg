@@ -906,12 +906,12 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   retune the high Plains 0.45. Objective target from the 3R.2 spacing metric.
 - **Hamlet clusters ✅ done** — a large (Town/City) settlement sprinkles a few **farming
   hamlets** in the arable land (Plains/Hills) of its immediate ring — a "breadbasket". Kept a
-  deliberate SPRINKLING: `CLUSTER_HAMLET_CHANCE` 0.2 per farmland neighbour, so ~half of big towns
-  get a hamlet or two and the rest stand alone (`settlement-water.js` `seedHamletClusters`, run by
-  `syncRivers` after the water passes — so anchors are their final boosted size — then a second
+  deliberate SPRINKLING: `CLUSTER_HAMLET_CHANCE` 0.4 per farmland neighbour, so ~two-thirds of big
+  towns get a hamlet or two and the rest stand alone (`settlement-water.js` `seedHamletClusters`, run
+  by `syncRivers` after the water passes — so anchors are their final boosted size — then a second
   idempotent `applyWaterBoosts` so a riverside hamlet is sized consistently that same sync).
   Deterministic + idempotent via a per-hex `clusterSeeded` decided-flag (no duplicates; a deleted
-  hamlet isn't resurrected); doesn't override an existing settlement. Measured: ~3.6 cluster hamlets
+  hamlet isn't resurrected); doesn't override an existing settlement. Measured: ~6 cluster hamlets
   per Huge fill. Node-tested. (Did NOT need region/chunk generation — the immediate-ring approach
   reads as a breadbasket and stays deterministic under lazy reveal.)
 - **River→settlement gravity (side step) ✅ done** — a river tracing past a settlement now bends to
