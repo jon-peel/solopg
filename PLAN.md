@@ -414,23 +414,27 @@ of big towns still standing alone. Deterministic + idempotent via a per-hex `clu
 hamlet isn't resurrected); never overrides an existing settlement.
 **3R.7 — Roads (network + rendering).** A derived `world.roads[]` overlay (the sibling of
 `world.rivers[]`), recomputed by `syncRoads` after `syncRivers`. `js/gen/roads.js` `computeRoads` builds
-a **greedy nearest-attachment network**: settlements are processed **biggest first**, and each one not
-already on the network builds ONE road via **least-cost routing** (Dijkstra over the road-tuned cost
-field `ROAD_COST` — Plains 1 … Mountains 8, Desert 10, Sea/Lake impassable; river-adjacent hexes get a
-**valley discount**) to the **nearest** thing it can reach — an existing road hex (**a crossroad**) or
-another eligible settlement. Because cities go first they wire up to cities **over long distances** (a
-road can span the map); towns then hang off that trunk, usually joining at a crossroad; villages/hamlets
-**spur** in to whatever's nearest. **Reach is size-scaled** (`REACH` — City 64 … Hamlet 8) so remote
-small places stay roadless, plus a small **isolation roll** (`ISO_CHANCE`) leaves the odd well-placed one
-unconnected. Nodes many others attach to become **hubs with several roads**. **Tiers** by the owning
-settlement: City = highway (t1), Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford).
-**Append-only/frozen** like rivers (a settlement on the network is never re-wired; only new roads added)
-and deterministic. Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing —
-**under** the settlement icons (a town sits on the network), **over** rivers (solid = bridge, dashed spur
-= ford), **nudged off-centre** so a road along a river sits beside it; a crossroad end is left long to
-meet the road it joins, a settlement end trimmed so its icon stays clean. Measured over 8 Huge seeds:
-~14 roads/fill, **100% of big settlements + ~90% of ALL settlements** on the network (the rest the
-intended isolated few); tiers ~17 highways / 16 roads / 78 spurs. Shared `MinHeap` extracted to
+the network in **two phases**. **(1) Trunk:** the big settlements (Town/City) are joined into a
+**minimum-spanning forest** (Kruskal + union-find over **A\*** least-cost routes) — this *guarantees*
+every big place within reach of another lands in **one connected network** (three nearby cities are
+always joined, as a chain/crossroads — this fixed the playtest bug where cities sat unconnected). City
+links reach far (`trunkReach` City–City 64 … Town–Town 30); cities never roll isolated. **(2) Spurs:**
+every other settlement (a Village/Hamlet, or a Town too remote for the trunk) attaches via **Dijkstra**
+to the **nearest** thing it can reach — an existing road hex (**a crossroad**) or another settlement —
+within a size-scaled `REACH` (City 64 … Hamlet 8); a small `ISO_CHANCE` leaves the odd small place
+roadless, and a remote one out of reach simply isn't connected. Routing is over the road-tuned cost
+field (`ROAD_COST` Plains 1 … Mountains 8, Desert 10, Sea/Lake impassable) so roads route **around**
+ranges / avoid desert / never cross water, with a **valley discount** on river-adjacent hexes. Nodes
+many others attach to become **hubs with several roads**. **Tiers** by the owning settlement: City =
+highway (t1), Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford). The **auto network is
+re-derived deterministically** each call (a pure function of the revealed terrain + settlements, so it
+stays connected as the world grows); only GM-drawn **manual** roads are kept verbatim (and seed the
+network). Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing — **under** the
+settlement icons (a town sits on the network), **over** rivers (solid = bridge, dashed spur = ford),
+**nudged off-centre** so a road along a river sits beside it; a crossroad end is left long to meet the
+road it joins, a settlement end trimmed so its icon stays clean. Measured over 8 Huge seeds:
+~15 roads/fill, **all big settlements in ONE connected network + ~90% of ALL settlements** on it (the
+rest the intended isolated few). Shared `MinHeap` extracted to
 `js/core/minheap.js` (reused by rivers + roads). Remaining: the "Rivers" draw menu → rename + **Draw
 road** (manual), and a desert-polish pass. Schema **v15** (backfill `roads: []`, stamp-only migration).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
@@ -438,7 +442,7 @@ road** (manual), and a desert-polish pass. Schema **v15** (backfill `roads: []`,
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change; 3R.7 adds `world.roads[]` (v15).**
-**Schema v15. 286 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v15. 287 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

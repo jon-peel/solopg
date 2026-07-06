@@ -950,13 +950,16 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 **Confirmed feel:** trunk + spurs; roads hug river valleys; tiered by importance; big pull /
 long roads — most settlements connected, some with several roads, an interesting few isolated.
 - **Network ✅ done** — a derived `world.roads[]` overlay (`js/gen/roads.js` `computeRoads`, run by
-  `syncRoads` after `syncRivers`; append-only/frozen like rivers). A **greedy nearest-attachment**
-  build: settlements are processed **biggest first**, and each one not already on the network builds ONE
-  road to the **nearest** thing it can reach — an existing road hex (**a crossroad**) or another
-  eligible settlement. Cities go first so they wire to cities **over long distances** (a road can span
-  the map); towns hang off the trunk (usually joining at a crossroad); villages/hamlets **spur** in.
-  Nodes many others attach to become **hubs with several roads**. Measured over 8 Huge seeds: ~14
-  roads/fill, **100% of big settlements + ~90% of all settlements** connected.
+  `syncRoads` after `syncRivers`). Built in **two phases**: **(1) trunk** — the big settlements
+  (Town/City) are joined into a **minimum-spanning forest** (Kruskal + union-find over A\* routes), which
+  *guarantees* all big places within reach land in **one connected network** (three nearby cities are
+  always joined — this fixed a playtest bug where cities sat unconnected); **(2) spurs** — every other
+  settlement (Village/Hamlet, or a remote Town) attaches (Dijkstra) to the **nearest** road hex (**a
+  crossroad**) or settlement within a size-scaled reach. City links reach far; nodes many others attach
+  to become **hubs with several roads**. Measured over 8 Huge seeds: ~15 roads/fill, **all big
+  settlements in one connected network + ~90% of all settlements** on it. The auto network is
+  **re-derived deterministically** each call (stays connected as the world grows); only GM-drawn
+  **manual** roads are kept verbatim (and seed the network).
 - **Routing / pathfinding ✅ done** — **Dijkstra** least-cost route over a road-tuned terrain cost
   (`ROAD_COST` Plains 1 … Mountains 8, Desert 10; Sea/Lake impassable), so roads route **around**
   ranges unless cutting through is genuinely cheaper, almost never cross desert, and never cross water.
@@ -970,13 +973,13 @@ long roads — most settlements connected, some with several roads, an interesti
   left long to meet the road it joins, a settlement end trimmed so its icon stays clean.
 - **Spurs / crossroads ✅ done** — folded into the attachment model above (a small settlement links to
   the nearest network hex, forming a crossroad, rather than a full long-haul road).
-- **Timing** — a **batch nearest-attachment** recompute each `syncRoads`, deterministic + append-only
-  (a settlement on the network is never re-wired; only new roads added as the world grows).
-  Order-dependent like the terrain/rivers it sits on.
-- Represented as `{id, a, b, tier, path, junction}` hex-path edges. Node-tested: connectivity, long
-  city links, crossroad spurs, reach-cap isolation, water impassability, mountain avoidance, valley-hug
-  discount, append-only/determinism, hub multi-connection. Shared `MinHeap` in `js/core/minheap.js`.
-  Schema **v15**.
+- **Timing** — a **batch two-phase** recompute each `syncRoads`: the auto network is re-derived
+  deterministically from the current terrain + settlements (so it stays connected as the world grows),
+  while GM-drawn manual roads are kept verbatim.
+- Represented as `{id, a, b, tier, path, junction}` hex-path edges. Node-tested: three-cities-connected
+  (one component), long city links, crossroad spurs, reach-cap isolation, water impassability, mountain
+  avoidance, valley-hug discount, determinism + manual-kept, hub multi-connection. Shared `MinHeap` in
+  `js/core/minheap.js`. Schema **v15**.
 - **Remaining polish (not blocking):** the **"Rivers" draw menu → rename + a "Draw road"** manual tool
   (mirroring Draw river); a **desert pass** (rare ancient dead-straight road). Bridges/ports + full
   manual-draw integration still slated for 3R.8.

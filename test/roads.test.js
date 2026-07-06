@@ -34,10 +34,10 @@ test("computeRoads: cities wire up across a long open-plains distance", () => {
 });
 
 test("computeRoads: a village spurs to the nearest road at a crossroad (tier 3, junction)", () => {
-  // A pre-built city–city road; a village sits one hex off its middle.
+  // A GM-drawn (manual) city–city road; a village sits one hex off its middle.
   const terr = boardRect(-1, 7, -2, 2);
   const existing = [{
-    id: "road:0,0", a: { q: 0, r: 0 }, b: { q: 6, r: 0 }, tier: 1, junction: false,
+    id: "manual:0", manual: true, a: { q: 0, r: 0 }, b: { q: 6, r: 0 }, tier: 1, junction: false,
     path: [0, 1, 2, 3, 4, 5, 6].map((q) => ({ q, r: 0 })),
   }];
   const setl = settlements([[0, 0, "City"], [6, 0, "City"], [3, 1, "Village"]]);
@@ -97,24 +97,45 @@ test("computeRoads: a road hugs a river valley (discount tips an otherwise-equal
   assert.ok(!onPath(roads[0].path, 1, 0), "route avoids the non-valley hex");
 });
 
-test("computeRoads: append-only, idempotent, and deterministic", () => {
+test("computeRoads: three cities at a fair distance all end up connected", () => {
+  // The playtest bug: three cities that each had a local road but weren't joined.
+  const terr = boardRect(-8, 8, -8, 8);
+  const cities = [[0, 0], [7, 0], [3, 6]];
+  const roads = computeRoads("s", terr, settlements(cities.map(([q, r]) => [q, r, "City"])), [], []);
+  // Build settlement connectivity over the road network and assert one component.
+  const onNet = new Set();
+  for (const rd of roads) for (const p of rd.path) onNet.add(axialKey(p.q, p.r));
+  for (const [q, r] of cities) assert.ok(onNet.has(axialKey(q, r)), `city ${q},${r} has a road`);
+  // n cities -> a spanning tree has n-1 edges; assert every city reaches every other.
+  const parent = new Map(cities.map(([q, r]) => [axialKey(q, r), axialKey(q, r)]));
+  const find = (x) => { while (parent.get(x) !== x) x = parent.get(x); return x; };
+  for (const rd of roads) {
+    const a = axialKey(rd.a.q, rd.a.r), b = axialKey(rd.b.q, rd.b.r);
+    if (parent.has(a) && parent.has(b)) parent.set(find(a), find(b));
+  }
+  const roots = new Set([...parent.keys()].map(find));
+  assert.equal(roots.size, 1, "all three cities are in one connected network");
+});
+
+test("computeRoads: idempotent/deterministic; manual roads kept verbatim", () => {
   const terr = boardRect(-1, 9, -3, 3);
   const setl = settlements([[0, 0, "City"], [5, 0, "City"], [8, 2, "Town"]]);
   const first = computeRoads("s", terr, setl, [], []);
-  assert.deepEqual(computeRoads("s", terr, setl, [], []), first, "same inputs -> identical roads");
-  const again = computeRoads("s", terr, setl, [], first);
-  assert.equal(again.length, first.length, "re-run adds no roads (all settlements on-net)");
-  for (const r of first) assert.ok(again.includes(r), "existing road kept verbatim (same object)");
+  assert.deepEqual(computeRoads("s", terr, setl, [], first), first, "re-derives identically (auto network is a pure function)");
+  const manual = { id: "manual:0", manual: true, a: { q: 0, r: -2 }, b: { q: 3, r: -2 }, tier: 2, junction: false, path: [{ q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -2 }, { q: 3, r: -2 }] };
+  const withManual = computeRoads("s", terr, setl, [], [manual]);
+  assert.ok(withManual.includes(manual), "a GM-drawn manual road is kept verbatim");
 });
 
-test("computeRoads: a newly-revealed town extends the network without moving old roads", () => {
+test("computeRoads: a newly-revealed town joins the network", () => {
   const terr = boardRect(-1, 12, -3, 3);
   const first = computeRoads("s", terr, settlements([[0, 0, "City"], [5, 0, "City"]]), [], []);
   assert.equal(first.length, 1);
-  const grown = settlements([[0, 0, "City"], [5, 0, "City"], [9, 0, "Town"]]);
-  const roads = computeRoads("s", terr, grown, [], first);
-  assert.ok(roads.length > first.length, "the new town adds a road");
-  for (const r of first) assert.ok(roads.includes(r), "the original road is kept verbatim");
+  const grown = computeRoads("s", terr, settlements([[0, 0, "City"], [5, 0, "City"], [9, 0, "Town"]]), [], first);
+  const onNet = new Set();
+  for (const rd of grown) for (const p of rd.path) onNet.add(axialKey(p.q, p.r));
+  assert.ok(onNet.has(axialKey(9, 0)), "the new town is on the network");
+  assert.ok(onNet.has(axialKey(0, 0)) && onNet.has(axialKey(5, 0)), "the original cities stay connected");
 });
 
 test("computeRoads: a central city becomes a hub with several roads", () => {
