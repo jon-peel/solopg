@@ -392,13 +392,17 @@ schema change (additive fields, no migration per the no-back-compat directive). 
 watered regions shift up ~a tier (Hamlets→Villages, the odd estuary City), landlocked seeds unchanged.
 **Water settlement GENERATION (3R.6, distinct from the boost above).** Water bodies now *seed NEW*
 settlements (`settlement-water.js` `seedWaterSettlements`, run by `syncRivers` before the boost):
-scattered **small settlements along a river's course** (`RIVER_SETTLE_CHANCE` per mid-course hex),
-a **City at each river MOUTH** where it meets the sea or a big lake (the "double whammy",
-`MOUTH_CITY_CHANCE` 0.8 → City else Town), and **shore Cities on lakes** (big lakes always ≥
-`BIG_LAKE_SIZE`; small lakes sometimes, `SMALL_LAKE_CITY_CHANCE`). Deterministic + **idempotent** via
-a per-hex `waterSeeded` decided-flag — the repeated `syncRivers` calls never duplicate, and a
-settlement a GM deletes is **not resurrected**. Measured: a Huge fill goes from ~14 to ~21
-settlements with **~4 Cities** (was ~0.8), all clustered at water; landlocked seeds barely change.
+scattered **small settlements along a river's course** (`RIVER_SETTLE_CHANCE` 0.08 per mid-course
+hex → Hamlet/Village, which the +1 riverside boost lifts so **some become Towns**),
+a **port at most river MOUTHS** where it meets the sea or a big lake (the "double whammy"):
+`MOUTH_SETTLE_CHANCE` 0.6 so ~40% of mouths stay wild, a **random base type** (City/Town/Hamlet)
+that the **+2 estuary boost** then lifts — so a mouth reads mostly City, sometimes Town — and
+`MOUTH_KEEP_CHANCE` 0.25 makes a few martial **keeps** guarding the crossing; plus **shore Cities on
+lakes** (big lakes always ≥ `BIG_LAKE_SIZE`; small lakes sometimes, `SMALL_LAKE_CITY_CHANCE`).
+Deterministic + **idempotent** via a per-hex `waterSeeded` decided-flag — the repeated `syncRivers`
+calls never duplicate, and a settlement a GM deletes is **not resurrected**. Measured over 8 Huge
+seeds: mouths settle ~58% (mostly City, the odd Town, ~18% keeps), and river courses carry a healthy
+scatter of Villages and **Towns**; landlocked seeds barely change.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based

@@ -60,9 +60,10 @@ export function settlementWaterContext(q, r, riverKeys, terrainByKey) {
 // `waterSeeded`), so the repeated syncRivers calls never duplicate, and a
 // settlement a GM deletes is not resurrected. Runs BEFORE applyWaterBoosts, so a
 // seeded river hamlet then also gets the +1 riverside bump.
-const RIVER_SETTLE_CHANCE = 0.06;   // per mid-course river hex -> a small settlement
-const RIVER_HAMLET_FRAC = 0.7;      // else a Village
-const MOUTH_CITY_CHANCE = 0.8;      // river mouth (meets major water) -> City, else Town
+const MOUTH_SETTLE_CHANCE = 0.6;    // a river mouth settles this often (not every one)
+const MOUTH_KEEP_CHANCE = 0.25;     // ...and is occasionally a martial keep guarding the crossing
+const RIVER_SETTLE_CHANCE = 0.08;   // per mid-course river hex -> a small settlement
+const RIVER_HAMLET_FRAC = 0.7;      // else a Village (the +1 riverside boost then lifts it to a Town)
 const MIN_LAKE_FOR_CITY = 3;        // 1-2 hex puddles never earn a city
 const BIG_LAKE_SIZE = 6;            // a real lake (>= this) always earns a shore City
 const SMALL_LAKE_CITY_CHANCE = 0.4; // a smaller lake (3-5 hexes) sometimes does
@@ -83,8 +84,9 @@ function seedAt(hex, size) {
 }
 
 /**
- * Generate new settlements at water: scattered along rivers, a City at each river
- * mouth (double whammy), and shore Cities on lakes (big always, small sometimes).
+ * Generate new settlements at water: scattered along rivers, a (mostly City-sized,
+ * sometimes a keep) settlement at river mouths (the double whammy), and shore
+ * Cities on lakes (big always, small sometimes).
  * MUTATES the hexes in `hexByKey`. Idempotent (see the note above).
  * @param {Map<string,object>} hexByKey axialKey -> hex object
  * @param {{path:{q:number,r:number}[]}[]} rivers world.rivers
@@ -112,11 +114,11 @@ export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
     size.set(bid, n); shore.set(bid, sh); canon.set(bid, mn); bid++;
   }
 
-  // 2. River mouths — where a river MEETS water. TEST: place a FORT (keep) here
-  //    100% of the time. The keep's tower icon is unmistakable, so generating a
-  //    world and spotting forts at every river-meets-water point verifies the
-  //    whole mechanism fires end-to-end. (Revert to the City/Town roll —
-  //    MOUTH_CITY_CHANCE — once confirmed.)
+  // 2. River mouths — where a river MEETS water (the "double whammy"). Most, but
+  //    not every, mouth settles; the seeded type is random (leaning City) and the
+  //    +2 estuary boost from applyWaterBoosts then makes it a proper port. A few
+  //    are martial keeps guarding the crossing. Mouths are recorded so the course
+  //    pass below doesn't also settle them.
   const mouthKeys = new Set();
   for (const rv of rivers || []) {
     const path = rv && rv.path;
@@ -131,9 +133,17 @@ export function seedWaterSettlements(hexByKey, rivers, terrainByKey, seed) {
     if (!neighbors(mouth.q, mouth.r).some((nb) => WATER.has(terrainByKey.get(axialKey(nb.q, nb.r))))) continue;
     const k = axialKey(mouth.q, mouth.r);
     mouthKeys.add(k);
+    if (subRng(seed, "mouthsettle", mouth.q, mouth.r)() >= MOUTH_SETTLE_CHANCE) continue;
     const hex = hexByKey.get(k);
-    seedAt(hex, "City");
-    if (hex && hex.settlement && hex.settlement.present) hex.settlement.kind = "keep"; // FORT marker (test)
+    // Random base type. The estuary boost (+2 at a sea mouth) then lifts it, so a
+    // seeded Hamlet still surfaces as a Town — that spread is the visible variety.
+    const roll = subRng(seed, "mouthsize", mouth.q, mouth.r)();
+    const size = roll < 0.55 ? "City" : roll < 0.75 ? "Town" : "Hamlet";
+    seedAt(hex, size);
+    if (hex && hex.settlement && hex.settlement.present &&
+        subRng(seed, "mouthkeep", mouth.q, mouth.r)() < MOUTH_KEEP_CHANCE) {
+      hex.settlement.kind = "keep";
+    }
   }
 
   // 3. Scattered settlements along the river course (mouths already handled).

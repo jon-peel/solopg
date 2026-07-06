@@ -75,20 +75,29 @@ test("applyWaterBoosts: a settlement that loses its water context reverts to bas
 
 // --- seedWaterSettlements: generate NEW settlements at water ----------------
 
-test("seedWaterSettlements: a river mouth settles the last LAND hex, not the water sink", () => {
-  const hexByKey = new Map([
-    [axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains" }], // last LAND hex = mouth
-    [axialKey(1, 0), { coords: { q: 1, r: 0 }, terrain: "Sea" }],    // the water sink
-  ]);
-  const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(1, 0), "Sea"]]);
+test("seedWaterSettlements: a river mouth settles the last LAND hex, never the water sink", () => {
   // computeRivers ENDS the path on the water sink hex, so the mouth is the last land hex.
-  const rivers = [{ path: [{ q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }] }];
-  seedWaterSettlements(hexByKey, rivers, terr, "s");
-  const mouth = hexByKey.get(axialKey(0, 0));
-  assert.ok(mouth.settlement && mouth.settlement.present, "the LAND mouth should be settled");
-  assert.ok(["City", "Town"].includes(mouth.settlement.size), `mouth size ${mouth.settlement.size}`);
-  const sink = hexByKey.get(axialKey(1, 0));
-  assert.ok(!sink.settlement || !sink.settlement.present, "the water sink must never be settled");
+  // Mouth settlement is probabilistic and its type random, so sweep seeds: the sink must
+  // NEVER be settled, and any settlement that appears must be on the land mouth (0,0).
+  let sawMouth = false;
+  for (let i = 0; i < 40; i++) {
+    const hexByKey = new Map([
+      [axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains" }], // last LAND hex = mouth
+      [axialKey(1, 0), { coords: { q: 1, r: 0 }, terrain: "Sea" }],    // the water sink
+    ]);
+    const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(1, 0), "Sea"]]);
+    const rivers = [{ path: [{ q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }] }];
+    seedWaterSettlements(hexByKey, rivers, terr, "seed" + i);
+    const sink = hexByKey.get(axialKey(1, 0));
+    assert.ok(!sink.settlement || !sink.settlement.present, "the water sink must never be settled");
+    const mouth = hexByKey.get(axialKey(0, 0));
+    if (mouth.settlement && mouth.settlement.present) {
+      sawMouth = true;
+      // Base (pre-boost) type is random; applyWaterBoosts lifts it at the estuary.
+      assert.ok(["City", "Town", "Hamlet"].includes(mouth.settlement.size), `mouth size ${mouth.settlement.size}`);
+    }
+  }
+  assert.ok(sawMouth, "across seeds, the land mouth should sometimes be settled");
 });
 
 test("seedWaterSettlements: a big lake earns a shore City", () => {
@@ -121,19 +130,26 @@ test("seedWaterSettlements: scatters small settlements along a river's course", 
 });
 
 test("seedWaterSettlements: idempotent, and a deleted seed is not resurrected", () => {
-  const make = () => new Map([
-    [axialKey(0, 0), { coords: { q: 0, r: 0 }, terrain: "Plains" }],
-    [axialKey(1, 0), { coords: { q: 1, r: 0 }, terrain: "Sea" }],
-  ]);
-  const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(1, 0), "Sea"]]);
-  const rivers = [{ path: [{ q: -1, r: 0 }, { q: 0, r: 0 }] }];
+  // A big lake always earns a shore City (deterministic), so use it — mouth settling is
+  // now probabilistic and can't anchor a deterministic idempotency check.
+  const shoreKey = axialKey(-1, 0);
+  const make = () => {
+    const m = new Map();
+    for (let q = 0; q < 4; q++) for (let r = 0; r < 4; r++) m.set(axialKey(q, r), { coords: { q, r }, terrain: "Lake" });
+    m.set(shoreKey, { coords: { q: -1, r: 0 }, terrain: "Plains" }); // its only land shore
+    return m;
+  };
+  const terr = new Map();
+  for (let q = 0; q < 4; q++) for (let r = 0; r < 4; r++) terr.set(axialKey(q, r), "Lake");
+  terr.set(shoreKey, "Plains");
   const hbk = make();
-  seedWaterSettlements(hbk, rivers, terr, "s");
-  const first = hbk.get(axialKey(0, 0)).settlement.size;
-  seedWaterSettlements(hbk, rivers, terr, "s"); // re-run: unchanged
-  assert.equal(hbk.get(axialKey(0, 0)).settlement.size, first);
+  seedWaterSettlements(hbk, [], terr, "s");
+  const first = hbk.get(shoreKey).settlement.size;
+  assert.equal(first, "City");
+  seedWaterSettlements(hbk, [], terr, "s"); // re-run: unchanged
+  assert.equal(hbk.get(shoreKey).settlement.size, first);
   // GM deletes it -> re-run must not resurrect (decided-flag)
-  hbk.get(axialKey(0, 0)).settlement = { present: false };
-  seedWaterSettlements(hbk, rivers, terr, "s");
-  assert.equal(hbk.get(axialKey(0, 0)).settlement.present, false, "deleted seed stays deleted");
+  hbk.get(shoreKey).settlement = { present: false };
+  seedWaterSettlements(hbk, [], terr, "s");
+  assert.equal(hbk.get(shoreKey).settlement.present, false, "deleted seed stays deleted");
 });

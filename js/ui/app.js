@@ -1080,10 +1080,10 @@ function syncRivers(world) {
   // are pulled toward nearby settlements (see computeRivers' gravity note).
   world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : [], settlementsByKey);
   // Civilisation follows water. First SEED new settlements at water — scattered
-  // along rivers, a City at each river mouth (double whammy), shore Cities on
-  // lakes — then BUMP every settlement by its river/coast context. Both are
-  // idempotent (a decided-flag / baseSize re-derivation), so the repeated
-  // syncRivers calls never duplicate or compound.
+  // along rivers, a port (mostly City, sometimes a keep) at most river mouths
+  // (the double whammy), shore Cities on lakes — then BUMP every settlement by
+  // its river/coast context. Both are idempotent (a decided-flag / baseSize
+  // re-derivation), so the repeated syncRivers calls never duplicate or compound.
   const hexByKey = new Map();
   for (const h of placedHexes(world)) hexByKey.set(axialKey(h.coords.q, h.coords.r), h);
   seedWaterSettlements(hexByKey, world.rivers, terrainByKey, world.seed);

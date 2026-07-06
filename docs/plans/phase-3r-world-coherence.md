@@ -925,12 +925,15 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   roll — cleaner and idempotent; a seeded probability is a one-liner if preferred.)
 - **Water settlement GENERATION ✅ done** (the "generate NEW settlements, not just boost" half) —
   `settlement-water.js` `seedWaterSettlements`, run by `syncRivers` before the boost: scattered small
-  settlements **along a river's course**, a **City at each river mouth** (double whammy — where it
-  meets the sea or a big lake), and **shore Cities on lakes** (big always, small sometimes).
-  Deterministic + idempotent via a per-hex `waterSeeded` decided-flag (no duplicates on the repeated
-  syncs; a GM-deleted seed isn't resurrected). Measured: ~14→~21 settlements and ~4 Cities per Huge
-  fill (was ~0.8), all clustered at water. Node-tested. Tunable: `RIVER_SETTLE_CHANCE`,
-  `MOUTH_CITY_CHANCE`, `BIG_LAKE_SIZE`, `SMALL_LAKE_CITY_CHANCE`.
+  settlements **along a river's course** (Hamlet/Village base; the +1 riverside boost lifts a share to
+  **Towns**), a **port at most river mouths** (double whammy — where it meets the sea or a big lake:
+  `MOUTH_SETTLE_CHANCE` 0.6 so not every mouth settles, a **random base type** that the +2 estuary
+  boost lifts to mostly-City/occasional-Town, and `MOUTH_KEEP_CHANCE` 0.25 for the odd martial **keep**),
+  and **shore Cities on lakes** (big always, small sometimes). Deterministic + idempotent via a per-hex
+  `waterSeeded` decided-flag (no duplicates on the repeated syncs; a GM-deleted seed isn't resurrected).
+  Measured over 8 Huge seeds: mouths settle ~58% (mostly City, some Town, ~18% keeps); river courses
+  carry a scatter of Villages and Towns; landlocked seeds barely change. Node-tested. Tunable:
+  `RIVER_SETTLE_CHANCE`, `MOUTH_SETTLE_CHANCE`, `MOUTH_KEEP_CHANCE`, `BIG_LAKE_SIZE`, `SMALL_LAKE_CITY_CHANCE`.
 - Schema: no bump needed — `kind`, `baseSize`, `waterBoost` are all additive fields (no migration, per
   the no-back-compat directive); `name` is derived, not stored.
 
