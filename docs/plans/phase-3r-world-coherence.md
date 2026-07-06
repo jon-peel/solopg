@@ -976,10 +976,15 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Timing** — a **batch two-phase** recompute each `syncRoads`: the auto network is re-derived
   deterministically from the current terrain + settlements (so it stays connected as the world grows),
   while GM-drawn manual roads are kept verbatim.
+- **Merging ✅ done** — an existing road hex is cheap to travel (`ROAD_REUSE_COST`), so a new route
+  merges onto it and shares the corridor rather than paralleling (double roads become one); spurs attach
+  network-first (join the connected trunk, not a random neighbour); `drawRoads` draws lowest-tier-first
+  and offsets to a canonical side so shared segments read as one bigger road. Measured: ~15–28% of
+  road-steps shared per Huge fill.
 - Represented as `{id, a, b, tier, path, junction}` hex-path edges. Node-tested: three-cities-connected
   (one component), long city links, crossroad spurs, reach-cap isolation, water impassability, mountain
-  avoidance, valley-hug discount, determinism + manual-kept, hub multi-connection. Shared `MinHeap` in
-  `js/core/minheap.js`. Schema **v15**.
+  avoidance, valley-hug discount, corridor merging, determinism + manual-kept, hub multi-connection.
+  Shared `MinHeap` in `js/core/minheap.js`. Schema **v15**.
 - **Remaining polish (not blocking):** the **"Rivers" draw menu → rename + a "Draw road"** manual tool
   (mirroring Draw river); a **desert pass** (rare ancient dead-straight road). Bridges/ports + full
   manual-draw integration still slated for 3R.8.

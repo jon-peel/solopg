@@ -138,6 +138,24 @@ test("computeRoads: a newly-revealed town joins the network", () => {
   assert.ok(onNet.has(axialKey(0, 0)) && onNet.has(axialKey(5, 0)), "the original cities stay connected");
 });
 
+test("computeRoads: nearby routes merge onto a shared corridor instead of paralleling", () => {
+  // A manual trunk with two villages stacked below q=3; the lower one's route to
+  // the trunk should reuse the upper one's road rather than draw a parallel line.
+  const terr = boardRect(-1, 7, -1, 6);
+  const manual = { id: "manual:0", manual: true, a: { q: 0, r: 0 }, b: { q: 6, r: 0 }, tier: 2, junction: false, path: [0, 1, 2, 3, 4, 5, 6].map((q) => ({ q, r: 0 })) };
+  const setl = settlements([[0, 0, "City"], [6, 0, "City"], [3, 3, "Village"], [3, 5, "Village"]]);
+  let tries = 0, merged = 0;
+  for (let i = 0; i < 24; i++) {
+    const roads = computeRoads("m" + i, terr, setl, [], [manual]);
+    const use = new Map(); // auto-road hex -> how many auto roads use it
+    for (const rd of roads) { if (rd.manual) continue; for (const p of rd.path) { const k = axialKey(p.q, p.r); use.set(k, (use.get(k) || 0) + 1); } }
+    const low = roads.find((r) => r.a.q === 3 && r.a.r === 5);
+    if (low) { tries++; if ([...use.values()].some((v) => v >= 2)) merged++; }
+  }
+  assert.ok(tries > 0, "the lower village built a road");
+  assert.ok(merged >= Math.floor(tries * 0.7), `nearby routes share hexes most of the time (${merged}/${tries})`);
+});
+
 test("computeRoads: a central city becomes a hub with several roads", () => {
   const terr = boardRect(-4, 4, -4, 4);
   const setl = settlements([[0, 0, "City"], [3, 0, "Town"], [-3, 0, "Town"], [0, 3, "Town"], [0, -3, "Town"]]);

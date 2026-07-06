@@ -38,7 +38,10 @@ const WATER = new Set(["Sea", "Lake"]);
 const ROAD_COST = { Plains: 1, Forest: 2, Hills: 3, Swamp: 4, Mountains: 8, Desert: 10 };
 const DEFAULT_COST = 3;
 const RIVER_DISCOUNT = 0.6; // river-adjacent hexes are cheaper -> roads hug valleys
-const H_UNIT = 1 * RIVER_DISCOUNT; // cheapest possible step -> admissible A* heuristic unit
+// An already-built road hex is cheap to travel, so a new road MERGES onto it and
+// shares the corridor rather than running parallel (double roads become one).
+const ROAD_REUSE_COST = 0.3;
+const H_UNIT = ROAD_REUSE_COST; // cheapest possible step -> admissible A* heuristic unit
 
 const SIZE_RANK = { Hamlet: 0, Village: 1, Town: 2, City: 3 };
 const BIG = new Set(["Town", "City"]); // trunk anchors
@@ -58,11 +61,12 @@ const ISO_CHANCE = { Village: 0.12, Hamlet: 0.18 };
 // a village's/hamlet's a track (dashed = ford).
 const TIER = { City: 1, Town: 2, Village: 3, Hamlet: 3 };
 
-/** Enter-cost of the hex at `key`: terrain cost, discounted along river valleys;
- *  Infinity for unplaced or water (impassable). */
-function hexCost(key, terrainByKey, riverAdj) {
+/** Enter-cost of the hex at `key`: cheap if it's already a road (so roads merge),
+ *  else terrain cost discounted along river valleys; Infinity for unplaced/water. */
+function hexCost(key, terrainByKey, riverAdj, roadHexes) {
   const t = terrainByKey.get(key);
   if (t === undefined || WATER.has(t)) return Infinity;
+  if (roadHexes && roadHexes.has(key)) return ROAD_REUSE_COST;
   const base = ROAD_COST[t] ?? DEFAULT_COST;
   return riverAdj.has(key) ? base * RIVER_DISCOUNT : base;
 }
@@ -71,7 +75,7 @@ function hexCost(key, terrainByKey, riverAdj) {
  * A* least-cost route between two points over placed land hexes. Returns
  * `{ path: [{q,r}...] (a-first, inclusive), cost }` or null if unreachable.
  */
-function routeBetween(aq, ar, bq, br, terrainByKey, riverAdj) {
+function routeBetween(aq, ar, bq, br, terrainByKey, riverAdj, roadHexes) {
   const startK = axialKey(aq, ar), goalK = axialKey(bq, br);
   if (terrainByKey.get(startK) === undefined || terrainByKey.get(goalK) === undefined) return null;
   const g = new Map([[startK, 0]]);
@@ -89,7 +93,7 @@ function routeBetween(aq, ar, bq, br, terrainByKey, riverAdj) {
     for (const n of neighbors(cur.q, cur.r)) {
       const nk = axialKey(n.q, n.r);
       if (closed.has(nk)) continue;
-      const step = hexCost(nk, terrainByKey, riverAdj);
+      const step = hexCost(nk, terrainByKey, riverAdj, roadHexes);
       if (!isFinite(step)) continue;
       const ng = gc + step;
       if (ng < (g.get(nk) ?? Infinity)) { g.set(nk, ng); came.set(nk, ck); heap.push({ q: n.q, r: n.r, d: ng + axialDistance(n.q, n.r, bq, br) * H_UNIT }); }
@@ -107,7 +111,7 @@ function routeBetween(aq, ar, bq, br, terrainByKey, riverAdj) {
  * (an existing road hex or an eligible settlement), Dijkstra over placed land
  * hexes, giving up past `maxCost`. Returns `{ path, attachKey, cost }` or null.
  */
-function attachToNetwork(sq, sr, isTarget, terrainByKey, riverAdj, maxCost) {
+function attachToNetwork(sq, sr, isTarget, terrainByKey, riverAdj, roadHexes, maxCost) {
   const startK = axialKey(sq, sr);
   const g = new Map([[startK, 0]]);
   const came = new Map();
@@ -130,7 +134,7 @@ function attachToNetwork(sq, sr, isTarget, terrainByKey, riverAdj, maxCost) {
     for (const n of neighbors(cur.q, cur.r)) {
       const nk = axialKey(n.q, n.r);
       if (closed.has(nk)) continue;
-      const step = hexCost(nk, terrainByKey, riverAdj);
+      const step = hexCost(nk, terrainByKey, riverAdj, roadHexes);
       if (!isFinite(step)) continue;
       const ng = gc + step;
       if (ng < (g.get(nk) ?? Infinity)) { g.set(nk, ng); came.set(nk, ck); heap.push({ q: n.q, r: n.r, d: ng }); }
@@ -175,6 +179,10 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
   const roads = [];
   const seenIds = new Set();
   const networkHexes = new Set();
+  // Hexes already carrying a road — cheap to route through, so later roads merge
+  // onto them instead of running parallel (see hexCost / ROAD_REUSE_COST).
+  const roadHexes = new Set();
+  const addRoadHexes = (path) => { for (const p of path) { const k = axialKey(p.q, p.r); networkHexes.add(k); roadHexes.add(k); } };
 
   // Keep GM-drawn manual roads verbatim; they seed the network and pre-connect any
   // settlements that lie on them.
@@ -182,34 +190,39 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
     if (!rd.manual || seenIds.has(rd.id)) continue;
     roads.push(rd); seenIds.add(rd.id);
     const onRoad = [];
-    for (const p of rd.path || []) { const k = axialKey(p.q, p.r); networkHexes.add(k); if (allSettle.has(k)) onRoad.push(k); }
+    for (const p of rd.path || []) { const k = axialKey(p.q, p.r); networkHexes.add(k); roadHexes.add(k); if (allSettle.has(k)) onRoad.push(k); }
     for (let i = 1; i < onRoad.length; i++) if (parent.has(onRoad[0]) && parent.has(onRoad[i])) union(onRoad[0], onRoad[i]);
   }
 
   // --- Phase 1: trunk MST over big settlements (Kruskal) ---------------------
+  // Edge weights use the independent (no-reuse) route cost, so the tree is chosen
+  // by real terrain distance; committed edges are then RE-ROUTED with the growing
+  // roadHexes discount so they merge onto the trunk built so far.
   const edges = [];
   for (let i = 0; i < bigNodes.length; i++) for (let j = i + 1; j < bigNodes.length; j++) {
     const a = bigNodes[i], b = bigNodes[j];
     const reach = trunkReach(a.size, b.size);
     if (axialDistance(a.q, a.r, b.q, b.r) > reach) continue; // prune (cost >= axial distance)
-    const route = routeBetween(a.q, a.r, b.q, b.r, terrainByKey, riverAdj);
+    const route = routeBetween(a.q, a.r, b.q, b.r, terrainByKey, riverAdj, null);
     if (!route || route.cost > reach) continue;
-    edges.push({ a, b, route, cost: route.cost, id: trunkId(a, b) });
+    edges.push({ a, b, cost: route.cost, id: trunkId(a, b) });
   }
   edges.sort((x, y) => (x.cost - y.cost) || cmpKey(x.id, y.id));
   for (const e of edges) {
     if (find(e.a.key) === find(e.b.key)) continue; // already connected -> no cycle, no mesh
     union(e.a.key, e.b.key);
-    // Bigger endpoint owns/orients the road (a-first).
+    // Bigger endpoint owns/orients the road (a-first). Re-route with reuse so it
+    // shares the corridor with earlier trunk roads.
     const owner = SIZE_RANK[e.a.size] >= SIZE_RANK[e.b.size] ? e.a : e.b;
     const other = owner === e.a ? e.b : e.a;
-    const path = (e.route.path[0].q === owner.q && e.route.path[0].r === owner.r) ? e.route.path : [...e.route.path].reverse();
+    const rr = routeBetween(owner.q, owner.r, other.q, other.r, terrainByKey, riverAdj, roadHexes);
+    if (!rr) continue;
     roads.push({
       id: e.id, a: { q: owner.q, r: owner.r }, b: { q: other.q, r: other.r },
-      tier: (owner.size === "City" || other.size === "City") ? 1 : 2, path, junction: false,
+      tier: (owner.size === "City" || other.size === "City") ? 1 : 2, path: rr.path, junction: false,
     });
     seenIds.add(e.id);
-    for (const p of path) networkHexes.add(axialKey(p.q, p.r));
+    addRoadHexes(rr.path);
   }
 
   // --- Phase 2: spurs — attach every remaining settlement to the network ------
@@ -220,8 +233,12 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
     if (seenIds.has(id)) continue;
     // Big places skip the isolation roll (they should reliably connect).
     if (!BIG.has(S.size) && subRng(seed, "road-iso", S.q, S.r)() < (ISO_CHANCE[S.size] ?? 0.12)) continue;
-    const isTarget = (k) => k !== S.key && (networkHexes.has(k) || allSettle.has(k));
-    const res = attachToNetwork(S.q, S.r, isTarget, terrainByKey, riverAdj, REACH[S.size] ?? 12);
+    const reach = REACH[S.size] ?? 12;
+    // Prefer joining the existing road NETWORK (so it stays connected to the trunk,
+    // and its route can reuse a nearby road) — only fall back to the nearest
+    // settlement when no road is in reach (a remote local link).
+    let res = attachToNetwork(S.q, S.r, (k) => k !== S.key && networkHexes.has(k), terrainByKey, riverAdj, roadHexes, reach);
+    if (!res) res = attachToNetwork(S.q, S.r, (k) => k !== S.key && allSettle.has(k), terrainByKey, riverAdj, roadHexes, reach);
     if (!res) continue; // nothing reachable within reach -> isolated (remote)
     const b = parseKey(res.attachKey);
     roads.push({
@@ -229,7 +246,7 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
       tier: TIER[S.size] ?? 3, path: res.path, junction: !allSettle.has(res.attachKey),
     });
     seenIds.add(id);
-    for (const p of res.path) networkHexes.add(axialKey(p.q, p.r));
+    addRoadHexes(res.path);
   }
   return roads;
 }

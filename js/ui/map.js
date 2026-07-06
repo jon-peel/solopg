@@ -432,8 +432,11 @@ function strokeDashed(pts) {
 function lerpPt(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
 
 // Shift a polyline sideways by `off` world px (perpendicular to the local travel
-// direction, to the left of a->b). Used so a road hugging a river valley draws
-// beside the river instead of on top of it.
+// direction). Used so a road hugging a river valley draws beside the river instead
+// of on top of it. The offset side is CANONICAL — it depends only on the segment's
+// orientation, not on which way the road is traversed — so two roads sharing a
+// corridor (in either direction) offset to the SAME side and merge into one line
+// instead of doubling up.
 function offsetPolyline(pts, off) {
   if (!off || pts.length < 2) return pts;
   const out = new Array(pts.length);
@@ -443,7 +446,9 @@ function offsetPolyline(pts, off) {
     let tx = b.x - a.x, ty = b.y - a.y;
     const len = Math.hypot(tx, ty) || 1;
     tx /= len; ty /= len;
-    out[i] = { x: pts[i].x - ty * off, y: pts[i].y + tx * off }; // left-normal
+    let nx = -ty, ny = tx; // perpendicular
+    if (nx < 0 || (nx === 0 && ny < 0)) { nx = -nx; ny = -ny; } // canonical side (orientation-only)
+    out[i] = { x: pts[i].x + nx * off, y: pts[i].y + ny * off };
   }
   return out;
 }
@@ -458,7 +463,10 @@ function drawRoads(minX, minY, maxX, maxY, margin) {
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  for (const road of world.roads) {
+  // Draw lowest tier first so where roads share a corridor the BIGGER one (drawn
+  // last) shows on top — overlapping roads read as one bigger road.
+  const ordered = [...world.roads].sort((a, b) => (a.tier || 2) - (b.tier || 2));
+  for (const road of ordered) {
     const path = road && road.path;
     if (!path || path.length < 2) continue;
     const pts = new Array(path.length);
