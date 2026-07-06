@@ -947,32 +947,39 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   the no-back-compat directive); `name` is derived, not stored.
 
 ### 3R.7 — Roads
-**Confirmed feel:** trunk + spurs; roads hug river valleys; tiered by importance.
-- **Trunk network ✅ done (step 1)** — a derived `world.roads[]` overlay
-  (`js/gen/roads.js` `computeRoads`, run by `syncRoads` after `syncRivers`; append-only/frozen like
-  rivers). The big settlements (Town/City) are linked into a **minimum-spanning forest** (union-find →
-  a clean tree, never a mesh), ordered best-first by a gravity weight `sizeA·sizeB/effDist²` that also
-  sets tiers. Measured over 8 Huge seeds: ~4 roads/fill, ~82% of big settlements on the network.
-- **Routing / pathfinding ✅ done** — **A\*** least-cost path over a road-tuned terrain cost
-  (`ROAD_COST` Plains 1 … Mountains 8, Desert 10; Sea/Lake impassable). A link is committed only if its
-  route's **effective distance ≤ `MAX_EFF_DIST`** (16): on open ground effDist ≈ hex distance so the
-  big places connect; **mountains** inflate it so the road routes **around** a range unless the detour
-  blows the cap (then the link fails — "act as though further away"); **desert** likewise inflates it,
-  so roads almost never cross it; **water** is unreachable. River-adjacent hexes get a **valley
-  discount** so roads hug rivers and cross at fords. *(The rare ancient dead-straight desert road is
-  deferred to step 2.)*
-- **Tiers/sizes ✅ done** — City-touching links render as **highways** (tier 1, widest), Town–Town as
-  **roads** (tier 2); tier 3 tracks are the spurs. `map.js` `drawRoads` draws tiered tan polylines with
-  a dark casing, on top of rivers (crossings read as bridges), endpoints trimmed so the town icon stays
-  clean.
-- **Spurs / side roads — step 2 (pending)** — a small settlement near an existing road links to it with
-  a short tier-3 **spur** instead of a full long-haul road.
-- **Timing** — settled on a **batch spanning-forest** recompute each `syncRoads`, kept deterministic +
-  append-only (built roads frozen; only new links added as the world grows). Order-dependent like the
-  terrain/rivers it sits on.
-- Represented as `{id, a, b, tier, path}` hex-path edges. Node-tested: connectivity/threshold,
-  mountain avoidance-then-block, water impassability, valley-hug discount, append-only/determinism,
-  no-mesh spanning tree. Shared `MinHeap` extracted to `js/core/minheap.js`. Schema **v15**.
+**Confirmed feel:** trunk + spurs; roads hug river valleys; tiered by importance; big pull /
+long roads — most settlements connected, some with several roads, an interesting few isolated.
+- **Network ✅ done** — a derived `world.roads[]` overlay (`js/gen/roads.js` `computeRoads`, run by
+  `syncRoads` after `syncRivers`; append-only/frozen like rivers). A **greedy nearest-attachment**
+  build: settlements are processed **biggest first**, and each one not already on the network builds ONE
+  road to the **nearest** thing it can reach — an existing road hex (**a crossroad**) or another
+  eligible settlement. Cities go first so they wire to cities **over long distances** (a road can span
+  the map); towns hang off the trunk (usually joining at a crossroad); villages/hamlets **spur** in.
+  Nodes many others attach to become **hubs with several roads**. Measured over 8 Huge seeds: ~14
+  roads/fill, **100% of big settlements + ~90% of all settlements** connected.
+- **Routing / pathfinding ✅ done** — **Dijkstra** least-cost route over a road-tuned terrain cost
+  (`ROAD_COST` Plains 1 … Mountains 8, Desert 10; Sea/Lake impassable), so roads route **around**
+  ranges unless cutting through is genuinely cheaper, almost never cross desert, and never cross water.
+  River-adjacent hexes get a **valley discount** so roads hug rivers and cross at fords. **Reach is
+  size-scaled** (`REACH` City 64 … Hamlet 8) — a remote small place is left roadless — and a small
+  seeded **isolation roll** (`ISO_CHANCE`) leaves the odd well-placed one unconnected too.
+- **Tiers/sizes ✅ done** — tier by the OWNING settlement: City = **highway** (t1), Town = **road**
+  (t2), Village/Hamlet = **track/spur** (t3, dashed). `map.js` `drawRoads` draws tiered tan polylines
+  with a dark casing — **under** the settlement icons, **over** rivers (solid = bridge, dashed spur =
+  ford), **nudged off-centre** so a road along a river sits beside it (both visible); a crossroad end is
+  left long to meet the road it joins, a settlement end trimmed so its icon stays clean.
+- **Spurs / crossroads ✅ done** — folded into the attachment model above (a small settlement links to
+  the nearest network hex, forming a crossroad, rather than a full long-haul road).
+- **Timing** — a **batch nearest-attachment** recompute each `syncRoads`, deterministic + append-only
+  (a settlement on the network is never re-wired; only new roads added as the world grows).
+  Order-dependent like the terrain/rivers it sits on.
+- Represented as `{id, a, b, tier, path, junction}` hex-path edges. Node-tested: connectivity, long
+  city links, crossroad spurs, reach-cap isolation, water impassability, mountain avoidance, valley-hug
+  discount, append-only/determinism, hub multi-connection. Shared `MinHeap` in `js/core/minheap.js`.
+  Schema **v15**.
+- **Remaining polish (not blocking):** the **"Rivers" draw menu → rename + a "Draw road"** manual tool
+  (mirroring Draw river); a **desert pass** (rare ancient dead-straight road). Bridges/ports + full
+  manual-draw integration still slated for 3R.8.
 
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning
 - Wire the full **deterministic region pipeline**: terrain → water/coastline → rivers

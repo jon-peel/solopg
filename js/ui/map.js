@@ -474,10 +474,11 @@ function drawRoads(minX, minY, maxX, maxY, margin) {
     if (bMaxX < minX - margin || bMinX > maxX + margin || bMaxY < minY - margin || bMinY > maxY + margin) {
       continue;
     }
-    // Trim both ends back toward their neighbour so the town icon stays clean,
-    // then nudge the whole line off-centre so it sits beside any river it follows.
-    pts[0] = lerpPt(pts[0], pts[1], ROAD_END_TRIM);
-    pts[pts.length - 1] = lerpPt(pts[pts.length - 1], pts[pts.length - 2], ROAD_END_TRIM);
+    // Trim the settlement end(s) back toward their neighbour so the town icon
+    // stays clean; a crossroad end (road.junction) is left long so it meets the
+    // road it joins. Then nudge the line off-centre so it sits beside any river.
+    pts[0] = lerpPt(pts[0], pts[1], ROAD_END_TRIM); // a is always the owning settlement
+    if (!road.junction) pts[pts.length - 1] = lerpPt(pts[pts.length - 1], pts[pts.length - 2], ROAD_END_TRIM);
     strokeRoad(offsetPolyline(pts, ROAD_OFFSET), road);
   }
   ctx.restore();

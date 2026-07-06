@@ -412,21 +412,27 @@ sits on water so fewer neighbours are eligible; the higher rate compensates). Me
 ringed / ~1.3 farms each vs towns ~52% / ~0.9 each; ~6 cluster hamlets per Huge fill overall, a third
 of big towns still standing alone. Deterministic + idempotent via a per-hex `clusterSeeded` decided-flag (no duplicates; a deleted
 hamlet isn't resurrected); never overrides an existing settlement.
-**3R.7 — Roads, step 1 (trunk network).** A derived `world.roads[]` overlay (the sibling of
-`world.rivers[]`), recomputed by `syncRoads` after `syncRivers`. `js/gen/roads.js` `computeRoads`
-links the **big settlements (Town/City)** into a **minimum-spanning forest**: candidate pairs are
-routed with **A\*** over a road-tuned terrain cost field (`ROAD_COST` — Plains 1 … Mountains 8,
-Desert 10, Sea/Lake impassable), river-adjacent hexes get a **valley discount** (roads hug rivers,
-cross at fords), and a link is committed only if its route is **practical** (effective distance ≤
-`MAX_EFF_DIST` 16 — a mountain wall or desert inflates it past the cap so the road routes AROUND or
-the link fails; water is unreachable). Union-find keeps it a clean **tree, no mesh**; a gravity weight
-(`sizeA·sizeB/effDist²`) only orders the forest and picks **tiers** (City-touching = highway t1,
-Town–Town = road t2). **Append-only/frozen** like rivers (a built road never re-routes) and
-deterministic. Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing, on top of
-rivers (crossings read as bridges), endpoints trimmed so the town icon stays clean. Measured over 8
-Huge seeds: ~4 roads/fill, **~82% of big settlements on the network**, mostly highways. Shared
-`MinHeap` extracted to `js/core/minheap.js` (reused by rivers + roads). Spurs + desert polish are
-step 2. Schema **v15** (backfill `roads: []`, stamp-only migration).
+**3R.7 — Roads (network + rendering).** A derived `world.roads[]` overlay (the sibling of
+`world.rivers[]`), recomputed by `syncRoads` after `syncRivers`. `js/gen/roads.js` `computeRoads` builds
+a **greedy nearest-attachment network**: settlements are processed **biggest first**, and each one not
+already on the network builds ONE road via **least-cost routing** (Dijkstra over the road-tuned cost
+field `ROAD_COST` — Plains 1 … Mountains 8, Desert 10, Sea/Lake impassable; river-adjacent hexes get a
+**valley discount**) to the **nearest** thing it can reach — an existing road hex (**a crossroad**) or
+another eligible settlement. Because cities go first they wire up to cities **over long distances** (a
+road can span the map); towns then hang off that trunk, usually joining at a crossroad; villages/hamlets
+**spur** in to whatever's nearest. **Reach is size-scaled** (`REACH` — City 64 … Hamlet 8) so remote
+small places stay roadless, plus a small **isolation roll** (`ISO_CHANCE`) leaves the odd well-placed one
+unconnected. Nodes many others attach to become **hubs with several roads**. **Tiers** by the owning
+settlement: City = highway (t1), Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford).
+**Append-only/frozen** like rivers (a settlement on the network is never re-wired; only new roads added)
+and deterministic. Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing —
+**under** the settlement icons (a town sits on the network), **over** rivers (solid = bridge, dashed spur
+= ford), **nudged off-centre** so a road along a river sits beside it; a crossroad end is left long to
+meet the road it joins, a settlement end trimmed so its icon stays clean. Measured over 8 Huge seeds:
+~14 roads/fill, **100% of big settlements + ~90% of ALL settlements** on the network (the rest the
+intended isolated few); tiers ~17 highways / 16 roads / 78 spurs. Shared `MinHeap` extracted to
+`js/core/minheap.js` (reused by rivers + roads). Remaining: the "Rivers" draw menu → rename + **Draw
+road** (manual), and a desert-polish pass. Schema **v15** (backfill `roads: []`, stamp-only migration).
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based

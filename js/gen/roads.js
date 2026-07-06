@@ -1,33 +1,37 @@
-// Roads (Phase 3R.7) — a gravity-weighted trunk network over the affinity
-// terrain. Roads are a DERIVED overlay (world.roads[]), the sibling of the river
-// overlay (js/gen/rivers.js): recomputed from the currently-revealed terrain +
-// settlements whenever the world grows, and rendered as tan polylines
-// (js/ui/map.js drawRoads).
+// Roads (Phase 3R.7) — a settlement road network over the affinity terrain.
+// Roads are a DERIVED overlay (world.roads[]), the sibling of the river overlay
+// (js/gen/rivers.js): recomputed from the currently-revealed terrain + settlements
+// whenever the world grows, and rendered as tiered tan polylines (map.js drawRoads).
 //
-// The model is "rivers, one level up":
-//   1. The big settlements (Town/City) are the network's nodes; roads join them
-//      into a spanning forest. Whether a given pair links is a TERRAIN question,
-//      not a distance one — see (3).
-//   2. Terrain is the routing cost (no elevation): plains cheap, hills/forest
-//      moderate, mountains DEAR (a road routes AROUND a range unless cutting
-//      through is genuinely cheaper), desert VERY dear (roads almost never), and
-//      sea/lake impassable (roads stop at the coast — bridges/ports come later).
-//      River-adjacent hexes get a discount, so roads hug valleys and cross at
-//      fords. The least-cost path's total cost is the link's "effective distance".
-//   3. A link is PRACTICAL only if that effective distance stays under a cap: on
-//      open ground effDist ~= the hex distance so the big places connect, but a
-//      mountain wall or desert inflates it past the cap and the link fails ("act
-//      as though further away"). Practical links are committed as a MINIMUM-
-//      SPANNING FOREST (union-find) — best-first by a gravity weight, adding an
-//      edge only when it joins two unconnected components — so the result is a
-//      clean trunk skeleton, never a parallel-road mesh. Gravity (sizeA*sizeB /
-//      effDist^k) only ORDERS the forest and picks road tiers.
+// GREEDY NEAREST-ATTACHMENT model — "civilisation reaches out to the network it
+// can already see":
+//   - Process settlements BIGGEST first (Cities, then Towns, then Villages,
+//     Hamlets). Each one that isn't already on the network builds ONE road to the
+//     nearest thing it can reach — a least-cost route (A* / Dijkstra over the
+//     terrain cost field) to the closest hex that is either an existing ROAD
+//     (a crossroad) or another eligible SETTLEMENT.
+//   - Because the big places go first, cities wire up to cities over long
+//     distances (a road can span the map), towns then hang off that trunk —
+//     usually joining it at a crossroad rather than running their own long haul —
+//     and finally villages/hamlets spur in to whatever is nearest.
+//   - REACH is size-scaled: a City reaches across a continent, a Hamlet only a few
+//     hexes, so a remote small place is left roadless (interesting), and a small
+//     seeded ISOLATION roll leaves the odd well-placed one unconnected too.
+//   - Nodes that many others attach to (central cities/towns, crossroads) end up
+//     with SEVERAL roads — the network grows hubs naturally, not a rigid tree.
 //
-// APPEND-ONLY like rivers: every road already on the world is kept verbatim and
-// only NEW links are added (a road must never re-route when more terrain is
-// revealed). Order-dependent by design, like the terrain and rivers it sits on.
+// Terrain is the routing cost (no elevation): plains cheap, hills/forest moderate,
+// mountains DEAR (a road routes AROUND a range unless cutting through is genuinely
+// cheaper), desert VERY dear, sea/lake impassable (roads stop at the coast).
+// River-adjacent hexes get a discount, so roads hug valleys and cross at fords.
+//
+// APPEND-ONLY like rivers: every road already on the world is kept verbatim and a
+// settlement already on the network is never re-wired; only NEW roads are added as
+// the world grows. Deterministic (fixed processing order), and order-dependent by
+// design like the terrain and rivers it sits on.
 
-import { neighbors, axialKey, parseKey, axialDistance } from "../core/hexgeo.js";
+import { neighbors, axialKey, parseKey } from "../core/hexgeo.js";
+import { subRng } from "../core/rng.js";
 import { MinHeap } from "../core/minheap.js";
 
 const WATER = new Set(["Sea", "Lake"]);
@@ -37,30 +41,20 @@ const WATER = new Set(["Sea", "Lake"]);
 // desert very dear (roads almost never cross it). Sea/Lake are impassable.
 const ROAD_COST = { Plains: 1, Forest: 2, Hills: 3, Swamp: 4, Mountains: 8, Desert: 10 };
 const DEFAULT_COST = 3;
-const PLAINS_COST = 1;        // the "one flat hex" unit; effDist = pathCost / this
-const RIVER_DISCOUNT = 0.6;   // river-adjacent hexes are cheaper -> roads hug valleys
-// Cheapest possible step (plains, discounted) — an admissible A* heuristic unit.
-const H_UNIT = PLAINS_COST * RIVER_DISCOUNT;
+const RIVER_DISCOUNT = 0.6; // river-adjacent hexes are cheaper -> roads hug valleys
 
-// The trunk connects the big places into a spanning forest. Two gates decide it:
-//   1. ROUTE PRACTICALITY — a link is only built if its least-cost route's
-//      effective distance (pathCost / PLAINS_COST) is <= MAX_EFF_DIST. On open
-//      terrain effDist ~= the hex distance, so nearby-ish big places always link;
-//      a mountain range or desert inflates effDist past the cap (the road routes
-//      AROUND if the detour stays under the cap, else the link fails — "act as
-//      though further away"), and water is simply unreachable. This is the terrain
-//      gate the doc calls for.
-//   2. NO MESH — a threshold-gated minimum-spanning forest (union-find) only adds
-//      an edge that joins two so-far-unconnected components, so the result is a
-//      clean tree, never parallel roads.
-// Gravity desirability (sizeA*sizeB / effDist^k) doesn't gate anything; it just
-// ORDERS the spanning forest (bigger, closer links chosen first) and picks tiers.
-const SIZE_WEIGHT = { Hamlet: 1, Village: 2, Town: 4, City: 7 };
-const GRAVITY_K = 2;          // distance falloff for the MST ordering weight
-const MAX_EFF_DIST = 16;      // a link's route may cost at most this (in flat-hex units)
-const MAX_LINK_DIST = 14;     // straight-line prefilter (hexes) before routing
-const TRUNK_SIZES = new Set(["Town", "City"]); // a trunk link joins two large places
-                                               // (Villages/Hamlets are pulled in by spurs)
+const SIZE_RANK = { Hamlet: 0, Village: 1, Town: 2, City: 3 };
+const BIG = new Set(["Town", "City"]); // trunk anchors; small places spur to any settlement
+// Max route cost a settlement of each size will build to reach the network — a
+// City wires up across a continent, a Hamlet only locally (so remote small places
+// stay roadless).
+const REACH = { City: 64, Town: 34, Village: 12, Hamlet: 8 };
+// Even a well-placed settlement occasionally has no road at all — most do, but the
+// gap is interesting. Small places skip more often than big ones.
+const ISO_CHANCE = { City: 0.02, Town: 0.05, Village: 0.12, Hamlet: 0.18 };
+// Render tier from the road's OWNER (the settlement that built it): a city's road
+// is a highway, a town's a road, a village's/hamlet's a track (dashed = ford).
+const TIER = { City: 1, Town: 2, Village: 3, Hamlet: 3 };
 
 /** Enter-cost of the hex at `key`: terrain cost, discounted along river valleys;
  *  Infinity for unplaced or water (impassable). */
@@ -72,67 +66,54 @@ function hexCost(key, terrainByKey, riverAdj) {
 }
 
 /**
- * A* least-cost path from (aq,ar) to (bq,br) over placed land hexes. Returns
- * `{ path: [{q,r}...] (a-first, inclusive), cost }` or null if b is unreachable
- * (e.g. across the sea). Start hex is free; each entered hex pays its `hexCost`.
+ * Least-cost route from (sq,sr) OUTWARD to the nearest hex satisfying `isTarget`
+ * (an existing road hex or an eligible settlement), Dijkstra over placed land
+ * hexes, giving up once the cheapest reachable target would cost more than
+ * `maxCost`. Returns `{ path: [{q,r}...] (source-first, inclusive of the attach
+ * hex), attachKey, cost }` or null if nothing is in reach.
  */
-function routeRoad(aq, ar, bq, br, terrainByKey, riverAdj) {
-  const startK = axialKey(aq, ar), goalK = axialKey(bq, br);
-  if (terrainByKey.get(startK) === undefined || terrainByKey.get(goalK) === undefined) return null;
+function attachToNetwork(sq, sr, isTarget, terrainByKey, riverAdj, maxCost) {
+  const startK = axialKey(sq, sr);
   const g = new Map([[startK, 0]]);
   const came = new Map();
   const closed = new Set();
   const heap = new MinHeap();
-  heap.push({ q: aq, r: ar, d: axialDistance(aq, ar, bq, br) * H_UNIT });
+  heap.push({ q: sq, r: sr, d: 0 });
   while (heap.size) {
     const cur = heap.pop();
     const ck = axialKey(cur.q, cur.r);
-    if (ck === goalK) break;
     if (closed.has(ck)) continue;
     closed.add(ck);
     const gc = g.get(ck);
+    if (gc > maxCost) break; // nearest reachable target is beyond this size's reach
+    if (ck !== startK && isTarget(ck)) {
+      const path = [];
+      for (let k = ck; k !== undefined; k = came.get(k)) { const { q, r } = parseKey(k); path.push({ q, r }); if (k === startK) break; }
+      path.reverse();
+      return { path, attachKey: ck, cost: gc };
+    }
     for (const n of neighbors(cur.q, cur.r)) {
       const nk = axialKey(n.q, n.r);
       if (closed.has(nk)) continue;
       const step = hexCost(nk, terrainByKey, riverAdj);
       if (!isFinite(step)) continue; // impassable (water/unplaced)
       const ng = gc + step;
-      if (ng < (g.get(nk) ?? Infinity)) {
-        g.set(nk, ng);
-        came.set(nk, ck);
-        heap.push({ q: n.q, r: n.r, d: ng + axialDistance(n.q, n.r, bq, br) * H_UNIT });
-      }
+      if (ng < (g.get(nk) ?? Infinity)) { g.set(nk, ng); came.set(nk, ck); heap.push({ q: n.q, r: n.r, d: ng }); }
     }
   }
-  if (!g.has(goalK)) return null;
-  const path = [];
-  for (let k = goalK; k !== undefined; k = came.get(k)) {
-    const { q, r } = parseKey(k);
-    path.push({ q, r });
-    if (k === startK) break;
-  }
-  path.reverse();
-  return { path, cost: g.get(goalK) };
+  return null;
 }
-
-// Canonical endpoint order (by axial key string) so a link's id and stored a/b
-// don't depend on which way round the pair was considered.
-function ordered(a, b) { return a.key <= b.key ? [a, b] : [b, a]; }
-function roadId(a, b) { const [x, y] = ordered(a, b); return `road:${x.q},${x.r}-${y.q},${y.r}`; }
-
-// Tier from the endpoints: a link touching a City is a highway (1) — cities are
-// the hubs — anything else (Town–Town) is a road (2). Spurs (3) are a later pass.
-function tierFor(a, b) { return a.size === "City" || b.size === "City" ? 1 : 2; }
 
 /**
  * Extend the road network over the currently-revealed hexes. Append-only: every
- * road in `existingRoads` is kept; only new trunk links are added.
- * @param {number|string} seed world seed (reserved; routing is deterministic without it)
+ * road in `existingRoads` is kept; only new roads (for settlements not yet on the
+ * network) are added.
+ * @param {number|string} seed world seed (drives the isolation roll)
  * @param {Map<string,string>} terrainByKey axialKey -> terrain for every placed hex
  * @param {Map<string,string>} settlementsByKey axialKey -> settlement size
  * @param {{path:{q:number,r:number}[]}[]} [rivers] world.rivers, for the valley discount
  * @param {object[]} [existingRoads] roads already on the world; kept verbatim
- * @returns {{id:string,a:{q,r},b:{q,r},tier:number,path:{q,r}[]}[]}
+ * @returns {{id:string,a:{q,r},b:{q,r},tier:number,path:{q,r}[],junction:boolean}[]}
  */
 export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], existingRoads = []) {
   // River-adjacency set (on-path + neighbours) for the valley-hug discount.
@@ -142,50 +123,52 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
     for (const n of neighbors(p.q, p.r)) riverAdj.add(axialKey(n.q, n.r));
   }
 
-  const nodes = [];
-  for (const [key, size] of settlementsByKey) { const { q, r } = parseKey(key); nodes.push({ key, q, r, size }); }
-
-  // Union-find over settlement keys, seeded from the frozen existing roads.
-  const parent = new Map(nodes.map((n) => [n.key, n.key]));
-  const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
-  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
-
+  // Keep existing roads verbatim; their hexes seed the network so new settlements
+  // attach to them (and a settlement a road already runs through counts as on-net).
   const roads = [];
   const seenIds = new Set();
+  const networkHexes = new Set();
   for (const rd of existingRoads || []) {
     if (seenIds.has(rd.id)) continue;
     roads.push(rd); seenIds.add(rd.id);
-    const ak = axialKey(rd.a.q, rd.a.r), bk = axialKey(rd.b.q, rd.b.r);
-    if (parent.has(ak) && parent.has(bk)) union(ak, bk);
+    for (const p of rd.path || []) networkHexes.add(axialKey(p.q, p.r));
   }
 
-  // Candidate trunk pairs: at least one Town/City, within the prefilter radius.
-  const scored = [];
-  for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
-    const a = nodes[i], b = nodes[j];
-    if (!TRUNK_SIZES.has(a.size) || !TRUNK_SIZES.has(b.size)) continue; // trunk = large↔large
-    const d = axialDistance(a.q, a.r, b.q, b.r);
-    if (d === 0 || d > MAX_LINK_DIST) continue;
-    const route = routeRoad(a.q, a.r, b.q, b.r, terrainByKey, riverAdj);
-    if (!route) continue; // unreachable (e.g. across the sea)
-    const effDist = route.cost / PLAINS_COST;
-    if (effDist > MAX_EFF_DIST) continue; // impractical route (mountains / desert / long detour)
-    const w = (SIZE_WEIGHT[a.size] * SIZE_WEIGHT[b.size]) / (effDist ** GRAVITY_K); // MST ordering only
-    scored.push({ a, b, route, w, id: roadId(a, b) });
+  // Settlement target sets: big places wire only to other big places / roads;
+  // small places may spur to ANY settlement / road.
+  const allSettle = new Set();
+  const bigSettle = new Set();
+  const nodes = [];
+  for (const [key, size] of settlementsByKey) {
+    allSettle.add(key);
+    if (BIG.has(size)) bigSettle.add(key);
+    const { q, r } = parseKey(key);
+    nodes.push({ key, q, r, size });
   }
-  // Best-first, deterministic (desirability desc, then id).
-  scored.sort((x, y) => (y.w - x.w) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  // Biggest first, then canonical by key — deterministic processing order.
+  nodes.sort((a, b) => (SIZE_RANK[b.size] - SIZE_RANK[a.size]) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
-  // Threshold-gated MST forest: commit a link only when it joins two components.
-  for (const s of scored) {
-    if (seenIds.has(s.id)) continue;
-    const ak = s.a.key, bk = s.b.key;
-    if (find(ak) === find(bk)) continue; // already connected -> skip (no cycle, no mesh)
-    union(ak, bk);
-    const [A, B] = ordered(s.a, s.b);
-    const path = A === s.a ? s.route.path : [...s.route.path].reverse();
-    roads.push({ id: s.id, a: { q: A.q, r: A.r }, b: { q: B.q, r: B.r }, tier: tierFor(A, B), path });
-    seenIds.add(s.id);
+  for (const S of nodes) {
+    if (networkHexes.has(S.key)) continue; // already on the network (frozen / a road runs through)
+    const id = `road:${S.q},${S.r}`;
+    if (seenIds.has(id)) continue;
+    // Occasional deliberate isolation — most places get a road, some just don't.
+    if (subRng(seed, "road-iso", S.q, S.r)() < (ISO_CHANCE[S.size] ?? 0.12)) continue;
+    const settleTargets = BIG.has(S.size) ? bigSettle : allSettle;
+    const isTarget = (k) => k !== S.key && (networkHexes.has(k) || settleTargets.has(k));
+    const res = attachToNetwork(S.q, S.r, isTarget, terrainByKey, riverAdj, REACH[S.size] ?? 12);
+    if (!res) continue; // nothing reachable within reach -> isolated (remote)
+    const b = parseKey(res.attachKey);
+    roads.push({
+      id,
+      a: { q: S.q, r: S.r },
+      b: { q: b.q, r: b.r },
+      tier: TIER[S.size] ?? 3,
+      path: res.path,
+      junction: !allSettle.has(res.attachKey), // b is a mid-road crossroad, not a settlement
+    });
+    seenIds.add(id);
+    for (const p of res.path) networkHexes.add(axialKey(p.q, p.r));
   }
   return roads;
 }
