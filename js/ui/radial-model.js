@@ -112,6 +112,18 @@ function generateChildren(placed) {
   ];
 }
 
+// Regenerate submenu: Lock/Unlock this hex (protect it from re-roll/delete), then
+// re-roll THIS hex, or a Small/Medium/Large disc around it (existing hexes only;
+// locked ones are kept, manual rivers/roads stay). `value` is the radius.
+const REGEN_SIZES = [{ label: "Small", radius: 1 }, { label: "Medium", radius: 2 }, { label: "Large", radius: 3 }];
+function regenChildren(locked) {
+  return [
+    leaf("toggleLock", locked ? "🔓" : "🔒", locked ? "Unlock" : "Lock"),
+    leaf("regenHex", "🔄", "This hex", locked ? { enabled: false, reason: "Hex is locked" } : {}),
+    ...REGEN_SIZES.map(({ label, radius }) => leaf("regenArea", "🧭", label, { value: radius, title: `Re-roll a ${label.toLowerCase()} area (locked hexes kept)` })),
+  ];
+}
+
 /**
  * Build the fixed-slot radial model for the cell under the cursor.
  * @param {object} state
@@ -131,7 +143,7 @@ export function buildRadialModel(state) {
     placed = false, terrain = null, hasSettlement = false,
     allowedSizes = [], canGossip = false,
     poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
-    manualRiverHere = null, manualRoadHere = null,
+    manualRiverHere = null, manualRoadHere = null, locked = false,
   } = state || {};
 
   const needHex = { enabled: false, reason: "Place terrain on this hex first" };
@@ -155,8 +167,10 @@ export function buildRadialModel(state) {
     // Placed at the bottom slot (nearest the cursor for a typical downward
     // right-click) since it's the most-used action.
     submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
-    leaf("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex),
-    leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete", placed ? { danger: true } : { enabled: false, reason: "Nothing here to delete", danger: true }),
+    // Regenerate: Lock/Unlock this hex, then re-roll it or a disc around it
+    // (existing hexes only; locked hexes and manual rivers/roads are kept).
+    submenu("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex, regenChildren(locked)),
+    leaf("deleteHex", ACTION_GLYPH.deleteHex, locked ? "Locked" : "Delete", !placed ? { enabled: false, reason: "Nothing here to delete", danger: true } : locked ? { enabled: false, reason: "Hex is locked" } : { danger: true }),
     // Draw: trace a manual river (open ends auto-complete to a source / the sea)
     // or a manual road (kept verbatim, joins the auto network) from this hex, and
     // Remove one that already passes through this hex.

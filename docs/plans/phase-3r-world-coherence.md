@@ -999,9 +999,12 @@ long roads — most settlements connected, some with several roads, an interesti
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning
 - Wire the full **deterministic region pipeline**: terrain → water/coastline → rivers
   → settlements (with boosts) → roads. Point the **3R.1 "Generate Area"** tool at it.
-- **Regeneration policy** — whole-region regenerate; single-hex re-roll inside a
-  coherent region without breaking coastlines/rivers/roads (respect the `locked`/
-  `manual` flag; re-stitch edges).
+- **Regeneration policy ✅ done** — the radial "Regenerate" slot became a submenu: **Lock / Unlock**
+  this hex, **This hex** re-roll, and **Small / Medium / Large** area re-roll. A per-hex `locked` flag
+  (additive; padlock marker on the map) **protects** a hex from regenerate AND delete. `onRegenerateArea`
+  re-rolls every existing UNLOCKED hex in the disc (bumping each hex's `gen`); locked hexes are kept and
+  the manual rivers/roads stay frozen, while the derived overlays (auto rivers/roads/regions) re-stitch.
+  Verified end-to-end over the DevTools protocol (lock → padlock shows, Delete/regen disabled).
 - **Region names ✅ done** — the big terrain tracts carry evocative names ("the Marrowwood",
   "the Wolf Sloughs", "the Nether Range"), shown **on hover** (no always-on labels — matching the
   settlement-name hover). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain clumps

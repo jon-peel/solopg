@@ -1589,6 +1589,7 @@ function onContextMenu({ q, r, clientX, clientY }) {
     dungeonSizes: dungeonSizes.map((s) => ({ label: s.size, value: s.size, title: s.blurb || "" })),
     manualRiverHere: manualRiverIdAt(q, r),
     manualRoadHere: manualRoadIdAt(q, r),
+    locked: !!(placed && hex.locked),
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -1608,7 +1609,9 @@ function radialDispatch(id, value) {
     case "addSettlement": return onAddSettlement(value);
     case "removeSettlement": return onRemoveSettlement();
     case "genArea": return onGenerateArea(value);
-    case "regenerate": return onRegenerate();
+    case "toggleLock": return onToggleLock();
+    case "regenHex": return onRegenerate();
+    case "regenArea": return onRegenerateArea(value);
     case "deleteHex": return onDeleteHex();
     case "genHook": return onGenerateHook();
     case "readMap": return onReadMap();
@@ -1681,11 +1684,13 @@ async function onGenerateArea(radius) {
 }
 
 // "Give me another": bump the per-hex gen counter to escape coord-determinism.
+// A locked hex is protected — unlock it first.
 async function onRegenerate() {
   if (!current || !selected) return;
   try {
     const { q, r } = selected;
     const existing = getHex(current, q, r);
+    if (existing && existing.locked) return logLine("Hex is locked — unlock it to regenerate.");
     const gen = ((existing && existing.gen) || 0) + 1;
     const tables = await loadTables(HEX_TABLE_IDS);
     addHex(current, buildRandomHex(tables, q, r, gen));
@@ -1695,8 +1700,44 @@ async function onRegenerate() {
   }
 }
 
+// Re-roll every EXISTING hex in the disc around the selection, bumping each one's
+// gen. Locked hexes are kept as-is, and the manual rivers/roads stay frozen (only
+// the derived overlays re-stitch). This is the "regenerate a region" tool.
+async function onRegenerateArea(radius) {
+  if (!current || !selected) return;
+  try {
+    const tables = await loadTables(HEX_TABLE_IDS);
+    let n = 0, kept = 0;
+    for (const { q, r } of hexDisc(selected.q, selected.r, radius)) {
+      const existing = getHex(current, q, r);
+      if (!existing || !existing.placed) continue; // only re-roll what's there
+      if (existing.locked) { kept++; continue; }    // protected
+      addHex(current, buildRandomHex(tables, q, r, ((existing.gen) || 0) + 1));
+      n++;
+    }
+    if (!n) return logLine(kept ? "Every hex in range is locked." : "No hexes to regenerate in range.");
+    await persistAndRefresh();
+    logLine(`Regenerated ${n} hex(es)${kept ? ` (${kept} locked, kept)` : ""}.`);
+  } catch (err) {
+    logLine(`Regenerate area error: ${err.message}`);
+  }
+}
+
+// Toggle the selected hex's `locked` flag — a locked hex is protected from
+// regenerate and delete (so you can re-roll a region and keep what you like).
+async function onToggleLock() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  hex.locked = !hex.locked;
+  await persistAndRefresh();
+  logLine(hex.locked ? "Hex locked." : "Hex unlocked.");
+}
+
 async function onDeleteHex() {
   if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (hex && hex.locked) return logLine("Hex is locked — unlock it to delete.");
   removeHex(current, selected.q, selected.r);
   await persistAndRefresh();
 }

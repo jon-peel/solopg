@@ -216,6 +216,13 @@ export function render() {
     const hk = axialKey(hex.coords.q, hex.coords.r);
     if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
+    // A locked hex (protected from regenerate/delete) shows a small padlock.
+    if (detail && hex.locked) {
+      const off = HEX_SIZE * 0.52, sz = HEX_SIZE * 0.4;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `${sz}px sans-serif`;
+      drawMarker(c.x - off, c.y - off, "🔒", sz, "#fff");
+    }
   }
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on

@@ -465,7 +465,12 @@ settlement name, else the region name. Node-tested.
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change; 3R.7 adds `world.roads[]` (v15).**
-**Schema v15. 296 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Regeneration policy (3R.8).** The radial "Regenerate" slot is now a submenu — **Lock/Unlock** this
+hex, re-roll **This hex**, or re-roll a **Small/Medium/Large** area. A per-hex `locked` flag (additive;
+padlock map marker) protects a hex from regenerate AND delete; `onRegenerateArea` re-rolls every
+existing UNLOCKED hex in the disc (bumping `gen`), keeping locked hexes + manual rivers/roads while the
+derived overlays re-stitch.
+**Schema v15. 297 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
