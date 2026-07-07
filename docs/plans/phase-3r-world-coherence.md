@@ -1020,8 +1020,12 @@ long roads — most settlements connected, some with several roads, an interesti
   Hills recoloured `#b08d4f` → **`#8c9e71`** (`terrain-style.js` `TERRAIN_COLORS`), a grey-green
   midpoint of Mountains grey + Plains green, so the Mountains→Hills→Plains band reads as an
   elevation gradient.
-- **Migration/compat** for pre-3R worlds. **Performance** pass (large-area gen stays
-  snappy). Final **tuning** against the 3R.2 metrics.
+- **Performance ✅ checked** — a full **Huge fill (721 hexes)** runs the whole pipeline in **~31 ms
+  average** (worst ~48 ms over 6 seeds): terrain fill ~10 ms, rivers ~4 ms, settlements ~1 ms, **roads
+  ~15 ms** (the largest — all-pairs A\* over the big settlements + ancient-road scan, both distance-
+  pruned), regions ~1 ms. Well within budget; no optimisation needed. Roads scale with the big-
+  settlement count (O(n²) A\*), but density caps that at ~7 avg / ~13 observed.
+- **Migration/compat** for pre-3R worlds. Final **tuning** against the 3R.2 metrics (both still open).
 
 ---
 
