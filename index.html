@@ -31,7 +31,6 @@
       <span class="bar-divider"></span>
       <button id="btn-icons">Icons: on</button>
       <button id="btn-labels">Labels: on</button>
-      <button id="btn-legend" aria-pressed="false">Legend</button>
       <input id="import-file" type="file" accept="application/json,.json" hidden />
     </header>
 
@@ -53,7 +52,11 @@
           <button id="btn-draw-finish" type="button" title="Save (Enter)">Finish</button>
           <button id="btn-draw-cancel" type="button" title="Discard (Esc)">Cancel</button>
         </div>
-        <!-- Map legend (bottom-left); toggled by the command-bar Legend button. -->
+        <!-- Bottom-left: legend toggle (opens the key panel above it). -->
+        <div id="map-controls-left">
+          <button id="btn-legend" aria-pressed="false" title="Legend" aria-label="Toggle map legend">🗺</button>
+        </div>
+        <!-- Map legend (bottom-left); toggled by the 🗺 button, opens above it. -->
         <div id="legend" hidden>
           <div class="legend-head">Legend</div>
           <div class="legend-section" id="legend-terrain"></div>
