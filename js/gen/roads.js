@@ -26,7 +26,7 @@
 // grows; only GM-drawn MANUAL roads are kept verbatim (and seed the network so
 // auto roads can join them). Order-independent for a given revealed set.
 
-import { neighbors, axialKey, parseKey, axialDistance } from "../core/hexgeo.js";
+import { neighbors, axialKey, parseKey, axialDistance, axialLine } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
 import { MinHeap } from "../core/minheap.js";
 
@@ -60,6 +60,12 @@ const ISO_CHANCE = { Village: 0.12, Hamlet: 0.18 };
 // Render tier from the road's OWNER: a city's road is a highway, a town's a road,
 // a village's/hamlet's a track (dashed = ford).
 const TIER = { City: 1, Town: 2, Village: 3, Hamlet: 3 };
+
+// Ancient desert roads — a rare dead-straight relic that ignores terrain cost and
+// cuts across the sands where a normal road would never go.
+const ANCIENT_MAX = 18;       // max straight-line length (hexes) for one
+const ANCIENT_MIN_DESERT = 3; // must genuinely cross the sands
+const ANCIENT_CHANCE = 0.14;  // rare, per qualifying big-settlement pair
 
 /** Enter-cost of the hex at `key`: cheap if it's already a road (so roads merge),
  *  else terrain cost discounted along river valleys; Infinity for unplaced/water. */
@@ -247,6 +253,27 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
     });
     seenIds.add(id);
     addRoadHexes(res.path);
+  }
+
+  // --- Ancient desert roads: a rare dead-straight relic across the sands -------
+  for (let i = 0; i < bigNodes.length; i++) for (let j = i + 1; j < bigNodes.length; j++) {
+    const a = bigNodes[i], b = bigNodes[j];
+    if (axialDistance(a.q, a.r, b.q, b.r) > ANCIENT_MAX) continue;
+    const line = axialLine(a.q, a.r, b.q, b.r);
+    let desert = 0, ok = true;
+    for (const p of line) {
+      const t = terrainByKey.get(axialKey(p.q, p.r));
+      if (t === undefined || WATER.has(t)) { ok = false; break; } // unrevealed / crosses water
+      if (t === "Desert") desert++;
+    }
+    if (!ok || desert < ANCIENT_MIN_DESERT) continue;
+    const [k1, k2] = a.key <= b.key ? [a.key, b.key] : [b.key, a.key];
+    const id = `ancient:${k1}-${k2}`;
+    if (seenIds.has(id)) continue;
+    if (subRng(seed, "ancient", k1, k2)() >= ANCIENT_CHANCE) continue;
+    roads.push({ id, a: { q: a.q, r: a.r }, b: { q: b.q, r: b.r }, tier: 2, kind: "ancient", path: line, junction: false });
+    seenIds.add(id);
+    addRoadHexes(line);
   }
   return roads;
 }

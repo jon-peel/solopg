@@ -156,6 +156,39 @@ test("computeRoads: nearby routes merge onto a shared corridor instead of parall
   assert.ok(merged >= Math.floor(tries * 0.7), `nearby routes share hexes most of the time (${merged}/${tries})`);
 });
 
+test("computeRoads: a rare ancient dead-straight road can cross a desert band", () => {
+  // Two cities with a wide desert between them; a normal road would detour, but
+  // occasionally an ancient road cuts dead-straight across the sands.
+  const terr = boardRect(-1, 9, -2, 2, "Plains");
+  for (let r = -2; r <= 2; r++) for (const q of [3, 4, 5]) terr.set(axialKey(q, r), "Desert");
+  const setl = settlements([[0, 0, "City"], [8, 0, "City"]]);
+  let ancient = 0, tries = 0;
+  for (let i = 0; i < 40; i++) {
+    const roads = computeRoads("anc" + i, terr, setl, [], []);
+    const a = roads.find((r) => r.kind === "ancient");
+    if (a) {
+      ancient++;
+      // dead-straight = the axial line between the two cities, crossing desert
+      assert.deepEqual(a.path[0], { q: 0, r: 0 });
+      assert.deepEqual(a.path[a.path.length - 1], { q: 8, r: 0 });
+      assert.ok(a.path.some((p) => [3, 4, 5].includes(p.q) && p.r === 0), "crosses the sands");
+    }
+    tries++;
+  }
+  assert.ok(ancient > 0 && ancient < tries, `ancient roads are rare but do appear (${ancient}/${tries})`);
+});
+
+test("computeRoads: an ancient road never crosses water", () => {
+  const terr = boardRect(-1, 9, -2, 2, "Plains");
+  for (let r = -2; r <= 2; r++) for (const q of [3, 4, 5]) terr.set(axialKey(q, r), "Desert");
+  for (let r = -2; r <= 2; r++) terr.set(axialKey(4, r), "Sea"); // sea splits the desert
+  const setl = settlements([[0, 0, "City"], [8, 0, "City"]]);
+  for (let i = 0; i < 40; i++) {
+    const roads = computeRoads("w" + i, terr, setl, [], []);
+    assert.ok(!roads.some((r) => r.kind === "ancient"), "no ancient road across water");
+  }
+});
+
 test("buildManualRoad: a GM-drawn road is kept verbatim and seeds the auto network", () => {
   const path = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }, { q: 3, r: 0 }];
   const road = buildManualRoad("manual:0", path);

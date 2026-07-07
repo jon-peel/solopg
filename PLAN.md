@@ -447,7 +447,12 @@ by straight hex-lines, Undo/Finish/Cancel bar, Enter/Esc/Ctrl-Z keys) was **gene
 (`js/gen/roads.js` `buildManualRoad` — a solid tier-2 road kept verbatim by `computeRoads`, seeding the
 auto network so settlements spur onto it). `map.js` `setRoadDraft`/`drawRoadDraft` preview it as a
 dashed tan line. Verified end-to-end over the DevTools protocol (Draw → Road → trace → Finish renders a
-manual road). Only a desert-polish pass (rare ancient dead-straight road) remains optional.
+manual road).
+**Ancient desert roads + legend (3R.8).** A rare, seeded, **dead-straight ancient road** now cuts
+across the sands where a normal road never would (`roads.js` — between big settlements whose straight
+line crosses ≥ 3 desert hexes and no water, `ANCIENT_CHANCE` 0.14); rendered pale + dotted + straight
+(`kind: "ancient"`), distinct from the curving tan roads. A toggleable **Legend** (command-bar button)
+keys the terrain colours (from `terrain-style.js`), route tiers, ancient road, river, and settlements.
 **Named regions (3R.8).** The big terrain tracts carry evocative names ("the Marrowwood", "the Wolf
 Sloughs", "the Nether Range"), shown **on hover** (no always-on labels cluttering the map — matching
 the settlement-name hover). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain
@@ -460,7 +465,7 @@ settlement name, else the region name. Node-tested.
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
 major-water drainage overlay (`js/gen/rivers.js`), no schema change; 3R.7 adds `world.roads[]` (v15).**
-**Schema v15. 294 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v15. 296 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 

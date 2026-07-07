@@ -990,7 +990,10 @@ long roads — most settlements connected, some with several roads, an interesti
   Finish builds a `manual` river or a `manual` road (`buildManualRoad` — a solid tier-2 road kept
   verbatim by `computeRoads`, seeding the auto network); `map.js` previews it as a dashed tan line.
   Verified end-to-end over the DevTools protocol.
-- **Remaining polish (not blocking):** a **desert pass** (rare ancient dead-straight road). Bridges/ports + full
+- **Ancient desert road ✅ done** — a rare seeded dead-straight road (`roads.js`, `kind: "ancient"`)
+  between big settlements whose straight line crosses ≥ 3 desert hexes and no water (`ANCIENT_CHANCE`
+  0.14); rendered pale + dotted + straight, distinct from the curving tan roads; keyed in the legend.
+- **Remaining polish (not blocking):** Bridges/ports + full
   manual-draw integration still slated for 3R.8.
 
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning

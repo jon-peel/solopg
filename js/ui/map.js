@@ -370,6 +370,7 @@ const ROAD_TIERS = {
   3: { width: 2.6, color: "#c69a58", dash: [7, 4] }, // track / spur (dashed = ford)
 };
 const ROAD_CASING = "#4a3a1f";
+const ANCIENT_COLOR = "#d8cba6"; // pale bone — a weathered ancient desert road (dead-straight, dotted)
 const ROAD_END_TRIM = 0.5; // pull each end back this fraction of its last segment,
                            // so the centred settlement icon sits cleanly where the road arrives
 const ROAD_OFFSET = HEX_SIZE * 0.2; // world px: nudge roads off hex-centre (perpendicular to
@@ -510,7 +511,11 @@ function drawRoads(minX, minY, maxX, maxY, margin) {
     // road it joins. Then nudge the line off-centre so it sits beside any river.
     pts[0] = lerpPt(pts[0], pts[1], ROAD_END_TRIM); // a is always the owning settlement
     if (!road.junction) pts[pts.length - 1] = lerpPt(pts[pts.length - 1], pts[pts.length - 2], ROAD_END_TRIM);
-    strokeRoad(offsetPolyline(pts, ROAD_OFFSET), road);
+    if (road.kind === "ancient") {
+      strokeAncient(offsetPolyline([pts[0], pts[pts.length - 1]], ROAD_OFFSET)); // dead-straight
+    } else {
+      strokeRoad(offsetPolyline(pts, ROAD_OFFSET), road);
+    }
   }
   ctx.restore();
 }
@@ -526,6 +531,21 @@ function strokeRoad(pts, road) {
   ctx.lineWidth = w + 1.8 / camera.scale;
   strokeSmoothPath(pts);
   ctx.strokeStyle = spec.color; // ...then the tan fill on top
+  ctx.lineWidth = w;
+  strokeSmoothPath(pts);
+  ctx.restore();
+}
+
+// An ancient desert road: a pale, dead-straight, dotted line (weathered/broken).
+function strokeAncient(pts) {
+  ctx.save();
+  ctx.lineCap = "round";
+  const w = 2.4 / camera.scale;
+  ctx.setLineDash([2 / camera.scale, 6 / camera.scale]);
+  ctx.strokeStyle = ROAD_CASING;
+  ctx.lineWidth = w + 1.2 / camera.scale;
+  strokeSmoothPath(pts);
+  ctx.strokeStyle = ANCIENT_COLOR;
   ctx.lineWidth = w;
   strokeSmoothPath(pts);
   ctx.restore();
