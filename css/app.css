@@ -480,6 +480,71 @@ button:hover {
   border-color: var(--accent);
 }
 
+/* Map legend (bottom-left), toggled from the command bar. */
+#legend {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  z-index: 6;
+  width: 12.5rem;
+  max-height: 70%;
+  overflow-y: auto;
+  font-size: 0.74rem;
+  color: var(--fg);
+  background: rgba(13, 15, 21, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+}
+#legend[hidden] {
+  display: none;
+}
+.legend-head {
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0.35rem;
+}
+.legend-section {
+  margin-bottom: 0.45rem;
+}
+.legend-section:last-child {
+  margin-bottom: 0;
+}
+.legend-sub {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  margin: 0.15rem 0;
+}
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.06rem 0;
+}
+.legend-note {
+  color: var(--muted);
+  font-size: 0.66rem;
+  margin-top: 0.25rem;
+}
+.lg-swatch {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+}
+.lg-line {
+  width: 1.6rem;
+  flex: 0 0 auto;
+  border-radius: 2px;
+}
+.lg-highway { height: 5px; background: #d9b25c; box-shadow: 0 0 0 1px #4a3a1f; }
+.lg-road { height: 3px; background: #c39a54; box-shadow: 0 0 0 1px #4a3a1f; }
+.lg-track { height: 0; border-top: 3px dashed #c69a58; }
+.lg-river { height: 3px; background: #6fd0f0; }
+
 /* Thin separator between command-bar groups. */
 .bar-divider {
   width: 1px;

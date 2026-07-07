@@ -1005,8 +1005,11 @@ long roads — most settlements connected, some with several roads, an interesti
   (≥ 16 hexes) and names each via a seeded `regionName(seed, terrain, anchorKey)` (prefix + terrain
   collective noun). Derived, not stored: `map.js` memoises a hex→name map per (seed, hex-count); the
   hover readout falls back to the region name when the hex has no GM name / settlement.
-- **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels (✅ above);
-  legend + LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
+- **Legend ✅ done** — a toggleable bottom-left key (command-bar "Legend" button): terrain colour
+  swatches (built from `terrain-style.js` `TERRAIN_COLORS`/`TERRAIN_ICONS` so it can't drift), route
+  tiers (highway/road/track/river), and a settlement/keep note.
+- **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels + legend
+  (✅ above); LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
   pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
   Hills recoloured `#b08d4f` → **`#8c9e71`** (`terrain-style.js` `TERRAIN_COLORS`), a grey-green
   midpoint of Mountains grey + Plains green, so the Mountains→Hills→Plains band reads as an

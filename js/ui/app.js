@@ -58,7 +58,7 @@ import {
   recenter,
   pixelsPerMile,
 } from "./map.js";
-import { TERRAIN_COLORS } from "./terrain-style.js";
+import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
@@ -338,6 +338,34 @@ function toggleHelp(force) {
   const el = $("help-overlay");
   if (!el) return;
   el.hidden = force === undefined ? !el.hidden : !force;
+}
+
+// Fill the legend's terrain rows from the single-source colour/icon tables (so
+// the key can never drift from the map), then toggle its visibility.
+let legendBuilt = false;
+function buildLegendTerrain() {
+  if (legendBuilt) return;
+  const host = $("legend-terrain");
+  if (!host) return;
+  host.innerHTML = `<div class="legend-sub">Terrain</div>`;
+  for (const terrain of Object.keys(TERRAIN_COLORS)) {
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    const sw = document.createElement("span");
+    sw.className = "lg-swatch";
+    sw.style.background = TERRAIN_COLORS[terrain];
+    const icon = (TERRAIN_ICONS[terrain] && TERRAIN_ICONS[terrain][0]) || "";
+    row.append(sw, document.createTextNode(`${icon} ${terrain}`));
+    host.appendChild(row);
+  }
+  legendBuilt = true;
+}
+function toggleLegend(force) {
+  const el = $("legend");
+  if (!el) return;
+  buildLegendTerrain();
+  el.hidden = force === undefined ? !el.hidden : !force;
+  $("btn-legend").setAttribute("aria-pressed", String(!el.hidden));
 }
 
 // `?` toggles the cheat-sheet; Esc closes it (ahead of other Esc handlers).
@@ -1682,6 +1710,7 @@ function wire() {
   $("import-file").addEventListener("change", onImportFile);
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("btn-labels").addEventListener("click", onToggleLabels);
+  $("btn-legend").addEventListener("click", () => toggleLegend());
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
