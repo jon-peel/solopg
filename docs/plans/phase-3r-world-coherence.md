@@ -999,11 +999,12 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Regeneration policy** — whole-region regenerate; single-hex re-roll inside a
   coherent region without breaking coastlines/rivers/roads (respect the `locked`/
   `manual` flag; re-stitch edges).
-- **Region labels ✅ done** — the big terrain tracts carry faint engraved names ("the Marrowwood",
-  "the Wolf Sloughs"). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain clumps
+- **Region names ✅ done** — the big terrain tracts carry evocative names ("the Marrowwood",
+  "the Wolf Sloughs", "the Nether Range"), shown **on hover** (no always-on labels — matching the
+  settlement-name hover). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain clumps
   (≥ 16 hexes) and names each via a seeded `regionName(seed, terrain, anchorKey)` (prefix + terrain
-  collective noun). Derived, not stored: `map.js` memoises per (seed, hex-count) and draws them at each
-  centroid as a light italic serif, biggest-first with greedy de-overlap, gated by the Labels toggle.
+  collective noun). Derived, not stored: `map.js` memoises a hex→name map per (seed, hex-count); the
+  hover readout falls back to the region name when the hex has no GM name / settlement.
 - **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels (✅ above);
   legend + LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
   pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**

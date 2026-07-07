@@ -448,13 +448,13 @@ by straight hex-lines, Undo/Finish/Cancel bar, Enter/Esc/Ctrl-Z keys) was **gene
 auto network so settlements spur onto it). `map.js` `setRoadDraft`/`drawRoadDraft` preview it as a
 dashed tan line. Verified end-to-end over the DevTools protocol (Draw → Road → trace → Finish renders a
 manual road). Only a desert-polish pass (rare ancient dead-straight road) remains optional.
-**Named regions (3R.8).** The big terrain tracts now carry faint engraved names ("the Marrowwood",
-"the Wolf Sloughs", "the Iron Thicket"). `js/gen/regions.js` `computeRegions` flood-fills connected
-same-terrain clumps ≥ 16 hexes and names each by a pure `regionName(seed, terrain, anchorKey)` (a
-seeded prefix + a terrain-flavoured collective noun — Peaks/Marches/Wood/Downs/Sands/Sea…). DERIVED,
-not stored: `map.js` memoises them per (seed, hex-count) and draws each at its centroid as a light
-italic serif, letter-spaced, sized to the region, **biggest-first with greedy de-overlap** so labels
-don't pile up; gated by the **Labels** toggle, under the water/road/marker layers. Node-tested.
+**Named regions (3R.8).** The big terrain tracts carry evocative names ("the Marrowwood", "the Wolf
+Sloughs", "the Nether Range"), shown **on hover** (no always-on labels cluttering the map — matching
+the settlement-name hover). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain
+clumps ≥ 16 hexes and names each by a pure `regionName(seed, terrain, anchorKey)` (a seeded prefix + a
+terrain-flavoured collective noun — Peaks/Marches/Wood/Downs/Sands/Sea…). DERIVED, not stored: `map.js`
+memoises a hex→name map per (seed, hex-count); the hover readout shows the GM's hex name, else a
+settlement name, else the region name. Node-tested.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based

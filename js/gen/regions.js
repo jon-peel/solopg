@@ -87,6 +87,7 @@ export function computeRegions(seed, terrainByKey, { minSize = 8 } = {}) {
       id: `region:${anchor}`, terrain, size: hexes.length, anchor,
       cq: sq / hexes.length, cr: sr / hexes.length,
       name: regionName(seed, terrain, anchor),
+      keys: hexes, // the region's hex keys (for hover lookup)
     });
   }
   return regions;
