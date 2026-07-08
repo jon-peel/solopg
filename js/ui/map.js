@@ -23,7 +23,7 @@ import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
-import { roadRiverCrossings, coastalPorts } from "../gen/crossings.js";
+import { coastalPorts } from "../gen/ports.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -51,9 +51,8 @@ let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destin
 let riverDraft = null; // in-progress manual river being drawn: [{q,r}, ...] | null
 let roadDraft = null;  // in-progress manual road being drawn: [{q,r}, ...] | null
 let regionCache = { seed: null, count: -1, byHex: new Map() }; // memoised hex -> region name (js/gen/regions.js)
-// Memoised bridge/ford crossings + coastal ports (js/gen/crossings.js), recomputed
-// only when the world grows or its road/river overlays change.
-let crossingCache = { seed: null, count: -1, roads: -1, rivers: -1, crossings: [], portKeys: new Set() };
+// Memoised coastal-port hex keys (js/gen/ports.js), recomputed only when the world grows.
+let portCache = { seed: null, count: -1, portKeys: new Set() };
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -79,6 +78,7 @@ export function attachMap(canvasEl, cbs = {}) {
 export function setWorld(w) {
   world = w;
   regionCache = { seed: null, count: -1, byHex: new Map() }; // invalidate named regions for the new world
+  portCache = { seed: null, count: -1, portKeys: new Set() }; // ...and coastal ports
   render();
 }
 
@@ -201,19 +201,19 @@ export function render() {
     visible.push({ hex, c });
   }
 
-  // 2a. Rivers then roads — both UNDER the markers below, and roads OVER rivers so
-  //     a crossing reads as a bridge (solid trunk) or ford (dashed spur). Roads
-  //     are nudged off-centre so one running along a river sits beside it rather
-  //     than hiding it (see drawRoads).
+  // 2a. Roads + rivers, UNDER the markers below. Draw order IS the bridge/ford:
+  //     dashed tracks/spurs go UNDER the river (a ford — water runs over them),
+  //     then the river, then solid roads OVER it (a bridge). Roads are nudged
+  //     off-centre so one running along a river sits beside it (see drawRoads).
+  drawRoads(minX, minY, maxX, maxY, margin, roadFordsRiver); // fords, under the water
   drawRivers(minX, minY, maxX, maxY, margin);
   drawRiverDraft(); // the manual river being traced (if any), on top
-  drawRoads(minX, minY, maxX, maxY, margin);
-  drawCrossings(minX, minY, maxX, maxY, margin); // bridge/ford glyphs at road×river crossings
+  drawRoads(minX, minY, maxX, maxY, margin, (rd) => !roadFordsRiver(rd)); // bridges, over
   drawRoadDraft(); // the manual road being traced (if any), on top
 
   // 2a″. Markers on placed hexes (settlement/POI + hook rings), on top of the
   //      water/road network so the icons stay legible.
-  const { portKeys } = crossingsAndPorts();
+  const portKeys = portKeysFor();
   for (const { hex, c } of visible) {
     if (detail) drawDetailMarkers(c.x, c.y, hex);
     else if (simplified) drawSimplifiedMarkers(c.x, c.y, hex);
@@ -369,18 +369,12 @@ function regionNameAt(q, r) {
   return regionCache.byHex.get(axialKey(q, r)) || null;
 }
 
-// Bridges/fords + coastal ports (3R.8), derived from the road/river overlays and
-// the coastline. Memoised per (seed, hex count, road count, river count) so we
-// only recompute when the world or its overlays change, not on every pan/zoom.
-function crossingsAndPorts() {
-  if (!world) return crossingCache;
+// Coastal ports (3R.8): the hex keys of Town/City settlements touching the Sea.
+// Memoised per (seed, hex count) — ports only change when the world grows.
+function portKeysFor() {
+  if (!world) return portCache.portKeys;
   const hexes = placedHexes(world);
-  const roadsN = (world.roads || []).length;
-  const riversN = (world.rivers || []).length;
-  if (crossingCache.seed === world.seed && crossingCache.count === hexes.length
-      && crossingCache.roads === roadsN && crossingCache.rivers === riversN) {
-    return crossingCache;
-  }
+  if (portCache.seed === world.seed && portCache.count === hexes.length) return portCache.portKeys;
   const terrainByKey = new Map();
   const settlementsByKey = new Map();
   for (const h of hexes) {
@@ -388,12 +382,11 @@ function crossingsAndPorts() {
     terrainByKey.set(k, h.terrain);
     if (h.settlement && h.settlement.present) settlementsByKey.set(k, h.settlement.size);
   }
-  crossingCache = {
-    seed: world.seed, count: hexes.length, roads: roadsN, rivers: riversN,
-    crossings: roadRiverCrossings(world.roads || [], world.rivers || []),
+  portCache = {
+    seed: world.seed, count: hexes.length,
     portKeys: new Set(coastalPorts(settlementsByKey, terrainByKey).map((p) => axialKey(p.q, p.r))),
   };
-  return crossingCache;
+  return portCache.portKeys;
 }
 
 // Rivers (Phase 3R.5, "curated rivers"): each world.rivers[] entry is a full
@@ -524,19 +517,27 @@ function offsetPolyline(pts, off) {
   return out;
 }
 
-// Roads (3R.7): one pass over world.roads[], drawn on top of rivers so a crossing
-// reads as a bridge. Each is a smoothed tan polyline through hex centres, tiered
-// by width/colour, with a dark casing under the fill for contrast. Whole-road
-// bounding-box cull like rivers; endpoints trimmed half a segment so the centred
-// settlement icon stays clean where the road arrives.
-function drawRoads(minX, minY, maxX, maxY, margin) {
+// A dashed track/spur (tier 3, not the ancient road) FORDS a river — it's drawn
+// UNDER the river so the water runs across it. Everything else (solid roads +
+// the ancient road) is a BRIDGE, drawn OVER the river. No crossing glyph: the
+// bridge/ford reads purely from which layer wins where they meet.
+function roadFordsRiver(road) {
+  return road.kind !== "ancient" && (road.tier || 2) >= 3;
+}
+
+// Roads (3R.7): a pass over world.roads[] matching `keep`. Each is a smoothed tan
+// polyline through hex centres, tiered by width/colour, with a dark casing under
+// the fill for contrast. Whole-road bounding-box cull like rivers; endpoints
+// trimmed half a segment so the centred settlement icon stays clean. Called twice
+// per frame — fords before the river, bridges after — so crossings layer right.
+function drawRoads(minX, minY, maxX, maxY, margin, keep) {
   if (!world || !Array.isArray(world.roads) || !world.roads.length) return;
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   // Draw lowest tier first so where roads share a corridor the BIGGER one (drawn
   // last) shows on top — overlapping roads read as one bigger road.
-  const ordered = [...world.roads].sort((a, b) => (a.tier || 2) - (b.tier || 2));
+  const ordered = world.roads.filter(keep).sort((a, b) => (a.tier || 2) - (b.tier || 2));
   for (const road of ordered) {
     const path = road && road.path;
     if (!path || path.length < 2) continue;
@@ -596,61 +597,6 @@ function strokeAncient(pts) {
   ctx.lineWidth = w;
   strokeSmoothPath(pts);
   ctx.restore();
-}
-
-// Bridges / fords where a road crosses a river (js/gen/crossings.js). Drawn after
-// the roads so the glyph sits on top of the road+river junction, but before the
-// settlement markers so a town icon still wins. Bounding-box culled per hex.
-function drawCrossings(minX, minY, maxX, maxY, margin) {
-  const { crossings } = crossingsAndPorts();
-  if (!crossings.length) return;
-  ctx.save();
-  ctx.lineCap = "round";
-  for (const cr of crossings) {
-    const c = axialToPixel(cr.q, cr.r, HEX_SIZE);
-    if (c.x < minX - margin || c.x > maxX + margin || c.y < minY - margin || c.y > maxY + margin) continue;
-    if (cr.kind === "bridge") strokeBridge(c, cr.roadDir);
-    else strokeFord(c, cr.roadDir, cr.riverDir);
-  }
-  ctx.restore();
-}
-
-// A bridge: a pale-stone deck straddling the river along the road (a dark-outlined
-// light rectangle), so it reads clearly over the tan road + blue river.
-const BRIDGE_STONE = "#e7ddc2";
-function strokeBridge(c, roadDir) {
-  const o = roadDir;                 // along the road
-  const p = { x: -o.y, y: o.x };     // across it (≈ along the river)
-  const half = HEX_SIZE * 0.34 / camera.scale; // half deck length (along road)
-  const rail = HEX_SIZE * 0.20 / camera.scale; // half deck width (across the road)
-  const corner = (u, v) => ({ x: c.x + o.x * u * half + p.x * v * rail, y: c.y + o.y * u * half + p.y * v * rail });
-  const pts = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.closePath();
-  ctx.fillStyle = BRIDGE_STONE;
-  ctx.fill();
-  ctx.strokeStyle = ROAD_CASING;
-  ctx.lineWidth = 1.4 / camera.scale;
-  ctx.stroke();
-}
-
-// A ford: a few pale-blue ripples washing across the road where it wades the river.
-function strokeFord(c, roadDir, riverDir) {
-  const o = roadDir;                 // step the ripples along the road
-  const r = riverDir;                // each ripple lies along the river
-  const step = HEX_SIZE * 0.16 / camera.scale;
-  const half = HEX_SIZE * 0.20 / camera.scale;
-  ctx.strokeStyle = RIVER_COLOR;
-  ctx.lineWidth = 1.7 / camera.scale;
-  for (const t of [-1, 0, 1]) {
-    const mx = c.x + o.x * t * step, my = c.y + o.y * t * step;
-    ctx.beginPath();
-    ctx.moveTo(mx - r.x * half, my - r.y * half);
-    ctx.lineTo(mx + r.x * half, my + r.y * half);
-    ctx.stroke();
-  }
 }
 
 /** Set (or clear) the in-progress manual river being traced; re-renders. */

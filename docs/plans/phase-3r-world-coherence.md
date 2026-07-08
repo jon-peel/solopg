@@ -1013,13 +1013,15 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Legend ✅ done** — a toggleable bottom-left key (command-bar "Legend" button): terrain colour
   swatches (built from `terrain-style.js` `TERRAIN_COLORS`/`TERRAIN_ICONS` so it can't drift), route
   tiers (highway/road/track/river), and a settlement/keep note.
-- **Bridges / fords + coastal ports ✅ done** — `js/gen/crossings.js` (pure, node-tested):
-  `roadRiverCrossings` marks each hex where a road runs TRANSVERSE to a river (|road·river| dir <
-  0.7) as a bridge (tier ≤ 2) or a ford (tier 3 track/spur); a road hugging a river alongside is not
-  a crossing. `coastalPorts` marks a Town/City with a Sea neighbour. `map.js` renders a pale-stone
-  bridge deck, cyan ford ripples, and a ⚓ port marker (memoised per seed/hex/road/river counts, culled),
-  all keyed in the legend. Grounded over 20 Huge fills (~1.1 bridges, 0.4 fords, 1.4 ports/fill) and
-  verified in-browser (seed 11: 6 bridges, 2 fords, 4 ports). Convention: bigger roads bridge, tracks ford.
+- **Bridges / fords + coastal ports ✅ done.** No crossing glyph — the bridge/ford falls out of
+  **draw order**: `map.js` draws dashed tracks/spurs (tier 3) UNDER the river (the water runs across
+  them = a **ford**), then the river, then solid roads + the ancient road OVER it (= a **bridge**).
+  `roadFordsRiver(road)` picks the pass; roads are already nudged off-centre so one hugging a river
+  stays beside it and only a true crossing is covered. **Ports:** `js/gen/ports.js` `coastalPorts`
+  (pure, node-tested) marks a Town/City with a Sea neighbour; `map.js` draws a ⚓ (memoised per
+  seed/hex count). Legend notes the solid=bridge / dashed=ford convention + the ⚓ port.
+  *(An earlier draw-a-glyph version — `crossings.js` with transverse-crossing detection + a pale
+  bridge deck + ford ripples — was scrapped as over-engineered per play feedback.)*
 - **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels + legend
   (✅ above); LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
   pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
