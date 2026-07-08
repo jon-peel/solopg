@@ -23,6 +23,7 @@ import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
+import { roadRiverCrossings, coastalPorts } from "../gen/crossings.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -50,6 +51,9 @@ let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destin
 let riverDraft = null; // in-progress manual river being drawn: [{q,r}, ...] | null
 let roadDraft = null;  // in-progress manual road being drawn: [{q,r}, ...] | null
 let regionCache = { seed: null, count: -1, byHex: new Map() }; // memoised hex -> region name (js/gen/regions.js)
+// Memoised bridge/ford crossings + coastal ports (js/gen/crossings.js), recomputed
+// only when the world grows or its road/river overlays change.
+let crossingCache = { seed: null, count: -1, roads: -1, rivers: -1, crossings: [], portKeys: new Set() };
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -204,10 +208,12 @@ export function render() {
   drawRivers(minX, minY, maxX, maxY, margin);
   drawRiverDraft(); // the manual river being traced (if any), on top
   drawRoads(minX, minY, maxX, maxY, margin);
+  drawCrossings(minX, minY, maxX, maxY, margin); // bridge/ford glyphs at road×river crossings
   drawRoadDraft(); // the manual road being traced (if any), on top
 
   // 2a″. Markers on placed hexes (settlement/POI + hook rings), on top of the
   //      water/road network so the icons stay legible.
+  const { portKeys } = crossingsAndPorts();
   for (const { hex, c } of visible) {
     if (detail) drawDetailMarkers(c.x, c.y, hex);
     else if (simplified) drawSimplifiedMarkers(c.x, c.y, hex);
@@ -216,6 +222,13 @@ export function render() {
     const hk = axialKey(hex.coords.q, hex.coords.r);
     if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
+    // A coastal town/city is a port — a small anchor in its top-right corner.
+    if (detail && portKeys.has(hk)) {
+      const off = HEX_SIZE * 0.52, sz = HEX_SIZE * 0.4;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `${sz}px sans-serif`;
+      drawMarker(c.x + off, c.y - off, "⚓", sz, "#fff");
+    }
     // A locked hex (protected from regenerate/delete) shows a small padlock.
     if (detail && hex.locked) {
       const off = HEX_SIZE * 0.52, sz = HEX_SIZE * 0.4;
@@ -354,6 +367,33 @@ function regionNameAt(q, r) {
     regionCache = { seed: world.seed, count: hexes.length, byHex };
   }
   return regionCache.byHex.get(axialKey(q, r)) || null;
+}
+
+// Bridges/fords + coastal ports (3R.8), derived from the road/river overlays and
+// the coastline. Memoised per (seed, hex count, road count, river count) so we
+// only recompute when the world or its overlays change, not on every pan/zoom.
+function crossingsAndPorts() {
+  if (!world) return crossingCache;
+  const hexes = placedHexes(world);
+  const roadsN = (world.roads || []).length;
+  const riversN = (world.rivers || []).length;
+  if (crossingCache.seed === world.seed && crossingCache.count === hexes.length
+      && crossingCache.roads === roadsN && crossingCache.rivers === riversN) {
+    return crossingCache;
+  }
+  const terrainByKey = new Map();
+  const settlementsByKey = new Map();
+  for (const h of hexes) {
+    const k = axialKey(h.coords.q, h.coords.r);
+    terrainByKey.set(k, h.terrain);
+    if (h.settlement && h.settlement.present) settlementsByKey.set(k, h.settlement.size);
+  }
+  crossingCache = {
+    seed: world.seed, count: hexes.length, roads: roadsN, rivers: riversN,
+    crossings: roadRiverCrossings(world.roads || [], world.rivers || []),
+    portKeys: new Set(coastalPorts(settlementsByKey, terrainByKey).map((p) => axialKey(p.q, p.r))),
+  };
+  return crossingCache;
 }
 
 // Rivers (Phase 3R.5, "curated rivers"): each world.rivers[] entry is a full
@@ -556,6 +596,61 @@ function strokeAncient(pts) {
   ctx.lineWidth = w;
   strokeSmoothPath(pts);
   ctx.restore();
+}
+
+// Bridges / fords where a road crosses a river (js/gen/crossings.js). Drawn after
+// the roads so the glyph sits on top of the road+river junction, but before the
+// settlement markers so a town icon still wins. Bounding-box culled per hex.
+function drawCrossings(minX, minY, maxX, maxY, margin) {
+  const { crossings } = crossingsAndPorts();
+  if (!crossings.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const cr of crossings) {
+    const c = axialToPixel(cr.q, cr.r, HEX_SIZE);
+    if (c.x < minX - margin || c.x > maxX + margin || c.y < minY - margin || c.y > maxY + margin) continue;
+    if (cr.kind === "bridge") strokeBridge(c, cr.roadDir);
+    else strokeFord(c, cr.roadDir, cr.riverDir);
+  }
+  ctx.restore();
+}
+
+// A bridge: a pale-stone deck straddling the river along the road (a dark-outlined
+// light rectangle), so it reads clearly over the tan road + blue river.
+const BRIDGE_STONE = "#e7ddc2";
+function strokeBridge(c, roadDir) {
+  const o = roadDir;                 // along the road
+  const p = { x: -o.y, y: o.x };     // across it (≈ along the river)
+  const half = HEX_SIZE * 0.34 / camera.scale; // half deck length (along road)
+  const rail = HEX_SIZE * 0.20 / camera.scale; // half deck width (across the road)
+  const corner = (u, v) => ({ x: c.x + o.x * u * half + p.x * v * rail, y: c.y + o.y * u * half + p.y * v * rail });
+  const pts = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = BRIDGE_STONE;
+  ctx.fill();
+  ctx.strokeStyle = ROAD_CASING;
+  ctx.lineWidth = 1.4 / camera.scale;
+  ctx.stroke();
+}
+
+// A ford: a few pale-blue ripples washing across the road where it wades the river.
+function strokeFord(c, roadDir, riverDir) {
+  const o = roadDir;                 // step the ripples along the road
+  const r = riverDir;                // each ripple lies along the river
+  const step = HEX_SIZE * 0.16 / camera.scale;
+  const half = HEX_SIZE * 0.20 / camera.scale;
+  ctx.strokeStyle = RIVER_COLOR;
+  ctx.lineWidth = 1.7 / camera.scale;
+  for (const t of [-1, 0, 1]) {
+    const mx = c.x + o.x * t * step, my = c.y + o.y * t * step;
+    ctx.beginPath();
+    ctx.moveTo(mx - r.x * half, my - r.y * half);
+    ctx.lineTo(mx + r.x * half, my + r.y * half);
+    ctx.stroke();
+  }
 }
 
 /** Set (or clear) the in-progress manual river being traced; re-renders. */

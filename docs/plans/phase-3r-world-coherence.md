@@ -993,8 +993,7 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Ancient desert road ✅ done** — a rare seeded dead-straight road (`roads.js`, `kind: "ancient"`)
   between big settlements whose straight line crosses ≥ 3 desert hexes and no water (`ANCIENT_CHANCE`
   0.14); rendered pale + dotted + straight, distinct from the curving tan roads; keyed in the legend.
-- **Remaining polish (not blocking):** Bridges/ports + full
-  manual-draw integration still slated for 3R.8.
+- **Bridges/fords + coastal ports ✅ done (3R.8).** Manual road/river draw already shipped (3R.7).
 
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning
 - Wire the full **deterministic region pipeline**: terrain → water/coastline → rivers
@@ -1014,6 +1013,13 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Legend ✅ done** — a toggleable bottom-left key (command-bar "Legend" button): terrain colour
   swatches (built from `terrain-style.js` `TERRAIN_COLORS`/`TERRAIN_ICONS` so it can't drift), route
   tiers (highway/road/track/river), and a settlement/keep note.
+- **Bridges / fords + coastal ports ✅ done** — `js/gen/crossings.js` (pure, node-tested):
+  `roadRiverCrossings` marks each hex where a road runs TRANSVERSE to a river (|road·river| dir <
+  0.7) as a bridge (tier ≤ 2) or a ford (tier 3 track/spur); a road hugging a river alongside is not
+  a crossing. `coastalPorts` marks a Town/City with a Sea neighbour. `map.js` renders a pale-stone
+  bridge deck, cyan ford ripples, and a ⚓ port marker (memoised per seed/hex/road/river counts, culled),
+  all keyed in the legend. Grounded over 20 Huge fills (~1.1 bridges, 0.4 fords, 1.4 ports/fill) and
+  verified in-browser (seed 11: 6 bridges, 2 fords, 4 ports). Convention: bigger roads bridge, tracks ford.
 - **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels + legend
   (✅ above); LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
   pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
