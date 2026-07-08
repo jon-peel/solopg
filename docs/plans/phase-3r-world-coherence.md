@@ -1025,7 +1025,11 @@ long roads — most settlements connected, some with several roads, an interesti
   ~15 ms** (the largest — all-pairs A\* over the big settlements + ancient-road scan, both distance-
   pruned), regions ~1 ms. Well within budget; no optimisation needed. Roads scale with the big-
   settlement count (O(n²) A\*), but density caps that at ~7 avg / ~13 observed.
-- **Migration/compat** for pre-3R worlds. Final **tuning** against the 3R.2 metrics (both still open).
+- **Migration/compat for pre-3R worlds — NO MIGRATION (deferred, deliberate).** Old saved worlds are
+  NOT migrated to the 3R overlays for now. A migration pass may come later, but it is explicitly out of
+  scope for this phase — do not add one without a fresh decision. (Requested 2026-07: "NO MIGRATION.
+  At a later point maybe… for now, NO MIGRATION.")
+- Final **tuning** against the 3R.2 metrics (still open).
 
 ---
 

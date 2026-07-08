@@ -1329,6 +1329,10 @@ async function onGenerateHook(opts = {}) {
 
     if (!hook) return logLine("Nothing to gossip about here.");
     current.hooks.push(hook);
+    // Surface the new lead: jump to the Hooks tab with it selected (and its
+    // endpoints highlighted on the map) so it's never a silent "nothing happened".
+    selectedHookId = hook.id;
+    setPanelTab("hooks");
     await persistAndRefresh();
     logLine(`New hook — ${hookName(hook)}${HOOK_NOTE[hook.pattern] || ""}.`);
   } catch (err) {
@@ -1395,6 +1399,9 @@ async function onFollowClue(id) {
       subject: { poiId: subj.poiId, name: subj.name, type: subj.type },
       chain: { ...hook.chain, step: nextStep }, // keep total + prize
     });
+    // Keep the advanced lead in view (Hooks tab, selected, new leg highlighted).
+    selectedHookId = hook.id;
+    setPanelTab("hooks");
     await persistAndRefresh();
     logLine(
       nextStep >= hook.chain.total

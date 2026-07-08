@@ -16,7 +16,7 @@ import {
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
-import { axialDistance, axialLine } from "../js/core/hexgeo.js";
+import { axialDistance, axialLine, hexDisc, axialKey } from "../js/core/hexgeo.js";
 
 function tables() {
   const ids = [
@@ -147,6 +147,24 @@ test("chooseDistantTarget avoids occupied cells, and gives up when boxed in", ()
   for (let s = 0; s < 50; s++) {
     const spot = chooseDistantTarget(mulberry32(s), origin, (q, r) => !free(q, r));
     if (spot) assert.ok(free(spot.q, spot.r));
+  }
+});
+
+test("chooseDistantTarget reaches past a dense fill (interior origin on a big map)", () => {
+  // Regression: a Huge fill (radius 15) leaves every cell within the preferred
+  // 2–6 band of an interior origin occupied, so hooks that need a distant target
+  // (Read map / Follow trail / distant) silently failed. It must now push out
+  // past the fill and always land a free cell.
+  const occupied = new Set(hexDisc(0, 0, 15).map((c) => axialKey(c.q, c.r)));
+  const isOccupied = (q, r) => occupied.has(axialKey(q, r));
+  const origin = { q: 0, r: 0 };
+  for (let s = 0; s < 100; s++) {
+    const spot = chooseDistantTarget(mulberry32(s), origin, isOccupied);
+    assert.ok(spot, `seed ${s}: found a distant target beyond the fill`);
+    assert.ok(!isOccupied(spot.q, spot.r), "the target is on open ground");
+    assert.ok(spot.distance > 15, "it cleared the radius-15 fill");
+    assert.equal(axialDistance(origin.q, origin.r, spot.q, spot.r), spot.distance);
+    assert.ok(bearingTo(origin, spot), "straight walk → clean compass bearing");
   }
 });
 
