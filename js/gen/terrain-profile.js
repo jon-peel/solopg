@@ -57,7 +57,7 @@ export const TERRAIN_PROFILE = {
     // Open water is almost always empty. The only auto-POI is a rare lone
     // landmark (an island, a reef, a shipwreck) — never a shrine/dungeon/camp
     // floating in the sea. (Manual placement can still add any type.)
-    poi: { chance: 0.006, weights: { landmark: 1 } },
+    poi: { chance: 0.003, weights: { landmark: 1 } },
   },
 };
 
