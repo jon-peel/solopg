@@ -1022,7 +1022,11 @@ long roads — most settlements connected, some with several roads, an interesti
   `crossings.js` transverse-crossing detector drawing a pale bridge deck + ford ripples — over-
   engineered; and a legend note + a ⚓ coastal-port marker (`ports.js`) — "no point to this".)*
 - **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels + legend
-  (✅ above); LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
+  (✅ above). **Network LOD ✅ done:** roads/rivers draw full-styled (casing, tier widths, track
+  dashes) only at the detail zoom; once hexes shrink past `DETAIL_PX` they switch to a thin SOLID
+  skeleton (`ROAD_TIERS[].far`, `RIVER_WIDTH_FAR`, no dashes) — driven by a zoom-only `netDetail`
+  flag (independent of the icons toggle) — so a zoomed-out Huge map reads as a delicate network
+  instead of fat dashed tubes on tiny hexes. (Rivers' line rendering already shipped in 3R.5,
   pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
   Hills recoloured `#b08d4f` → **`#8c9e71`** (`terrain-style.js` `TERRAIN_COLORS`), a grey-green
   midpoint of Mountains grey + Plains green, so the Mountains→Hills→Plains band reads as an

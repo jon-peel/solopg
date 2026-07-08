@@ -174,6 +174,9 @@ export function render() {
   const onScreen = HEX_SIZE * camera.scale;
   const detail = iconsEnabled && onScreen >= DETAIL_PX;
   const simplified = iconsEnabled && onScreen >= MARK_MIN_PX && onScreen < DETAIL_PX;
+  // Network LOD is zoom-only (roads/rivers draw regardless of the icons toggle):
+  // full styling when close, a thin solid skeleton once hexes shrink past detail.
+  const netDetail = onScreen >= DETAIL_PX;
   // Two passes so the water/road network layers correctly: first the hex FILLS +
   // terrain motifs (background), then rivers + roads, then the settlement/POI/hook
   // MARKERS on top — so a town icon sits cleanly ON the network, not under it. The
@@ -201,10 +204,10 @@ export function render() {
   //     dashed tracks/spurs go UNDER the river (a ford — water runs over them),
   //     then the river, then solid roads OVER it (a bridge). Roads are nudged
   //     off-centre so one running along a river sits beside it (see drawRoads).
-  drawRoads(minX, minY, maxX, maxY, margin, roadFordsRiver); // fords, under the water
-  drawRivers(minX, minY, maxX, maxY, margin);
+  drawRoads(minX, minY, maxX, maxY, margin, roadFordsRiver, netDetail); // fords, under the water
+  drawRivers(minX, minY, maxX, maxY, margin, netDetail);
   drawRiverDraft(); // the manual river being traced (if any), on top
-  drawRoads(minX, minY, maxX, maxY, margin, (rd) => !roadFordsRiver(rd)); // bridges, over
+  drawRoads(minX, minY, maxX, maxY, margin, (rd) => !roadFordsRiver(rd), netDetail); // bridges, over
   drawRoadDraft(); // the manual road being traced (if any), on top
 
   // 2a″. Markers on placed hexes (settlement/POI + hook rings), on top of the
@@ -367,15 +370,18 @@ function regionNameAt(q, r) {
 // rivers entirely off-screen, and the canvas clips the rest, so a long river
 // only really costs its visible span.
 const RIVER_COLOR = "#6fd0f0";
-const RIVER_WIDTH = 3.4; // world px at scale 1 (before the /camera.scale divide)
+const RIVER_WIDTH = 3.4; // constant screen px at the detail zoom
+const RIVER_WIDTH_FAR = 1.5; // thinner in the zoomed-out overview so it doesn't dominate tiny hexes
 
 // Roads (3R.7): tiered tan polylines linking settlements. Tier 1 highways
 // (City–City) are widest, tier 3 tracks/spurs thinnest and dashed. A dark casing
-// under the fill lifts them off the terrain. Widths are world px at scale 1.
+// under the fill lifts them off the terrain. `width` is the detail-zoom screen px;
+// `far` is the zoomed-out overview width — thin + solid (no dash), so a big map
+// reads as a clean network skeleton instead of fat dashed tubes on tiny hexes.
 const ROAD_TIERS = {
-  1: { width: 4.4, color: "#d9b25c" }, // highway (City–City)
-  2: { width: 2.9, color: "#c39a54" }, // road
-  3: { width: 2.6, color: "#c69a58", dash: [7, 4] }, // track / spur (dashed = ford)
+  1: { width: 4.4, far: 2.1, color: "#d9b25c" }, // highway (City–City)
+  2: { width: 2.9, far: 1.5, color: "#c39a54" }, // road
+  3: { width: 2.6, far: 1.2, color: "#c69a58", dash: [7, 4] }, // track / spur (dashed = ford)
 };
 const ROAD_CASING = "#4a3a1f";
 const ANCIENT_COLOR = "#d8cba6"; // pale bone — a weathered ancient desert road (dead-straight, dotted)
@@ -406,13 +412,13 @@ function strokeSmoothPath(pts) {
   ctx.stroke();
 }
 
-function drawRivers(minX, minY, maxX, maxY, margin) {
+function drawRivers(minX, minY, maxX, maxY, margin, detail) {
   if (!world || !Array.isArray(world.rivers) || !world.rivers.length) return;
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = RIVER_COLOR;
-  ctx.lineWidth = RIVER_WIDTH / camera.scale;
+  ctx.lineWidth = (detail ? RIVER_WIDTH : RIVER_WIDTH_FAR) / camera.scale;
   for (const river of world.rivers) {
     const path = river && river.path;
     if (!path || path.length < 2) continue;
@@ -498,7 +504,7 @@ function roadFordsRiver(road) {
 // the fill for contrast. Whole-road bounding-box cull like rivers; endpoints
 // trimmed half a segment so the centred settlement icon stays clean. Called twice
 // per frame — fords before the river, bridges after — so crossings layer right.
-function drawRoads(minX, minY, maxX, maxY, margin, keep) {
+function drawRoads(minX, minY, maxX, maxY, margin, keep, detail) {
   if (!world || !Array.isArray(world.roads) || !world.roads.length) return;
   ctx.save();
   ctx.lineCap = "round";
@@ -528,18 +534,31 @@ function drawRoads(minX, minY, maxX, maxY, margin, keep) {
     pts[0] = lerpPt(pts[0], pts[1], ROAD_END_TRIM); // a is always the owning settlement
     if (!road.junction) pts[pts.length - 1] = lerpPt(pts[pts.length - 1], pts[pts.length - 2], ROAD_END_TRIM);
     if (road.kind === "ancient") {
-      strokeAncient(offsetPolyline([pts[0], pts[pts.length - 1]], ROAD_OFFSET)); // dead-straight
+      strokeAncient(offsetPolyline([pts[0], pts[pts.length - 1]], ROAD_OFFSET), detail); // dead-straight
     } else {
-      strokeRoad(offsetPolyline(pts, ROAD_OFFSET), road);
+      strokeRoad(offsetPolyline(pts, ROAD_OFFSET), road, detail);
     }
   }
   ctx.restore();
 }
 
-function strokeRoad(pts, road) {
+function strokeRoad(pts, road, detail) {
   const spec = ROAD_TIERS[road.tier] || ROAD_TIERS[2];
-  const w = spec.width / camera.scale;
   ctx.save();
+  if (!detail) {
+    // Overview (zoomed out): a thin SOLID line with a hairline casing — no dashes
+    // (they turn to noise at this scale). The network reads as a clean skeleton.
+    const w = spec.far / camera.scale;
+    ctx.strokeStyle = ROAD_CASING;
+    ctx.lineWidth = w + 0.8 / camera.scale;
+    strokeSmoothPath(pts);
+    ctx.strokeStyle = spec.color;
+    ctx.lineWidth = w;
+    strokeSmoothPath(pts);
+    ctx.restore();
+    return;
+  }
+  const w = spec.width / camera.scale;
   // A dashed track gets the same dark casing as a solid road (dashed too), so its
   // dashes read clearly against the terrain instead of washing out.
   if (spec.dash) ctx.setLineDash(spec.dash.map((d) => d / camera.scale));
@@ -553,9 +572,17 @@ function strokeRoad(pts, road) {
 }
 
 // An ancient desert road: a pale, dead-straight, dotted line (weathered/broken).
-function strokeAncient(pts) {
+// Zoomed out the dots vanish into noise, so it becomes a faint thin solid line.
+function strokeAncient(pts, detail) {
   ctx.save();
   ctx.lineCap = "round";
+  if (!detail) {
+    ctx.strokeStyle = ANCIENT_COLOR;
+    ctx.lineWidth = 1.1 / camera.scale;
+    strokeSmoothPath(pts);
+    ctx.restore();
+    return;
+  }
   const w = 2.4 / camera.scale;
   ctx.setLineDash([2 / camera.scale, 6 / camera.scale]);
   ctx.strokeStyle = ROAD_CASING;
