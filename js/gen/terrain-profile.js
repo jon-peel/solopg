@@ -54,7 +54,10 @@ export const TERRAIN_PROFILE = {
   },
   Water: {
     settlement: null, // no settlements on open water
-    poi: { chance: 0.03, weights: { landmark: 2, shrine: 1 } }, // extremely rare; no dungeon on open water
+    // Open water is almost always empty. The only auto-POI is a rare lone
+    // landmark (an island, a reef, a shipwreck) — never a shrine/dungeon/camp
+    // floating in the sea. (Manual placement can still add any type.)
+    poi: { chance: 0.006, weights: { landmark: 1 } },
   },
 };
 

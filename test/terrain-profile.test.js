@@ -101,9 +101,14 @@ test("cappedSizeTable excludes oversized sizes and never mutates base", () => {
   assert.deepEqual(sizeTable, snapshot); // unchanged
 });
 
-test("Water POI weights exclude dungeon (no explorable on open water)", () => {
-  const types = Object.keys(TERRAIN_PROFILE.Water.poi.weights);
-  assert.ok(!types.includes("dungeon"), "Water should not auto-roll a dungeon");
+test("open water auto-rolls only a rare lone landmark — no shrine/dungeon/camp/tower", () => {
+  const water = TERRAIN_PROFILE.Water.poi;
+  assert.deepEqual(Object.keys(water.weights), ["landmark"], "landmark is the only auto water POI");
+  assert.ok(water.chance <= 0.01, `water POI chance stays rare (got ${water.chance})`);
+  // Lake/Sea alias to Water, so their auto-POI table is landmark-only too.
+  for (const t of ["Lake", "Sea"]) {
+    assert.deepEqual(poiTypeTable(t).entries.map((e) => e.value), ["landmark"], `${t} auto-POI is landmark-only`);
+  }
 });
 
 test("dungeon is an allowed POI type on every land terrain", () => {
