@@ -23,7 +23,6 @@ import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
-import { coastalPorts } from "../gen/ports.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -51,8 +50,6 @@ let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destin
 let riverDraft = null; // in-progress manual river being drawn: [{q,r}, ...] | null
 let roadDraft = null;  // in-progress manual road being drawn: [{q,r}, ...] | null
 let regionCache = { seed: null, count: -1, byHex: new Map() }; // memoised hex -> region name (js/gen/regions.js)
-// Memoised coastal-port hex keys (js/gen/ports.js), recomputed only when the world grows.
-let portCache = { seed: null, count: -1, portKeys: new Set() };
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -78,7 +75,6 @@ export function attachMap(canvasEl, cbs = {}) {
 export function setWorld(w) {
   world = w;
   regionCache = { seed: null, count: -1, byHex: new Map() }; // invalidate named regions for the new world
-  portCache = { seed: null, count: -1, portKeys: new Set() }; // ...and coastal ports
   render();
 }
 
@@ -213,7 +209,6 @@ export function render() {
 
   // 2a″. Markers on placed hexes (settlement/POI + hook rings), on top of the
   //      water/road network so the icons stay legible.
-  const portKeys = portKeysFor();
   for (const { hex, c } of visible) {
     if (detail) drawDetailMarkers(c.x, c.y, hex);
     else if (simplified) drawSimplifiedMarkers(c.x, c.y, hex);
@@ -222,13 +217,6 @@ export function render() {
     const hk = axialKey(hex.coords.q, hex.coords.r);
     if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
     else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
-    // A coastal town/city is a port — a small anchor in its top-right corner.
-    if (detail && portKeys.has(hk)) {
-      const off = HEX_SIZE * 0.52, sz = HEX_SIZE * 0.4;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.font = `${sz}px sans-serif`;
-      drawMarker(c.x + off, c.y - off, "⚓", sz, "#fff");
-    }
     // A locked hex (protected from regenerate/delete) shows a small padlock.
     if (detail && hex.locked) {
       const off = HEX_SIZE * 0.52, sz = HEX_SIZE * 0.4;
@@ -367,26 +355,6 @@ function regionNameAt(q, r) {
     regionCache = { seed: world.seed, count: hexes.length, byHex };
   }
   return regionCache.byHex.get(axialKey(q, r)) || null;
-}
-
-// Coastal ports (3R.8): the hex keys of Town/City settlements touching the Sea.
-// Memoised per (seed, hex count) — ports only change when the world grows.
-function portKeysFor() {
-  if (!world) return portCache.portKeys;
-  const hexes = placedHexes(world);
-  if (portCache.seed === world.seed && portCache.count === hexes.length) return portCache.portKeys;
-  const terrainByKey = new Map();
-  const settlementsByKey = new Map();
-  for (const h of hexes) {
-    const k = axialKey(h.coords.q, h.coords.r);
-    terrainByKey.set(k, h.terrain);
-    if (h.settlement && h.settlement.present) settlementsByKey.set(k, h.settlement.size);
-  }
-  portCache = {
-    seed: world.seed, count: hexes.length,
-    portKeys: new Set(coastalPorts(settlementsByKey, terrainByKey).map((p) => axialKey(p.q, p.r))),
-  };
-  return portCache.portKeys;
 }
 
 // Rivers (Phase 3R.5, "curated rivers"): each world.rivers[] entry is a full

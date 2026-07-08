@@ -993,7 +993,8 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Ancient desert road ✅ done** — a rare seeded dead-straight road (`roads.js`, `kind: "ancient"`)
   between big settlements whose straight line crosses ≥ 3 desert hexes and no water (`ANCIENT_CHANCE`
   0.14); rendered pale + dotted + straight, distinct from the curving tan roads; keyed in the legend.
-- **Bridges/fords + coastal ports ✅ done (3R.8).** Manual road/river draw already shipped (3R.7).
+- **Bridges/fords ✅ done (3R.8)** via draw order (solid over = bridge, dashed under = ford; see 3R.8).
+  Manual road/river draw already shipped (3R.7). *(Coastal-port markers were tried and dropped — no value.)*
 
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning
 - Wire the full **deterministic region pipeline**: terrain → water/coastline → rivers
@@ -1013,15 +1014,13 @@ long roads — most settlements connected, some with several roads, an interesti
 - **Legend ✅ done** — a toggleable bottom-left key (command-bar "Legend" button): terrain colour
   swatches (built from `terrain-style.js` `TERRAIN_COLORS`/`TERRAIN_ICONS` so it can't drift), route
   tiers (highway/road/track/river), and a settlement/keep note.
-- **Bridges / fords + coastal ports ✅ done.** No crossing glyph — the bridge/ford falls out of
-  **draw order**: `map.js` draws dashed tracks/spurs (tier 3) UNDER the river (the water runs across
-  them = a **ford**), then the river, then solid roads + the ancient road OVER it (= a **bridge**).
-  `roadFordsRiver(road)` picks the pass; roads are already nudged off-centre so one hugging a river
-  stays beside it and only a true crossing is covered. **Ports:** `js/gen/ports.js` `coastalPorts`
-  (pure, node-tested) marks a Town/City with a Sea neighbour; `map.js` draws a ⚓ (memoised per
-  seed/hex count). Legend notes the solid=bridge / dashed=ford convention + the ⚓ port.
-  *(An earlier draw-a-glyph version — `crossings.js` with transverse-crossing detection + a pale
-  bridge deck + ford ripples — was scrapped as over-engineered per play feedback.)*
+- **Bridges / fords ✅ done — draw order only, no glyph.** `map.js` draws dashed tracks/spurs
+  (tier 3) UNDER the river (the water runs across them = a **ford**), then the river, then solid
+  roads + the ancient road OVER it (= a **bridge**). `roadFordsRiver(road)` picks the pass; roads are
+  already nudged off-centre so one hugging a river stays beside it and only a true crossing is covered.
+  Nothing in the legend (self-evident). *(Two earlier versions were scrapped per play feedback: a
+  `crossings.js` transverse-crossing detector drawing a pale bridge deck + ford ripples — over-
+  engineered; and a legend note + a ⚓ coastal-port marker (`ports.js`) — "no point to this".)*
 - **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels + legend
   (✅ above); LOD updates still open. (Rivers' line rendering already shipped in 3R.5,
   pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
