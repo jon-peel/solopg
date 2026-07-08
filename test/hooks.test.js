@@ -168,6 +168,33 @@ test("chooseDistantTarget reaches past a dense fill (interior origin on a big ma
   }
 });
 
+test("dense-map pipeline: distant + chain hooks still build past a full fill", () => {
+  // Composes the exact pure pieces onGenerateHook uses for its distant/map/chain
+  // branches, under a Huge-fill occupancy predicate — the scenario that used to
+  // yield nothing. Both a distant hook and a chain must come out well-formed.
+  const t = tables();
+  const occupied = new Set(hexDisc(0, 0, 15).map((c) => axialKey(c.q, c.r)));
+  const isOccupied = (q, r) => occupied.has(axialKey(q, r));
+  const origin = { q: 0, r: 0 };
+  for (let s = 0; s < 40; s++) {
+    const rng = mulberry32(s);
+    const spot = chooseDistantTarget(rng, origin, isOccupied);
+    assert.ok(spot, `seed ${s}: a distant target exists past the fill`);
+    const subject = { poiId: "poi:0", name: "Tomb", type: "dungeon", q: spot.q, r: spot.r, occupant: { kind: "none" } };
+    const distant = generateHook(t, rng, { subjects: [subject], origin, index: 0, pattern: "distant", distance: spot.distance });
+    assert.ok(distant, "distant hook built");
+    assert.equal(distant.target.q, spot.q);
+    assert.equal(distant.target.r, spot.r);
+    const chain = startChain(t, rng, {
+      origin, index: 1, target: { q: spot.q, r: spot.r, poiId: "poi:0" },
+      subject: { poiId: "poi:0", name: "Tomb", type: "dungeon" }, terrain: "Forest",
+    });
+    assert.equal(chain.pattern, "chain");
+    assert.equal(chain.chain.step, 1);
+    assert.ok(chain.chain.total >= 3);
+  }
+});
+
 test("a distant hook carries pattern + distance and points at its lone subject", () => {
   const t = tables();
   const subject = { poiId: "poi:0", name: "Tomb", type: "dungeon", q: 4, r: -4, occupant: { kind: "none" } };
