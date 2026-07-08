@@ -1040,7 +1040,24 @@ long roads — most settlements connected, some with several roads, an interesti
   NOT migrated to the 3R overlays for now. A migration pass may come later, but it is explicitly out of
   scope for this phase — do not add one without a fresh decision. (Requested 2026-07: "NO MIGRATION.
   At a later point maybe… for now, NO MIGRATION.")
-- Final **tuning** against the 3R.2 metrics (still open).
+- **Final tuning against the 3R.2 metrics ✅ done — measured, all on/beating target, NO changes needed.**
+  Re-ran `test/stats-harness.js` (3 seeds, radius 25, ~1951 hexes) and the full-pipeline
+  `measure.mjs` (8 Huge fills) over the finished pipeline:
+  - **Terrain coherence** (vs 3R.2 baseline): **lone-hex rate 23–25% → 6.2–6.6%**; **clump median
+    1–2 → 3–5** (Mountains mean 10–14, max 130+ — real ranges). Terrain histogram still tracks the
+    base weights (Forest/Plains ~20–24%, Mountains ~12–20%).
+  - **Settlements:** **nearest-neighbour spacing ~1.1 hex → 4.5–5.5 hex** (no more clumping); raw
+    size table stays Hamlet-majority (56/33/8/3 %); the final mix is Village-heavy (≈ Village 45 /
+    Hamlet 28 / Town 14 / City 13 %) as the water boosts intend (~3 cities + 3 towns per Huge fill).
+  - **Water:** Sea+Lake ≈ 10 % median (coastal minority), per the flooding retune.
+  - **Roads:** 13.9/fill; **big settlements on the network 49/49 = 100 %** (one connected component).
+  - **Cluster hamlets:** City 79 % ringed (1.33 farms), Town 52 % (0.92) — exactly the tuned targets.
+  - **Rivers:** 0–10/fill (avg ~4.25), **terrain-driven** — scattered peaks yield none, dense ranges
+    (99–145 Mountain hexes) give 9–10; sources are deep-interior by design, so this variety is
+    intended, not a tuning gap. Left as-is.
+  Conclusion: the finished pipeline meets or beats every baseline target; no constants changed.
+
+**Phase 3R is feature-complete.**
 
 ---
 
