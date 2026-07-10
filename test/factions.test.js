@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   generateFaction,
+  promoteFaction,
   factionLabel,
   factionDescription,
   FACTION_BUILD,
@@ -92,6 +93,53 @@ test("factionName is deterministic for a given (seed,n)", () => {
 
 test("a noble house reads as a dynasty", () => {
   assert.match(factionName(3, 0, { archetype: "noble house" }), /^House /);
+});
+
+// --- Promote (8.8) --------------------------------------------------------
+
+function promote(seed, q, r, n, by) {
+  const t = tables();
+  const rng = subRng(seed, "faction", q, r, n);
+  return promoteFaction(t, rng, { q, r, index: n, seed, poiId: "poi:0", occupant: { by } });
+}
+
+test("promoteFaction maps a known occupier label to its archetype + disposition", () => {
+  assert.equal(promote(1, 0, 0, 0, "Bandits").archetype, "bandits");
+  assert.equal(promote(1, 0, 0, 0, "Bandits").disposition, "hostile");
+  assert.equal(promote(1, 2, 2, 0, "Smugglers").archetype, "thieves' guild");
+  assert.equal(promote(1, 2, 2, 0, "Cultists").archetype, "cult");
+  assert.equal(promote(1, 2, 2, 0, "A hermit").archetype, "hermit order");
+});
+
+test("promoteFaction records the source POI as origin + its single holding", () => {
+  const f = promote(9, 3, -4, 2, "Cultists");
+  assert.deepEqual(f.origin, { fromPOI: { q: 3, r: -4, poiId: "poi:0" } });
+  assert.equal(f.holdings.length, 1);
+  assert.deepEqual(f.holdings[0], { q: 3, r: -4, poiId: "poi:0" });
+});
+
+test("an unmapped occupier (Refugees) still promotes — archetype rolled, disposition seeded", () => {
+  const t = tables();
+  const f = promote(4, 1, 1, 0, "Refugees");
+  assert.ok(valuesOf("faction-archetype", t).has(f.archetype), "archetype rolled from the table");
+  assert.equal(f.disposition, "friendly");
+});
+
+test("an entirely unknown label falls back to fully-rolled archetype + disposition", () => {
+  const t = tables();
+  const f = promote(4, 1, 1, 0, "Nobody in particular");
+  assert.ok(valuesOf("faction-archetype", t).has(f.archetype));
+  assert.ok(valuesOf("faction-disposition", t).has(f.disposition));
+});
+
+test("promoteFaction is deterministic and otherwise well-formed", () => {
+  const a = promote(5, 2, 3, 1, "Bandits");
+  const b = promote(5, 2, 3, 1, "Bandits");
+  assert.deepEqual(a, b);
+  assert.equal(a.build, FACTION_BUILD);
+  assert.equal(a.goal.progress, 0);
+  assert.deepEqual(a.clock, { turns: 0, sinceTurn: 0 });
+  assert.equal(a.status, "active");
 });
 
 test("factionLabel / factionDescription are pure functions of the picks", () => {

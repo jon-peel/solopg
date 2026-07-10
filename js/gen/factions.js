@@ -67,6 +67,43 @@ export function generateFaction(tables, rng, ctx) {
   };
 }
 
+// Occupier label -> faction seed (Phase 8.8). A RULE (which occupier reads as
+// which kind of power), so it's a JS const here, not a table. A mapped label pins
+// the archetype so a promoted threat reads as the SAME one (Bandits stay
+// bandit-like); an unmapped/partial entry (Refugees) leaves archetype undefined
+// so generateFaction rolls it, but still seeds a coherent disposition.
+const OCCUPIER_SEED = {
+  "Bandits": { archetype: "bandits", disposition: "hostile" },
+  "Cutthroats": { archetype: "bandits", disposition: "hostile" },
+  "Smugglers": { archetype: "thieves' guild", disposition: "wary" },
+  "Cultists": { archetype: "cult", disposition: "hostile" },
+  "Pilgrims": { archetype: "cult", disposition: "neutral" },
+  "Deserters": { archetype: "mercenary company", disposition: "wary" },
+  "A hermit": { archetype: "hermit order", disposition: "neutral" },
+  "Refugees": { disposition: "friendly" }, // no clean archetype → rolled
+};
+
+/**
+ * Promote an existing occupied POI into a faction (Phase 8.8) — a thin wrapper
+ * over generateFaction that seeds archetype/disposition from the occupier label
+ * (so it reads as the same threat) and records the source POI as its origin.
+ * @param {Map<string,object>} tables
+ * @param {() => number} rng
+ * @param {{ q:number, r:number, poiId?:string, index?:number, seed?:number|string,
+ *   occupant?:{ by?:string } }} ctx
+ * @returns {object} the structured faction
+ */
+export function promoteFaction(tables, rng, ctx) {
+  const label = ctx.occupant && ctx.occupant.by;
+  const seed = OCCUPIER_SEED[label] || {};
+  return generateFaction(tables, rng, {
+    q: ctx.q, r: ctx.r, poiId: ctx.poiId, index: ctx.index, seed: ctx.seed,
+    archetype: seed.archetype,       // undefined → generateFaction rolls it
+    disposition: seed.disposition,   // undefined → generateFaction rolls it
+    origin: { fromPOI: { q: ctx.q, r: ctx.r, ...(ctx.poiId ? { poiId: ctx.poiId } : {}) } },
+  });
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the factions list (just the name). */

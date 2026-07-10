@@ -123,6 +123,30 @@ function renderPoiSection(sel, hex, model) {
         box.appendChild(div);
       }
     }
+    // Promote (Phase 8.8): an occupied POI can be wrapped into a full faction.
+    // Once promoted it shows a link to its faction instead (no double-promote).
+    const occupant = selectedPoi.occupant;
+    if (occupant && occupant.kind === "occupied") {
+      if (occupant.factionId) {
+        const name = model.factionNameById && model.factionNameById(occupant.factionId);
+        const row = document.createElement("div");
+        row.className = "hook-legend";
+        const a = document.createElement("button");
+        a.type = "button";
+        a.className = "legend-link";
+        a.textContent = `Faction: ${name || occupant.factionId}`;
+        a.title = "Centre the map on this faction's holding";
+        if (model.onCenterFaction) a.addEventListener("click", () => model.onCenterFaction(occupant.factionId));
+        row.appendChild(a);
+        box.appendChild(row);
+      } else if (model.onPromotePoi) {
+        const row = document.createElement("div");
+        row.className = "tile-actions";
+        row.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(selectedPoi.id)));
+        box.appendChild(row);
+      }
+    }
+
     const back = document.createElement("button");
     back.className = "link-back";
     back.textContent = "← Back to hex";

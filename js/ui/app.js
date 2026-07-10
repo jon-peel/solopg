@@ -26,7 +26,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction } from "../gen/factions.js";
+import { generateFaction, promoteFaction } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -575,6 +575,9 @@ function renderSelection() {
     onPlaceParty: hex && hex.placed ? onPlaceParty : undefined,
     onTravelToward: hex && hex.placed ? onTravelToward : undefined,
     onGenerateFaction: hex && hex.placed ? onGenerateFaction : undefined,
+    onPromotePoi,
+    onCenterFaction,
+    factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
   });
 }
 
@@ -1597,6 +1600,31 @@ async function onGenerateFaction() {
     logLine(`New faction — ${faction.name} (${faction.archetype}).`);
   } catch (err) {
     logLine(`Generate faction error: ${err.message}`);
+  }
+}
+
+// Promote an occupied POI into a faction (Phase 8.8) — seeds the archetype from
+// the occupier label so it reads as the same threat, records the POI as origin,
+// and tags the POI's occupant with the new faction id (no double-promote).
+async function onPromotePoi(poiId) {
+  if (!current || !selected) return;
+  try {
+    const hex = getHex(current, selected.q, selected.r);
+    const poi = hex && (hex.pois || []).find((p) => p.id === poiId);
+    if (!poi || !poi.occupant || poi.occupant.kind !== "occupied") return;
+    if (poi.occupant.factionId) return; // already promoted
+    const tables = await loadTables(FACTION_TABLE_IDS);
+    const { q, r } = selected;
+    const n = nextFactionId(current);
+    const rng = subRng(current.seed, "faction", q, r, n);
+    const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant });
+    addFaction(current, faction);
+    poi.occupant.factionId = faction.id; // link the POI to its new faction
+    setPanelTab("factions");
+    await persistAndRefresh();
+    logLine(`Promoted ${poi.occupant.by} → ${faction.name} (${faction.archetype}).`);
+  } catch (err) {
+    logLine(`Promote faction error: ${err.message}`);
   }
 }
 
