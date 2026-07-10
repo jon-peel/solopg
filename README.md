@@ -6,11 +6,13 @@ generation + record-keeping tool for hex-crawl worlds.
 See **[PLAN.md](./PLAN.md)** for the master plan: architecture, phased build order, the data
 model, and the per-step sub-plans in [`docs/plans/`](./docs/plans).
 
-**Status:** Phases 0–6 complete — seeded hex map with terrain/settlements/POIs, multi-level
-**dungeons** (+ towers), terrain-aware **shrine/camp/landmark** detail, and **adventure hooks**
-(known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return). **Phase 7 (QoL & UX) in
-progress:** **7.1 right-click radial menu** — right-click a tile for a fixed-slot ring of its actions,
-with inapplicable options greyed-out rather than hidden.
+**Status:** Phases 0–7 complete — seeded hex map with terrain/settlements/POIs, multi-level
+**dungeons** (+ towers), terrain-aware **shrine/camp/landmark** detail, **adventure hooks**
+(known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return), and full **QoL & UX**
+polish (right-click radial menu, dungeon-view UX, panel tabs, pinned hooks, map notes/labels, map
+nav/onboarding, POI dot polish). **Phase 3R (world coherence)** is also feature-complete — coherent
+terrain, rivers, roads, and settlement placement. See [PLAN.md](./PLAN.md) for what's next
+(Phase 8 Factions, Phase 9 small oracles, Phase 10 backlog).
 
 ## Running
 

@@ -18,7 +18,7 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
-import { glyphForPoi } from "./poi-style.js";
+import { glyphForPoi, poiDotColor } from "./poi-style.js";
 import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
@@ -757,7 +757,8 @@ function drawHexLabel(cx, cy, name) {
 }
 
 // Simplified tier (zoomed out): settlement size-marker centered on the tile +
-// a red dot at the bottom when the hex has any POIs.
+// a dot at the bottom when the hex has any POIs — coloured by type for a
+// single POI, or a neutral dot carrying the count for several (Phase 7.9).
 function drawSimplifiedMarkers(cx, cy, hex) {
   if (hex.settlement && hex.settlement.present) {
     const size = HEX_SIZE * 0.8;
@@ -768,14 +769,23 @@ function drawSimplifiedMarkers(cx, cy, hex) {
   }
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
   if (pois.length) {
-    const r = HEX_SIZE * 0.18;
+    const multi = pois.length > 1;
+    const r = HEX_SIZE * (multi ? 0.24 : 0.18);
+    const dotY = cy + HEX_SIZE * 0.58;
     ctx.beginPath();
-    ctx.arc(cx, cy + HEX_SIZE * 0.58, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#d23b3b";
+    ctx.arc(cx, dotY, r, 0, Math.PI * 2);
+    ctx.fillStyle = multi ? "#3a3f4b" : poiDotColor(pois[0].type);
     ctx.fill();
     ctx.lineWidth = HEX_SIZE * 0.05;
     ctx.strokeStyle = "rgba(255,255,255,0.9)";
     ctx.stroke();
+    if (multi) {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `${HEX_SIZE * 0.26}px sans-serif`;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(String(pois.length), cx, dotY);
+    }
   }
 }
 

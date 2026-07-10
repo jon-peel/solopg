@@ -38,8 +38,23 @@ export const THEME_GLYPHS = {
 
 export const SETTLEMENT_GLYPH = "🏠";
 
+// Zoomed-out map dot colour by POI type (Phase 7.9). Falls back to the
+// original all-POI red for unknown/legacy types.
+export const POI_DOT_COLORS = {
+  dungeon: "#d23b3b",
+  shrine: "#9b6fd6",
+  camp: "#e08a3c",
+  landmark: "#4fa3a3",
+  tower: "#8a5a3c",
+};
+
 export function glyphForPoiType(type) {
   return POI_GLYPHS[type] || LEGACY_POI_GLYPHS[type] || "❖";
+}
+
+/** Far-zoom dot colour for a POI type (falls back to the default red). */
+export function poiDotColor(type) {
+  return POI_DOT_COLORS[type] || POI_DOT_COLORS.dungeon;
 }
 
 /** Glyph for a dungeon theme (falls back to the generic dungeon glyph). */

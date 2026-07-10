@@ -490,6 +490,19 @@ is feature-complete.**
 **Schema v15. 299 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
+**Phase 7 wrap-up: 7.9 POI dot polish is done** (see
+[phase-7.9-poi-dot-polish.md](docs/plans/phase-7.9-poi-dot-polish.md)) — the far-zoom POI dot is now
+**coloured by type** (dungeon/shrine/camp/landmark/tower) when a hex has one POI, or a **neutral dot
+carrying the count** when it has several; the map legend gained a matching "Points of interest"
+section built from the same table (`js/ui/poi-style.js` `POI_DOT_COLORS`/`poiDotColor`). **7.14
+(radial right-click steps back) was already implemented** during the water-polish work above and is
+now recorded as done rather than left in the backlog. With those two landed, **Phase 7 (QoL & UX) is
+complete** — 7.1–7.6, 7.9, 7.14. **Roadmap renumbered:** the remaining Phase 7 backlog items (old
+7.7/7.8/7.10–7.13) move to a new **Phase 10 — Backlog** (see
+[phase-10-backlog.md](docs/plans/phase-10-backlog.md), replacing `phase-7-backlog.md`), folded in
+with the previously-unnumbered Party position marker / Art / Misc ideas. **Factions**, previously an
+unnumbered future phase, is now **Phase 8** (dedicated); the small-oracle catalog phase, previously
+Phase 8, is now **Phase 9**. No code/schema changes — documentation reorganization only.
 
 ---
 
@@ -607,10 +620,13 @@ graph TD
     P0[0 Foundation] --> P1[1 Single hex] --> P2[2 Hex map] --> P3[3 POIs + terrain rules]
     P3 --> P4[4 Dungeons] --> P5[5 Other POI detail]
     P2 --> P6[6 Hooks]
-    P3 --> P8[8 Small oracles]
+    P6 --> P8[8 Factions]
+    P3 --> P9[9 Small oracles]
     P5 --> P7[7 QoL & customization]
     P6 --> P7
-    P8 --> P7
+    P9 --> P7
+    P7 --> P10[10 Backlog]
+    P8 --> P10
 ```
 
 ---
@@ -675,12 +691,15 @@ graph TD
 | **4 — Dungeons** (base + 4.5–4.8 arc + 4.9.1–4.9.14 sub-project) | ✅ done | [phase-4-dungeons.md](docs/plans/phase-4-dungeons.md), [phase-4.9-dungeon-connectivity.md](docs/plans/phase-4.9-dungeon-connectivity.md) |
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
-| 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
+| 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ✅ **done** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.9 POI dot polish ✅** [phase-7.9-poi-dot-polish.md](docs/plans/phase-7.9-poi-dot-polish.md) · **7.14 radial right-click back ✅** (landed inside the 3R water-polish work). Remaining backlog items moved to **Phase 10**. |
 | **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
-| 8 — Additional small oracles | ◻ later | see catalog below |
+| 8 — Factions | ▶ **queued (1st)** | dedicated phase: generation **plus operating rules** (goals advancing, disposition, holdings, faction turns/doom clock, reuse of one faction across the map) — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) |
+| 9 — Additional small oracles | ▶ **queued (2nd)** | see catalog below |
+| 10 — Backlog | ▶ **queued (3rd)** | leftover QoL/UX items + misc ideas — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) and [phase-10-backlog.md](docs/plans/phase-10-backlog.md) |
 
-Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a
-dedicated future phase (see backlog).
+Phases 0→1→2→3→4→5 are a hard chain; 6/9 need only the map + POIs; 7 is done; 8 (Factions) builds
+on 6 (Hooks) and the POI/occupant model. **Remaining work order: 8 → 9 → 10** — Factions, then the
+small-oracle catalog, then the Phase 10 backlog, worked in that sequence rather than opportunistically.
 
 **Phase 4 (done) — Dungeons:** a dungeon POI carries a terrain-biased theme (map glyph) and opens
 into a multi-level **Dungeon View** — per-level room-graph maps with loops, doors/secret doors,
@@ -708,13 +727,13 @@ threat/rescue/escort carry a **reward** (patron + coin, or glory). A hook reads 
 name, distance in **miles**, and tile **terrain**. Generation is a **manual "Generate hook"** at a town, plus **"Read map"** /
 **"Follow a trail"** anywhere; auto-generation waits on a future Travel feature. A global **open-hooks
 list** (→ Target / ↩ Origin / Follow-the-clue) and **amber map markers** tie it together. Type-2 "distant
-powers" (roaming/region/news-propagation) belong to the future Factions phase. See
+powers" (roaming/region/news-propagation) belong to **Phase 8 (Factions)**. See
 [phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
-[small-oracle catalog](#small-oracle-catalog-for-phase-8-selection).
+[small-oracle catalog](#small-oracle-catalog-for-phase-9-selection).
 
 ---
 
-## Small-oracle catalog (for Phase 8 selection)
+## Small-oracle catalog (for Phase 9 selection)
 
 - **Solo core:** Yes/No fate oracle; random event / inspiration; plot/quest hook.
 - **World & travel:** weather; wilderness encounter; travel/journey events; region/realm;
@@ -726,21 +745,23 @@ powers" (roaming/region/news-propagation) belong to the future Factions phase. S
 
 ---
 
-## Backlog — other ideas (discussed, not yet scheduled)
+## Backlog — other ideas (queued 8 then 9 then 10)
 
-- **Factions** — a dedicated phase: generation **plus operating rules** (goals advancing,
+- **Phase 8 — Factions (queued 1st)** — generation **plus operating rules** (goals advancing,
   disposition, holdings, faction turns/doom clock, reuse of one faction across the map). POIs
   currently use generic occupier labels only; no faction objects exist.
-- **Hydrology, terrain coherence, rivers, roads, richer settlements** — now planned as
-  **Phase 3R** ([phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)): fresh/salt
-  water & coastlines, terrain v2, rivers, roads, settlement spacing/names/Keep-Fort/clusters.
-- **Party position marker** — needs exploration/travel rules first.
-- **Art** — pencil sketches for POIs; optional "full painted hex"; eventual "pencil-drawn"
-  refinement of tiles; optional 3rd terrain variant; an `svg-tile` authoring skill for consistency.
-- **Misc** — allow a manual settlement on Lake/Sea (currently disallowed); more terrain types.
-- **Phase 7 items** — search, undo, print/GM-screen view, themes, POI-dot polish, radial
-  keyboard/touch parity (see [phase-7-backlog.md](docs/plans/phase-7-backlog.md)). In-app custom
-  tables were **dropped**.
+- **Phase 9 — Additional small oracles (queued 2nd)** — pick from the
+  [catalog above](#small-oracle-catalog-for-phase-9-selection).
+- **Phase 10 — Backlog (queued 3rd)** — everything else: the remaining Phase 7 QoL/UX items
+  (search/jump-to, undo/redo, print/GM-screen view, themes, radial keyboard/touch parity, hooks tab
+  pop-out), plus the party position marker (needs travel rules first), art (pencil POI sketches,
+  painted hex, 3rd terrain variant, an `svg-tile` authoring skill), and misc (manual settlement on
+  Lake/Sea, more terrain types). Full numbered list in
+  [phase-10-backlog.md](docs/plans/phase-10-backlog.md). In-app custom tables were **dropped**
+  (not carried into Phase 10).
+
+*(Historical note: hydrology/terrain-coherence/rivers/roads/richer-settlements — once listed here as
+unscheduled — shipped as **Phase 3R**, now feature-complete.)*
 
 ---
 

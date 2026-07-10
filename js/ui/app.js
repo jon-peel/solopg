@@ -59,7 +59,7 @@ import {
   pixelsPerMile,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
-import { POI_GLYPHS } from "./poi-style.js";
+import { POI_GLYPHS, POI_DOT_COLORS } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
 import { openRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
@@ -358,7 +358,30 @@ function buildLegendTerrain() {
     row.append(sw, document.createTextNode(`${icon} ${terrain}`));
     host.appendChild(row);
   }
+  buildLegendPoi();
   legendBuilt = true;
+}
+
+// Far-zoom POI dot colours (Phase 7.9) — same source table map.js reads from.
+function buildLegendPoi() {
+  const host = $("legend-poi");
+  if (!host) return;
+  host.innerHTML = `<div class="legend-sub">Points of interest</div>`;
+  for (const type of Object.keys(POI_DOT_COLORS)) {
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    const sw = document.createElement("span");
+    sw.className = "lg-swatch";
+    sw.style.background = POI_DOT_COLORS[type];
+    sw.style.borderRadius = "50%";
+    const label = type.charAt(0).toUpperCase() + type.slice(1);
+    row.append(sw, document.createTextNode(`${POI_GLYPHS[type] || "❖"} ${label}`));
+    host.appendChild(row);
+  }
+  const note = document.createElement("div");
+  note.className = "legend-note";
+  note.textContent = "Far zoom: dot = single POI (by type); numbered dot = several.";
+  host.appendChild(note);
 }
 function toggleLegend(force) {
   const el = $("legend");
