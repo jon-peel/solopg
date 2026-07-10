@@ -2,8 +2,10 @@
 //
 // Pace = hexes/day a party can cover on foot, per terrain. Day-by-day movement
 // (8.4/8.5) sums `daysToCross` over a route to figure out how long a leg takes;
-// getting lost (8.3) and the stepping algorithm itself are separate, later
-// pieces that build on top of this table.
+// getting lost (8.3, below) and the stepping algorithm itself (8.4/8.5) are
+// separate pieces that build on top of this table.
+
+import { subRng } from "../core/rng.js";
 
 // Hexes/day, off-road, on foot — illustrative starting point (flagged for
 // real-play retuning, same as every other generation constant in this
@@ -63,4 +65,69 @@ export function paceFor(terrain, { road = false, encumbrance = "unencumbered" } 
  */
 export function daysToCross(terrain, opts) {
   return 1 / paceFor(terrain, opts);
+}
+
+// --- Getting lost (Phase 8.3) ---------------------------------------------
+
+// Per-day, off-road chance of drifting off course — d6-flavoured to match the
+// existing B/X travel-tip tooltip's style. Illustrative starting point (same
+// retuning caveat as TRAVEL_COST). Lake/Sea are 0 for table completeness —
+// moot in practice, since pace there is already 0/impassable.
+export const LOST_CHANCE = {
+  Plains: 1 / 6,
+  Forest: 2 / 6,
+  Hills: 2 / 6,
+  Desert: 2 / 6,
+  Swamp: 3 / 6,
+  Mountains: 3 / 6,
+  Lake: 0,
+  Sea: 0,
+};
+
+/**
+ * Roll whether a day of off-road travel through `terrain` goes astray.
+ * Deterministic per (day, q, r) — the same day at the same position always
+ * rolls the same, regardless of when it's actually simulated.
+ * @param {number|string} seed world seed
+ * @param {number} day the day being resolved
+ * @param {number} q current position
+ * @param {number} r
+ * @param {string} terrain terrain of the hex being crossed that day
+ * @param {{road?: boolean}} [opts] road: always false, roads are never lost
+ * @returns {boolean}
+ */
+export function rollGetLost(seed, day, q, r, terrain, { road = false } = {}) {
+  if (road) return false;
+  const chance = LOST_CHANCE[terrain] ?? 0;
+  if (chance <= 0) return false;
+  const rng = subRng(seed, "travel", day, q, r);
+  return rng() < chance;
+}
+
+/**
+ * Pick the direction actually travelled on a day the party got lost: one of
+ * the two hex-directions adjacent to `intendedDir` in NEIGHBOR_DIRS' fixed
+ * cyclic order (never the intended direction itself, never the opposite one).
+ * A deterministic coin flip picks a side; if that neighbour is impassable
+ * (per the injected `isPassable` predicate — kept as a callback rather than a
+ * terrain lookup so this module stays pure, and so the caller can answer for
+ * not-yet-generated frontier hexes), it swaps to the other side. If BOTH
+ * adjacent hexes are impassable, falls back to holding `intendedDir` (an edge
+ * case the plan doesn't specify — simplest safe default).
+ * @param {number|string} seed world seed
+ * @param {number} day
+ * @param {number} q current position
+ * @param {number} r
+ * @param {number} intendedDir index (0-5) into NEIGHBOR_DIRS, the bearing being followed
+ * @param {(dir: number) => boolean} [isPassable] predicate over a candidate direction; defaults to always-passable
+ * @returns {number} the direction (0-5) actually travelled
+ */
+export function deviateDirection(seed, day, q, r, intendedDir, isPassable = () => true) {
+  const left = (intendedDir + 5) % 6;
+  const right = (intendedDir + 1) % 6;
+  const rng = subRng(seed, "travel-deviate", day, q, r);
+  const [first, second] = rng() < 0.5 ? [left, right] : [right, left];
+  if (isPassable(first)) return first;
+  if (isPassable(second)) return second;
+  return intendedDir;
 }
