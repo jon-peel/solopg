@@ -430,9 +430,14 @@ already-built road hex is **cheap to travel** (`ROAD_REUSE_COST`), so a new rout
 existing road and shares the corridor rather than running parallel — double roads become one (spurs
 attach network-first so they join the connected trunk, not a random neighbour). Nodes many others
 attach to become **hubs with several roads**. **Tiers** by the owning settlement: City = highway (t1),
-Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford). The **auto network is re-derived
-deterministically** each call (a pure function of the revealed terrain + settlements, so it stays
-connected as the world grows); only GM-drawn **manual** roads are kept verbatim (and seed the network).
+Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford). **Roads are APPEND-ONLY** (mirrors
+the rivers rule): every existing road — manual AND auto — is kept **verbatim**, so an established road
+**never re-routes** when new settlements/rivers appear; each call only ADDS roads to connect
+newly-revealed settlements onto the frozen network (the connected components of the existing roads
+seed the trunk union-find, so no redundant parallel road is added), and a fresh world derives the
+whole network at once. *(This replaced the original "auto network re-derived each call" behaviour
+after a real-play report that an established road changed when a nearby town/river was generated —
+the same fix rivers got. `seedNetworkComponents` in `roads.js`.)*
 Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing — **under** the settlement
 icons (a town sits on the network), **over** rivers (solid = bridge, dashed spur = ford), **nudged
 off-centre to a canonical side** so a road along a river sits beside it AND two roads sharing a corridor
