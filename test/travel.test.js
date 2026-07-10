@@ -3,8 +3,18 @@ import assert from "node:assert/strict";
 import {
   TRAVEL_COST, ROAD_PACE_MULTIPLIER, ENCUMBRANCE_FACTOR, paceFor, daysToCross,
   LOST_CHANCE, rollGetLost, deviateDirection,
+  roadHexKeySet, planRoute, planMoveToward,
 } from "../js/gen/travel.js";
-import { NEIGHBOR_DIRS } from "../js/core/hexgeo.js";
+import { NEIGHBOR_DIRS, axialKey } from "../js/core/hexgeo.js";
+
+// A filled axial box of one terrain, with per-hex overrides (keyed by axialKey) —
+// same helper shape as test/roads.test.js's boardRect.
+function boardRect(qMin, qMax, rMin, rMax, terrain = "Plains", overrides = {}) {
+  const t = new Map();
+  for (let q = qMin; q <= qMax; q++) for (let r = rMin; r <= rMax; r++) t.set(axialKey(q, r), terrain);
+  for (const [k, v] of Object.entries(overrides)) t.set(k, v);
+  return t;
+}
 
 test("TRAVEL_COST covers every terrain with the documented pace", () => {
   assert.deepEqual(TRAVEL_COST, {
@@ -162,4 +172,126 @@ test("deviateDirection falls back to intendedDir when both adjacent hexes are im
 
 test("NEIGHBOR_DIRS has exactly 6 entries (sanity check for the mod-6 adjacency math above)", () => {
   assert.equal(NEIGHBOR_DIRS.length, 6);
+});
+
+// --- Route-finding + day-by-day movement (Phase 8.4) ----------------------
+
+test("roadHexKeySet collects every hex any road's path passes through", () => {
+  const roads = [
+    { path: [{ q: 0, r: 0 }, { q: 1, r: 0 }] },
+    { path: [{ q: 1, r: 0 }, { q: 1, r: 1 }] }, // shares a hex with the first
+  ];
+  const keys = roadHexKeySet(roads);
+  assert.deepEqual([...keys].sort(), ["0,0", "1,0", "1,1"]);
+});
+
+test("roadHexKeySet is empty for no roads", () => {
+  assert.equal(roadHexKeySet([]).size, 0);
+  assert.equal(roadHexKeySet(undefined).size, 0);
+});
+
+test("planRoute returns null when the start or the goal is unplaced", () => {
+  const terr = boardRect(0, 3, 0, 0);
+  assert.equal(planRoute(0, 0, 9, 9, terr, new Set()), null); // goal unplaced
+  assert.equal(planRoute(9, 9, 0, 0, terr, new Set()), null); // start unplaced
+});
+
+test("planRoute returns a trivial zero-day route when start === goal", () => {
+  const terr = boardRect(0, 3, 0, 0);
+  const route = planRoute(1, 0, 1, 0, terr, new Set());
+  assert.deepEqual(route, { path: [{ q: 1, r: 0 }], days: 0 });
+});
+
+test("planRoute returns null when no connected placed-hex path exists (Sea gap)", () => {
+  const terr = boardRect(0, 4, 0, 0, "Plains", { "2,0": "Sea" });
+  assert.equal(planRoute(0, 0, 4, 0, terr, new Set()), null);
+});
+
+test("planRoute costs a straight all-Plains line at the documented pace", () => {
+  const terr = boardRect(0, 4, 0, 0);
+  const route = planRoute(0, 0, 4, 0, terr, new Set());
+  assert.equal(route.path.length, 5); // start-inclusive, 4 steps
+  assert.equal(route.days, 4 * daysToCross("Plains"));
+});
+
+test("planRoute prefers a road even via a longer (more-hexes) detour, when it's fewer total days", () => {
+  // r=0: Plains, no road (direct, 4 hexes). r=1: Plains, ALL road (a detour
+  // that's 5 hexes but each entered at half the day-cost).
+  const terr = boardRect(-1, 5, 0, 1);
+  const roadKeys = new Set();
+  for (let q = -1; q <= 5; q++) roadKeys.add(axialKey(q, 1));
+
+  const direct = planRoute(0, 0, 4, 0, terr, new Set());
+  assert.equal(direct.days, 4 * daysToCross("Plains"), "no road available: straight line, 4 days-worth");
+
+  const withRoad = planRoute(0, 0, 4, 0, terr, roadKeys);
+  assert.ok(withRoad.days < direct.days, `expected the road detour to be cheaper: ${withRoad.days} vs ${direct.days}`);
+  assert.ok(
+    withRoad.path.some((p) => p.r === 1),
+    "expected the cheaper route to actually use the road row",
+  );
+});
+
+test("planMoveToward: start === target arrives immediately with no days spent", () => {
+  const terr = boardRect(0, 2, 0, 0);
+  const r = planMoveToward("seed", 0, 1, 0, 1, 0, terr, new Set());
+  assert.deepEqual(r, { finalPos: { q: 1, r: 0 }, days: 0, arrived: true, log: [] });
+});
+
+test("planMoveToward is deterministic for identical inputs", () => {
+  const terr = boardRect(-2, 8, -2, 2, "Swamp"); // high lost chance, exercises deviation too
+  const a = planMoveToward("trip-seed", 3, 0, 0, 6, 0, terr, new Set());
+  const b = planMoveToward("trip-seed", 3, 0, 0, 6, 0, terr, new Set());
+  assert.deepEqual(a, b);
+});
+
+test("planMoveToward: an all-road trip always arrives with zero lost days and the documented pace", () => {
+  const terr = boardRect(-1, 6, 0, 0);
+  const roadKeys = new Set();
+  for (let q = -1; q <= 6; q++) roadKeys.add(axialKey(q, 0));
+  const r = planMoveToward("road-trip", 0, 0, 0, 5, 0, terr, roadKeys);
+  assert.equal(r.arrived, true);
+  assert.equal(r.finalPos.q, 5);
+  assert.equal(r.finalPos.r, 0);
+  assert.equal(r.log.length, 5); // 5 hexes crossed, one entry each
+  assert.ok(r.log.every((e) => e.lost === false && e.road === true));
+  assert.equal(r.days, Math.ceil(5 * daysToCross("Plains", { road: true })));
+});
+
+test("planMoveToward reports \"stranded\" when the target is disconnected from the party", () => {
+  const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(20, 20), "Plains"]]);
+  const r = planMoveToward("seed", 0, 0, 0, 20, 20, terr, new Set());
+  assert.equal(r.arrived, false);
+  assert.equal(r.reason, "stranded");
+  assert.equal(r.log.length, 0);
+  assert.deepEqual(r.finalPos, { q: 0, r: 0 }); // never moved
+});
+
+test("planMoveToward: log's day index starts at startDay and increments per hex crossed", () => {
+  const terr = boardRect(-1, 6, 0, 0);
+  const roadKeys = new Set();
+  for (let q = -1; q <= 6; q++) roadKeys.add(axialKey(q, 0));
+  const r = planMoveToward("seed", 100, 0, 0, 3, 0, terr, roadKeys);
+  assert.deepEqual(r.log.map((e) => e.day), [100, 101, 102]);
+});
+
+test("planMoveToward: heavier encumbrance takes longer over the same route", () => {
+  const terr = boardRect(-1, 6, 0, 0);
+  const roadKeys = new Set();
+  for (let q = -1; q <= 6; q++) roadKeys.add(axialKey(q, 0));
+  const fast = planMoveToward("enc-seed", 0, 0, 0, 5, 0, terr, roadKeys, { encumbrance: "unencumbered" });
+  const slow = planMoveToward("enc-seed", 0, 0, 0, 5, 0, terr, roadKeys, { encumbrance: "heavy" });
+  assert.ok(slow.days > fast.days, `expected heavy encumbrance to take longer: ${slow.days} vs ${fast.days}`);
+});
+
+test("planMoveToward: at least one sampled trip through high-lost-chance terrain actually gets lost", () => {
+  // Swamp, off-road: 3-in-6 lost chance per hex. Sweep several seeds/targets
+  // over a long enough leg that at least one should show a genuine deviation.
+  const terr = boardRect(-10, 10, -10, 10, "Swamp");
+  let sawLost = false;
+  for (let i = 0; i < 20 && !sawLost; i++) {
+    const r = planMoveToward(`lost-sweep-${i}`, 0, 0, 0, 8, 0, terr, new Set());
+    if (r.log.some((e) => e.lost)) sawLost = true;
+  }
+  assert.ok(sawLost, "expected at least one sampled trip to report a lost day");
 });

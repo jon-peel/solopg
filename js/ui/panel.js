@@ -7,11 +7,11 @@ import { settlementName } from "../gen/settlement-name.js";
 
 const panel = () => document.getElementById("panel");
 
-// --- panel tabs (Detail | Hooks) -----------------------------------------
-// The panel shows one of two tabs at a time; #selection (Detail) and
-// #global-hooks (Hooks) are both built once and toggled via a class on #panel.
+// --- panel tabs (Detail | Hooks | Pinned | Travel) ------------------------
+// The panel shows one tab at a time; each region is built once (in showWorld)
+// and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", travel: "travel-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -28,7 +28,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "travel"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -347,6 +347,72 @@ export function renderGlobalHooks(model) {
   );
 }
 
+// Encumbrance tier labels (Phase 8.4), matching ENCUMBRANCE_FACTOR's keys
+// (js/gen/travel.js) and the existing B/X travel-tip tooltip's phrasing.
+const ENCUMBRANCE_LABELS = {
+  unencumbered: "Unencumbered",
+  light: "Lightly loaded",
+  encumbered: "Encumbered",
+  heavy: "Heavily loaded",
+};
+
+/**
+ * Render the Travel tab: the party's encumbrance setting + the last trip's
+ * day-by-day report. The report is REPLACED (not appended) on every new trip
+ * — `model.lastTrip` is app.js-only ephemeral state, not persisted.
+ * @param {{ encumbrance?: string, onSetEncumbrance?: (tier:string)=>void,
+ *   lastTrip: {days:number, arrived:boolean, reason?:string,
+ *     log:{day:number,terrain:string,road:boolean,note:string}[]}|null }} model
+ */
+export function renderTravelPanel(model) {
+  const host = document.getElementById("travel-panel");
+  if (!host) return;
+  host.innerHTML = "";
+
+  host.appendChild(sectionLabel("Party pace"));
+  const select = document.createElement("select");
+  select.className = "encumbrance-select";
+  select.setAttribute("aria-label", "Party encumbrance");
+  for (const [value, label] of Object.entries(ENCUMBRANCE_LABELS)) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if (value === (model.encumbrance || "unencumbered")) opt.selected = true;
+    select.appendChild(opt);
+  }
+  if (model.onSetEncumbrance) {
+    select.addEventListener("change", () => model.onSetEncumbrance(select.value));
+  }
+  host.appendChild(select);
+
+  host.appendChild(sectionLabel("Last trip"));
+  const trip = model.lastTrip;
+  if (!trip) {
+    const empty = document.createElement("div");
+    empty.className = "panel-hint";
+    empty.textContent = 'No trips yet — select a placed hex and press "Move party here".';
+    host.appendChild(empty);
+    return;
+  }
+
+  const plural = trip.days === 1 ? "" : "s";
+  const summary = document.createElement("div");
+  summary.className = "log-line trip-summary";
+  summary.textContent = trip.arrived
+    ? `Arrived after ${trip.days} day${plural}.`
+    : trip.reason === "stranded"
+      ? `No route through from here — stopped after ${trip.days} day${plural}, short of the target.`
+      : `The trip ran long and was called off after ${trip.days} day${plural}.`;
+  host.appendChild(summary);
+
+  for (const entry of trip.log) {
+    const div = document.createElement("div");
+    div.className = "log-line trip-day" + (entry.lost ? " trip-lost" : "");
+    div.textContent = `Day ${entry.day} — ${entry.terrain}${entry.road ? " (road)" : ""}: ${entry.note}`;
+    host.appendChild(div);
+  }
+}
+
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
 // notes. Both commit on blur/Enter (change event) — the only editable bits left
 // in the otherwise read-only Detail tab.
@@ -412,10 +478,12 @@ export function renderSelectionPanel(model) {
     }
     renderPoiSection(sel, hex, model);
 
-    // Party marker (Phase 8.1 stopgap): a panel action, not the radial ring —
-    // the ring's 8 slots are all spoken for, and this is a temporary affordance
-    // superseded by real movement (8.4/8.5). Hidden once the party is already here.
-    if (model.onPlaceParty) {
+    // Party actions: panel, not the radial ring — the ring's 8 slots are all
+    // spoken for. "Place party here" (8.1) is an instant GM-override teleport;
+    // "Move party here" (8.4) simulates the real trip (days, pace, getting
+    // lost) — kept alongside each other on purpose, not one replacing the
+    // other. Both hidden once the party is already here.
+    if (model.onPlaceParty || model.onMoveParty) {
       if (model.partyHere) {
         const div = document.createElement("div");
         div.className = "log-line";
@@ -424,7 +492,8 @@ export function renderSelectionPanel(model) {
       } else {
         const row = document.createElement("div");
         row.className = "tile-actions";
-        row.appendChild(actionButton("Place party here", model.onPlaceParty));
+        if (model.onMoveParty) row.appendChild(actionButton("Move party here", model.onMoveParty));
+        if (model.onPlaceParty) row.appendChild(actionButton("Place party here", model.onPlaceParty));
         sel.appendChild(row);
       }
     }
@@ -616,6 +685,7 @@ export function showWorld(world, opts = {}) {
     mkTab("detail", "Detail"),
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
+    mkTab("travel", "Travel"),
   );
   el.appendChild(tabs);
   // Detail region: the selected hex (or dungeon room) details.
@@ -632,6 +702,12 @@ export function showWorld(world, opts = {}) {
   pinned.id = "pinned-hooks";
   pinned.hidden = true;
   el.appendChild(pinned);
+  // Travel region (Phase 8.4): encumbrance setting + the last trip's report
+  // (filled by renderTravelPanel).
+  const travel = document.createElement("div");
+  travel.id = "travel-panel";
+  travel.hidden = true;
+  el.appendChild(travel);
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.

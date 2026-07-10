@@ -162,6 +162,16 @@ export function setPartyPosition(world, q, r) {
   return world;
 }
 
+/**
+ * Set the party's encumbrance tier (Phase 8.4) — one of `ENCUMBRANCE_FACTOR`'s
+ * keys (js/gen/travel.js). Additive/self-defaulting, no schema bump: absent
+ * means "unencumbered". Mutates and returns the world.
+ */
+export function setPartyEncumbrance(world, encumbrance) {
+  world.party.encumbrance = encumbrance;
+  return world;
+}
+
 function newId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();

@@ -942,6 +942,18 @@ button:hover {
   color: var(--muted);
 }
 
+/* Travel tab (Phase 8.4): encumbrance select + the last trip's day log. */
+.encumbrance-select {
+  margin-bottom: 0.4rem;
+}
+.trip-summary {
+  color: var(--fg);
+  font-weight: 600;
+}
+.trip-lost {
+  color: #f5c45a; /* matches the amber hook-mark colour */
+}
+
 /* Muted hint pointing at the right-click menu (panel is read-only now). */
 .panel-hint {
   margin-top: 0.6rem;

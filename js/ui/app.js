@@ -22,10 +22,12 @@ import {
   placedHexes,
   removeHex,
   setPartyPosition,
+  setPartyEncumbrance,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
+import { planMoveToward, roadHexKeySet } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -42,7 +44,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, setPanelTab } from "./panel.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -132,9 +134,13 @@ let draftClicks = null; // manual river/road drawing: clicked anchor hexes, or n
 let draftKind = null;   // "river" | "road" — what the active draft builds
 
 // World clock (Phase 8.1) — deliberately a SESSION-only counter, never part of
-// `world`/IndexedDB/export: always starts at 0 on page load. Real advancement
-// (Progress N days) is 8.6; nothing changes this yet.
+// `world`/IndexedDB/export: always starts at 0 on page load. 8.4 advances it
+// when a trip resolves; 8.6 adds a manual "Progress N days" while stationary.
 let sessionDay = 0;
+
+// Last trip's report (Phase 8.4) — ephemeral, app.js-only, like sessionDay:
+// replaced (not appended) by each new "Move party here", reset on world switch.
+let lastTrip = null;
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -194,6 +200,7 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
+  lastTrip = null; // the last trip's report is ephemeral, per-world (Phase 8.4)
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
@@ -207,6 +214,7 @@ async function setCurrent(world) {
   }
   renderSelection();
   refreshGlobalHooks();
+  refreshTravelPanel();
   refreshHookMarks();
   refreshHookFocus();
   refreshMapChrome();
@@ -539,15 +547,59 @@ function renderSelection() {
     onNoteHex,
     partyHere: !!(current.party && current.party.q === q && current.party.r === r),
     onPlaceParty: hex && hex.placed ? onPlaceParty : undefined,
+    onMoveParty: hex && hex.placed ? onMovePartyHere : undefined,
   });
 }
 
-// Stopgap party placement (Phase 8.1) — a panel action, not the radial ring
-// (see phase-8.1 plan doc). Superseded by real movement in 8.4/8.5.
+// Instant GM-override teleport (Phase 8.1) — kept alongside real movement
+// (8.4) on request: no day cost, no route/lost simulation, just a direct jump.
 async function onPlaceParty() {
   if (!current || !selected) return;
   setPartyPosition(current, selected.q, selected.r);
   await persistAndRefresh();
+}
+
+// Real simulated movement (Phase 8.4) — resolves the whole trip (route, pace,
+// getting lost) in one action; see docs/plans/phase-8.4-move-toward-hex.md.
+async function onMovePartyHere() {
+  if (!current || !selected || !current.party) return;
+  const terrainByKey = buildTerrainByKey(current);
+  const roadKeys = roadHexKeySet(current.roads);
+  const { q: aq, r: ar } = current.party;
+  const encumbrance = current.party.encumbrance || "unencumbered";
+  const result = planMoveToward(
+    current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance },
+  );
+  setPartyPosition(current, result.finalPos.q, result.finalPos.r);
+  sessionDay += result.days;
+  lastTrip = result;
+  // Surface the trip: jump to the Travel tab, same convention as a new hook
+  // jumping to the Hooks tab — never a silent "nothing happened".
+  setPanelTab("travel");
+  await persistAndRefresh();
+}
+
+// Party pace setting (Phase 8.4) — persists to world.party.encumbrance; no day
+// cost by itself, just changes how future moves are paced.
+async function onSetEncumbrance(tier) {
+  if (!current) return;
+  setPartyEncumbrance(current, tier);
+  await persistAndRefresh();
+}
+
+function buildTerrainByKey(world) {
+  const terrainByKey = new Map();
+  for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  return terrainByKey;
+}
+
+// Travel tab (Phase 8.4): encumbrance setting + the last trip's report.
+function refreshTravelPanel() {
+  renderTravelPanel({
+    encumbrance: (current && current.party && current.party.encumbrance) || "unencumbered",
+    onSetEncumbrance,
+    lastTrip,
+  });
 }
 
 // GM annotations work on any selected cell. An empty cell is annotated by
@@ -1468,6 +1520,7 @@ async function persistAndRefresh() {
   refreshHookMarks();
   renderSelection();
   refreshGlobalHooks();
+  refreshTravelPanel();
   refreshHookFocus();
   refreshMapChrome();
 }
