@@ -14,8 +14,11 @@
 > See PLAN.md's "TERRAIN REWRITE" entry. The 3R.3–3R.5 detail below is kept for
 > history; the classifier/river code it references no longer exists.
 
-**Status: 📋 planning only.** No code in this pass. Every sub-phase carries its
-own **research/design step** — external research is done *there*, not now.
+**Status: ✅ feature-complete.** All sub-phases (3R.1–3R.8) are built, node-tested, and shipped;
+this document is now the design *history* + as-built record. The lone deferred item is
+**migration for pre-3R saved worlds** — explicitly out of scope (see 3R.8). Everything below the
+original "planning" framing is kept for the reasoning trail; the ✅ markers on each sub-phase track
+what actually landed. Every sub-phase carried its own **research/design step** — done there, not up front.
 
 This is a revisit of Phase 3 ("POIs + terrain-aware generation"), not Phase 6
 (Hooks) or Phase 7 (QoL/UX). It's **generation quality** — what the world *is* —
@@ -1070,17 +1073,20 @@ long roads — most settlements connected, some with several roads, an interesti
   Water+subtype field — see 3R.4's write-up for why).
 - **Elevation/moisture:** ✅ adopted as first-class per-hex fields (3R.2) — the
   keystone that makes terrain coherence, sea level, and rivers all fall out.
-- **Keep/Fort:** new size tier vs martial overlay on an existing band. *Leaning overlay.*
-- **Road generation:** incremental per-settlement vs batch network pass.
-- **Regen vs manual edits:** per-hex `locked` flag semantics.
+- **Keep/Fort:** ✅ decided in 3R.6 — a **martial overlay** (`settlement.kind = "keep"`, a per-terrain
+  `keepChance`), not a new size tier. (The old Thorp tier was dropped at the same time.)
+- **Road generation:** ✅ decided in 3R.7 — a **batch network pass** (`computeRoads`: Kruskal MST trunk
+  over the big settlements + greedy spurs), recomputed each sync; only manual roads are frozen.
+- **Regen vs manual edits:** ✅ decided in 3R.8 — a per-hex **`locked`** flag protects a hex from both
+  re-roll and delete; area-regenerate re-rolls only the unlocked hexes and keeps manual rivers/roads.
 
 ## Ideas worth folding in (things that pair well)
 
 - **Elevation + moisture fields** (as above) — the single highest-leverage addition.
 - **Named regions/biomes** ("the Blackpine", "the Salt Marches") — pairs with the
   Phase 7.7 **search** feature and gives GMs flavour hooks.
-- **Bridges/fords** where a road crosses a river; **ports** where a road meets a
-  coastal city — cheap emergent detail once rivers+roads+coast exist.
+- **Bridges/fords** where a road crosses a river — ✅ done in 3R.8 (draw order: solid road over the
+  river = bridge, dashed track under = ford; no glyph). Coastal **ports** were tried and dropped (no value).
 - **Travel tie-in (future, not in scope):** roads speed travel / rivers slow crossing —
   hooks into the existing scale-bar & travel-tier work.
 - **Hook/POI synergy:** rivers, roads, and coasts are natural hook geography ("bandits

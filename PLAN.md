@@ -33,8 +33,9 @@ is done (see [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md)) �
 **fixed-slot ring** of its actions (Terrain / POI / Settlement / Hook / Neighbours / Regenerate / Delete /
 Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, submenus open as a **second
 outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
-(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Phase 3R — world coherence started:
-3R.1 "Generate Area" radial tool is done** (see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)) —
+(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Phase 3R — world coherence is
+feature-complete (3R.1–3R.8; schema v15); the running log below records each sub-phase as built.**
+**3R.1 "Generate Area" radial tool is done** (see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)) —
 folded into the existing **"Generate" slot** (Random + **Small/Medium/Large/Huge** hex-radius disc,
 radius 1/2/3/15 — Huge added later as a bulk-fill/testing aid, up to 721 hexes in one click, ~36ms
 measured), always **fill-empty only**; new `hexRing`/`hexDisc` geometry in `js/core/hexgeo.js`; v1 rides
@@ -470,7 +471,23 @@ hex, re-roll **This hex**, or re-roll a **Small/Medium/Large** area. A per-hex `
 padlock map marker) protects a hex from regenerate AND delete; `onRegenerateArea` re-rolls every
 existing UNLOCKED hex in the disc (bumping `gen`), keeping locked hexes + manual rivers/roads while the
 derived overlays re-stitch.
-**Schema v15. 297 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**3R.8 wrap-up (integration + polish).** **Legend → icon button:** the command-bar "Legend" text
+button became a small **🗺 button** pinned bottom-left, opening the key panel above it (`index.html`,
+`css/app.css`). **Bridges/fords:** no glyph — pure **draw order** in `map.js` (dashed tracks/spurs draw
+UNDER the river = a ford; solid roads + the ancient road draw OVER it = a bridge; `roadFordsRiver`
+picks the pass). A first glyph-drawing version (`crossings.js`) and a **coastal-port ⚓ marker**
+(`ports.js`) were both built, then removed as over-engineered / no value. **Network LOD:** roads/rivers
+draw full-styled (casing, tier widths, track dashes) only at the detail zoom; once hexes shrink past
+`DETAIL_PX` they switch to a thin SOLID skeleton (`ROAD_TIERS[].far`, `RIVER_WIDTH_FAR`), so a
+zoomed-out Huge map reads as a delicate network, not fat tubes. **Hooks fix:** `chooseDistantTarget`
+now pushes outward past a dense fill (Read map / Follow trail / distant hooks were silently failing on
+Huge maps), and generating/advancing a hook jumps to the **Hooks** tab with it selected. **Fewer water
+POIs:** open water auto-rolls only a rare lone landmark (`terrain-profile.js` chance 0.03 → 0.003),
+never sea-shrines. **NO MIGRATION** for pre-3R worlds (deferred, deliberate). **Final tuning ✅:**
+re-measured vs the 3R.2 baseline — lone-hex 24 % → 6 %, clump median 1–2 → 3–5, settlement spacing
+1.1 → 4.5–5.5 hex, roads 100 % connected, cluster hamlets on target; no constants changed. **Phase 3R
+is feature-complete.**
+**Schema v15. 299 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -505,7 +522,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema version.** `SCHEMA_VERSION` (currently **14**) lives in `js/world/world.js`. Bump it
+- **Schema version.** `SCHEMA_VERSION` (currently **15**) lives in `js/world/world.js`. Bump it
   when the persisted shape changes — it marks the current shape and guards `importWorld` against
   loading a *newer* world into an older app. `migrateWorld()` in `js/data/portability.js` runs on
   import and load. Per the no-back-compat policy below, a schema bump gets only a **version STAMP**
@@ -598,10 +615,11 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v11)
+## Current data model (as built, schema v15)
 
-- **World:** `{ schemaVersion:11, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
-  (IndexedDB holds a **list** of worlds). No `factions` (deferred).
+- **World:** `{ schemaVersion:15, id, name, seed, hexScale, hexes:{}, hooks:[], rivers:[], roads:[], createdAt, updatedAt }`
+  (IndexedDB holds a **list** of worlds). `rivers[]`/`roads[]` are **derived overlays** (recomputed by
+  `syncRivers`/`syncRoads` from the revealed terrain + settlements; manual entries are frozen). No `factions` (deferred).
 - **Hook** (Phase 6; top-level `world.hooks[]`):
   `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
   bearing, distance, targetTerrain, claim, source, status }` plus per-kind fields — `chain:{total,step,prize}`,
@@ -610,7 +628,8 @@ graph TD
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
   `{ key, coords:{q,r}, placed, terrain, terrainFeature|null,
-  settlement, pois:[], explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations —
+  settlement, pois:[], explored, gen, name?, note?, locked? }`. `locked` (3R.8) protects a hex from
+  regenerate + delete. `name`/`note` (v7) are optional GM annotations —
   `name` shows as a map label. `terrain` (one of `affinity.js`'s `TERRAINS`: Sea/Lake/Swamp/Plains/
   Forest/Hills/Mountains/Desert) is chosen by the **v13 neighbour-affinity hex oracle** — a weighted
   roll biased by already-revealed neighbours (`terrainAt`), deliberately reveal-order-dependent (NOT a
@@ -657,7 +676,7 @@ graph TD
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
-| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅** (Lake/Sea via a `continent` land/ocean gate — revised after manual testing found "inland seas"; real coastlines now; rivers grow incrementally from mountain sources like sea contagion, for performance; schema v11); next 3R.6 (settlements v2). |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a
