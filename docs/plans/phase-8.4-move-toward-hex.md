@@ -46,8 +46,7 @@ that hex's **own terrain** — high ground sees far, forest/swamp hems you in. V
 
 | Standing on | Sight radius |
 |---|---|
-| Mountains | 3 |
-| Hills / Plains / Desert | 2 |
+| Mountains / Hills / Plains / Desert | 2 |
 | Forest / Swamp | 1 |
 
 `sightHexes(path)` (pure) returns the deduped union of those discs; the app lazily generates any

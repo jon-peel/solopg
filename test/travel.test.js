@@ -407,8 +407,8 @@ test("travelDayBearing N: the flank alternation is stateless across day-presses 
 
 // --- Sight (Phase 8.4 follow-up) ------------------------------------------
 
-test("SIGHT_RADIUS: high ground sees far, forest/swamp hems you in", () => {
-  assert.equal(sightRadius("Mountains"), 3);
+test("SIGHT_RADIUS: open/higher ground sees 2, forest/swamp hems you in at 1", () => {
+  assert.equal(sightRadius("Mountains"), 2);
   assert.equal(sightRadius("Hills"), 2);
   assert.equal(sightRadius("Plains"), 2);
   assert.equal(sightRadius("Desert"), 2);
@@ -422,19 +422,19 @@ test("sightRadius: an unknown terrain falls back to the minimum (1)", () => {
 });
 
 test("sightHexes: a single hex reveals exactly its terrain's disc", () => {
-  const mt = sightHexes([{ q: 0, r: 0, terrain: "Mountains" }]); // radius 3
-  const fo = sightHexes([{ q: 5, r: 5, terrain: "Forest" }]);    // radius 1
-  assert.equal(mt.length, 1 + 3 * 3 * 4); // 1 + 3*r*(r+1) = 37
+  const op = sightHexes([{ q: 0, r: 0, terrain: "Plains" }]); // radius 2
+  const fo = sightHexes([{ q: 5, r: 5, terrain: "Forest" }]); // radius 1
+  assert.equal(op.length, 1 + 3 * 2 * 3); // 1 + 3*r*(r+1) = 19
   assert.equal(fo.length, 7);             // 1 + 3*1*2
   // every revealed hex is within the sight radius of its centre
-  assert.ok(mt.every((c) => axialDistance(0, 0, c.q, c.r) <= 3));
+  assert.ok(op.every((c) => axialDistance(0, 0, c.q, c.r) <= 2));
   assert.ok(fo.every((c) => axialDistance(5, 5, c.q, c.r) <= 1));
 });
 
-test("sightHexes: forest sees less than mountains (radius by standing terrain)", () => {
+test("sightHexes: forest (r1) sees less than open ground (r2)", () => {
   const forest = sightHexes([{ q: 0, r: 0, terrain: "Forest" }]);
-  const mountains = sightHexes([{ q: 0, r: 0, terrain: "Mountains" }]);
-  assert.ok(mountains.length > forest.length);
+  const open = sightHexes([{ q: 0, r: 0, terrain: "Plains" }]);
+  assert.ok(open.length > forest.length);
 });
 
 test("sightHexes: overlapping discs along a path are deduped", () => {

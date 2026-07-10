@@ -389,8 +389,9 @@ function stepHex(cur, dir) {
 // country and high vantages see far, dense terrain hems you in. Illustrative /
 // tunable, like every other travel constant. (Water never appears here — the
 // party never stands on it — but it's listed for completeness.)
+// Just two tiers: open/higher ground sees 2 hexes, dense terrain 1.
 export const SIGHT_RADIUS = {
-  Mountains: 3, // a commanding view from the heights
+  Mountains: 2,
   Hills: 2,
   Plains: 2,
   Desert: 2,
