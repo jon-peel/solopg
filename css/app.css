@@ -574,6 +574,17 @@ button:hover {
   white-space: nowrap;
 }
 
+/* Progress-N-days control (Phase 8.6), sits beside the day readout. */
+.progress-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.progress-days {
+  width: 3.2rem;
+  text-align: right;
+}
+
 /* Small uppercase section label in the selection panel. */
 .section-label {
   margin-top: 0.6rem;

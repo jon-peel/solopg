@@ -309,11 +309,29 @@ function refreshMapChrome() {
   renderDayReadout();
 }
 
-// Session-only world clock readout (Phase 8.1) — see `sessionDay`. Nothing
-// advances it yet; this just keeps the command bar in sync for when 8.6 does.
+// Session-only world clock readout (Phase 8.1) — see `sessionDay`.
 function renderDayReadout() {
   const el = $("day-readout");
   if (el) el.textContent = `Day ${sessionDay}`;
+}
+
+// The single day-advance chokepoint (Phase 8.6). Every place a day passes —
+// travelling (8.4) and the stationary "Progress" control — goes through here,
+// so Arc B/C have ONE seam to hook: 8.10 faction turns and 8.12 auto-hooks will
+// fire as days pass. For now it only bumps the (session-only) clock.
+function advanceDays(n) {
+  if (!Number.isFinite(n) || n < 1) return;
+  sessionDay += n;
+  // (8.10/8.12: fire faction turns / roll auto-hooks for the elapsed days here.)
+  renderDayReadout();
+}
+
+// "Progress N days" while stationary (Phase 8.6) — no movement, no world change,
+// no persistence (the clock is session-only); just advances the day counter.
+function onProgressDays() {
+  const input = $("progress-days");
+  const n = Math.max(1, Math.floor(Number(input && input.value) || 1));
+  advanceDays(n);
 }
 
 // Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
@@ -625,7 +643,7 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 // tab (same "jump to the tab" convention as a new hook).
 async function applyTravel(result, aimLabel, aimKind) {
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
-  if (result.daySpent) sessionDay += 1;
+  if (result.daySpent) advanceDays(1); // one press = one day, through the shared clock
   lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
   setPanelTab("travel");
   await persistAndRefresh();
@@ -1944,6 +1962,8 @@ function wire() {
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("btn-labels").addEventListener("click", onToggleLabels);
   $("btn-legend").addEventListener("click", () => toggleLegend());
+  $("btn-progress").addEventListener("click", onProgressDays);
+  $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);

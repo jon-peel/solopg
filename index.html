@@ -32,6 +32,12 @@
       <!-- Session day readout (Phase 8.1) — in-memory only, always starts at 0,
            never persisted; see js/ui/app.js sessionDay. -->
       <span id="day-readout" class="day-readout" title="World clock (session-only, resets on reload)">Day 0</span>
+      <!-- Progress N days without moving (Phase 8.6) — advances the same clock. -->
+      <span class="progress-ctl">
+        <input id="progress-days" class="progress-days" type="number" min="1" max="365" value="1"
+               aria-label="Days to progress" title="Days to advance while stationary" />
+        <button id="btn-progress" title="Advance the clock without moving (rest / wait)">Progress</button>
+      </span>
       <span class="bar-divider"></span>
       <button id="btn-icons">Icons: on</button>
       <button id="btn-labels">Labels: on</button>
