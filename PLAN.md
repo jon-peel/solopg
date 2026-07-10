@@ -693,12 +693,13 @@ graph TD
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ✅ **done** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.9 POI dot polish ✅** [phase-7.9-poi-dot-polish.md](docs/plans/phase-7.9-poi-dot-polish.md) · **7.14 radial right-click back ✅** (landed inside the 3R water-polish work). Remaining backlog items moved to **Phase 10**. |
 | **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
-| 8 — Factions | ◻ later | dedicated phase: generation **plus operating rules** (goals advancing, disposition, holdings, faction turns/doom clock, reuse of one faction across the map) — see [Backlog](#backlog--other-ideas-not-yet-scheduled) |
-| 9 — Additional small oracles | ◻ later | see catalog below |
-| 10 — Backlog | ◻ later | leftover QoL/UX items + misc ideas, not yet scheduled — see [Backlog](#backlog--other-ideas-not-yet-scheduled) and [phase-10-backlog.md](docs/plans/phase-10-backlog.md) |
+| 8 — Factions | ▶ **queued (1st)** | dedicated phase: generation **plus operating rules** (goals advancing, disposition, holdings, faction turns/doom clock, reuse of one faction across the map) — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) |
+| 9 — Additional small oracles | ▶ **queued (2nd)** | see catalog below |
+| 10 — Backlog | ▶ **queued (3rd)** | leftover QoL/UX items + misc ideas — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) and [phase-10-backlog.md](docs/plans/phase-10-backlog.md) |
 
-Phases 0→1→2→3→4→5 are a hard chain; 6/9 need only the map + POIs; 7 is polish; 8 (Factions) builds
-on 6 (Hooks) and the POI/occupant model; 10 is the catch-all backlog, picked up opportunistically.
+Phases 0→1→2→3→4→5 are a hard chain; 6/9 need only the map + POIs; 7 is done; 8 (Factions) builds
+on 6 (Hooks) and the POI/occupant model. **Remaining work order: 8 → 9 → 10** — Factions, then the
+small-oracle catalog, then the Phase 10 backlog, worked in that sequence rather than opportunistically.
 
 **Phase 4 (done) — Dungeons:** a dungeon POI carries a terrain-biased theme (map glyph) and opens
 into a multi-level **Dungeon View** — per-level room-graph maps with loops, doors/secret doors,
@@ -744,14 +745,14 @@ powers" (roaming/region/news-propagation) belong to **Phase 8 (Factions)**. See
 
 ---
 
-## Backlog — other ideas (discussed, not yet scheduled)
+## Backlog — other ideas (queued 8 then 9 then 10)
 
-- **Phase 8 — Factions** — generation **plus operating rules** (goals advancing, disposition,
-  holdings, faction turns/doom clock, reuse of one faction across the map). POIs currently use
-  generic occupier labels only; no faction objects exist.
-- **Phase 9 — Additional small oracles** — pick from the [catalog above](#small-oracle-catalog-for-phase-9-selection)
-  when scheduled.
-- **Phase 10 — Backlog** — everything else not yet scheduled: the remaining Phase 7 QoL/UX items
+- **Phase 8 — Factions (queued 1st)** — generation **plus operating rules** (goals advancing,
+  disposition, holdings, faction turns/doom clock, reuse of one faction across the map). POIs
+  currently use generic occupier labels only; no faction objects exist.
+- **Phase 9 — Additional small oracles (queued 2nd)** — pick from the
+  [catalog above](#small-oracle-catalog-for-phase-9-selection).
+- **Phase 10 — Backlog (queued 3rd)** — everything else: the remaining Phase 7 QoL/UX items
   (search/jump-to, undo/redo, print/GM-screen view, themes, radial keyboard/touch parity, hooks tab
   pop-out), plus the party position marker (needs travel rules first), art (pencil POI sketches,
   painted hex, 3rd terrain variant, an `svg-tile` authoring skill), and misc (manual settlement on

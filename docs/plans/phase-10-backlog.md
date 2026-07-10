@@ -45,6 +45,7 @@ value for how this tool is used). The generator tables stay JSON-on-disk.
 
 ## Recommended sequence
 
-10.1 → 10.4 → 10.2 → 10.5 → 10.6 → 10.3, interleaving with **Phase 8 (Factions)** and
-**Phase 9 (small oracles)** as desired — these touch disjoint code (UI vs generator).
-10.7 stays blocked until travel rules exist; 10.8/10.9 are opportunistic, pick up any time.
+Phase 10 itself comes **after Phase 8 (Factions) and Phase 9 (small oracles)** in the roadmap's
+fixed work order (8 → 9 → 10 — see `PLAN.md` Roadmap & status). Within Phase 10, once reached:
+10.1 → 10.4 → 10.2 → 10.5 → 10.6 → 10.3. 10.7 stays blocked until travel rules exist; 10.8/10.9 are
+opportunistic within this phase, pick up any time after 10.1–10.6/10.3.
