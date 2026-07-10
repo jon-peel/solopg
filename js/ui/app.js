@@ -560,8 +560,14 @@ async function onPlaceParty() {
   await persistAndRefresh();
 }
 
-// Compass words for the 6 hex directions (indexes match NEIGHBOR_DIRS / DIR_LABELS).
+// Compass words for the 6 hex directions (indexes match NEIGHBOR_DIRS), plus
+// the N/S pseudo-cardinals — used only to phrase the travel report.
 const DIR_WORDS = ["east", "north-east", "north-west", "west", "south-west", "south-east"];
+function bearingWord(bearing) {
+  if (bearing === "N") return "north";
+  if (bearing === "S") return "south";
+  return DIR_WORDS[bearing];
+}
 
 // Travel ONE day toward the selected placed hex (Phase 8.4). Over placed
 // terrain only (routes around water/mountains); each press = one day.
@@ -579,7 +585,7 @@ async function onTravelToward() {
 // Travel ONE day in a hex direction (Phase 8.4) — pushes into the unknown,
 // lazily generating each frontier hex the party steps into (same seam as
 // area/hook generation). Off-road (cross-country in a compass line).
-async function onTravelDirection(dir) {
+async function onTravelDirection(bearing) {
   if (!current || !current.party) return;
   const tables = await loadTables(HEX_TABLE_IDS);
   const { q: aq, r: ar } = current.party;
@@ -593,8 +599,8 @@ async function onTravelDirection(dir) {
     addHex(current, hex);
     return hex.terrain;
   };
-  const result = travelDayBearing(current.seed, sessionDay, aq, ar, dir, { encumbrance, terrainAt });
-  applyTravel(result, DIR_WORDS[dir], "bearing");
+  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt });
+  applyTravel(result, bearingWord(bearing), "bearing");
 }
 
 // Apply a resolved travel day: move the party, advance the clock by one (only

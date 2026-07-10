@@ -358,11 +358,18 @@ const ENCUMBRANCE_LABELS = {
 
 // The 6 hex neighbour directions as compass labels (indexes match core
 // hexgeo.js NEIGHBOR_DIRS; derived from each delta's pixel bearing on a
-// pointy-top grid: E / NE / NW / W / SW / SE).
+// pointy-top grid: E / NE / NW / W / SW / SE). Used to name a step in the log.
 export const DIR_LABELS = ["E", "NE", "NW", "W", "SW", "SE"];
-const DIR_ARROWS = ["→", "↗", "↖", "←", "↙", "↘"];
-// Visual order for the compass rose (3 rows of 2): NW NE / W E / SW SE.
-const ROSE_ORDER = [2, 1, 3, 0, 4, 5];
+
+// The compass rose, laid out as a 3×3 grid (center empty). Each cell's `id` is
+// the bearing passed to onTravelDirection: a hex-direction index (0-5) for the
+// 6 true neighbours, or "N"/"S" for the pseudo-cardinals (which alternate their
+// two flanking directions hex-by-hex — see travel.js travelDayBearing).
+const ROSE_CELLS = [
+  { id: 2, label: "NW", arrow: "↖" }, { id: "N", label: "N", arrow: "↑" }, { id: 1, label: "NE", arrow: "↗" },
+  { id: 3, label: "W", arrow: "←" }, null, { id: 0, label: "E", arrow: "→" },
+  { id: 4, label: "SW", arrow: "↙" }, { id: "S", label: "S", arrow: "↓" }, { id: 5, label: "SE", arrow: "↘" },
+];
 
 /**
  * Render the Travel tab: the party's pace (encumbrance) setting, a 6-direction
@@ -370,7 +377,7 @@ const ROSE_ORDER = [2, 1, 3, 0, 4, 5];
  * report. Everything here is app.js-only ephemeral state (not persisted); the
  * report is replaced on every travel press.
  * @param {{ encumbrance?: string, onSetEncumbrance?: (tier:string)=>void,
- *   onTravelDirection?: (dir:number)=>void,
+ *   onTravelDirection?: (bearing:number|"N"|"S")=>void,
  *   lastDay: {headline:string, finalPos:{q:number,r:number},
  *     log:{terrain:string,road:boolean,lost:boolean,dir:number}[]}|null }} model
  */
@@ -395,17 +402,24 @@ export function renderTravelPanel(model) {
   }
   host.appendChild(select);
 
-  // Compass rose — travel a day in one of the 6 hex directions (into the
-  // unknown, generating terrain as the party goes).
+  // Compass rose — travel a day in a direction (into the unknown, generating
+  // terrain as the party goes). 8 points: the 6 hex neighbours + N/S (which
+  // zig-zag their flanking hexes).
   host.appendChild(sectionLabel("Travel a day"));
   const rose = document.createElement("div");
   rose.className = "dir-rose";
-  for (const dir of ROSE_ORDER) {
+  for (const cell of ROSE_CELLS) {
+    if (!cell) {
+      const spacer = document.createElement("div");
+      spacer.className = "dir-spacer";
+      rose.appendChild(spacer);
+      continue;
+    }
     const b = document.createElement("button");
     b.className = "dir-btn";
-    b.textContent = `${DIR_ARROWS[dir]} ${DIR_LABELS[dir]}`;
-    b.title = `Travel one day ${DIR_LABELS[dir]}`;
-    if (model.onTravelDirection) b.addEventListener("click", () => model.onTravelDirection(dir));
+    b.textContent = `${cell.arrow} ${cell.label}`;
+    b.title = `Travel one day ${cell.label}`;
+    if (model.onTravelDirection) b.addEventListener("click", () => model.onTravelDirection(cell.id));
     rose.appendChild(b);
   }
   host.appendChild(rose);

@@ -946,15 +946,18 @@ button:hover {
 .encumbrance-select {
   margin-bottom: 0.4rem;
 }
-/* 6-direction compass rose: NW NE / W E / SW SE. */
+/* 8-point compass rose (3×3, centre empty): NW N NE / W · E / SW S SE. */
 .dir-rose {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.3rem;
   margin-bottom: 0.4rem;
 }
 .dir-btn {
-  padding: 0.35rem 0.5rem;
+  padding: 0.35rem 0.4rem;
+}
+.dir-spacer {
+  /* empty centre cell of the rose */
 }
 .trip-summary {
   color: var(--fg);

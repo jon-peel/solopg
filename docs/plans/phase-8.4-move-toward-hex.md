@@ -21,10 +21,12 @@ Arc A's movement step, and the first consumer of 8.2's pace model and 8.3's gett
 - **Two ways to point them:**
   - **Travel toward a hex** — pick an already-placed destination; each day heads that way over known
     terrain (routing around water/mountains via `planRoute`). Arriving ends the trip.
-  - **Travel in a direction** — pick one of the hex grid's **6** neighbour directions
-    (E/NE/NW/W/SW/SE — a pointy-top hex has 6 neighbours, not 8); each day walks that way,
-    **lazily generating new terrain** as the party pushes into the unknown (the seam hooks/dungeons
-    already use).
+  - **Travel in a direction** — an **8-point compass**: the hex grid's 6 true neighbours
+    (E/NE/NW/W/SW/SE) plus **N/S**. A pointy-top hex has no true north/south neighbour, so N/S
+    travel **alternates its two flanking directions hex-by-hex** (NE↔NW for north, SE↔SW for south),
+    keyed on row parity so it nets a straight vertical course. Each day walks that way, **lazily
+    generating new terrain** as the party pushes into the unknown (the seam hooks/dungeons already
+    use).
 - **No persisted "travel intent."** Each press is self-contained — "toward THIS hex, one day" or
   "THIS direction, one day" — so there's no schema addition; `world.party` stays `{q, r,
   encumbrance?}`. Re-pressing continues naturally from the party's new position.
@@ -68,7 +70,7 @@ Thin wrappers: **`travelDayToward`** (builds the callbacks over a `terrainByKey`
 | Where | What |
 |---|---|
 | Detail tab (selected hex) | **"Travel toward this hex"** (new) + **"Place party here"** (8.1 teleport, kept) — both hidden once the party is already there |
-| **Travel tab** | Encumbrance `<select>`; a **6-direction compass rose** (E/NE/NW/W/SW/SE) that travels a day per press; the **last day's report** (headline + per-hex lines, lost days highlighted), replaced each press; an empty state before any travel |
+| **Travel tab** | Encumbrance `<select>`; an **8-point compass rose** (the 6 hex directions + **N/S**) that travels a day per press; the **last day's report** (headline + per-hex lines, lost days highlighted), replaced each press; an empty state before any travel |
 | After any travel press | jumps to the Travel tab; the Day readout advances by 1 (only if a day was actually spent) |
 
 The last-day report and `sessionDay` stay **app.js-only ephemeral state** (not persisted); the party
@@ -109,7 +111,14 @@ unlost day ending due-east, and a swept case confirming a lost roll bends the da
 Manual pass via a headless-browser smoke test (Playwright): the Detail tab shows "Travel toward this
 hex" + "Place party here"; one press of Travel-toward advances the clock exactly one day, jumps to
 the Travel tab, and reports the day's march (with amber "drifted …" lines on a lost roll), arriving
-when the target is within a day; the Travel tab's 6-direction compass rose (NW/NE, W/E, SW/SE) walks
-a day per press — three East presses moved the party from (2,-1) to (8,-2) over Day 1→4, **visibly
-growing the map eastward** as new terrain was generated on the frontier. No console errors beyond the
-pre-existing `favicon.ico` 404.
+when the target is within a day; the Travel tab's compass rose walks a day per press — three East
+presses moved the party from (2,-1) to (8,-2) over Day 1→4, **visibly growing the map eastward** as
+new terrain was generated on the frontier. No console errors beyond the pre-existing `favicon.ico`
+404.
+
+**N/S follow-up (user request):** the rose became an **8-point compass** — the 6 hex directions plus
+**N/S**, which alternate their flanking hexes (NE/NW, SE/SW) by row parity for a straight vertical
+course (`travelDayBearing` now takes `bearing` = 0-5 or `"N"`/`"S"`). Verified: `node --test`
+350/350 (5 new N/S cases — alternation, straight-vertical net, row-parity statelessness across
+presses); headless pass showed all 8 rose buttons and N/S travel growing the map north/south with
+correct reports.

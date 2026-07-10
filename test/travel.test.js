@@ -344,3 +344,62 @@ test("travelDayBearing: getting lost bends the day's path off the straight beari
   }
   assert.ok(sawBend, "expected at least one sampled bearing-day to bend off course");
 });
+
+// --- N/S bearings: alternate the flanking hexes, net a straight vertical course.
+// A pointy-top hex has no true N/S neighbour, so N zig-zags NE/NW and S zig-zags
+// SE/SW. Pixel x ∝ (q + r/2), so a straight vertical course keeps |q + r/2| small.
+
+test("travelDayBearing N: an unlost day alternates NE/NW and nets straight north", () => {
+  const terrainAt = () => "Plains";
+  let straight = null;
+  for (let i = 0; i < 40 && !straight; i++) {
+    const r = travelDayBearing(`n-${i}`, 0, 0, 0, "N", { terrainAt });
+    if (r.log.every((e) => !e.lost)) straight = r;
+  }
+  assert.ok(straight, "expected a seed with no lost roll");
+  // every step went north (r decreased by 1) via a NE or NW flank
+  assert.ok(straight.log.every((e) => e.dir === 1 || e.dir === 2), "only NE/NW flanks");
+  assert.equal(straight.finalPos.r, -straight.hexesCrossed);
+  assert.ok(Math.abs(straight.finalPos.q + straight.finalPos.r / 2) <= 0.5, "stays on the north column");
+  if (straight.hexesCrossed > 1) {
+    assert.ok(
+      straight.log.some((e) => e.dir === 1) && straight.log.some((e) => e.dir === 2),
+      "actually alternated NE and NW",
+    );
+  }
+});
+
+test("travelDayBearing S: an unlost day alternates SE/SW and nets straight south", () => {
+  const terrainAt = () => "Plains";
+  let straight = null;
+  for (let i = 0; i < 40 && !straight; i++) {
+    const r = travelDayBearing(`s-${i}`, 0, 0, 0, "S", { terrainAt });
+    if (r.log.every((e) => !e.lost)) straight = r;
+  }
+  assert.ok(straight, "expected a seed with no lost roll");
+  assert.ok(straight.log.every((e) => e.dir === 4 || e.dir === 5), "only SW/SE flanks");
+  assert.equal(straight.finalPos.r, straight.hexesCrossed);
+  assert.ok(Math.abs(straight.finalPos.q + straight.finalPos.r / 2) <= 0.5, "stays on the south column");
+  if (straight.hexesCrossed > 1) {
+    assert.ok(
+      straight.log.some((e) => e.dir === 4) && straight.log.some((e) => e.dir === 5),
+      "actually alternated SW and SE",
+    );
+  }
+});
+
+test("travelDayBearing N: the flank alternation is stateless across day-presses (continues straight)", () => {
+  const terrainAt = () => "Plains";
+  // Walk north over two consecutive presses; the second continues from where
+  // the first ended and should stay on the same column (row-parity keyed).
+  const day1 = travelDayBearing("cont", 0, 0, 0, "N", { terrainAt });
+  const p = day1.finalPos;
+  const day2 = travelDayBearing("cont", 1, p.q, p.r, "N", { terrainAt });
+  // If neither day got lost, the combined course is still vertical.
+  if (day1.log.every((e) => !e.lost) && day2.log.every((e) => !e.lost)) {
+    assert.ok(Math.abs(day2.finalPos.q + day2.finalPos.r / 2) <= 0.5, "still on the north column after two presses");
+  }
+  // The second day's first flank is chosen purely from the row it starts on,
+  // not a carried counter — so it depends only on p.r's parity.
+  assert.equal(day2.log[0].dir, (p.r & 1) === 0 ? 1 : 2);
+});

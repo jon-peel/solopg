@@ -339,19 +339,45 @@ export function travelDayToward(seed, day, aq, ar, bq, br, terrainByKey, roadKey
  * travel has no destination — the day's budget stops it. `terrainAt` is supplied
  * by the caller (the app GENERATES the frontier hex there, so walking off the
  * edge reveals new land); off-road by default (cross-country in a compass line).
+ *
+ * `bearing` is one of the 6 hex directions (0-5 into NEIGHBOR_DIRS) OR the
+ * pseudo-cardinals `"N"`/`"S"`. A pointy-top hex has NO true north/south
+ * neighbour (its top and bottom are points, not edges), so N/S travel
+ * ALTERNATES between the two flanking directions hex-by-hex — NE/NW for north,
+ * SE/SW for south. The alternation is keyed on the row (`r`) parity: every
+ * northward/southward step changes `r` by exactly 1, so the flank flips each
+ * hex automatically. This is stateless and deterministic (no step counter to
+ * carry across day-presses) and nets a straight vertical course.
+ *
  * @param {number|string} seed
  * @param {number} day
  * @param {number} aq @param {number} ar   start
- * @param {number} dir direction index 0-5
+ * @param {number|"N"|"S"} bearing  a hex direction 0-5, or "N"/"S"
  * @param {{encumbrance?: string, terrainAt: (q,r)=>string|null, roadAt?: (q,r)=>boolean}} opts
  */
-export function travelDayBearing(seed, day, aq, ar, dir, { encumbrance = "unencumbered", terrainAt, roadAt } = {}) {
-  const [ddq, ddr] = NEIGHBOR_DIRS[dir];
+export function travelDayBearing(seed, day, aq, ar, bearing, { encumbrance = "unencumbered", terrainAt, roadAt } = {}) {
   return travelDay(seed, day, { q: aq, r: ar }, {
     encumbrance,
     atGoal: () => false,
-    nextIntended: (cur) => ({ q: cur.q + ddq, r: cur.r + ddr }),
+    nextIntended: bearingNextIntended(bearing),
     terrainAt,
     roadAt,
   });
+}
+
+// NEIGHBOR_DIRS indices for the flanking directions used by N/S travel.
+const DIR_NE = 1, DIR_NW = 2, DIR_SW = 4, DIR_SE = 5;
+
+// The "next intended hex" function for a bearing. N/S alternate their two
+// flanks by row parity (see travelDayBearing); a numeric bearing is a single
+// fixed hex direction. `r & 1` handles negative rows correctly in JS.
+function bearingNextIntended(bearing) {
+  if (bearing === "N") return (cur) => stepHex(cur, (cur.r & 1) === 0 ? DIR_NE : DIR_NW);
+  if (bearing === "S") return (cur) => stepHex(cur, (cur.r & 1) === 0 ? DIR_SE : DIR_SW);
+  return (cur) => stepHex(cur, bearing);
+}
+
+function stepHex(cur, dir) {
+  const [dq, dr] = NEIGHBOR_DIRS[dir];
+  return { q: cur.q + dq, r: cur.r + dr };
 }
