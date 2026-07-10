@@ -21,6 +21,7 @@ import {
   hasHexAt,
   placedHexes,
   removeHex,
+  setPartyPosition,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
@@ -129,6 +130,11 @@ let selectedPoiId = null; // drill-in POI within the selected hex
 let selectedHookId = null; // hook whose target/origin are highlighted on the map
 let draftClicks = null; // manual river/road drawing: clicked anchor hexes, or null when not drawing
 let draftKind = null;   // "river" | "road" — what the active draft builds
+
+// World clock (Phase 8.1) — deliberately a SESSION-only counter, never part of
+// `world`/IndexedDB/export: always starts at 0 on page load. Real advancement
+// (Progress N days) is 8.6; nothing changes this yet.
+let sessionDay = 0;
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -291,6 +297,14 @@ function refreshMapChrome() {
   const tip = $("travel-tip");
   if (tip && current) tip.innerHTML = travelTipHTML(current.hexScale);
   if (current) drawScaleBar(pixelsPerMile());
+  renderDayReadout();
+}
+
+// Session-only world clock readout (Phase 8.1) — see `sessionDay`. Nothing
+// advances it yet; this just keeps the command bar in sync for when 8.6 does.
+function renderDayReadout() {
+  const el = $("day-readout");
+  if (el) el.textContent = `Day ${sessionDay}`;
 }
 
 // Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
@@ -523,7 +537,17 @@ function renderSelection() {
     },
     onRenameHex,
     onNoteHex,
+    partyHere: !!(current.party && current.party.q === q && current.party.r === r),
+    onPlaceParty: hex && hex.placed ? onPlaceParty : undefined,
   });
+}
+
+// Stopgap party placement (Phase 8.1) — a panel action, not the radial ring
+// (see phase-8.1 plan doc). Superseded by real movement in 8.4/8.5.
+async function onPlaceParty() {
+  if (!current || !selected) return;
+  setPartyPosition(current, selected.q, selected.r);
+  await persistAndRefresh();
 }
 
 // GM annotations work on any selected cell. An empty cell is annotated by

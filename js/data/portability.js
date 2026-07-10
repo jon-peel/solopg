@@ -188,5 +188,16 @@ export function migrateWorld(data) {
     if (!Array.isArray(data.roads)) data.roads = [];
     data.schemaVersion = 15;
   }
+  if (data.schemaVersion < 16) {
+    // Phase 8.1 — a `party` marker + a reserved `factions` array. Backfill a
+    // default party at the origin and an empty factions list. The world clock
+    // ("day") is an in-memory session counter, not part of the schema — there's
+    // nothing to migrate for it.
+    if (!data.party || typeof data.party.q !== "number" || typeof data.party.r !== "number") {
+      data.party = { q: 0, r: 0 };
+    }
+    if (!Array.isArray(data.factions)) data.factions = [];
+    data.schemaVersion = 16;
+  }
   return data;
 }

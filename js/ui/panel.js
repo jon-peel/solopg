@@ -411,6 +411,23 @@ export function renderSelectionPanel(model) {
       sel.appendChild(div);
     }
     renderPoiSection(sel, hex, model);
+
+    // Party marker (Phase 8.1 stopgap): a panel action, not the radial ring —
+    // the ring's 8 slots are all spoken for, and this is a temporary affordance
+    // superseded by real movement (8.4/8.5). Hidden once the party is already here.
+    if (model.onPlaceParty) {
+      if (model.partyHere) {
+        const div = document.createElement("div");
+        div.className = "log-line";
+        div.textContent = "The party is here.";
+        sel.appendChild(div);
+      } else {
+        const row = document.createElement("div");
+        row.className = "tile-actions";
+        row.appendChild(actionButton("Place party here", model.onPlaceParty));
+        sel.appendChild(row);
+      }
+    }
   }
 
   // Annotations (name + notes) work for any selected cell — even an ungenerated

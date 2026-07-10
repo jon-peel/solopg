@@ -55,7 +55,11 @@ import { axialKey } from "../core/hexgeo.js";
 // v15: a top-level `roads` array (Phase 3R.7) — a DERIVED overlay like `rivers`,
 // recomputed from terrain + settlements (js/gen/roads.js — gravity trunk network)
 // into `world.roads[]`. Migration backfills `roads: []`; syncRoads repopulates it.
-export const SCHEMA_VERSION = 15;
+// v16: Phase 8.1 — a single `party` marker ({q,r}, default the origin) and a
+// reserved `factions` array (populated from 8.7 on). NOTE: the world clock
+// ("day") is deliberately NOT part of this — it's an in-memory session
+// counter (js/ui/app.js), always starts at 0, never persisted.
+export const SCHEMA_VERSION = 16;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
@@ -89,6 +93,12 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     // tiles, isn't owned by one hex), recomputed by syncRoads as the world grows;
     // append-only so a built road never re-routes.
     roads: [],
+    // Party marker (Phase 8.1) — single position; multi-party is out of scope
+    // (single-GM-screen decision). The origin is a safe default: hex (0,0)
+    // always spawns land under the affinity terrain roll.
+    party: { q: 0, r: 0 },
+    // Factions (Phase 8.1, reserved) — populated starting 8.7; empty until then.
+    factions: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -143,6 +153,12 @@ export function placedHexes(world) {
 /** Remove the hex at axial (q,r), if any. Mutates and returns the world. */
 export function removeHex(world, q, r) {
   delete world.hexes[axialKey(q, r)];
+  return world;
+}
+
+/** Move the party marker to axial (q,r). Mutates and returns the world. */
+export function setPartyPosition(world, q, r) {
+  world.party = { q, r };
   return world;
 }
 

@@ -279,6 +279,16 @@ export function render() {
     if (t) drawHookFocus(t, FOCUS_TARGET);
   }
 
+  // 5. Party marker (Phase 8.1) — the single most important marker, always ON
+  //    TOP of everything else and visible at every zoom, regardless of whether
+  //    a hex is placed there yet (it's just a coordinate on the infinite grid).
+  if (world && world.party) {
+    const pc = axialToPixel(world.party.q, world.party.r, HEX_SIZE);
+    if (pc.x >= minX - margin && pc.x <= maxX + margin && pc.y >= minY - margin && pc.y <= maxY + margin) {
+      drawPartyMark(pc.x, pc.y, detail);
+    }
+  }
+
   // Notify the scale bar only when the zoom (px-per-mile) actually changes.
   const ppm = pixelsPerMile();
   if (ppm !== lastPpm) {
@@ -813,6 +823,22 @@ function drawPinnedMark(cx, cy, detail) {
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
     drawMarker(cx - off, cy - off, "📌", size, "#b794f6");
+  }
+}
+
+// Party position (Phase 8.1): a bold magenta ring — a colour not already used
+// by hooks (amber/violet) or hook-focus (red/teal) — plus a crossed-swords
+// badge in the detail tier. Visible at every zoom, same convention as hooks.
+const PARTY_COLOR = "#ff4fd8";
+function drawPartyMark(cx, cy, detail) {
+  strokeHex(cx, cy, PARTY_COLOR, 3.5);
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.5;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx + off, cy - off, "⚔️", size, PARTY_COLOR);
   }
 }
 

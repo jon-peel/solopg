@@ -568,6 +568,12 @@ button:hover {
   margin: 0 0.25rem;
 }
 
+/* Session day readout (Phase 8.1) — quiet, matches .world-picker's muted tone. */
+.day-readout {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* Small uppercase section label in the selection panel. */
 .section-label {
   margin-top: 0.6rem;
