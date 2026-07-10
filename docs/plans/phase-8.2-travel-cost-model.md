@@ -50,3 +50,27 @@ export function daysToCross(terrain, opts) { ... } // 1/pace; Infinity if impass
 **Verified:** `node --test` 312/312 passing (7 new in `test/travel.test.js`) — table values,
 off-road pace, road doubling, Lake/Sea impassable on or off road, an unknown-terrain default, and
 `daysToCross`'s reciprocal/Infinity behaviour.
+
+## Revision (immediate follow-up, on request): party base rate / encumbrance
+
+Before 8.3 built on top of it, the user asked for a way to set the party's overall pace, defaulting
+to standard if never touched. Landed as a revision here (rather than deferred to 8.4) since nothing
+consumed `paceFor`'s signature yet — cheaper to extend now than retrofit later.
+
+- **Shape decided (user pick):** reuse the app's existing B/X travel-tip tooltip (hover the scale
+  bar, Phase 7.6) — Unencumbered/Lightly loaded/Encumbered/Heavily loaded = 1 / ¾ / ½ / ¼ of full
+  speed — rather than a free numeric multiplier or a flat hexes/day override.
+- `ENCUMBRANCE_FACTOR = { unencumbered: 1, light: 0.75, encumbered: 0.5, heavy: 0.25 }`;
+  `paceFor(terrain, { road, encumbrance })` multiplies by the tier (road and encumbrance combine
+  multiplicatively); an unrecognised/absent tier falls back to `unencumbered` — today's numbers are
+  completely unchanged unless a GM actively picks a different tier.
+- **No schema bump.** The tier will live at `world.party.encumbrance` once there's a UI to set it,
+  but it's read with a default (`encumbrance = "unencumbered"`) that covers both "never set" and
+  "old world predates this field" — additive, self-healing, same pattern as `hex.locked` /
+  `settlement.kind` ("absent = default state"), so no migration step was needed.
+- **No UI yet, still node-only.** There's nowhere to put an actual control until movement UI exists
+  — that lands in **8.4** ("Move party here"), the first step where changing the tier has any
+  visible effect (a day-by-day trip log). Adding a control before then would do nothing observable.
+
+**Verified:** `node --test` 318/318 passing (6 more new tests) — tier factors match the tooltip
+ladder exactly, default/fallback behaviour, and combination with the road multiplier.

@@ -24,24 +24,41 @@ export const TRAVEL_COST = {
 // specified by the plan, so not invented here).
 export const ROAD_PACE_MULTIPLIER = 2;
 
+// Encumbrance tiers (B/X-style) — the same 4 tiers the app's existing
+// travel-tip tooltip already shows (hover the scale bar): Unencumbered/Lightly
+// loaded/Encumbered/Heavily loaded = the classic 24/18/12/6 mi-per-day ladder,
+// i.e. 1 / ¾ / ½ / ¼ of full speed. A party's tier lives at
+// `world.party.encumbrance`; absent means "unencumbered" (today's numbers,
+// unchanged) — additive, no schema bump needed (mirrors the `hex.locked` /
+// `settlement.kind` "absent = default state" convention).
+export const ENCUMBRANCE_FACTOR = {
+  unencumbered: 1,
+  light: 0.75,
+  encumbered: 0.5,
+  heavy: 0.25,
+};
+
 /**
  * Pace in hexes/day for crossing one hex of `terrain`, on foot.
  * @param {string} terrain
- * @param {{road?: boolean}} [opts] road: this hex is being crossed via a road/track
+ * @param {{road?: boolean, encumbrance?: string}} [opts]
+ *   road: this hex is being crossed via a road/track
+ *   encumbrance: one of ENCUMBRANCE_FACTOR's keys; defaults to "unencumbered"
  * @returns {number} hexes/day; 0 if impassable off-road (Lake/Sea, or an
  *   unknown terrain key) — a `road` flag never overrides impassability, since
  *   roads never cross water anyway.
  */
-export function paceFor(terrain, { road = false } = {}) {
+export function paceFor(terrain, { road = false, encumbrance = "unencumbered" } = {}) {
   const base = TRAVEL_COST[terrain] ?? 0;
   if (base <= 0) return 0;
-  return road ? base * ROAD_PACE_MULTIPLIER : base;
+  const factor = ENCUMBRANCE_FACTOR[encumbrance] ?? ENCUMBRANCE_FACTOR.unencumbered;
+  return (road ? base * ROAD_PACE_MULTIPLIER : base) * factor;
 }
 
 /**
  * Days to cross one hex of `terrain` — the reciprocal of pace.
  * @param {string} terrain
- * @param {{road?: boolean}} [opts]
+ * @param {{road?: boolean, encumbrance?: string}} [opts]
  * @returns {number} days (fractional); Infinity if impassable (pace 0)
  */
 export function daysToCross(terrain, opts) {
