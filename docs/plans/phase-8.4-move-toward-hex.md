@@ -1,122 +1,115 @@
-# Phase 8.4 — Move toward a hex
+# Phase 8.4 — Travel, a day at a time
 
-Fourth step of Arc A, and the first consumer of 8.2's pace model and 8.3's getting-lost mechanic.
-The GM picks an already-placed destination hex; the engine resolves the whole trip — route,
-day-by-day pace, lost rolls — in one action, and reports what happened.
+Arc A's movement step, and the first consumer of 8.2's pace model and 8.3's getting-lost mechanic.
 
-**Status:** ✅ done.
+> **Redesigned mid-build (user steer).** The first cut resolved a whole multi-day trip in one click.
+> The user wants the opposite: **one press = one day.** You point the party — *toward a hex* or *in a
+> direction* — press, and the app shows where they ended up **at the end of that day** (terrain
+> crossed, how far they got, whether they got lost). Press again for the next day. This also folds in
+> what was going to be **8.5** (travel along a bearing into unexplored territory), so 8.5 is now
+> delivered here rather than as its own step.
 
-> Plan → approve → build → `node --test` → commit/push → manual checklist.
+**Status:** ✅ done (rebuilt to the day-at-a-time model).
 
-## Decided (user steer, this session)
-1. **8.1's stopgap "Place party here" (instant teleport) stays**, alongside the new **"Move party
-   here"** (simulated, costs days, can end up lost) — both live in the Detail tab for a selected
-   hex. Teleport is a GM-override; Move is the real mechanic.
-2. **A dedicated Travel tab** (alongside Detail/Hooks/Pinned) holds the party's **encumbrance**
-   setting and the **last trip's day-by-day report** — replaced (not appended) on every new trip.
-   Completing a trip auto-switches to this tab (same convention as generating a hook jumping to the
-   Hooks tab, 3R.8).
+## The model
+
+- **One press = one day.** Each travel action advances the clock by exactly one day and moves the
+  party as far as their speed allows for that day's terrain — **several hexes across open Plains,
+  ~one hex a day through Mountains/Swamp**, faster on a road, slower when heavily loaded. A day
+  always moves **at least one hex** (a hard mountain crossing is just "one hex, a hard day"), so the
+  party is never fully stuck on passable ground. Getting lost can bend the day's path off course.
+- **Two ways to point them:**
+  - **Travel toward a hex** — pick an already-placed destination; each day heads that way over known
+    terrain (routing around water/mountains via `planRoute`). Arriving ends the trip.
+  - **Travel in a direction** — pick one of the hex grid's **6** neighbour directions
+    (E/NE/NW/W/SW/SE — a pointy-top hex has 6 neighbours, not 8); each day walks that way,
+    **lazily generating new terrain** as the party pushes into the unknown (the seam hooks/dungeons
+    already use).
+- **No persisted "travel intent."** Each press is self-contained — "toward THIS hex, one day" or
+  "THIS direction, one day" — so there's no schema addition; `world.party` stays `{q, r,
+  encumbrance?}`. Re-pressing continues naturally from the party's new position.
+
+### The day's movement budget (the one judgment call, confirmed with the user)
+A day is a budget of `1.0` day. Entering a hex spends `daysToCross(terrain, {road, encumbrance})`
+(8.2). Keep crossing hexes along the aim while budget remains; **always cross at least the first
+hex.** So Plains (0.25/hex) → up to 4 hexes/day; Plains-on-road → 8; Mountains/Swamp (1.0/hex) → 1;
+heavily-loaded Mountains → still 1 (the at-least-one rule; encumbrance only visibly slows the
+faster terrains — flagged as tunable, same as every other travel constant).
 
 ## Design
 
-### Route-finding — `planRoute` (pure)
-Mirrors `roads.js`'s `routeBetween` shape exactly (A* via the shared `MinHeap`, a `g`/`came`/`closed`
-map trio, an admissible heuristic scaled by the cheapest possible per-hex cost) — same algorithm,
-different cost function. Roads.js's own `routeBetween`/`hexCost` aren't exported (and answer a
-different question — cost to *build* a road, not to *travel* one), so this is a **new function that
-reuses the shared `MinHeap` + mirrors the proven A* shape**, not a fork of private road-building
-logic.
+### `planRoute` (pure) — unchanged from the first cut
+A* via the shared `MinHeap`, mirroring `roads.js`'s `routeBetween` shape but costed by
+`daysToCross` (so a road is naturally preferred, no separate phase). Placed hexes only; returns
+`null` if unreachable. Used by "toward" to pick each day's next hex (routing around water).
 
-- **Cost to enter a hex** = `daysToCross(terrain, { road })` (8.2) — so road hexes are naturally
-  preferred by a cost-minimizing search (half the days), no separate "prefer roads" phase needed.
-- **Placed hexes only.** `terrainByKey` (built the same way `syncRivers`/`syncRoads` already build
-  it in `app.js`) only has entries for placed hexes — any coordinate outside it is treated as
-  impassable, so a route can never cross an unplaced gap. That's 8.5's territory (lazy generation
-  along a bearing), not this one's. If no route exists, `planRoute` returns `null`.
-- **Encumbrance is deliberately left out of route-finding.** It's a flat multiplier applied equally
-  to every terrain/road combination (8.2), so it can never change which path has the lowest *total*
-  cost — only the day-by-day simulation needs it, to convert the chosen route's days into the
-  actual elapsed time.
+### `travelDay` (pure) — the one-day stepper
+Callback-driven so it stays pure and testable while the app can feed it lazily-generated terrain:
+```js
+travelDay(seed, day, from, { encumbrance, atGoal, nextIntended, terrainAt, roadAt })
+```
+- `nextIntended(cur)` → the hex the party *means* to enter next (`planRoute`'s 2nd hex for "toward";
+  `cur + dir` for a bearing), or `null` (no route / stranded).
+- `terrainAt(q,r)` → terrain string, or `null` if impassable/unavailable. For a bearing the app's
+  callback **generates** the frontier hex here (idempotent — returns existing terrain if placed).
+- Each hex: roll `rollGetLost` on the hex being entered; on a lost roll `deviateDirection` picks the
+  actual step (checked passable via `terrainAt`), else hold course. Charge `daysToCross` entering.
+- Stops at: `atGoal` (arrived), a water/edge block, no route (stranded), or the day's budget spent
+  (with ≥1 hex guaranteed). A `MAX_HEXES_PER_DAY` guard backstops runaway loops.
+- Returns `{ finalPos, hexesCrossed, daySpent, arrived, reason?, log }`; `log` is one entry per hex
+  (`{q, r, terrain, road, lost, dir}`). `daySpent` is true iff ≥1 hex moved — the caller adds
+  exactly **one** day when it is.
 
-### Day-by-day simulation — `planMoveToward` (pure)
-The master plan's own anticipated name for this piece. Walks the route one hex at a time:
-
-- **Re-plans only when needed** — keeps the last computed path and only calls `planRoute` again on
-  the first step or right after a deviation (self-correcting, but not wastefully re-solving A* every
-  single day when nothing went wrong).
-- **One lost-roll per hex crossed, not per calendar day.** The plan's wording ("rolled once per day
-  of a leg") is ambiguous once pace varies by terrain (a Plains day can cover 4 hexes) — resolved by
-  making risk scale with **distance** (one roll per hex, regardless of pace), and elapsed **time**
-  scale separately via `daysToCross`. This also avoids the perverse alternative where fast travel
-  would need *fewer* lost-rolls than slow travel over the same distance. The `day` argument threaded
-  into `rollGetLost`/`deviateDirection` for the Nth hex crossed is `startDay + n` (the actual session
-  day the trip started on, plus a sequence counter) — so a repeat trip from the same hex on a later
-  day rolls independently, not identically.
-- **Cost is charged entering a hex** (matches `roads.js`'s own "cost to ENTER a hex" convention),
-  using that hex's terrain + whether it's on a road (`roadHexKeySet`, a small new helper scanning
-  `world.roads[].path` — the equivalent Set roads.js builds internally but doesn't export).
-- **On a lost roll**, `deviateDirection` picks the actual hex stepped into instead of the intended
-  next one (checked passable = placed and not Lake/Sea); if it returns the *same* direction anyway
-  (both sides were blocked), the step is logged as "on course" rather than "lost" — nothing actually
-  changed.
-- **Stops** when the party reaches the target (`arrived: true`), when `planRoute` can't find a route
-  from the *current* (possibly deviated) position (`arrived: false, reason: "stranded"`), or after a
-  generous safety cap (300 steps — nothing realistic gets close) as a defensive backstop.
-- **Returns** `{ finalPos, days, arrived, reason?, log }` — `days` is the summed fractional
-  `daysToCross` over every hex actually crossed, rounded up (`Math.ceil`) once at the end (not
-  per-step, to avoid compounding rounding); `log` is one entry per hex crossed (`day`, `q`, `r`,
-  `terrain`, `road`, `lost`, a short note).
+Thin wrappers: **`travelDayToward`** (builds the callbacks over a `terrainByKey` map + road set) and
+**`travelDayBearing`** (fixed direction; `terrainAt` supplied by the caller so the app can generate).
 
 ## UI
 
 | Where | What |
 |---|---|
-| Detail tab (selected hex) | "Place party here" (unchanged, 8.1) + new "Move party here" — both hidden once the party is already on that hex |
-| **New Travel tab** | Encumbrance `<select>` (persists to `world.party.encumbrance`, no schema bump — additive/self-defaulting, per 8.2's revision); the last trip's day-by-day report, replaced each trip; an empty state before any trip |
-| On trip completion | `setPanelTab("travel")` — jumps the GM straight to the result |
+| Detail tab (selected hex) | **"Travel toward this hex"** (new) + **"Place party here"** (8.1 teleport, kept) — both hidden once the party is already there |
+| **Travel tab** | Encumbrance `<select>`; a **6-direction compass rose** (E/NE/NW/W/SW/SE) that travels a day per press; the **last day's report** (headline + per-hex lines, lost days highlighted), replaced each press; an empty state before any travel |
+| After any travel press | jumps to the Travel tab; the Day readout advances by 1 (only if a day was actually spent) |
 
-The trip report and the "last trip" data are **app.js-only ephemeral state** (like `sessionDay`) —
-not persisted to `world`/IndexedDB. `sessionDay` **does** advance here (`Math.ceil(days)` added to
-it) — 8.6's "Progress N days" is a separate *manual* way to advance it while stationary, not the
-only way it moves.
+The last-day report and `sessionDay` stay **app.js-only ephemeral state** (not persisted); the party
+*position* is persisted, and a bearing's newly-generated hexes persist (integrated by the usual
+`syncRivers`/`syncRoads` in `persistAndRefresh`).
 
 ## Files
-- `js/gen/travel.js` — add `roadHexKeySet`, `planRoute`, `planMoveToward`.
-- `js/world/world.js` — `setPartyEncumbrance(world, tier)` accessor (mirrors `setPartyPosition`).
-- `js/ui/panel.js` — new Travel tab region/renderer (`renderTravelPanel`); Detail tab gains "Move
-  party here" next to "Place party here".
-- `js/ui/app.js` — `onMovePartyHere` (builds `terrainByKey`/`roadHexKeySet` from `current`, same
-  pattern as `syncRivers`/`syncRoads`; calls `planMoveToward`; advances `sessionDay`; persists;
-  jumps to Travel tab); `onSetEncumbrance`; tab bar gains "Travel".
-- `test/travel.test.js` — `planRoute` (prefers roads, fails on an unplaced gap, ignores encumbrance
-  for ranking); `planMoveToward` (determinism, arrives with no lost rolls on an all-road route,
-  reports `stranded` when disconnected, `days` matches a hand-computed sum for a simple all-Plains
-  leg, log length matches hexes crossed).
+- `js/gen/travel.js` — remove `planMoveToward`; add `travelDay`, `travelDayToward`, `travelDayBearing`
+  (keep `planRoute`, `roadHexKeySet`, and the 8.2/8.3 primitives).
+- `js/world/world.js` — `setPartyEncumbrance` (from the first cut, unchanged).
+- `js/ui/panel.js` — Travel tab: direction rose + last-day report; Detail: "Travel toward this hex".
+- `js/ui/app.js` — `onTravelToward` (over placed terrain) and `onTravelDirection(dir)` (loads tables,
+  `terrainAt` lazily `buildRandomHex`+`addHex` on the frontier); one day per press; `onSetEncumbrance`.
+- `test/travel.test.js` — replace the `planMoveToward` suite with `travelDay`/`travelDayToward`
+  (crosses several Plains in a day, one hex on Mountains, arrives when close, stranded, water-block)
+  and `travelDayBearing` (steps a fixed direction, generates via the `terrainAt` callback, deviates
+  on a lost roll). Keep the `planRoute` tests.
 
 ## Verification (manual, via `./run-local.sh`)
 ```
-8.4 [ ] "Move party here" on a distant known town → Travel tab opens with a day-by-day log, party
-        arrives (or ends up lost nearby); a road route is visibly faster and never reports "lost"
-       [ ] "Place party here" still works as an instant teleport, unaffected
-       [ ] Changing the encumbrance tier and moving again produces a slower/faster trip accordingly
+8.4 [ ] "Travel toward this hex" on a distant known hex → Travel tab shows the day's march (1 press
+        = 1 day); press again to continue; arriving ends it; a road day covers more ground
+    [ ] The 6-direction rose walks a day that way; walking off the generated edge reveals new terrain
+    [ ] Heavier encumbrance covers fewer hexes per day; getting lost sometimes bends the day's path
+    [ ] "Place party here" still teleports instantly; Day readout +1 per travelled day, resets on reload
 ```
 
 ## Verified
 
-`node --test`: 342/342 passing (24 new in `test/travel.test.js` — `roadHexKeySet`; `planRoute`
-null on an unplaced start/goal, trivial start===goal, null across a Sea gap, straight-line cost
-matches 8.2's pace table, and a hand-verified case where it takes a longer detour because a road
-makes it cheaper overall; `planMoveToward` determinism, immediate arrival at zero distance, an
-all-road trip with zero lost days at the documented pace, `"stranded"` when the target is
-disconnected, the log's day index starting at `startDay`, heavier encumbrance taking longer over
-the same route, and a swept sample confirming a real deviation shows up on high-lost-chance
-terrain).
+`node --test`: 347/347 passing (18 in `test/travel.test.js` cover the new model — `travelDayToward`
+covering several Plains hexes in a day, a single Mountains hex (at-least-one rule), a road day
+covering more ground with no lost rolls, heavier encumbrance covering fewer hexes, arriving mid-day,
+determinism, and `stranded` with no day spent; `travelDayBearing` stepping a fixed direction while
+generating frontier terrain through the callback, blocking on water with no day spent, a straight
+unlost day ending due-east, and a swept case confirming a lost roll bends the day's path; the
+`planRoute` suite retained).
 
-Manual pass via a headless-browser smoke test (`python3 -m http.server` + Playwright, since this
-step has real UI): selecting a non-party hex shows both "Move party here" and "Place party here";
-clicking Move auto-jumps to the new Travel tab; a Sea target correctly reports "No route through
-from here" (a live "stranded" case caught by accident, not staged); a reachable target arrives with
-a day-by-day log (a lost day rendered in amber); the Day readout advances by the trip's day count
-and resets to 0 on reload (session-only, per 8.1); changing the encumbrance-tier select and moving
-again visibly changes trip duration; no console errors beyond the pre-existing unrelated
-`favicon.ico` 404.
+Manual pass via a headless-browser smoke test (Playwright): the Detail tab shows "Travel toward this
+hex" + "Place party here"; one press of Travel-toward advances the clock exactly one day, jumps to
+the Travel tab, and reports the day's march (with amber "drifted …" lines on a lost roll), arriving
+when the target is within a day; the Travel tab's 6-direction compass rose (NW/NE, W/E, SW/SE) walks
+a day per press — three East presses moved the party from (2,-1) to (8,-2) over Day 1→4, **visibly
+growing the map eastward** as new terrain was generated on the frontier. No console errors beyond the
+pre-existing `favicon.ico` 404.

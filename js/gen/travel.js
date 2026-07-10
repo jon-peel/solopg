@@ -225,88 +225,133 @@ function directionBetween(aq, ar, bq, br) {
   return NEIGHBOR_DIRS.findIndex(([ddq, ddr]) => ddq === dq && ddr === dr);
 }
 
-const MAX_TRIP_STEPS = 300; // defensive backstop; no realistic trip gets close
+// Defensive backstop: the fastest terrain (Plains on a road, unencumbered) is
+// 8 hexes/day; nothing realistic crosses this many in one day.
+const MAX_HEXES_PER_DAY = 32;
 
 /**
- * Resolve a full trip toward (bq,br) from (aq,ar), day by day, over PLACED
- * hexes only (see `planRoute`).
+ * Resolve ONE day of travel from `from`, callback-driven so it stays pure while
+ * the app can feed it lazily-generated frontier terrain (see travelDayBearing).
+ * One press of a travel action = one call = one day.
  *
- * Each hex crossed: re-plans the route only on the first step or right after
- * a deviation (not wastefully every day when nothing went wrong); charges the
- * cost of ENTERING that hex (`daysToCross`, matching roads.js's own "cost to
- * enter" convention); rolls `rollGetLost` ONCE per hex crossed (not per
- * calendar day — risk scales with distance, elapsed time scales separately
- * via the day cost, avoiding the perverse case where fast travel would need
- * FEWER rolls than slow travel over the same distance); on a lost roll, steps
- * into `deviateDirection`'s pick instead of the intended hex (logged as "on
- * course" rather than "lost" if both adjacent hexes were blocked and it held
- * the intended direction anyway — nothing actually changed).
+ * The party moves as far as its speed allows for the day's terrain: a budget of
+ * 1.0 day, each hex ENTERED spending `daysToCross(terrain, {road, encumbrance})`
+ * (8.2). It keeps crossing hexes along the aim while budget remains, but ALWAYS
+ * crosses at least the first hex — so a hard Mountains/Swamp day is one hex, and
+ * open Plains is several. `rollGetLost` (8.3) fires per hex ENTERED; on a lost
+ * roll the party deviates to an adjacent direction (holding course if both
+ * sides are blocked — then it isn't logged as lost).
+ *
  * @param {number|string} seed world seed
- * @param {number} startDay the world's current day count when the trip begins
- * @param {number} aq start q
- * @param {number} ar start r
- * @param {number} bq target q
- * @param {number} br target r
- * @param {Map<string,string>} terrainByKey
- * @param {Set<string>} roadHexKeys
- * @param {{encumbrance?: string}} [opts]
+ * @param {number} day the world's current day (keys the lost/deviation rolls)
+ * @param {{q:number,r:number}} from starting position
+ * @param {object} aim
+ *   atGoal(cur)       {(c)=>boolean}   true once the destination is reached (bearing: always false)
+ *   nextIntended(cur) {(c)=>{q,r}|null} the hex the party MEANS to enter next, or null (no route)
+ *   terrainAt(q,r)    {(q,r)=>string|null} terrain, or null if impassable/unavailable
+ *                                       (a bearing's app callback GENERATES the frontier hex here)
+ *   roadAt(q,r)       {(q,r)=>boolean} whether that hex is on a road (default false)
+ *   encumbrance       {string}         one of ENCUMBRANCE_FACTOR's keys
  * @returns {{
- *   finalPos: {q:number,r:number}, days: number, arrived: boolean,
- *   reason?: "stranded"|"too-long",
- *   log: {day:number, q:number, r:number, terrain:string, road:boolean, lost:boolean, note:string}[]
+ *   finalPos:{q,r}, hexesCrossed:number, daySpent:boolean, arrived:boolean,
+ *   reason?: "stranded"|"blocked",
+ *   log: {q:number,r:number,terrain:string,road:boolean,lost:boolean,dir:number}[]
  * }}
  */
-export function planMoveToward(seed, startDay, aq, ar, bq, br, terrainByKey, roadHexKeys, { encumbrance = "unencumbered" } = {}) {
-  let cur = { q: aq, r: ar };
-  const target = { q: bq, r: br };
+export function travelDay(seed, day, from, {
+  encumbrance = "unencumbered",
+  atGoal = () => false,
+  nextIntended,
+  terrainAt,
+  roadAt = () => false,
+} = {}) {
+  let cur = { q: from.q, r: from.r };
   const log = [];
-  let daysElapsed = 0;
-  let plannedPath = null; // {q,r}[] from the last planRoute call, cur-first
+  let daysUsed = 0;
+  let crossed = 0;
 
-  if (cur.q === target.q && cur.r === target.r) {
-    return { finalPos: cur, days: 0, arrived: true, log };
-  }
+  if (atGoal(cur)) return { finalPos: cur, hexesCrossed: 0, daySpent: false, arrived: true, log };
 
-  for (let step = 0; step < MAX_TRIP_STEPS; step++) {
-    if (!plannedPath || plannedPath.length < 2) {
-      const route = planRoute(cur.q, cur.r, target.q, target.r, terrainByKey, roadHexKeys);
-      if (!route) {
-        return { finalPos: cur, days: Math.ceil(daysElapsed), arrived: false, reason: "stranded", log };
-      }
-      plannedPath = route.path;
+  for (let guard = 0; guard < MAX_HEXES_PER_DAY; guard++) {
+    const intended = nextIntended(cur);
+    if (!intended) {
+      // No onward route (toward, after drifting) — the day ends here.
+      return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, arrived: false, reason: "stranded", log };
     }
-    const intended = plannedPath[1];
     const intendedDir = directionBetween(cur.q, cur.r, intended.q, intended.r);
-    const day = startDay + step;
-    const isPassable = (dir) => {
-      const [ddq, ddr] = NEIGHBOR_DIRS[dir];
-      const t = terrainByKey.get(axialKey(cur.q + ddq, cur.r + ddr));
-      return t !== undefined && paceFor(t) > 0;
+    const passable = (dir) => {
+      const [dq, dr] = NEIGHBOR_DIRS[dir];
+      const t = terrainAt(cur.q + dq, cur.r + dr);
+      return t != null && paceFor(t) > 0;
     };
-    // Terrain/road context for the ENTERED hex drives both the day cost and
-    // the lost roll (cost is charged entering a hex — roads.js's convention).
-    const intendedTerrain = terrainByKey.get(axialKey(intended.q, intended.r));
-    const onRoad = roadHexKeys.has(axialKey(intended.q, intended.r));
-    const gotLost = rollGetLost(seed, day, cur.q, cur.r, intendedTerrain, { road: onRoad });
-    const actualDir = gotLost ? deviateDirection(seed, day, cur.q, cur.r, intendedDir, isPassable) : intendedDir;
-    const reallyDeviated = actualDir !== intendedDir;
-    const [ddq, ddr] = NEIGHBOR_DIRS[actualDir];
-    const next = { q: cur.q + ddq, r: cur.r + ddr };
-    const nextTerrain = terrainByKey.get(axialKey(next.q, next.r));
-    const nextOnRoad = roadHexKeys.has(axialKey(next.q, next.r));
-    const dayCost = daysToCross(nextTerrain, { road: nextOnRoad, encumbrance });
-
-    daysElapsed += dayCost;
-    log.push({
-      day, q: next.q, r: next.r, terrain: nextTerrain, road: nextOnRoad, lost: reallyDeviated,
-      note: reallyDeviated ? "got turned around, drifted off course" : "on course",
-    });
+    // Terrain of the hex being ENTERED drives both the lost roll and the cost.
+    const intendedTerrain = terrainAt(intended.q, intended.r);
+    const gotLost = intendedTerrain != null
+      && rollGetLost(seed, day, cur.q, cur.r, intendedTerrain, { road: roadAt(intended.q, intended.r) });
+    const actualDir = gotLost ? deviateDirection(seed, day, cur.q, cur.r, intendedDir, passable) : intendedDir;
+    const deviated = actualDir !== intendedDir;
+    const [dq, dr] = NEIGHBOR_DIRS[actualDir];
+    const next = { q: cur.q + dq, r: cur.r + dr };
+    const nextTerrain = terrainAt(next.q, next.r);
+    if (nextTerrain == null || paceFor(nextTerrain) <= 0) {
+      // Water / edge blocks the step — the day ends at the water's edge.
+      return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, arrived: false, reason: "blocked", log };
+    }
+    const onRoad = roadAt(next.q, next.r);
+    daysUsed += daysToCross(nextTerrain, { road: onRoad, encumbrance });
+    crossed++;
+    log.push({ q: next.q, r: next.r, terrain: nextTerrain, road: onRoad, lost: deviated, dir: actualDir });
     cur = next;
 
-    if (cur.q === target.q && cur.r === target.r) {
-      return { finalPos: cur, days: Math.ceil(daysElapsed), arrived: true, log };
-    }
-    plannedPath = reallyDeviated ? null : plannedPath.slice(1);
+    if (atGoal(cur)) return { finalPos: cur, hexesCrossed: crossed, daySpent: true, arrived: true, log };
+    if (daysUsed >= 1) break; // the day's budget is spent (≥1 hex guaranteed above)
   }
-  return { finalPos: cur, days: Math.ceil(daysElapsed), arrived: false, reason: "too-long", log };
+  return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, arrived: false, log };
+}
+
+/**
+ * One day of travel TOWARD a placed hex, over placed terrain only (routes
+ * around water/mountains via planRoute). Thin wrapper over travelDay.
+ * @param {number|string} seed
+ * @param {number} day
+ * @param {number} aq @param {number} ar   start
+ * @param {number} bq @param {number} br   destination
+ * @param {Map<string,string>} terrainByKey
+ * @param {Set<string>} roadKeys
+ * @param {{encumbrance?: string}} [opts]
+ */
+export function travelDayToward(seed, day, aq, ar, bq, br, terrainByKey, roadKeys, { encumbrance = "unencumbered" } = {}) {
+  const target = { q: bq, r: br };
+  return travelDay(seed, day, { q: aq, r: ar }, {
+    encumbrance,
+    atGoal: (cur) => cur.q === target.q && cur.r === target.r,
+    nextIntended: (cur) => {
+      const route = planRoute(cur.q, cur.r, target.q, target.r, terrainByKey, roadKeys);
+      return route && route.path[1] ? route.path[1] : null;
+    },
+    terrainAt: (q, r) => terrainByKey.get(axialKey(q, r)) ?? null,
+    roadAt: (q, r) => roadKeys.has(axialKey(q, r)),
+  });
+}
+
+/**
+ * One day of travel in a fixed hex DIRECTION (0-5 into NEIGHBOR_DIRS). Bearing
+ * travel has no destination — the day's budget stops it. `terrainAt` is supplied
+ * by the caller (the app GENERATES the frontier hex there, so walking off the
+ * edge reveals new land); off-road by default (cross-country in a compass line).
+ * @param {number|string} seed
+ * @param {number} day
+ * @param {number} aq @param {number} ar   start
+ * @param {number} dir direction index 0-5
+ * @param {{encumbrance?: string, terrainAt: (q,r)=>string|null, roadAt?: (q,r)=>boolean}} opts
+ */
+export function travelDayBearing(seed, day, aq, ar, dir, { encumbrance = "unencumbered", terrainAt, roadAt } = {}) {
+  const [ddq, ddr] = NEIGHBOR_DIRS[dir];
+  return travelDay(seed, day, { q: aq, r: ar }, {
+    encumbrance,
+    atGoal: () => false,
+    nextIntended: (cur) => ({ q: cur.q + ddq, r: cur.r + ddr }),
+    terrainAt,
+    roadAt,
+  });
 }

@@ -356,13 +356,23 @@ const ENCUMBRANCE_LABELS = {
   heavy: "Heavily loaded",
 };
 
+// The 6 hex neighbour directions as compass labels (indexes match core
+// hexgeo.js NEIGHBOR_DIRS; derived from each delta's pixel bearing on a
+// pointy-top grid: E / NE / NW / W / SW / SE).
+export const DIR_LABELS = ["E", "NE", "NW", "W", "SW", "SE"];
+const DIR_ARROWS = ["→", "↗", "↖", "←", "↙", "↘"];
+// Visual order for the compass rose (3 rows of 2): NW NE / W E / SW SE.
+const ROSE_ORDER = [2, 1, 3, 0, 4, 5];
+
 /**
- * Render the Travel tab: the party's encumbrance setting + the last trip's
- * day-by-day report. The report is REPLACED (not appended) on every new trip
- * — `model.lastTrip` is app.js-only ephemeral state, not persisted.
+ * Render the Travel tab: the party's pace (encumbrance) setting, a 6-direction
+ * compass rose (each button travels ONE day that way), and the LAST DAY's
+ * report. Everything here is app.js-only ephemeral state (not persisted); the
+ * report is replaced on every travel press.
  * @param {{ encumbrance?: string, onSetEncumbrance?: (tier:string)=>void,
- *   lastTrip: {days:number, arrived:boolean, reason?:string,
- *     log:{day:number,terrain:string,road:boolean,note:string}[]}|null }} model
+ *   onTravelDirection?: (dir:number)=>void,
+ *   lastDay: {headline:string, finalPos:{q:number,r:number},
+ *     log:{terrain:string,road:boolean,lost:boolean,dir:number}[]}|null }} model
  */
 export function renderTravelPanel(model) {
   const host = document.getElementById("travel-panel");
@@ -385,32 +395,49 @@ export function renderTravelPanel(model) {
   }
   host.appendChild(select);
 
-  host.appendChild(sectionLabel("Last trip"));
-  const trip = model.lastTrip;
-  if (!trip) {
+  // Compass rose — travel a day in one of the 6 hex directions (into the
+  // unknown, generating terrain as the party goes).
+  host.appendChild(sectionLabel("Travel a day"));
+  const rose = document.createElement("div");
+  rose.className = "dir-rose";
+  for (const dir of ROSE_ORDER) {
+    const b = document.createElement("button");
+    b.className = "dir-btn";
+    b.textContent = `${DIR_ARROWS[dir]} ${DIR_LABELS[dir]}`;
+    b.title = `Travel one day ${DIR_LABELS[dir]}`;
+    if (model.onTravelDirection) b.addEventListener("click", () => model.onTravelDirection(dir));
+    rose.appendChild(b);
+  }
+  host.appendChild(rose);
+
+  host.appendChild(sectionLabel("Last day"));
+  const last = model.lastDay;
+  if (!last) {
     const empty = document.createElement("div");
     empty.className = "panel-hint";
-    empty.textContent = 'No trips yet — select a placed hex and press "Move party here".';
+    empty.textContent = 'No travel yet — press a direction above, or "Travel toward this hex" on a selected hex.';
     host.appendChild(empty);
     return;
   }
 
-  const plural = trip.days === 1 ? "" : "s";
   const summary = document.createElement("div");
   summary.className = "log-line trip-summary";
-  summary.textContent = trip.arrived
-    ? `Arrived after ${trip.days} day${plural}.`
-    : trip.reason === "stranded"
-      ? `No route through from here — stopped after ${trip.days} day${plural}, short of the target.`
-      : `The trip ran long and was called off after ${trip.days} day${plural}.`;
+  summary.textContent = last.headline;
   host.appendChild(summary);
 
-  for (const entry of trip.log) {
+  for (const entry of last.log) {
     const div = document.createElement("div");
     div.className = "log-line trip-day" + (entry.lost ? " trip-lost" : "");
-    div.textContent = `Day ${entry.day} — ${entry.terrain}${entry.road ? " (road)" : ""}: ${entry.note}`;
+    const road = entry.road ? " (road)" : "";
+    const bend = entry.lost ? `, drifted ${DIR_LABELS[entry.dir]}` : "";
+    div.textContent = `${entry.terrain}${road}${bend}`;
     host.appendChild(div);
   }
+
+  const where = document.createElement("div");
+  where.className = "log-line";
+  where.textContent = `Now at (${last.finalPos.q}, ${last.finalPos.r}).`;
+  host.appendChild(where);
 }
 
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
@@ -480,10 +507,10 @@ export function renderSelectionPanel(model) {
 
     // Party actions: panel, not the radial ring — the ring's 8 slots are all
     // spoken for. "Place party here" (8.1) is an instant GM-override teleport;
-    // "Move party here" (8.4) simulates the real trip (days, pace, getting
-    // lost) — kept alongside each other on purpose, not one replacing the
-    // other. Both hidden once the party is already here.
-    if (model.onPlaceParty || model.onMoveParty) {
+    // "Travel toward this hex" (8.4) heads that way ONE day per press (pace,
+    // getting lost) — kept alongside each other on purpose. Both hidden once
+    // the party is already here.
+    if (model.onPlaceParty || model.onTravelToward) {
       if (model.partyHere) {
         const div = document.createElement("div");
         div.className = "log-line";
@@ -492,7 +519,7 @@ export function renderSelectionPanel(model) {
       } else {
         const row = document.createElement("div");
         row.className = "tile-actions";
-        if (model.onMoveParty) row.appendChild(actionButton("Move party here", model.onMoveParty));
+        if (model.onTravelToward) row.appendChild(actionButton("Travel toward this hex", model.onTravelToward));
         if (model.onPlaceParty) row.appendChild(actionButton("Place party here", model.onPlaceParty));
         sel.appendChild(row);
       }

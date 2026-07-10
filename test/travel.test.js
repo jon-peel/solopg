@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   TRAVEL_COST, ROAD_PACE_MULTIPLIER, ENCUMBRANCE_FACTOR, paceFor, daysToCross,
   LOST_CHANCE, rollGetLost, deviateDirection,
-  roadHexKeySet, planRoute, planMoveToward,
+  roadHexKeySet, planRoute, travelDayToward, travelDayBearing,
 } from "../js/gen/travel.js";
 import { NEIGHBOR_DIRS, axialKey } from "../js/core/hexgeo.js";
 
@@ -232,66 +232,115 @@ test("planRoute prefers a road even via a longer (more-hexes) detour, when it's 
   );
 });
 
-test("planMoveToward: start === target arrives immediately with no days spent", () => {
+test("travelDayToward: already at the target arrives immediately, no day spent", () => {
   const terr = boardRect(0, 2, 0, 0);
-  const r = planMoveToward("seed", 0, 1, 0, 1, 0, terr, new Set());
-  assert.deepEqual(r, { finalPos: { q: 1, r: 0 }, days: 0, arrived: true, log: [] });
+  const r = travelDayToward("seed", 0, 1, 0, 1, 0, terr, new Set());
+  assert.deepEqual(r, { finalPos: { q: 1, r: 0 }, hexesCrossed: 0, daySpent: false, arrived: true, log: [] });
 });
 
-test("planMoveToward is deterministic for identical inputs", () => {
-  const terr = boardRect(-2, 8, -2, 2, "Swamp"); // high lost chance, exercises deviation too
-  const a = planMoveToward("trip-seed", 3, 0, 0, 6, 0, terr, new Set());
-  const b = planMoveToward("trip-seed", 3, 0, 0, 6, 0, terr, new Set());
+test("travelDayToward: one day of open Plains covers several hexes (pace 4/day)", () => {
+  const terr = boardRect(-1, 12, -1, 1); // far target so the day's budget is the limit, not arrival
+  const r = travelDayToward("seed", 0, 0, 0, 11, 0, terr, new Set());
+  assert.equal(r.daySpent, true);
+  assert.equal(r.arrived, false); // 11 hexes away, one day only gets partway
+  assert.equal(r.hexesCrossed, 4); // Plains: 4 hexes/day
+  assert.equal(r.log.length, 4);
+});
+
+test("travelDayToward: one day of Mountains covers a single hex (at-least-one rule)", () => {
+  const terr = boardRect(-1, 12, -1, 1, "Mountains");
+  const r = travelDayToward("seed", 0, 0, 0, 11, 0, terr, new Set());
+  assert.equal(r.hexesCrossed, 1);
+  assert.equal(r.daySpent, true);
+});
+
+test("travelDayToward: a road day covers more ground than off-road (8/day vs 4)", () => {
+  const terr = boardRect(-1, 20, -1, 1);
+  const roadKeys = new Set();
+  for (let q = -1; q <= 20; q++) roadKeys.add(axialKey(q, 0));
+  const offRoad = travelDayToward("seed", 0, 0, 0, 19, 0, terr, new Set());
+  const onRoad = travelDayToward("seed", 0, 0, 0, 19, 0, terr, roadKeys);
+  assert.equal(offRoad.hexesCrossed, 4);
+  assert.equal(onRoad.hexesCrossed, 8);
+  assert.ok(onRoad.log.every((e) => e.road === true && e.lost === false)); // roads never get lost
+});
+
+test("travelDayToward: heavier encumbrance covers fewer hexes in a day", () => {
+  const terr = boardRect(-1, 12, -1, 1);
+  const fast = travelDayToward("seed", 0, 0, 0, 11, 0, terr, new Set(), { encumbrance: "unencumbered" });
+  const slow = travelDayToward("seed", 0, 0, 0, 11, 0, terr, new Set(), { encumbrance: "heavy" });
+  assert.ok(slow.hexesCrossed < fast.hexesCrossed, `${slow.hexesCrossed} should be < ${fast.hexesCrossed}`);
+});
+
+test("travelDayToward: arriving mid-day ends the trip early", () => {
+  const terr = boardRect(-1, 5, -1, 1); // target only 2 hexes away on Plains (budget allows 4)
+  const r = travelDayToward("seed", 0, 0, 0, 2, 0, terr, new Set());
+  assert.equal(r.arrived, true);
+  assert.deepEqual(r.finalPos, { q: 2, r: 0 });
+  assert.equal(r.hexesCrossed, 2);
+});
+
+test("travelDayToward is deterministic for identical inputs", () => {
+  const terr = boardRect(-4, 12, -4, 4, "Swamp"); // high lost chance exercises deviation
+  const a = travelDayToward("trip-seed", 3, 0, 0, 8, 0, terr, new Set());
+  const b = travelDayToward("trip-seed", 3, 0, 0, 8, 0, terr, new Set());
   assert.deepEqual(a, b);
 });
 
-test("planMoveToward: an all-road trip always arrives with zero lost days and the documented pace", () => {
-  const terr = boardRect(-1, 6, 0, 0);
-  const roadKeys = new Set();
-  for (let q = -1; q <= 6; q++) roadKeys.add(axialKey(q, 0));
-  const r = planMoveToward("road-trip", 0, 0, 0, 5, 0, terr, roadKeys);
-  assert.equal(r.arrived, true);
-  assert.equal(r.finalPos.q, 5);
-  assert.equal(r.finalPos.r, 0);
-  assert.equal(r.log.length, 5); // 5 hexes crossed, one entry each
-  assert.ok(r.log.every((e) => e.lost === false && e.road === true));
-  assert.equal(r.days, Math.ceil(5 * daysToCross("Plains", { road: true })));
-});
-
-test("planMoveToward reports \"stranded\" when the target is disconnected from the party", () => {
+test("travelDayToward reports \"stranded\" (no day spent) when the target is disconnected", () => {
   const terr = new Map([[axialKey(0, 0), "Plains"], [axialKey(20, 20), "Plains"]]);
-  const r = planMoveToward("seed", 0, 0, 0, 20, 20, terr, new Set());
+  const r = travelDayToward("seed", 0, 0, 0, 20, 20, terr, new Set());
   assert.equal(r.arrived, false);
   assert.equal(r.reason, "stranded");
-  assert.equal(r.log.length, 0);
-  assert.deepEqual(r.finalPos, { q: 0, r: 0 }); // never moved
+  assert.equal(r.daySpent, false);
+  assert.deepEqual(r.finalPos, { q: 0, r: 0 });
 });
 
-test("planMoveToward: log's day index starts at startDay and increments per hex crossed", () => {
-  const terr = boardRect(-1, 6, 0, 0);
-  const roadKeys = new Set();
-  for (let q = -1; q <= 6; q++) roadKeys.add(axialKey(q, 0));
-  const r = planMoveToward("seed", 100, 0, 0, 3, 0, terr, roadKeys);
-  assert.deepEqual(r.log.map((e) => e.day), [100, 101, 102]);
+test("travelDayBearing: steps a fixed direction, generating frontier terrain via the callback", () => {
+  const store = new Map();
+  const generated = [];
+  const terrainAt = (q, r) => {
+    const k = axialKey(q, r);
+    if (!store.has(k)) { store.set(k, "Plains"); generated.push(k); }
+    return store.get(k);
+  };
+  // dir 0 = E ([1,0]); a Plains day covers 4 hexes. (Exact final position isn't
+  // asserted — a Plains lost roll can bend the path — only that a full day's
+  // worth of hexes were crossed and generated on the frontier.)
+  const r = travelDayBearing("seed", 0, 0, 0, 0, { terrainAt });
+  assert.equal(r.hexesCrossed, 4);
+  assert.ok(generated.length >= 4, "walked into and generated new frontier hexes");
 });
 
-test("planMoveToward: heavier encumbrance takes longer over the same route", () => {
-  const terr = boardRect(-1, 6, 0, 0);
-  const roadKeys = new Set();
-  for (let q = -1; q <= 6; q++) roadKeys.add(axialKey(q, 0));
-  const fast = planMoveToward("enc-seed", 0, 0, 0, 5, 0, terr, roadKeys, { encumbrance: "unencumbered" });
-  const slow = planMoveToward("enc-seed", 0, 0, 0, 5, 0, terr, roadKeys, { encumbrance: "heavy" });
-  assert.ok(slow.days > fast.days, `expected heavy encumbrance to take longer: ${slow.days} vs ${fast.days}`);
-});
-
-test("planMoveToward: at least one sampled trip through high-lost-chance terrain actually gets lost", () => {
-  // Swamp, off-road: 3-in-6 lost chance per hex. Sweep several seeds/targets
-  // over a long enough leg that at least one should show a genuine deviation.
-  const terr = boardRect(-10, 10, -10, 10, "Swamp");
-  let sawLost = false;
-  for (let i = 0; i < 20 && !sawLost; i++) {
-    const r = planMoveToward(`lost-sweep-${i}`, 0, 0, 0, 8, 0, terr, new Set());
-    if (r.log.some((e) => e.lost)) sawLost = true;
+test("travelDayBearing: a straight (unlost) Plains bearing ends due east", () => {
+  // Pick a seed whose first days don't roll lost, to pin the straight-line case.
+  const terrainAt = () => "Plains";
+  let straight = null;
+  for (let i = 0; i < 40 && !straight; i++) {
+    const r = travelDayBearing(`straight-${i}`, 0, 0, 0, 0, { terrainAt });
+    if (r.log.every((e) => !e.lost)) straight = r;
   }
-  assert.ok(sawLost, "expected at least one sampled trip to report a lost day");
+  assert.ok(straight, "expected to find a seed with no lost roll");
+  assert.deepEqual(straight.finalPos, { q: 4, r: 0 }); // 4 hexes due east
+});
+
+test("travelDayBearing: a bearing into water is blocked with no day spent", () => {
+  // Everything Sea (impassable). The party can't set out.
+  const terrainAt = () => "Sea";
+  const r = travelDayBearing("seed", 0, 0, 0, 0, { terrainAt });
+  assert.equal(r.reason, "blocked");
+  assert.equal(r.daySpent, false);
+  assert.equal(r.hexesCrossed, 0);
+});
+
+test("travelDayBearing: getting lost bends the day's path off the straight bearing", () => {
+  // Swamp (3-in-6 lost). Sweep seeds until one day shows a deviation, and
+  // confirm at least one crossed hex is off the straight E line (r !== 0).
+  const terrainAt = () => "Swamp";
+  let sawBend = false;
+  for (let i = 0; i < 30 && !sawBend; i++) {
+    const r = travelDayBearing(`bend-${i}`, 0, 0, 0, 0, { terrainAt });
+    if (r.log.some((e) => e.lost) && r.log.some((e) => e.r !== 0)) sawBend = true;
+  }
+  assert.ok(sawBend, "expected at least one sampled bearing-day to bend off course");
 });

@@ -942,9 +942,19 @@ button:hover {
   color: var(--muted);
 }
 
-/* Travel tab (Phase 8.4): encumbrance select + the last trip's day log. */
+/* Travel tab (Phase 8.4): encumbrance select + direction rose + last-day log. */
 .encumbrance-select {
   margin-bottom: 0.4rem;
+}
+/* 6-direction compass rose: NW NE / W E / SW SE. */
+.dir-rose {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+.dir-btn {
+  padding: 0.35rem 0.5rem;
 }
 .trip-summary {
   color: var(--fg);

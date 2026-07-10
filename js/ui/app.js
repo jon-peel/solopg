@@ -27,7 +27,7 @@ import {
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
-import { planMoveToward, roadHexKeySet } from "../gen/travel.js";
+import { travelDayToward, travelDayBearing, roadHexKeySet } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -45,6 +45,7 @@ import {
   getLastWorldId,
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, setPanelTab } from "./panel.js";
+import { settlementName } from "../gen/settlement-name.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -134,13 +135,13 @@ let draftClicks = null; // manual river/road drawing: clicked anchor hexes, or n
 let draftKind = null;   // "river" | "road" — what the active draft builds
 
 // World clock (Phase 8.1) — deliberately a SESSION-only counter, never part of
-// `world`/IndexedDB/export: always starts at 0 on page load. 8.4 advances it
-// when a trip resolves; 8.6 adds a manual "Progress N days" while stationary.
+// `world`/IndexedDB/export: always starts at 0 on page load. 8.4 advances it by
+// ONE per travelled day; 8.6 adds a manual "Progress N days" while stationary.
 let sessionDay = 0;
 
-// Last trip's report (Phase 8.4) — ephemeral, app.js-only, like sessionDay:
-// replaced (not appended) by each new "Move party here", reset on world switch.
-let lastTrip = null;
+// Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
+// sessionDay: replaced by each travel press, reset on world switch.
+let lastDay = null;
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -200,7 +201,7 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
-  lastTrip = null; // the last trip's report is ephemeral, per-world (Phase 8.4)
+  lastDay = null; // the last day's travel report is ephemeral, per-world (Phase 8.4)
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
@@ -547,7 +548,7 @@ function renderSelection() {
     onNoteHex,
     partyHere: !!(current.party && current.party.q === q && current.party.r === r),
     onPlaceParty: hex && hex.placed ? onPlaceParty : undefined,
-    onMoveParty: hex && hex.placed ? onMovePartyHere : undefined,
+    onTravelToward: hex && hex.placed ? onTravelToward : undefined,
   });
 }
 
@@ -559,28 +560,88 @@ async function onPlaceParty() {
   await persistAndRefresh();
 }
 
-// Real simulated movement (Phase 8.4) — resolves the whole trip (route, pace,
-// getting lost) in one action; see docs/plans/phase-8.4-move-toward-hex.md.
-async function onMovePartyHere() {
+// Compass words for the 6 hex directions (indexes match NEIGHBOR_DIRS / DIR_LABELS).
+const DIR_WORDS = ["east", "north-east", "north-west", "west", "south-west", "south-east"];
+
+// Travel ONE day toward the selected placed hex (Phase 8.4). Over placed
+// terrain only (routes around water/mountains); each press = one day.
+async function onTravelToward() {
   if (!current || !selected || !current.party) return;
   const terrainByKey = buildTerrainByKey(current);
   const roadKeys = roadHexKeySet(current.roads);
   const { q: aq, r: ar } = current.party;
   const encumbrance = current.party.encumbrance || "unencumbered";
-  const result = planMoveToward(
-    current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance },
-  );
+  const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance });
+  const destHex = getHex(current, selected.q, selected.r);
+  applyTravel(result, destinationLabel(destHex, selected.q, selected.r), "toward");
+}
+
+// Travel ONE day in a hex direction (Phase 8.4) — pushes into the unknown,
+// lazily generating each frontier hex the party steps into (same seam as
+// area/hook generation). Off-road (cross-country in a compass line).
+async function onTravelDirection(dir) {
+  if (!current || !current.party) return;
+  const tables = await loadTables(HEX_TABLE_IDS);
+  const { q: aq, r: ar } = current.party;
+  const encumbrance = current.party.encumbrance || "unencumbered";
+  // terrainAt reveals the frontier hex on demand (idempotent — returns the
+  // existing terrain if already placed), so walking off the edge grows the map.
+  const terrainAt = (q, r) => {
+    const existing = getHex(current, q, r);
+    if (existing && existing.placed) return existing.terrain;
+    const hex = buildRandomHex(tables, q, r, 0);
+    addHex(current, hex);
+    return hex.terrain;
+  };
+  const result = travelDayBearing(current.seed, sessionDay, aq, ar, dir, { encumbrance, terrainAt });
+  applyTravel(result, DIR_WORDS[dir], "bearing");
+}
+
+// Apply a resolved travel day: move the party, advance the clock by one (only
+// if a day was actually spent), stash the report, and surface it on the Travel
+// tab (same "jump to the tab" convention as a new hook).
+async function applyTravel(result, aimLabel, aimKind) {
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
-  sessionDay += result.days;
-  lastTrip = result;
-  // Surface the trip: jump to the Travel tab, same convention as a new hook
-  // jumping to the Hooks tab — never a silent "nothing happened".
+  if (result.daySpent) sessionDay += 1;
+  lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
   setPanelTab("travel");
   await persistAndRefresh();
 }
 
+// One-line summary of a day's travel, composed here (app knows the day, the
+// destination name, and the direction word); panel just renders it.
+function travelHeadline(result, aimLabel, aimKind) {
+  const dayTag = `Day ${sessionDay} — `;
+  const n = result.hexesCrossed;
+  const hexes = `${n} hex${n === 1 ? "" : "es"}`;
+  if (result.arrived) return `${dayTag}arrived at ${aimLabel}.`;
+  if (result.reason === "stranded") {
+    return n > 0
+      ? `${dayTag}lost the way to ${aimLabel} — drifted ${hexes} and could go no further.`
+      : `No way through to ${aimLabel} from here.`;
+  }
+  if (result.reason === "blocked") {
+    const where = aimKind === "bearing" ? aimLabel : `toward ${aimLabel}`;
+    return n > 0
+      ? `${dayTag}reached the water's edge after ${hexes}.`
+      : `Water blocks the way ${where}.`;
+  }
+  const aim = aimKind === "bearing" ? aimLabel : `toward ${aimLabel}`;
+  return `${dayTag}travelled ${aim} — ${hexes}.`;
+}
+
+// A readable name for a travel destination hex: its GM label, else a settlement
+// name, else bare coords.
+function destinationLabel(hex, q, r) {
+  if (hex && hex.name) return hex.name;
+  if (hex && hex.settlement && hex.settlement.present) {
+    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+  }
+  return `(${q}, ${r})`;
+}
+
 // Party pace setting (Phase 8.4) — persists to world.party.encumbrance; no day
-// cost by itself, just changes how future moves are paced.
+// cost by itself, just changes how future travel is paced.
 async function onSetEncumbrance(tier) {
   if (!current) return;
   setPartyEncumbrance(current, tier);
@@ -593,12 +654,13 @@ function buildTerrainByKey(world) {
   return terrainByKey;
 }
 
-// Travel tab (Phase 8.4): encumbrance setting + the last trip's report.
+// Travel tab (Phase 8.4): pace setting, the direction rose, and the last day's report.
 function refreshTravelPanel() {
   renderTravelPanel({
     encumbrance: (current && current.party && current.party.encumbrance) || "unencumbered",
     onSetEncumbrance,
-    lastTrip,
+    onTravelDirection,
+    lastDay,
   });
 }
 
