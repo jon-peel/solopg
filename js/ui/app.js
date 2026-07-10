@@ -27,7 +27,7 @@ import {
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
-import { travelDayToward, travelDayBearing, roadHexKeySet } from "../gen/travel.js";
+import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -577,7 +577,10 @@ async function onTravelToward() {
   const roadKeys = roadHexKeySet(current.roads);
   const { q: aq, r: ar } = current.party;
   const encumbrance = current.party.encumbrance || "unencumbered";
+  const originTerrain = (getHex(current, aq, ar) || {}).terrain;
   const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance });
+  const tables = await loadTables(HEX_TABLE_IDS);
+  revealSightAlong(originTerrain, aq, ar, result, tables);
   const destHex = getHex(current, selected.q, selected.r);
   applyTravel(result, destinationLabel(destHex, selected.q, selected.r), "toward");
 }
@@ -590,6 +593,7 @@ async function onTravelDirection(bearing) {
   const tables = await loadTables(HEX_TABLE_IDS);
   const { q: aq, r: ar } = current.party;
   const encumbrance = current.party.encumbrance || "unencumbered";
+  const originTerrain = (getHex(current, aq, ar) || {}).terrain;
   // terrainAt reveals the frontier hex on demand (idempotent — returns the
   // existing terrain if already placed), so walking off the edge grows the map.
   const terrainAt = (q, r) => {
@@ -600,7 +604,20 @@ async function onTravelDirection(bearing) {
     return hex.terrain;
   };
   const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt });
+  revealSightAlong(originTerrain, aq, ar, result, tables);
   applyTravel(result, bearingWord(bearing), "bearing");
+}
+
+// Reveal the swath of country the party could SEE this day (Phase 8.4 follow-up):
+// each hex they stood in (the day's origin + every hex crossed) reveals a sight
+// disc sized by that hex's terrain — high ground sees far, forest/swamp keeps
+// them blind. Lazily generates any unplaced hexes in view (same seam as area
+// generation); already-placed hexes are left untouched.
+function revealSightAlong(originTerrain, aq, ar, result, tables) {
+  const path = [{ q: aq, r: ar, terrain: originTerrain }, ...result.log];
+  for (const cell of sightHexes(path)) {
+    if (!hasHexAt(current, cell.q, cell.r)) addHex(current, buildRandomHex(tables, cell.q, cell.r, 0));
+  }
 }
 
 // Apply a resolved travel day: move the party, advance the clock by one (only

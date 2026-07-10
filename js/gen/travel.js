@@ -6,7 +6,7 @@
 // separate pieces that build on top of this table.
 
 import { subRng } from "../core/rng.js";
-import { neighbors, axialKey, parseKey, axialDistance, NEIGHBOR_DIRS } from "../core/hexgeo.js";
+import { neighbors, axialKey, parseKey, axialDistance, hexDisc, NEIGHBOR_DIRS } from "../core/hexgeo.js";
 import { MinHeap } from "../core/minheap.js";
 
 // Hexes/day, off-road, on foot — illustrative starting point (flagged for
@@ -380,4 +380,52 @@ function bearingNextIntended(bearing) {
 function stepHex(cur, dir) {
   const [dq, dr] = NEIGHBOR_DIRS[dir];
   return { q: cur.q + dq, r: cur.r + dr };
+}
+
+// --- Sight (Phase 8.4 follow-up) ------------------------------------------
+
+// How many hexes the party can make out from a hex they're standing in, by
+// that hex's terrain. Grounded in the app's 6-mile hex + B/X sighting: open
+// country and high vantages see far, dense terrain hems you in. Illustrative /
+// tunable, like every other travel constant. (Water never appears here — the
+// party never stands on it — but it's listed for completeness.)
+export const SIGHT_RADIUS = {
+  Mountains: 3, // a commanding view from the heights
+  Hills: 2,
+  Plains: 2,
+  Desert: 2,
+  Forest: 1, // can't see past the trees
+  Swamp: 1,
+  Lake: 2,
+  Sea: 2,
+};
+const DEFAULT_SIGHT = 1;
+
+/** Sight radius (hexes) from a hex of the given terrain. */
+export function sightRadius(terrain) {
+  return SIGHT_RADIUS[terrain] ?? DEFAULT_SIGHT;
+}
+
+/**
+ * The deduped set of hexes visible from a travelled path — the union of each
+ * path hex's sight disc (radius per its own terrain). Pure; the caller reveals
+ * (lazily generates) whichever of these aren't placed yet. Discs are emitted
+ * center-out per path hex, in path order, so lazy generation conforms outward
+ * from the route.
+ * @param {{q:number,r:number,terrain:string}[]} pathHexes hexes the party stood in
+ * @returns {{q:number,r:number}[]} deduped visible hexes
+ */
+export function sightHexes(pathHexes) {
+  const seen = new Set();
+  const out = [];
+  for (const h of pathHexes || []) {
+    for (const cell of hexDisc(h.q, h.r, sightRadius(h.terrain))) {
+      const k = axialKey(cell.q, cell.r);
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(cell);
+      }
+    }
+  }
+  return out;
 }

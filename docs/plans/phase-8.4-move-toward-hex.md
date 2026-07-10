@@ -38,6 +38,26 @@ hex.** So Plains (0.25/hex) → up to 4 hexes/day; Plains-on-road → 8; Mountai
 heavily-loaded Mountains → still 1 (the at-least-one rule; encumbrance only visibly slows the
 faster terrains — flagged as tunable, same as every other travel constant).
 
+### Sight — reveal what the party can see (follow-up, on request)
+Travel used to reveal only the hexes actually stepped into (a 1-wide corridor). That's too stingy —
+a party crossing open country can see the land for miles either side. Each travel day now reveals a
+**sight disc around every hex the party stood in** (the day's origin + each hex crossed), radius by
+that hex's **own terrain** — high ground sees far, forest/swamp hems you in. Values (tunable):
+
+| Standing on | Sight radius |
+|---|---|
+| Mountains | 3 |
+| Hills / Plains / Desert | 2 |
+| Forest / Swamp | 1 |
+
+`sightHexes(path)` (pure) returns the deduped union of those discs; the app lazily generates any
+unplaced hexes in view (same `buildRandomHex` seam), leaving placed hexes untouched. This is fair
+by construction — the neighbour-affinity terrain oracle is *built* for incremental reveal. Applies
+to **both** modes (you see the country either side of a known route too). Two flagged
+simplifications: no line-of-sight occlusion (a peak doesn't hide what's behind it — just a radius),
+and sighted hexes are **fully** generated (settlements/POIs and all, like the Area tool) rather than
+terrain-only — a "seen vs visited" distinction is a bigger change left for later.
+
 ## Design
 
 ### `planRoute` (pure) — unchanged from the first cut
@@ -122,3 +142,10 @@ course (`travelDayBearing` now takes `bearing` = 0-5 or `"N"`/`"S"`). Verified: 
 350/350 (5 new N/S cases — alternation, straight-vertical net, row-parity statelessness across
 presses); headless pass showed all 8 rose buttons and N/S travel growing the map north/south with
 correct reports.
+
+**Sight follow-up (user request):** `SIGHT_RADIUS`/`sightRadius`/`sightHexes` added to `travel.js`;
+`app.js`'s `revealSightAlong` reveals the sight swath after each travel day (both modes). Verified:
+`node --test` 356/356 (6 new sight cases — radius-by-terrain, disc size/containment, dedup along a
+path, empty-path); headless pass — travelling East four days revealed a **wide multi-hex band** of
+varied terrain (plains/desert/mountains/forest) rather than a 1-wide line, confirming the party now
+sees the countryside as it moves.

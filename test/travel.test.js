@@ -4,8 +4,9 @@ import {
   TRAVEL_COST, ROAD_PACE_MULTIPLIER, ENCUMBRANCE_FACTOR, paceFor, daysToCross,
   LOST_CHANCE, rollGetLost, deviateDirection,
   roadHexKeySet, planRoute, travelDayToward, travelDayBearing,
+  SIGHT_RADIUS, sightRadius, sightHexes,
 } from "../js/gen/travel.js";
-import { NEIGHBOR_DIRS, axialKey } from "../js/core/hexgeo.js";
+import { NEIGHBOR_DIRS, axialKey, axialDistance } from "../js/core/hexgeo.js";
 
 // A filled axial box of one terrain, with per-hex overrides (keyed by axialKey) —
 // same helper shape as test/roads.test.js's boardRect.
@@ -402,4 +403,52 @@ test("travelDayBearing N: the flank alternation is stateless across day-presses 
   // The second day's first flank is chosen purely from the row it starts on,
   // not a carried counter — so it depends only on p.r's parity.
   assert.equal(day2.log[0].dir, (p.r & 1) === 0 ? 1 : 2);
+});
+
+// --- Sight (Phase 8.4 follow-up) ------------------------------------------
+
+test("SIGHT_RADIUS: high ground sees far, forest/swamp hems you in", () => {
+  assert.equal(sightRadius("Mountains"), 3);
+  assert.equal(sightRadius("Hills"), 2);
+  assert.equal(sightRadius("Plains"), 2);
+  assert.equal(sightRadius("Desert"), 2);
+  assert.equal(sightRadius("Forest"), 1);
+  assert.equal(sightRadius("Swamp"), 1);
+  assert.equal(sightRadius("Mountains"), SIGHT_RADIUS.Mountains);
+});
+
+test("sightRadius: an unknown terrain falls back to the minimum (1)", () => {
+  assert.equal(sightRadius("Nonsense"), 1);
+});
+
+test("sightHexes: a single hex reveals exactly its terrain's disc", () => {
+  const mt = sightHexes([{ q: 0, r: 0, terrain: "Mountains" }]); // radius 3
+  const fo = sightHexes([{ q: 5, r: 5, terrain: "Forest" }]);    // radius 1
+  assert.equal(mt.length, 1 + 3 * 3 * 4); // 1 + 3*r*(r+1) = 37
+  assert.equal(fo.length, 7);             // 1 + 3*1*2
+  // every revealed hex is within the sight radius of its centre
+  assert.ok(mt.every((c) => axialDistance(0, 0, c.q, c.r) <= 3));
+  assert.ok(fo.every((c) => axialDistance(5, 5, c.q, c.r) <= 1));
+});
+
+test("sightHexes: forest sees less than mountains (radius by standing terrain)", () => {
+  const forest = sightHexes([{ q: 0, r: 0, terrain: "Forest" }]);
+  const mountains = sightHexes([{ q: 0, r: 0, terrain: "Mountains" }]);
+  assert.ok(mountains.length > forest.length);
+});
+
+test("sightHexes: overlapping discs along a path are deduped", () => {
+  const path = [
+    { q: 0, r: 0, terrain: "Plains" }, // radius 2
+    { q: 1, r: 0, terrain: "Plains" }, // radius 2, adjacent — discs overlap heavily
+  ];
+  const out = sightHexes(path);
+  const keys = new Set(out.map((c) => axialKey(c.q, c.r)));
+  assert.equal(keys.size, out.length, "no duplicate hexes");
+  assert.ok(out.length < 2 * 19, "adjacent discs share hexes, so fewer than two full discs");
+});
+
+test("sightHexes: empty/absent path yields nothing", () => {
+  assert.deepEqual(sightHexes([]), []);
+  assert.deepEqual(sightHexes(undefined), []);
 });
