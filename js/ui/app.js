@@ -23,7 +23,10 @@ import {
   removeHex,
   setPartyPosition,
   setPartyEncumbrance,
+  addFaction,
+  getFactions,
 } from "../world/world.js";
+import { generateFaction } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -44,7 +47,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, renderFactionsPanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
@@ -63,7 +66,7 @@ import {
   pixelsPerMile,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
-import { POI_GLYPHS, POI_DOT_COLORS } from "./poi-style.js";
+import { POI_GLYPHS, POI_DOT_COLORS, factionColor } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
 import { openRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
@@ -126,6 +129,9 @@ const HOOK_TABLE_IDS = [
   "hook-return",
   "creatures",
 ];
+
+// Tables the faction generator rolls on (Phase 8.7), loaded on demand.
+const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -215,6 +221,7 @@ async function setCurrent(world) {
   }
   renderSelection();
   refreshGlobalHooks();
+  refreshFactions();
   refreshTravelPanel();
   refreshHookMarks();
   refreshHookFocus();
@@ -567,6 +574,7 @@ function renderSelection() {
     partyHere: !!(current.party && current.party.q === q && current.party.r === r),
     onPlaceParty: hex && hex.placed ? onPlaceParty : undefined,
     onTravelToward: hex && hex.placed ? onTravelToward : undefined,
+    onGenerateFaction: hex && hex.placed ? onGenerateFaction : undefined,
   });
 }
 
@@ -1219,6 +1227,17 @@ function refreshGlobalHooks() {
   });
 }
 
+// Refresh the Factions tab (list + count badge). Colour is keyed on the
+// faction's order in the roster — same index the map marker uses.
+function refreshFactions() {
+  const factions = getFactions(current);
+  renderFactionsPanel({
+    factions,
+    onCenterFaction,
+    factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
+  });
+}
+
 // Highlight the selected hook's target/origin on the map (clears if none/gone).
 function refreshHookFocus() {
   const h = selectedHookId && (current && current.hooks || []).find((x) => x.id === selectedHookId);
@@ -1276,6 +1295,17 @@ function nextHookId(world) {
   let max = -1;
   for (const h of world.hooks || []) {
     const m = /^hook:(\d+)$/.exec(h.id || "");
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+
+// Next free faction ordinal (mirrors nextHookId) — also seeds the faction's name
+// and its per-faction map colour, so it stays stable for the faction's life.
+function nextFactionId(world) {
+  let max = -1;
+  for (const f of getFactions(world)) {
+    const m = /^faction:(\d+)$/.exec(f.id || "");
     if (m) max = Math.max(max, Number(m[1]));
   }
   return max + 1;
@@ -1547,6 +1577,29 @@ const onReadMap = () => onGenerateHook({ forcePattern: "map", source: "A map fou
 // "Follow a trail": the party finds a riddle/clue here → start a chain anywhere.
 const onStartChain = () => onGenerateHook({ forcePattern: "chain", source: "A riddle found here" });
 
+// Generate a faction whose single starting holding is the selected placed hex
+// (Phase 8.7) — mirrors onGenerateHook: deterministic sub-stream keyed on the
+// coords + ordinal, surfaced on the Factions tab so it's never a silent no-op.
+async function onGenerateFaction() {
+  if (!current || !selected) return;
+  try {
+    const tables = await loadTables(FACTION_TABLE_IDS);
+    const { q, r } = selected;
+    const n = nextFactionId(current);
+    const rng = subRng(current.seed, "faction", q, r, n);
+    // Attach the holding to a POI here, if one is placed (a faction holds a site).
+    const hex = getHex(current, q, r);
+    const poiId = hex && Array.isArray(hex.pois) && hex.pois[0] ? hex.pois[0].id : undefined;
+    const faction = generateFaction(tables, rng, { q, r, index: n, seed: current.seed, poiId });
+    addFaction(current, faction);
+    setPanelTab("factions");
+    await persistAndRefresh();
+    logLine(`New faction — ${faction.name} (${faction.archetype}).`);
+  } catch (err) {
+    logLine(`Generate faction error: ${err.message}`);
+  }
+}
+
 // Toggle a hook's status (clicking the same status again clears it back to open).
 async function setHookStatus(id, status) {
   if (!current) return;
@@ -1572,6 +1625,14 @@ function onCenterHook(id, which) {
   const h = (current && current.hooks || []).find((x) => x.id === id);
   const pt = h && (which === "origin" ? h.origin : h.target);
   if (pt) recenterOn(pt.q, pt.r);
+}
+
+// Centre the map on a faction's (first) holding — click-to-jump from the
+// Factions tab, mirroring a hook card's Target link (Phase 8.7).
+function onCenterFaction(id) {
+  const f = getFactions(current).find((x) => x.id === id);
+  const hold = f && (f.holdings || [])[0];
+  if (hold) recenterOn(hold.q, hold.r);
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the
@@ -1623,6 +1684,7 @@ async function persistAndRefresh() {
   refreshHookMarks();
   renderSelection();
   refreshGlobalHooks();
+  refreshFactions();
   refreshTravelPanel();
   refreshHookFocus();
   refreshMapChrome();

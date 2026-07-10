@@ -1,0 +1,14 @@
+{
+  "id": "faction-goal",
+  "title": "Faction goal (what it is working toward; the clock length is JS tuning, not here)",
+  "entries": [
+    { "weight": 2, "value": "seize the region" },
+    { "weight": 2, "value": "hoard wealth" },
+    { "weight": 2, "value": "drive out rivals" },
+    { "weight": 1, "value": "spread the faith" },
+    { "weight": 1, "value": "awaken something buried" },
+    { "weight": 1, "value": "restore a fallen house" },
+    { "weight": 1, "value": "control the trade roads" },
+    { "weight": 1, "value": "raid the frontier" }
+  ]
+}
