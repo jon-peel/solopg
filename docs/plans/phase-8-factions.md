@@ -31,10 +31,8 @@ days"** control for when the party sits still. This one clock then drives factio
 graph TD
     A1[8.1 world.day + party marker + schema] --> A2[8.2 travel cost model]
     A2 --> A3[8.3 getting-lost mechanic]
-    A3 --> A4[8.4 move toward a hex]
-    A3 --> A5[8.5 move along a bearing]
+    A3 --> A4["8.4 travel a day at a time (toward a hex + compass rose; 8.5 folded in)"]
     A4 --> A6[8.6 progress N days]
-    A5 --> A6
     A1 --> B1[8.7 generate faction]
     B1 --> B2[8.8 promote occupied POI]
     B1 --> B3[8.9 multiple holdings]
@@ -103,9 +101,9 @@ same pattern as hooks/features):
 | **8.1** | **Foundation: world clock + party marker.** Schema v16 (`day`, `party`, `factions:[]` reserved). Party renders on the map (distinct marker/glyph); a "Day N" readout. A stopgap "Place party here" action (any placed hex) so the slice is visible/testable before real movement (8.4/8.5) exists. |
 | **8.2** | **Travel cost model** *(pure, node-only)* — `js/gen/travel.js`, a `TRAVEL_COST`/pace-per-terrain const table (illustrative starting point below), a **road discount** reusing `roads.js`'s tiers. No UI. |
 | **8.3** | **Getting lost** *(pure, node-only)* — per-terrain lost chance (off-road only; always 0 on a road/track hex — see table below), rolled **once per day** of a leg; when lost, deviate to one of the two hex-directions adjacent to the intended bearing (not fully random) — reroll if the deviated hex is impassable (Sea/Lake). Deterministic via `subRng(seed, "travel", day, q, r)`. |
-| **8.4** | **Move toward a hex** — GM picks a destination among **already-placed** hexes (radial/panel action "Move party here"). Engine prefers an existing **road** route (reuse the A*/`MinHeap` machinery from `roads.js`) — road travel is faster and never gets lost; off-road, steps day-by-day paying 8.2's cost and rolling 8.3's lost check. Resolves the **whole trip in one action** (like "one hook per press") and reports a short day-by-day log + final position, which may differ from the intended target if the party got lost. |
-| **8.5** | **Move along a bearing** — for pushing into **unplaced** territory (no target hex to click yet): pick one of the 6 hex directions + a day count. Reuses the **lazy-tile-generation seam** (`generateHex`, same pattern as Distant hooks / dungeon lazy-build) for each new hex stepped into. Same lost/deviation rules as 8.4. |
-| **8.6** | **Progress N days (stationary)** — `advanceDays(world, n)`: no movement, `world.day += n`. The hook other systems (8.10 faction turns, 8.12 auto-hooks) key off. UI: a small numeric "Progress" control next to the Day readout. |
+| **8.4** | **Travel, a day at a time** (✅ done — see `phase-8.4-move-toward-hex.md`). *Redesigned from the original "resolve the whole trip in one action" to **one press = one day** (user steer): "Travel toward this hex" (over placed terrain, road-aware) OR the Travel-tab **compass rose** (E/NE/NW/W/SW/SE **+ N/S**) into the unknown. Each day covers as many hexes as pace allows, rolls 8.3's lost check per hex, and reveals a terrain-based **line-of-sight** swath. **8.5 was folded in here** (the compass rose IS "move along a bearing", with the lazy-tile-generation seam).* |
+| ~~**8.5**~~ | ~~Move along a bearing~~ — **folded into 8.4** (the compass rose's direction travel, into unplaced territory via the lazy-tile-generation seam). No separate step. |
+| **8.6** | **Progress N days (stationary)** (✅ done — see `phase-8.6-progress-days.md`). No movement, advances the clock. *Adapted to the session-only clock (8.1): `advanceDays(n)` is the single day-advance chokepoint in `app.js` — travel routes through it too — rather than a persisted `world.day` bump; 8.10/8.12 hook it.* UI: a small numeric "Progress" control next to the Day readout. |
 
 **Illustrative starting constants** (flagged for real-play retuning, same as every other generation
 constant in this project — rivers/settlements/roads all went through several retunes after manual
@@ -123,7 +121,7 @@ play):
 | **8.7** | **Foundation: Generate faction.** `js/gen/factions.js` `generateFaction`; `data/faction-archetype.json`, `data/faction-goal.json`, `data/faction-disposition.json`; `FACTION_BUILD` stamp; `js/gen/faction-name.js` (derived name, same pattern as `settlement-name.js`). A manual **"Generate faction"** action (any hex/POI — mirrors "Generate hook" at a settlement) creates a faction with one starting holding. New **Factions panel/tab** (list: name / archetype / disposition / goal — same shape as the Hooks tab from 7.3). **Holding markers render on the map from the start** (per your steer — no panel-only-first deferral), coloured/keyed per faction like the POI-dot-by-type convention from 7.9. |
 | **8.8** | **Promote an occupied POI.** A radial/panel action on any POI with `occupant.kind === "occupied"` — "Promote to faction" — wraps the existing occupier label (e.g. "Bandits") into a full faction object, using the label as a seed for archetype/name so it reads as the *same* threat, not a new one. Sets `origin.fromPOI`. |
 | **8.9** | **Multiple holdings.** "Claim for faction" action at any POI/hex attaches it to an existing faction's `holdings[]` — the "reuse one faction across the map" requirement (a bandit gang with three camps, a cult with a shrine *and* a hidden lair). Faction panel lists all holdings, click-to-jump like hooks' Target/Origin. |
-| **8.10** | **Faction turns.** `advanceFactionTurn(world, rng)` ticks goal progress, occasional disposition drift, occasional strength/holding change, for every `active` faction. A **faction turn = N days** (proposed default **7**, tunable) — `advanceDays`/movement (8.6/8.4/8.5) auto-fires however many turns have elapsed since each faction's `clock.sinceTurn` (floor division, remainder carried, per-faction so a promoted-late faction doesn't "catch up" unfairly). A **manual "Advance faction turn" button** also exists (per your steer) for GM pacing independent of moving/waiting days. Panel shows goal progress + turn count per faction. |
+| **8.10** | **Faction turns.** `advanceFactionTurn(world, rng)` ticks goal progress, occasional disposition drift, occasional strength/holding change, for every `active` faction. A **faction turn = N days** (proposed default **7**, tunable) — `advanceDays`/movement (8.6/8.4/8.5) auto-fires however many turns have elapsed since each faction's `clock.sinceTurn` (floor division, remainder carried, per-faction so a promoted-late faction doesn't "catch up" unfairly). A **manual "Advance faction turn" button** also exists (per your steer) for GM pacing independent of moving/waiting days. Panel shows goal progress + turn count per faction. **Note the clock tension:** the day is currently **session-only** (8.1 decision), so faction-turn bookkeeping across reloads needs a persisted per-faction turn counter (or to start persisting `day`) — decide when building this. |
 
 ### Arc C — Type-2 hooks (the seam Phase 6 left open)
 
@@ -140,9 +138,9 @@ play):
    occupied POI into a faction (8.7 + 8.8).
 2. **Turn mechanic** — manually GM-paced (an "Advance faction turn" button), **plus** a bundled
    party-movement mechanic whose day-ticks drive turns automatically too (Arc A → 8.10).
-3. **Movement mode** — both **toward a known hex** (8.4, road-aware) and **along a bearing** into
-   unplaced territory (8.5); **getting lost** is a real per-day, per-terrain chance (8.3), always 0
-   on a road, and roads are also faster.
+3. **Movement mode** — both **toward a known hex** and **along a bearing** into unplaced territory
+   (both delivered in 8.4, day-at-a-time; 8.5 folded in); **getting lost** is a real per-day,
+   per-terrain chance (8.3), always 0 on a road, and roads are also faster.
 4. **Type-2 hooks** — yes, as a later sub-phase (8.11–8.12) once the faction object exists, using the
    `sourcePower` seam Phase 6 left open.
 5. **Map presence** — faction holding markers ship **from the first slice** (8.7), not deferred to a
@@ -211,11 +209,10 @@ unchanged for 8.11's faction-emitted hooks.
 8.1  [ ] New/loaded world shows a party marker + "Day 0"; "Place party" moves it; reload persists
 8.2  [ ] (node-only — no manual step)
 8.3  [ ] (node-only — no manual step)
-8.4  [ ] "Move party here" on a distant known town → day-by-day log, party arrives (or ends up
-         lost nearby); a road route is visibly faster and never reports "lost"
-8.5  [ ] Pick a bearing + N days from the map edge → N new hexes generated along the path, party
-         ends there; a lost roll visibly bends the path at least sometimes over repeated tries
-8.6  [ ] "Progress 5 days" → Day +5, party doesn't move
+8.4  [ ] "Travel toward this hex" = one day per press (road days go further); the compass rose
+         (incl. N/S) walks a day into the unknown, revealing a line-of-sight swath; lost days bend
+         the path. (8.5 folded in — the rose IS "move along a bearing".)
+8.6  [ ] "Progress N days" → Day +N, party doesn't move (same clock travel uses)
 8.7  [ ] "Generate faction" → appears in the Factions tab with name/archetype/disposition/goal;
          its holding shows a marker on the map; reload + export→import → identical (schema v16)
 8.8  [ ] "Promote to faction" on an occupied camp → a faction appears carrying that occupier's flavour
