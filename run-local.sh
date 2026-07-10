@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BRANCH="claude/project-roadmap-review-pu01z3"
+BRANCH="claude/phase-8-arch-a-plan-jrv8pk"
 PORT="${1:-8000}"
 
 # Always operate on the repo this script lives in (so it serves index.html at root).

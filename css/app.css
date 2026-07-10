@@ -568,6 +568,23 @@ button:hover {
   margin: 0 0.25rem;
 }
 
+/* Session day readout (Phase 8.1) — quiet, matches .world-picker's muted tone. */
+.day-readout {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Progress-N-days control (Phase 8.6), sits beside the day readout. */
+.progress-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.progress-days {
+  width: 3.2rem;
+  text-align: right;
+}
+
 /* Small uppercase section label in the selection panel. */
 .section-label {
   margin-top: 0.6rem;
@@ -934,6 +951,31 @@ button:hover {
 /* Empty-state hint shown when no world is loaded. */
 .panel-empty {
   color: var(--muted);
+}
+
+/* Travel tab (Phase 8.4): encumbrance select + direction rose + last-day log. */
+.encumbrance-select {
+  margin-bottom: 0.4rem;
+}
+/* 8-point compass rose (3×3, centre empty): NW N NE / W · E / SW S SE. */
+.dir-rose {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+.dir-btn {
+  padding: 0.35rem 0.4rem;
+}
+.dir-spacer {
+  /* empty centre cell of the rose */
+}
+.trip-summary {
+  color: var(--fg);
+  font-weight: 600;
+}
+.trip-lost {
+  color: #f5c45a; /* matches the amber hook-mark colour */
 }
 
 /* Muted hint pointing at the right-click menu (panel is read-only now). */

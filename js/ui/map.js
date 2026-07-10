@@ -19,8 +19,8 @@ import {
   SELECTED_STROKE,
 } from "./terrain-style.js";
 import { glyphForPoi, poiDotColor } from "./poi-style.js";
-import { artFor } from "./terrain-art.js";
-import { settlementArt, settlementMark } from "./settlement-art.js";
+import { artFor, TERRAIN_ART } from "./terrain-art.js";
+import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
 
@@ -69,6 +69,7 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", onContextMenu);
 
+  preloadTileArt(); // warm terrain/settlement art so tiles never start as emoji
   resize();
 }
 
@@ -277,6 +278,16 @@ export function render() {
     if (t && o && !(t.q === o.q && t.r === o.r)) drawHookLine(o, t); // under the rings
     if (o) drawHookFocus(o, FOCUS_ORIGIN);
     if (t) drawHookFocus(t, FOCUS_TARGET);
+  }
+
+  // 5. Party marker (Phase 8.1) — the single most important marker, always ON
+  //    TOP of everything else and visible at every zoom, regardless of whether
+  //    a hex is placed there yet (it's just a coordinate on the infinite grid).
+  if (world && world.party) {
+    const pc = axialToPixel(world.party.q, world.party.r, HEX_SIZE);
+    if (pc.x >= minX - margin && pc.x <= maxX + margin && pc.y >= minY - margin && pc.y <= maxY + margin) {
+      drawPartyMark(pc.x, pc.y, detail);
+    }
   }
 
   // Notify the scale bar only when the zoom (px-per-mile) actually changes.
@@ -655,16 +666,56 @@ function drawRoadDraft() {
 }
 
 // Cache of tile <img>s keyed by url; re-render once each finishes loading.
+//
+// Resilience matters here: a tile that fails to load must NOT be cached as a
+// permanently-broken Image, or that terrain/settlement silently shows its emoji
+// fallback until a full page reload happens to succeed (the "reverted to emoji,
+// fixed by a few cmd-shift-r" symptom — a transient fetch failure, e.g. the
+// single-threaded dev server dropping one of a burst of concurrent SVG requests,
+// getting stuck). So on error we DROP the entry (bounded retries) and warn, and
+// a later render re-attempts the load — the tile self-heals without a reload.
 const tileCache = new Map();
+const tileRetries = new Map(); // url -> attempts, to cap retries on a genuinely-missing file
+const MAX_TILE_RETRIES = 4;
 function tileImage(url) {
   let img = tileCache.get(url);
   if (img) return img;
   img = new Image();
-  img.onload = () => render();
-  img.onerror = () => {};
+  img.onload = () => {
+    tileRetries.delete(url); // loaded cleanly — reset its retry budget
+    render();
+  };
+  img.onerror = () => {
+    const attempts = (tileRetries.get(url) || 0) + 1;
+    tileRetries.set(url, attempts);
+    if (attempts <= MAX_TILE_RETRIES) {
+      // Transient failure: drop the broken image so the next render re-creates
+      // and re-fetches it (self-heal), instead of caching a
+      // `complete && naturalWidth===0` husk that shows emoji forever.
+      tileCache.delete(url);
+      console.warn(`tile art failed to load (attempt ${attempts}), will retry: ${url}`);
+    } else {
+      // Give up after repeated failures — LEAVE the broken image cached so we
+      // stop re-fetching every render; the emoji fallback stands in. (A truly
+      // missing file is caught by the node --test art-integrity check.)
+      console.error(`tile art gave up after ${attempts} attempts (check the file exists): ${url}`);
+    }
+  };
   img.src = url;
   tileCache.set(url, img);
   return img;
+}
+
+// Warm every terrain/settlement art image up front (called from attachMap) so
+// tiles never first-paint as emoji and no first-time load races mid-session
+// (e.g. when travel reveals a terrain type for the first time). Idempotent —
+// tileImage caches, and a failed preload simply retries on the next render.
+export function preloadTileArt() {
+  const urls = new Set();
+  for (const variants of Object.values(TERRAIN_ART)) for (const u of variants) urls.add(u);
+  for (const u of Object.values(SETTLEMENT_ART)) urls.add(u);
+  urls.add(KEEP_ART);
+  for (const url of urls) tileImage(url);
 }
 
 function drawTerrainIcon(cx, cy, terrain, q, r) {
@@ -813,6 +864,22 @@ function drawPinnedMark(cx, cy, detail) {
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
     drawMarker(cx - off, cy - off, "📌", size, "#b794f6");
+  }
+}
+
+// Party position (Phase 8.1): a bold magenta ring — a colour not already used
+// by hooks (amber/violet) or hook-focus (red/teal) — plus a crossed-swords
+// badge in the detail tier. Visible at every zoom, same convention as hooks.
+const PARTY_COLOR = "#ff4fd8";
+function drawPartyMark(cx, cy, detail) {
+  strokeHex(cx, cy, PARTY_COLOR, 3.5);
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.5;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx + off, cy - off, "⚔️", size, PARTY_COLOR);
   }
 }
 

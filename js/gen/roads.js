@@ -21,10 +21,12 @@
 // desert VERY dear, sea/lake impassable (roads stop at the coast). River-adjacent
 // hexes get a discount, so roads hug valleys and cross at fords.
 //
-// The AUTO network is re-derived each call (deterministic — a pure function of the
-// revealed terrain + settlements), so it stays correct/connected as the world
-// grows; only GM-drawn MANUAL roads are kept verbatim (and seed the network so
-// auto roads can join them). Order-independent for a given revealed set.
+// APPEND-ONLY: every road already on the world is kept VERBATIM — an established
+// road never re-routes when new settlements/rivers appear (mirrors the rivers
+// rule). Each call only ADDS roads to connect newly-revealed settlements onto the
+// frozen network; the connected components of the existing roads seed the trunk
+// union-find so no redundant parallel road is added. A fresh world (no existing
+// roads) derives the whole network at once, as before.
 
 import { neighbors, axialKey, parseKey, axialDistance, axialLine } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
@@ -66,6 +68,35 @@ const TIER = { City: 1, Town: 2, Village: 3, Hamlet: 3 };
 const ANCIENT_MAX = 18;       // max straight-line length (hexes) for one
 const ANCIENT_MIN_DESERT = 3; // must genuinely cross the sands
 const ANCIENT_CHANCE = 0.14;  // rare, per qualifying big-settlement pair
+
+/**
+ * Seed the trunk union-find from the CONNECTED COMPONENTS of the existing road
+ * graph, so append-only re-derivation doesn't add a redundant new trunk edge
+ * between big settlements that a frozen road already connects (possibly through
+ * a junction). Flood-fills the road-hex graph; unions the settlement keys found
+ * in each component. Pure over its args (mutates the caller's union-find).
+ */
+function seedNetworkComponents(existingRoads, allSettle, parent, union) {
+  const roadHexSet = new Set();
+  for (const rd of existingRoads) for (const p of rd.path || []) roadHexSet.add(axialKey(p.q, p.r));
+  const visited = new Set();
+  for (const startK of roadHexSet) {
+    if (visited.has(startK)) continue;
+    const stack = [startK];
+    visited.add(startK);
+    const settlesInComp = [];
+    while (stack.length) {
+      const k = stack.pop();
+      if (allSettle.has(k)) settlesInComp.push(k);
+      const { q, r } = parseKey(k);
+      for (const n of neighbors(q, r)) {
+        const nk = axialKey(n.q, n.r);
+        if (roadHexSet.has(nk) && !visited.has(nk)) { visited.add(nk); stack.push(nk); }
+      }
+    }
+    for (let i = 1; i < settlesInComp.length; i++) union(settlesInComp[0], settlesInComp[i]);
+  }
+}
 
 /** Enter-cost of the hex at `key`: cheap if it's already a road (so roads merge),
  *  else terrain cost discounted along river valleys; Infinity for unplaced/water. */
@@ -190,15 +221,19 @@ export function computeRoads(seed, terrainByKey, settlementsByKey, rivers = [], 
   const roadHexes = new Set();
   const addRoadHexes = (path) => { for (const p of path) { const k = axialKey(p.q, p.r); networkHexes.add(k); roadHexes.add(k); } };
 
-  // Keep GM-drawn manual roads verbatim; they seed the network and pre-connect any
-  // settlements that lie on them.
+  // APPEND-ONLY (mirrors the rivers rule — see js/gen/rivers.js): keep EVERY
+  // existing road verbatim (manual AND auto), so an established road NEVER
+  // re-routes when new settlements or rivers appear. They seed the network (new
+  // roads merge onto them via the reuse discount). Then the CONNECTED COMPONENTS
+  // of the existing road graph seed the union-find, so already-connected big
+  // settlements don't get a redundant new trunk edge, and settlements already on
+  // a road are skipped by the spur phase.
   for (const rd of existingRoads || []) {
-    if (!rd.manual || seenIds.has(rd.id)) continue;
+    if (seenIds.has(rd.id)) continue;
     roads.push(rd); seenIds.add(rd.id);
-    const onRoad = [];
-    for (const p of rd.path || []) { const k = axialKey(p.q, p.r); networkHexes.add(k); roadHexes.add(k); if (allSettle.has(k)) onRoad.push(k); }
-    for (let i = 1; i < onRoad.length; i++) if (parent.has(onRoad[0]) && parent.has(onRoad[i])) union(onRoad[0], onRoad[i]);
+    addRoadHexes(rd.path || []);
   }
+  seedNetworkComponents(existingRoads || [], allSettle, parent, union);
 
   // --- Phase 1: trunk MST over big settlements (Kruskal) ---------------------
   // Edge weights use the independent (no-reuse) route cost, so the tree is chosen

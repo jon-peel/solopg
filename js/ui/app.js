@@ -21,10 +21,13 @@ import {
   hasHexAt,
   placedHexes,
   removeHex,
+  setPartyPosition,
+  setPartyEncumbrance,
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
+import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -41,7 +44,8 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, setPanelTab } from "./panel.js";
+import { settlementName } from "../gen/settlement-name.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -130,6 +134,15 @@ let selectedHookId = null; // hook whose target/origin are highlighted on the ma
 let draftClicks = null; // manual river/road drawing: clicked anchor hexes, or null when not drawing
 let draftKind = null;   // "river" | "road" — what the active draft builds
 
+// World clock (Phase 8.1) — deliberately a SESSION-only counter, never part of
+// `world`/IndexedDB/export: always starts at 0 on page load. 8.4 advances it by
+// ONE per travelled day; 8.6 adds a manual "Progress N days" while stationary.
+let sessionDay = 0;
+
+// Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
+// sessionDay: replaced by each travel press, reset on world switch.
+let lastDay = null;
+
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
 let dungeonLevelIndex = 0;
@@ -188,6 +201,7 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
+  lastDay = null; // the last day's travel report is ephemeral, per-world (Phase 8.4)
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
@@ -201,6 +215,7 @@ async function setCurrent(world) {
   }
   renderSelection();
   refreshGlobalHooks();
+  refreshTravelPanel();
   refreshHookMarks();
   refreshHookFocus();
   refreshMapChrome();
@@ -291,6 +306,32 @@ function refreshMapChrome() {
   const tip = $("travel-tip");
   if (tip && current) tip.innerHTML = travelTipHTML(current.hexScale);
   if (current) drawScaleBar(pixelsPerMile());
+  renderDayReadout();
+}
+
+// Session-only world clock readout (Phase 8.1) — see `sessionDay`.
+function renderDayReadout() {
+  const el = $("day-readout");
+  if (el) el.textContent = `Day ${sessionDay}`;
+}
+
+// The single day-advance chokepoint (Phase 8.6). Every place a day passes —
+// travelling (8.4) and the stationary "Progress" control — goes through here,
+// so Arc B/C have ONE seam to hook: 8.10 faction turns and 8.12 auto-hooks will
+// fire as days pass. For now it only bumps the (session-only) clock.
+function advanceDays(n) {
+  if (!Number.isFinite(n) || n < 1) return;
+  sessionDay += n;
+  // (8.10/8.12: fire faction turns / roll auto-hooks for the elapsed days here.)
+  renderDayReadout();
+}
+
+// "Progress N days" while stationary (Phase 8.6) — no movement, no world change,
+// no persistence (the clock is session-only); just advances the day counter.
+function onProgressDays() {
+  const input = $("progress-days");
+  const n = Math.max(1, Math.floor(Number(input && input.value) || 1));
+  advanceDays(n);
 }
 
 // Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
@@ -523,6 +564,144 @@ function renderSelection() {
     },
     onRenameHex,
     onNoteHex,
+    partyHere: !!(current.party && current.party.q === q && current.party.r === r),
+    onPlaceParty: hex && hex.placed ? onPlaceParty : undefined,
+    onTravelToward: hex && hex.placed ? onTravelToward : undefined,
+  });
+}
+
+// Instant GM-override teleport (Phase 8.1) — kept alongside real movement
+// (8.4) on request: no day cost, no route/lost simulation, just a direct jump.
+async function onPlaceParty() {
+  if (!current || !selected) return;
+  setPartyPosition(current, selected.q, selected.r);
+  await persistAndRefresh();
+}
+
+// Compass words for the 6 hex directions (indexes match NEIGHBOR_DIRS), plus
+// the N/S pseudo-cardinals — used only to phrase the travel report.
+const DIR_WORDS = ["east", "north-east", "north-west", "west", "south-west", "south-east"];
+function bearingWord(bearing) {
+  if (bearing === "N") return "north";
+  if (bearing === "S") return "south";
+  return DIR_WORDS[bearing];
+}
+
+// Travel ONE day toward the selected placed hex (Phase 8.4). Over placed
+// terrain only (routes around water/mountains); each press = one day.
+async function onTravelToward() {
+  if (!current || !selected || !current.party) return;
+  const terrainByKey = buildTerrainByKey(current);
+  const roadKeys = roadHexKeySet(current.roads);
+  const { q: aq, r: ar } = current.party;
+  const encumbrance = current.party.encumbrance || "unencumbered";
+  const originTerrain = (getHex(current, aq, ar) || {}).terrain;
+  const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance });
+  const tables = await loadTables(HEX_TABLE_IDS);
+  revealSightAlong(originTerrain, aq, ar, result, tables);
+  const destHex = getHex(current, selected.q, selected.r);
+  applyTravel(result, destinationLabel(destHex, selected.q, selected.r), "toward");
+}
+
+// Travel ONE day in a hex direction (Phase 8.4) — pushes into the unknown,
+// lazily generating each frontier hex the party steps into (same seam as
+// area/hook generation). Off-road (cross-country in a compass line).
+async function onTravelDirection(bearing) {
+  if (!current || !current.party) return;
+  const tables = await loadTables(HEX_TABLE_IDS);
+  const { q: aq, r: ar } = current.party;
+  const encumbrance = current.party.encumbrance || "unencumbered";
+  const originTerrain = (getHex(current, aq, ar) || {}).terrain;
+  // terrainAt reveals the frontier hex on demand (idempotent — returns the
+  // existing terrain if already placed), so walking off the edge grows the map.
+  const terrainAt = (q, r) => {
+    const existing = getHex(current, q, r);
+    if (existing && existing.placed) return existing.terrain;
+    const hex = buildRandomHex(tables, q, r, 0);
+    addHex(current, hex);
+    return hex.terrain;
+  };
+  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt });
+  revealSightAlong(originTerrain, aq, ar, result, tables);
+  applyTravel(result, bearingWord(bearing), "bearing");
+}
+
+// Reveal the swath of country the party could SEE this day (Phase 8.4 follow-up):
+// each hex they stood in (the day's origin + every hex crossed) reveals a sight
+// disc sized by that hex's terrain — high ground sees far, forest/swamp keeps
+// them blind. Lazily generates any unplaced hexes in view (same seam as area
+// generation); already-placed hexes are left untouched.
+function revealSightAlong(originTerrain, aq, ar, result, tables) {
+  const path = [{ q: aq, r: ar, terrain: originTerrain }, ...result.log];
+  for (const cell of sightHexes(path)) {
+    if (!hasHexAt(current, cell.q, cell.r)) addHex(current, buildRandomHex(tables, cell.q, cell.r, 0));
+  }
+}
+
+// Apply a resolved travel day: move the party, advance the clock by one (only
+// if a day was actually spent), stash the report, and surface it on the Travel
+// tab (same "jump to the tab" convention as a new hook).
+async function applyTravel(result, aimLabel, aimKind) {
+  setPartyPosition(current, result.finalPos.q, result.finalPos.r);
+  if (result.daySpent) advanceDays(1); // one press = one day, through the shared clock
+  lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
+  setPanelTab("travel");
+  await persistAndRefresh();
+}
+
+// One-line summary of a day's travel, composed here (app knows the day, the
+// destination name, and the direction word); panel just renders it.
+function travelHeadline(result, aimLabel, aimKind) {
+  const dayTag = `Day ${sessionDay} — `;
+  const n = result.hexesCrossed;
+  const hexes = `${n} hex${n === 1 ? "" : "es"}`;
+  if (result.arrived) return `${dayTag}arrived at ${aimLabel}.`;
+  if (result.reason === "stranded") {
+    return n > 0
+      ? `${dayTag}lost the way to ${aimLabel} — drifted ${hexes} and could go no further.`
+      : `No way through to ${aimLabel} from here.`;
+  }
+  if (result.reason === "blocked") {
+    const where = aimKind === "bearing" ? aimLabel : `toward ${aimLabel}`;
+    return n > 0
+      ? `${dayTag}reached the water's edge after ${hexes}.`
+      : `Water blocks the way ${where}.`;
+  }
+  const aim = aimKind === "bearing" ? aimLabel : `toward ${aimLabel}`;
+  return `${dayTag}travelled ${aim} — ${hexes}.`;
+}
+
+// A readable name for a travel destination hex: its GM label, else a settlement
+// name, else bare coords.
+function destinationLabel(hex, q, r) {
+  if (hex && hex.name) return hex.name;
+  if (hex && hex.settlement && hex.settlement.present) {
+    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+  }
+  return `(${q}, ${r})`;
+}
+
+// Party pace setting (Phase 8.4) — persists to world.party.encumbrance; no day
+// cost by itself, just changes how future travel is paced.
+async function onSetEncumbrance(tier) {
+  if (!current) return;
+  setPartyEncumbrance(current, tier);
+  await persistAndRefresh();
+}
+
+function buildTerrainByKey(world) {
+  const terrainByKey = new Map();
+  for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  return terrainByKey;
+}
+
+// Travel tab (Phase 8.4): pace setting, the direction rose, and the last day's report.
+function refreshTravelPanel() {
+  renderTravelPanel({
+    encumbrance: (current && current.party && current.party.encumbrance) || "unencumbered",
+    onSetEncumbrance,
+    onTravelDirection,
+    lastDay,
   });
 }
 
@@ -1444,6 +1623,7 @@ async function persistAndRefresh() {
   refreshHookMarks();
   renderSelection();
   refreshGlobalHooks();
+  refreshTravelPanel();
   refreshHookFocus();
   refreshMapChrome();
 }
@@ -1782,6 +1962,8 @@ function wire() {
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("btn-labels").addEventListener("click", onToggleLabels);
   $("btn-legend").addEventListener("click", () => toggleLegend());
+  $("btn-progress").addEventListener("click", onProgressDays);
+  $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);

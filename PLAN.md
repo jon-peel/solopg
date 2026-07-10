@@ -9,7 +9,9 @@ remembers the evolving map.
 > [Roadmap & status](#roadmap--status)). Completed work is recorded in
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
-**Status (current):** Phases 0–6 complete. Phase 4 delivered the full dungeon arc (base interiors +
+**Status (current):** Phases 0–7 complete, plus Phase 3R (world coherence) and **Phase 8 Arc A
+(Travel & Party Movement, 8.1–8.6)** — see the Phase 8 note near the end of this running log. Phase 4
+delivered the full dungeon arc (base interiors +
 Dungeon View; themed/explorable 4.5–4.8 arc; the 4.9.1–4.9.14 depth-&-connectivity sub-project —
 sizes, room-graphs + loops, doors/secret doors, inter-level + vertical stairs, multiple
 entrances/exits, rich room contents, exploration state + GM notes, lighting + occupied frontier,
@@ -430,9 +432,14 @@ already-built road hex is **cheap to travel** (`ROAD_REUSE_COST`), so a new rout
 existing road and shares the corridor rather than running parallel — double roads become one (spurs
 attach network-first so they join the connected trunk, not a random neighbour). Nodes many others
 attach to become **hubs with several roads**. **Tiers** by the owning settlement: City = highway (t1),
-Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford). The **auto network is re-derived
-deterministically** each call (a pure function of the revealed terrain + settlements, so it stays
-connected as the world grows); only GM-drawn **manual** roads are kept verbatim (and seed the network).
+Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford). **Roads are APPEND-ONLY** (mirrors
+the rivers rule): every existing road — manual AND auto — is kept **verbatim**, so an established road
+**never re-routes** when new settlements/rivers appear; each call only ADDS roads to connect
+newly-revealed settlements onto the frozen network (the connected components of the existing roads
+seed the trunk union-find, so no redundant parallel road is added), and a fresh world derives the
+whole network at once. *(This replaced the original "auto network re-derived each call" behaviour
+after a real-play report that an established road changed when a nearby town/river was generated —
+the same fix rivers got. `seedNetworkComponents` in `roads.js`.)*
 Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing — **under** the settlement
 icons (a town sits on the network), **over** rivers (solid = bridge, dashed spur = ford), **nudged
 off-centre to a canonical side** so a road along a river sits beside it AND two roads sharing a corridor
@@ -487,7 +494,7 @@ never sea-shrines. **NO MIGRATION** for pre-3R worlds (deferred, deliberate). **
 re-measured vs the 3R.2 baseline — lone-hex 24 % → 6 %, clump median 1–2 → 3–5, settlement spacing
 1.1 → 4.5–5.5 hex, roads 100 % connected, cluster hamlets on target; no constants changed. **Phase 3R
 is feature-complete.**
-**Schema v15. 299 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+**Schema v16. 358 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 **Phase 7 wrap-up: 7.9 POI dot polish is done** (see
@@ -503,6 +510,27 @@ complete** — 7.1–7.6, 7.9, 7.14. **Roadmap renumbered:** the remaining Phase
 with the previously-unnumbered Party position marker / Art / Misc ideas. **Factions**, previously an
 unnumbered future phase, is now **Phase 8** (dedicated); the small-oracle catalog phase, previously
 Phase 8, is now **Phase 9**. No code/schema changes — documentation reorganization only.
+**Phase 8 — Arc A (Travel & Party Movement) is complete** (8.1–8.6; see
+[phase-8-factions.md](docs/plans/phase-8-factions.md) and the per-step docs). **Schema v16** adds a
+single `party` marker (`{q,r,encumbrance?}`) and a reserved `factions: []`; the world clock is a
+**session-only** in-memory `sessionDay` (never persisted — 8.1 user steer). New pure `js/gen/travel.js`
+holds the whole travel model: **8.2** pace-per-terrain (`TRAVEL_COST`, road ×2, B/X **encumbrance**
+tiers) + `daysToCross`; **8.3** getting-lost (`LOST_CHANCE`, `rollGetLost`, `deviateDirection` — a
+deviation picks a hex-direction adjacent to the bearing); **8.4** the **day-at-a-time** movement
+(`travelDay`/`travelDayToward`/`travelDayBearing`, `planRoute` A* over placed hexes) — one press = one
+day, showing where the party ends up (terrain, pace, getting lost). **8.5 folded into 8.4**: an
+**8-point compass rose** (the 6 hex dirs + **N/S**, which alternate their flanking hexes by row
+parity) walks into the unknown, lazily generating frontier terrain, and each day reveals a
+terrain-based **line-of-sight** swath (`SIGHT_RADIUS`/`sightHexes` — open/high ground 2, forest/swamp
+1). **8.6** a "Progress N days" command-bar control advances the same clock while stationary via a
+single `advanceDays(n)` chokepoint (travel routes through it too — the seam 8.10/8.12 will hook).
+UI: a magenta party marker (`map.js`), a **Travel** panel tab (encumbrance + compass rose + last-day
+report), "Travel toward this hex" / "Place party here" (teleport) on the Detail tab, a "Day N" readout
++ Progress control. Also two real-play fixes landed here: **terrain/settlement art no longer reverts
+to emoji** (the tile loader retries a failed image instead of caching a broken one + preloads art on
+attach), and **roads are now APPEND-ONLY** (an established road never re-routes when new
+settlements/rivers appear — mirrors the rivers rule; `roads.js` keeps every existing road verbatim).
+**Arc B (Factions) is next** (8.7 generate faction → 8.10 turns); Arc C (8.11–8.13) after.
 
 ---
 
@@ -535,7 +563,7 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema version.** `SCHEMA_VERSION` (currently **15**) lives in `js/world/world.js`. Bump it
+- **Schema version.** `SCHEMA_VERSION` (currently **16**) lives in `js/world/world.js`. Bump it
   when the persisted shape changes — it marks the current shape and guards `importWorld` against
   loading a *newer* world into an older app. `migrateWorld()` in `js/data/portability.js` runs on
   import and load. Per the no-back-compat policy below, a schema bump gets only a **version STAMP**
@@ -589,7 +617,11 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
           hooks.js (generateHook/startChain/buildChainStep/buildLocalHook/buildEscortHook, rollHookPattern,
                     chooseDistantTarget, hookName/hookDescription, HOOK_BUILD — Phase 6 adventure hooks)
-  /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex; world.hooks)
+          travel.js (Phase 8 Arc A, pure: TRAVEL_COST/paceFor/daysToCross, ENCUMBRANCE_FACTOR;
+                    LOST_CHANCE/rollGetLost/deviateDirection; planRoute + travelDay/travelDayToward/
+                    travelDayBearing (day-at-a-time, N/S bearings); SIGHT_RADIUS/sightHexes)
+  /world  world.js (createWorld, SCHEMA_VERSION, getHex/hasHexAt/placedHexes/addHex/removeHex;
+                    setPartyPosition/setPartyEncumbrance; world.hooks/rivers/roads/party/factions)
   /data   db.js (IndexedDB)    portability.js (exportWorld/importWorld/migrateWorld)
   /ui     app.js (bootstrap/wiring; dungeon view + lazy build; hook generation + map marks; radial dispatch; syncRivers; manual-river draw mode)   map.js (canvas renderer + LOD + hook markers + river lines + draw-draft; right-click → radial)
           panel.js (selection UI + dungeon/room view + global hooks list)   dungeon-map.js (dungeon canvas: camera, grid)

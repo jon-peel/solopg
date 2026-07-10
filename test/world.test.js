@@ -9,6 +9,7 @@ import {
   placedHexes,
   removeHex,
   nextUnplacedKey,
+  setPartyPosition,
 } from "../js/world/world.js";
 import { axialKey } from "../js/core/hexgeo.js";
 import { exportWorld, importWorld } from "../js/data/portability.js";
@@ -32,6 +33,21 @@ test("createWorld applies defaults", () => {
   const w = createWorld();
   assert.equal(w.name, "Untitled World");
   assert.equal(w.hexScale, 6);
+});
+
+test("createWorld seeds a party at the origin and an empty factions list (Phase 8.1)", () => {
+  const w = createWorld({ name: "Fresh", seed: 1 });
+  assert.deepEqual(w.party, { q: 0, r: 0 });
+  assert.deepEqual(w.factions, []);
+  // The world clock is deliberately session-only — never part of the schema.
+  assert.equal("day" in w, false);
+});
+
+test("setPartyPosition moves the marker and returns the world", () => {
+  const w = createWorld({ name: "Map", seed: 1 });
+  const ret = setPartyPosition(w, 3, -2);
+  assert.equal(ret, w);
+  assert.deepEqual(w.party, { q: 3, r: -2 });
 });
 
 test("export -> import round-trips losslessly", () => {

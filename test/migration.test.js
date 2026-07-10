@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateWorld, importWorld, exportWorld } from "../js/data/portability.js";
-import { createWorld, SCHEMA_VERSION } from "../js/world/world.js";
+import { createWorld, SCHEMA_VERSION, setPartyPosition } from "../js/world/world.js";
 
 function v2World() {
   return {
@@ -167,4 +167,35 @@ test("a fresh current-version world is unchanged by migration", () => {
   const w = createWorld({ name: "New", seed: 2 });
   const before = JSON.parse(JSON.stringify(w));
   assert.deepEqual(migrateWorld(w), before);
+});
+
+test("migrateWorld upgrades v15 -> v16: party/factions backfilled, no day field (Phase 8.1)", () => {
+  const v15 = { ...v2World(), schemaVersion: 15, hooks: [], rivers: [], roads: [] };
+  const w = migrateWorld(v15);
+  assert.equal(w.schemaVersion, SCHEMA_VERSION);
+  assert.deepEqual(w.party, { q: 0, r: 0 });
+  assert.deepEqual(w.factions, []);
+  assert.equal("day" in w, false);
+});
+
+test("migrateWorld preserves an existing party/factions", () => {
+  const v16 = {
+    ...v2World(),
+    schemaVersion: 16,
+    hooks: [], rivers: [], roads: [],
+    party: { q: 5, r: -3 },
+    factions: [{ id: "faction:0" }],
+  };
+  const w = migrateWorld(v16);
+  assert.deepEqual(w.party, { q: 5, r: -3 });
+  assert.equal(w.factions.length, 1);
+});
+
+test("party/factions round-trip through export/import", () => {
+  const world = createWorld({ name: "Roundtrip", seed: 1 });
+  setPartyPosition(world, 2, 1);
+  world.factions.push({ id: "faction:0" });
+  const restored = importWorld(exportWorld(world));
+  assert.deepEqual(restored.party, { q: 2, r: 1 });
+  assert.equal(restored.factions.length, 1);
 });

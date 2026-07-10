@@ -11,8 +11,12 @@ model, and the per-step sub-plans in [`docs/plans/`](./docs/plans).
 (known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return), and full **QoL & UX**
 polish (right-click radial menu, dungeon-view UX, panel tabs, pinned hooks, map notes/labels, map
 nav/onboarding, POI dot polish). **Phase 3R (world coherence)** is also feature-complete — coherent
-terrain, rivers, roads, and settlement placement. See [PLAN.md](./PLAN.md) for what's next
-(Phase 8 Factions, Phase 9 small oracles, Phase 10 backlog).
+terrain, rivers, roads, and settlement placement. **Phase 8 Arc A (Travel & Party Movement)** is
+complete — a party marker + session day clock, a per-terrain **travel** model (pace, encumbrance,
+getting lost), **day-at-a-time** travel (toward a hex, or an 8-point compass into the unknown that
+generates terrain and reveals line-of-sight), and a "Progress N days" control. See
+[PLAN.md](./PLAN.md) for what's next (Phase 8 Arc B **Factions**, Phase 9 small oracles, Phase 10
+backlog).
 
 ## Running
 

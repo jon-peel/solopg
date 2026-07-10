@@ -138,6 +138,35 @@ test("computeRoads: a newly-revealed town joins the network", () => {
   assert.ok(onNet.has(axialKey(0, 0)) && onNet.has(axialKey(5, 0)), "the original cities stay connected");
 });
 
+test("computeRoads: APPEND-ONLY — an established auto road is kept verbatim when a new city appears", () => {
+  const terr = boardRect(-2, 12, -6, 6);
+  const first = computeRoads("s", terr, settlements([[0, 0, "City"], [10, 0, "City"]]), [], []);
+  const trunk = first.find((r) => !r.manual);
+  assert.ok(trunk, "an auto trunk road was built");
+  // Add a third city off to the side and feed the existing roads back in.
+  const grown = computeRoads("s", terr, settlements([[0, 0, "City"], [10, 0, "City"], [5, 4, "City"]]), [], first);
+  const kept = grown.find((r) => r.id === trunk.id);
+  assert.ok(kept, "the original road still exists (not re-derived away)");
+  assert.deepEqual(kept.path, trunk.path, "its path is byte-for-byte unchanged");
+  assert.ok(grown.length > first.length, "a new road was added for the new city");
+  const onNet = new Set();
+  for (const rd of grown) for (const p of rd.path) onNet.add(axialKey(p.q, p.r));
+  assert.ok(onNet.has(axialKey(5, 4)), "the new city is connected to the network");
+});
+
+test("computeRoads: APPEND-ONLY — adding a river never re-routes an existing road", () => {
+  const terr = boardRect(-2, 12, -4, 4);
+  const first = computeRoads("s", terr, settlements([[0, 0, "City"], [10, 0, "City"]]), [], []);
+  const trunk = first.find((r) => !r.manual);
+  // A river running parallel just off the trunk would tempt a valley-discount
+  // re-route on a fresh derive; append-only must keep the existing road as-is.
+  const river = [{ path: [1, 2, 3, 4, 5, 6, 7, 8].map((q) => ({ q, r: 1 })) }];
+  const withRiver = computeRoads("s", terr, settlements([[0, 0, "City"], [10, 0, "City"]]), river, first);
+  const kept = withRiver.find((r) => r.id === trunk.id);
+  assert.ok(kept, "the road survives the new river");
+  assert.deepEqual(kept.path, trunk.path, "unchanged despite the new valley discount");
+});
+
 test("computeRoads: nearby routes merge onto a shared corridor instead of paralleling", () => {
   // A manual trunk with two villages stacked below q=3; the lower one's route to
   // the trunk should reuse the upper one's road rather than draw a parallel line.
