@@ -9,7 +9,7 @@ import { rollTable } from "../core/table.js";
 import { makeResolver } from "../core/loader.js";
 import { subRng } from "../core/rng.js";
 import { terrainAt } from "./affinity.js";
-import { profileFor, cappedSizeTable } from "./terrain-profile.js";
+import { profileFor, cappedSizeTable, suppressLargeSizes } from "./terrain-profile.js";
 import { generatePoi } from "./poi.js";
 
 /**
@@ -18,11 +18,15 @@ import { generatePoi } from "./poi.js";
  *   poi-types, poi-occupant, creatures, occupiers (and terrain sub-tables).
  * @param {() => number} rng a single stream consumed in a fixed order
  * @param {{ key?: string, coords?: object|null, placed?: boolean,
- *   terrain?: string, seed?: number|string, gen?: number, neighborTerrains?: string[] }} [opts]
+ *   terrain?: string, seed?: number|string, gen?: number, neighborTerrains?: string[],
+ *   nearbyLargeCount?: number }} [opts]
  *   seed+gen+coords seed per-POI sub-streams (order-stable). neighborTerrains
  *   are the terrains of this hex's already-placed neighbours — they bias the
  *   affinity terrain roll (js/gen/affinity.js); omit/[] for a hex revealed with
- *   no placed neighbours.
+ *   no placed neighbours. nearbyLargeCount is how many large (Town/City)
+ *   settlements already sit within a day's travel — it softly suppresses this
+ *   hex rolling large too (js/gen/terrain-profile.js suppressLargeSizes), so big
+ *   settlements rarely cluster; omit/0 when none are near.
  * @returns {object} hex
  */
 export function generateHex(tables, rng, opts = {}) {
@@ -58,12 +62,22 @@ export function generateHex(tables, rng, opts = {}) {
   if (profile.settlement) {
     const present = rng() < profile.settlement.chance;
     if (present) {
-      const sizeTable = cappedSizeTable(
+      const capped = cappedSizeTable(
         tables.get("settlement-size"),
         profile.settlement.maxSize,
       );
+      // Soft-suppress large sizes near existing big settlements (reweights only;
+      // rollTable still draws once, so the rng stream / downstream POI rolls are
+      // unchanged whether or not any large neighbour is present).
+      const sizeTable = capped && suppressLargeSizes(capped, opts.nearbyLargeCount ?? 0);
       if (sizeTable) {
         settlement = { present: true, size: rollTable(sizeTable, rng).value.size };
+        // Martial KEEP overlay (terrain-biased, rare). Rolled from its own
+        // sub-stream so it never shifts the main rng / downstream POI rolls.
+        const keepChance = profile.settlement.keepChance ?? 0;
+        if (keepChance > 0 && subRng(opts.seed ?? 0, "keep", coords.q, coords.r, opts.gen ?? 0)() < keepChance) {
+          settlement.kind = "keep";
+        }
       }
     }
   }

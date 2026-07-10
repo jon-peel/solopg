@@ -24,12 +24,14 @@ import {
 } from "../world/world.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
+import { computeRoads, buildManualRoad } from "../gen/roads.js";
+import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
 import { describeFeature, featureName, FEATURE_BUILD, FEATURE_TYPES } from "../gen/feature-detail.js";
 import { getRoomState, withRoomState } from "../world/dungeon-state.js";
-import { profileFor, SIZE_ORDER } from "../gen/terrain-profile.js";
+import { profileFor, SIZE_ORDER, isLargeSize } from "../gen/terrain-profile.js";
 import { exportWorld, importWorld, migrateWorld } from "../data/portability.js";
 import {
   listWorlds,
@@ -51,11 +53,12 @@ import {
   setHookMarks,
   setHookFocus,
   setRiverDraft,
+  setRoadDraft,
   zoomStep,
   recenter,
   pixelsPerMile,
 } from "./map.js";
-import { TERRAIN_COLORS } from "./terrain-style.js";
+import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
 import { POI_GLYPHS } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
@@ -124,7 +127,8 @@ let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
 let selectedHookId = null; // hook whose target/origin are highlighted on the map
-let riverDraftClicks = null; // manual-river drawing: clicked anchor hexes, or null when not drawing
+let draftClicks = null; // manual river/road drawing: clicked anchor hexes, or null when not drawing
+let draftKind = null;   // "river" | "road" — what the active draft builds
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -185,6 +189,7 @@ async function setCurrent(world) {
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
+  if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -202,16 +207,58 @@ async function setCurrent(world) {
   await refreshWorldList();
 }
 
-async function onNewWorld() {
+// Create a new world. `fillRadius` (from the New World dropdown) optionally
+// pre-fills a hex disc of that radius around the origin — Empty (null), Small (1),
+// Medium (2), Large (3), Huge (15) — running the full terrain/water/settlement/
+// road pipeline via setCurrent's sync passes.
+async function onNewWorld(fillRadius = null) {
   // No blocking prompt(): browsers can suppress repeated dialogs (the "prevent
   // this page from creating more dialogs" box), which silently broke this
   // button. Create with a default name; rename inline via the panel title.
   const worlds = await listWorlds();
-  const world = await saveWorld(createWorld({ name: defaultWorldName(worlds) }));
-  await setCurrent(world);
+  const world = createWorld({ name: defaultWorldName(worlds) });
+  let filled = 0;
+  if (fillRadius) {
+    current = world; // buildRandomHex reads `current` for neighbour affinity + spacing
+    const tables = await loadTables(HEX_TABLE_IDS);
+    for (const { q, r } of hexDisc(0, 0, fillRadius)) {
+      if (hasHexAt(current, q, r)) continue;
+      addHex(current, buildRandomHex(tables, q, r, 0));
+      filled++;
+    }
+    syncRivers(current);
+    syncRoads(current); // persist the derived overlays with the world
+  }
+  const saved = await saveWorld(world);
+  await setCurrent(saved);
   selectCell(0, 0); // land the GM on the origin, ready to right-click
   recenterOn(0, 0);
-  logLine("Created and saved.");
+  logLine(filled ? `Created a new world (${filled} hexes).` : "Created and saved.");
+}
+
+// The New World button opens a small dropdown (Empty / Small / Medium / Large /
+// Huge); picking a size creates the world pre-filled to that hex radius.
+function wireNewWorldMenu() {
+  const btn = $("btn-new");
+  const menu = $("new-world-menu");
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+  };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(menu.hidden);
+  });
+  menu.addEventListener("click", (e) => {
+    const opt = e.target.closest("button[data-radius]");
+    if (!opt) return;
+    setOpen(false);
+    const raw = opt.dataset.radius;
+    onNewWorld(raw ? Number(raw) : null);
+  });
+  // Dismiss on an outside click or Escape.
+  document.addEventListener("click", (e) => { if (!menu.hidden && !e.target.closest("#new-world-menu, #btn-new")) setOpen(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
 }
 
 // --- map chrome (hover readout, scale, empty-state prompt, help) ---------
@@ -291,6 +338,34 @@ function toggleHelp(force) {
   const el = $("help-overlay");
   if (!el) return;
   el.hidden = force === undefined ? !el.hidden : !force;
+}
+
+// Fill the legend's terrain rows from the single-source colour/icon tables (so
+// the key can never drift from the map), then toggle its visibility.
+let legendBuilt = false;
+function buildLegendTerrain() {
+  if (legendBuilt) return;
+  const host = $("legend-terrain");
+  if (!host) return;
+  host.innerHTML = `<div class="legend-sub">Terrain</div>`;
+  for (const terrain of Object.keys(TERRAIN_COLORS)) {
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    const sw = document.createElement("span");
+    sw.className = "lg-swatch";
+    sw.style.background = TERRAIN_COLORS[terrain];
+    const icon = (TERRAIN_ICONS[terrain] && TERRAIN_ICONS[terrain][0]) || "";
+    row.append(sw, document.createTextNode(`${icon} ${terrain}`));
+    host.appendChild(row);
+  }
+  legendBuilt = true;
+}
+function toggleLegend(force) {
+  const el = $("legend");
+  if (!el) return;
+  buildLegendTerrain();
+  el.hidden = force === undefined ? !el.hidden : !force;
+  $("btn-legend").setAttribute("aria-pressed", String(!el.hidden));
 }
 
 // `?` toggles the cheat-sheet; Esc closes it (ahead of other Esc handlers).
@@ -415,6 +490,7 @@ function renderSelection() {
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
+    seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
     selectedPoiId,
     onSelectPoi,
@@ -960,15 +1036,15 @@ function onSelectHook(id) {
 
 // Esc clears a hook highlight (takes priority over leaving the dungeon). Inert
 // while a ring is open (the ring owns Esc) or while typing in a field.
-// While tracing a river, Enter finishes, Esc cancels, Ctrl/Cmd+Z undoes a point.
-// Registered before the other key handlers so it wins those keys during a draw.
-function onRiverDraftKey(e) {
-  if (!riverDraftClicks) return;
+// While tracing a river/road, Enter finishes, Esc cancels, Ctrl/Cmd+Z undoes a
+// point. Registered before the other key handlers so it wins those keys mid-draw.
+function onDraftKey(e) {
+  if (!draftClicks) return;
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-  if (e.key === "Escape") onCancelDrawRiver();
-  else if (e.key === "Enter") onFinishDrawRiver();
-  else if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey)) onUndoRiverPoint();
+  if (e.key === "Escape") onCancelDraft();
+  else if (e.key === "Enter") onFinishDraft();
+  else if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey)) onUndoDraftPoint();
   else return;
   e.stopImmediatePropagation();
   e.preventDefault();
@@ -1042,6 +1118,22 @@ function neighborTerrains(q, r) {
   return out;
 }
 
+// Radius (in hexes ≈ a day's travel at 6 miles/hex) within which an existing
+// large settlement soft-suppresses a new one — see generateHex/suppressLargeSizes.
+const LARGE_SPACING = 4;
+
+// How many large (Town/City) settlements already sit within a day's travel of
+// (q,r). Feeds generateHex's nearbyLargeCount so big settlements rarely cluster.
+function nearbyLargeCount(q, r) {
+  let count = 0;
+  for (const c of hexDisc(q, r, LARGE_SPACING)) {
+    if (c.q === q && c.r === r) continue;
+    const h = getHex(current, c.q, c.r);
+    if (h && h.placed && h.settlement && h.settlement.present && isLargeSize(h.settlement.size)) count++;
+  }
+  return count;
+}
+
 // Rivers (Phase 3R.6): a DERIVED overlay recomputed from the currently-revealed
 // terrain (js/gen/rivers.js — major-water drainage over the elevation-free
 // affinity world). Recompute after every generation batch and on world load;
@@ -1051,10 +1143,54 @@ function neighborTerrains(q, r) {
 function syncRivers(world) {
   if (!world) return;
   const terrainByKey = new Map();
-  for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  const settlementsByKey = new Map(); // key -> size, so new rivers bend toward towns
+  for (const h of placedHexes(world)) {
+    const key = axialKey(h.coords.q, h.coords.r);
+    terrainByKey.set(key, h.terrain);
+    if (h.settlement && h.settlement.present) settlementsByKey.set(key, h.settlement.size);
+  }
   // Append-only: keep existing rivers, add rivers for newly-revealed sources
-  // (a river must never disappear when more terrain is generated).
-  world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : []);
+  // (a river must never disappear when more terrain is generated). New rivers
+  // are pulled toward nearby settlements (see computeRivers' gravity note).
+  world.rivers = computeRivers(world.seed, terrainByKey, Array.isArray(world.rivers) ? world.rivers : [], settlementsByKey);
+  // Civilisation follows water. First SEED new settlements at water — scattered
+  // along rivers, a port (mostly City, sometimes a keep) at most river mouths
+  // (the double whammy), shore Cities on lakes — then BUMP every settlement by
+  // its river/coast context. Both are idempotent (a decided-flag / baseSize
+  // re-derivation), so the repeated syncRivers calls never duplicate or compound.
+  const hexByKey = new Map();
+  for (const h of placedHexes(world)) hexByKey.set(axialKey(h.coords.q, h.coords.r), h);
+  seedWaterSettlements(hexByKey, world.rivers, terrainByKey, world.seed);
+  applyWaterBoosts(placedHexes(world), world.rivers, terrainByKey);
+  // Then sprinkle a few farming hamlets around the large (now final-sized)
+  // settlements and re-run the (idempotent) boost so a riverside one is sized
+  // consistently this same sync.
+  seedHamletClusters(hexByKey, world.seed);
+  applyWaterBoosts(placedHexes(world), world.rivers, terrainByKey);
+}
+
+// Rebuild the road overlay (Phase 3R.7) from the current terrain, settlements,
+// and rivers. Runs AFTER syncRivers so settlements are their final, boosted size
+// and the river valleys exist for roads to hug. Append-only like rivers — a
+// built road is kept verbatim (js/gen/roads.js), so revealing more terrain only
+// EXTENDS the network, never re-routes it. world.roads holds the tiered polylines
+// that map.js draws.
+function syncRoads(world) {
+  if (!world) return;
+  const terrainByKey = new Map();
+  const settlementsByKey = new Map(); // key -> size, so roads link the big places
+  for (const h of placedHexes(world)) {
+    const key = axialKey(h.coords.q, h.coords.r);
+    terrainByKey.set(key, h.terrain);
+    if (h.settlement && h.settlement.present) settlementsByKey.set(key, h.settlement.size);
+  }
+  world.roads = computeRoads(
+    world.seed,
+    terrainByKey,
+    settlementsByKey,
+    world.rivers,
+    Array.isArray(world.roads) ? world.roads : [],
+  );
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
@@ -1193,6 +1329,10 @@ async function onGenerateHook(opts = {}) {
 
     if (!hook) return logLine("Nothing to gossip about here.");
     current.hooks.push(hook);
+    // Surface the new lead: jump to the Hooks tab with it selected (and its
+    // endpoints highlighted on the map) so it's never a silent "nothing happened".
+    selectedHookId = hook.id;
+    setPanelTab("hooks");
     await persistAndRefresh();
     logLine(`New hook — ${hookName(hook)}${HOOK_NOTE[hook.pattern] || ""}.`);
   } catch (err) {
@@ -1259,6 +1399,9 @@ async function onFollowClue(id) {
       subject: { poiId: subj.poiId, name: subj.name, type: subj.type },
       chain: { ...hook.chain, step: nextStep }, // keep total + prize
     });
+    // Keep the advanced lead in view (Hooks tab, selected, new leg highlighted).
+    selectedHookId = hook.id;
+    setPanelTab("hooks");
     await persistAndRefresh();
     logLine(
       nextStep >= hook.chain.total
@@ -1272,6 +1415,7 @@ async function onFollowClue(id) {
 
 async function persistAndRefresh() {
   syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
+  syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
@@ -1293,56 +1437,66 @@ function buildRandomHex(tables, q, r, gen) {
     seed: current.seed,
     gen,
     neighborTerrains: neighborTerrains(q, r),
+    nearbyLargeCount: nearbyLargeCount(q, r),
   });
   hex.gen = gen;
   return hex;
 }
 
 function onHexClick({ q, r }) {
-  if (riverDraftClicks) return addRiverPoint(q, r);
+  if (draftClicks) return addDraftPoint(q, r);
   selectCell(q, r);
 }
 
 function onEmptyCellClick({ q, r }) {
-  if (riverDraftClicks) return addRiverPoint(q, r);
+  if (draftClicks) return addDraftPoint(q, r);
   selectCell(q, r);
 }
 
-// --- Manual river drawing (Phase 3R.6) -----------------------------------
-// Trace a river by clicking hexes: consecutive clicks are joined by the
-// straight hex-line between them, so two clicks make a line and more clicks a
-// winding course. On finish it's stored as a `manual` river (js/gen/rivers.js);
-// its open ends auto-complete to a mountain source / the sea over time.
+// --- Manual river / road drawing (Phase 3R.6 / 3R.7) ---------------------
+// Trace a river OR a road by clicking hexes: consecutive clicks are joined by
+// the straight hex-line between them, so two clicks make a line and more clicks
+// a winding course. `draftKind` ("river" | "road") says which the active draft
+// is; on Finish it's stored as a `manual` river (js/gen/rivers.js — open ends
+// auto-complete to a mountain source / the sea) or a `manual` road
+// (js/gen/roads.js — kept verbatim, seeds the auto road network).
 
 // The full hex path from the clicked anchors (straight lines filled between).
-function riverDraftPath() {
-  if (!riverDraftClicks || !riverDraftClicks.length) return [];
+function draftPath() {
+  if (!draftClicks || !draftClicks.length) return [];
   const path = [];
   const push = (c) => {
     const last = path[path.length - 1];
     if (!last || last.q !== c.q || last.r !== c.r) path.push({ q: c.q, r: c.r });
   };
-  push(riverDraftClicks[0]);
-  for (let i = 1; i < riverDraftClicks.length; i++) {
-    const seg = axialLine(riverDraftClicks[i - 1].q, riverDraftClicks[i - 1].r, riverDraftClicks[i].q, riverDraftClicks[i].r);
+  push(draftClicks[0]);
+  for (let i = 1; i < draftClicks.length; i++) {
+    const seg = axialLine(draftClicks[i - 1].q, draftClicks[i - 1].r, draftClicks[i].q, draftClicks[i].r);
     for (let k = 1; k < seg.length; k++) push(seg[k]);
   }
   return path;
 }
 
-function refreshRiverDraft() {
-  setRiverDraft(riverDraftClicks ? riverDraftPath() : null);
-  $("river-draw-bar").hidden = !riverDraftClicks;
+function refreshDraft() {
+  const pts = draftClicks ? draftPath() : null;
+  setRiverDraft(draftKind === "river" ? pts : null);
+  setRoadDraft(draftKind === "road" ? pts : null);
+  $("draw-bar").hidden = !draftClicks;
+  if (draftClicks) $("draw-hint").textContent = `Click hexes to trace a ${draftKind}`;
 }
 
-// The id of a GM-drawn (manual) river passing through (q, r), or null. Only
-// manual rivers are individually removable — auto rivers are derived.
+// The id of a GM-drawn (manual) river / road passing through (q, r), or null.
+// Only manual ones are individually removable — the auto overlays are derived.
 function manualRiverIdAt(q, r) {
   if (!current) return null;
   const k = axialKey(q, r);
-  for (const rv of current.rivers || []) {
-    if (rv.manual && rv.path.some((p) => axialKey(p.q, p.r) === k)) return rv.id;
-  }
+  for (const rv of current.rivers || []) if (rv.manual && rv.path.some((p) => axialKey(p.q, p.r) === k)) return rv.id;
+  return null;
+}
+function manualRoadIdAt(q, r) {
+  if (!current) return null;
+  const k = axialKey(q, r);
+  for (const rd of current.roads || []) if (rd.manual && rd.path.some((p) => axialKey(p.q, p.r) === k)) return rd.id;
   return null;
 }
 
@@ -1352,56 +1506,72 @@ async function onRemoveRiver(id) {
   await persistAndRefresh(); // syncRivers keeps the rest; auto rivers re-derive
   logLine("River removed.");
 }
+async function onRemoveRoad(id) {
+  if (!current || !id) return;
+  current.roads = (current.roads || []).filter((rd) => rd.id !== id);
+  await persistAndRefresh(); // syncRoads keeps manual roads; the auto network re-derives
+  logLine("Road removed.");
+}
 
-function onStartDrawRiver() {
+function onStartDrawRiver() { startDraft("river"); }
+function onStartDrawRoad() { startDraft("road"); }
+function startDraft(kind) {
   if (!current || !selected) return;
-  riverDraftClicks = [{ q: selected.q, r: selected.r }];
-  refreshRiverDraft();
-  logLine("Drawing a river — click hexes to trace its course, then Finish.");
+  draftKind = kind;
+  draftClicks = [{ q: selected.q, r: selected.r }];
+  refreshDraft();
+  logLine(`Drawing a ${kind} — click hexes to trace its course, then Finish.`);
 }
 
-function addRiverPoint(q, r) {
-  if (!riverDraftClicks) return;
-  const last = riverDraftClicks[riverDraftClicks.length - 1];
+function addDraftPoint(q, r) {
+  if (!draftClicks) return;
+  const last = draftClicks[draftClicks.length - 1];
   if (last.q === q && last.r === r) return; // ignore a repeat click on the same hex
-  riverDraftClicks.push({ q, r });
-  refreshRiverDraft();
+  draftClicks.push({ q, r });
+  refreshDraft();
 }
 
-function onUndoRiverPoint() {
-  if (!riverDraftClicks) return;
-  if (riverDraftClicks.length > 1) riverDraftClicks.pop();
-  refreshRiverDraft();
+function onUndoDraftPoint() {
+  if (!draftClicks) return;
+  if (draftClicks.length > 1) draftClicks.pop();
+  refreshDraft();
 }
 
-function onCancelDrawRiver() {
-  riverDraftClicks = null;
-  refreshRiverDraft();
+function onCancelDraft() {
+  draftClicks = null;
+  draftKind = null;
+  refreshDraft();
 }
 
-// Next id for a manual river: manual:<n>, monotonic across the world's rivers.
-function nextManualRiverId(world) {
+// Next id for a manual overlay entry: manual:<n>, monotonic across the list.
+function nextManualId(list) {
   let max = -1;
-  for (const rv of world.rivers || []) {
-    const m = /^manual:(\d+)$/.exec(rv.id || "");
+  for (const item of list || []) {
+    const m = /^manual:(\d+)$/.exec(item.id || "");
     if (m) max = Math.max(max, Number(m[1]));
   }
   return `manual:${max + 1}`;
 }
 
-async function onFinishDrawRiver() {
-  if (!current || !riverDraftClicks) return;
-  const path = riverDraftPath();
-  if (path.length < 2) { onCancelDrawRiver(); return; }
-  const terrainByKey = new Map();
-  for (const h of placedHexes(current)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
-  const river = buildManualRiver(nextManualRiverId(current), path, terrainByKey);
-  if (!Array.isArray(current.rivers)) current.rivers = [];
-  current.rivers.push(river);
-  riverDraftClicks = null;
-  refreshRiverDraft();
-  await persistAndRefresh(); // syncRivers completes the open ends + merges tributaries
-  logLine("River added.");
+async function onFinishDraft() {
+  if (!current || !draftClicks) return;
+  const path = draftPath();
+  const kind = draftKind;
+  if (path.length < 2) { onCancelDraft(); return; }
+  if (kind === "river") {
+    const terrainByKey = new Map();
+    for (const h of placedHexes(current)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+    if (!Array.isArray(current.rivers)) current.rivers = [];
+    current.rivers.push(buildManualRiver(nextManualId(current.rivers), path, terrainByKey));
+  } else {
+    if (!Array.isArray(current.roads)) current.roads = [];
+    current.roads.push(buildManualRoad(nextManualId(current.roads), path));
+  }
+  draftClicks = null;
+  draftKind = null;
+  refreshDraft();
+  await persistAndRefresh(); // syncRivers/syncRoads integrate the new manual overlay
+  logLine(kind === "river" ? "River added." : "Road added.");
 }
 
 // Right-click: select the cell, then open the radial menu over it. The model is
@@ -1409,7 +1579,7 @@ async function onFinishDrawRiver() {
 // are shown disabled. Picks route through `radialDispatch` to existing handlers.
 function onContextMenu({ q, r, clientX, clientY }) {
   if (!current) return;
-  if (riverDraftClicks) return; // ignore right-click while tracing a river
+  if (draftClicks) return; // ignore right-click while tracing a river/road
   selectCell(q, r);
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
@@ -1425,6 +1595,8 @@ function onContextMenu({ q, r, clientX, clientY }) {
     pois: placed ? (hex.pois || []).map((p) => ({ id: p.id, name: p.name })) : [],
     dungeonSizes: dungeonSizes.map((s) => ({ label: s.size, value: s.size, title: s.blurb || "" })),
     manualRiverHere: manualRiverIdAt(q, r),
+    manualRoadHere: manualRoadIdAt(q, r),
+    locked: !!(placed && hex.locked),
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -1444,13 +1616,17 @@ function radialDispatch(id, value) {
     case "addSettlement": return onAddSettlement(value);
     case "removeSettlement": return onRemoveSettlement();
     case "genArea": return onGenerateArea(value);
-    case "regenerate": return onRegenerate();
+    case "toggleLock": return onToggleLock();
+    case "regenHex": return onRegenerate();
+    case "regenArea": return onRegenerateArea(value);
     case "deleteHex": return onDeleteHex();
     case "genHook": return onGenerateHook();
     case "readMap": return onReadMap();
     case "followTrail": return onStartChain();
     case "drawRiver": return onStartDrawRiver();
     case "removeRiver": return onRemoveRiver(value);
+    case "drawRoad": return onStartDrawRoad();
+    case "removeRoad": return onRemoveRoad(value);
   }
 }
 
@@ -1480,6 +1656,7 @@ async function onPlaceTerrain(terrain) {
       terrain,
       seed: current.seed,
       gen: 0,
+      nearbyLargeCount: nearbyLargeCount(q, r),
     });
     hex.gen = 0;
     addHex(current, hex);
@@ -1514,11 +1691,13 @@ async function onGenerateArea(radius) {
 }
 
 // "Give me another": bump the per-hex gen counter to escape coord-determinism.
+// A locked hex is protected — unlock it first.
 async function onRegenerate() {
   if (!current || !selected) return;
   try {
     const { q, r } = selected;
     const existing = getHex(current, q, r);
+    if (existing && existing.locked) return logLine("Hex is locked — unlock it to regenerate.");
     const gen = ((existing && existing.gen) || 0) + 1;
     const tables = await loadTables(HEX_TABLE_IDS);
     addHex(current, buildRandomHex(tables, q, r, gen));
@@ -1528,14 +1707,50 @@ async function onRegenerate() {
   }
 }
 
+// Re-roll every EXISTING hex in the disc around the selection, bumping each one's
+// gen. Locked hexes are kept as-is, and the manual rivers/roads stay frozen (only
+// the derived overlays re-stitch). This is the "regenerate a region" tool.
+async function onRegenerateArea(radius) {
+  if (!current || !selected) return;
+  try {
+    const tables = await loadTables(HEX_TABLE_IDS);
+    let n = 0, kept = 0;
+    for (const { q, r } of hexDisc(selected.q, selected.r, radius)) {
+      const existing = getHex(current, q, r);
+      if (!existing || !existing.placed) continue; // only re-roll what's there
+      if (existing.locked) { kept++; continue; }    // protected
+      addHex(current, buildRandomHex(tables, q, r, ((existing.gen) || 0) + 1));
+      n++;
+    }
+    if (!n) return logLine(kept ? "Every hex in range is locked." : "No hexes to regenerate in range.");
+    await persistAndRefresh();
+    logLine(`Regenerated ${n} hex(es)${kept ? ` (${kept} locked, kept)` : ""}.`);
+  } catch (err) {
+    logLine(`Regenerate area error: ${err.message}`);
+  }
+}
+
+// Toggle the selected hex's `locked` flag — a locked hex is protected from
+// regenerate and delete (so you can re-roll a region and keep what you like).
+async function onToggleLock() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  hex.locked = !hex.locked;
+  await persistAndRefresh();
+  logLine(hex.locked ? "Hex locked." : "Hex unlocked.");
+}
+
 async function onDeleteHex() {
   if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (hex && hex.locked) return logLine("Hex is locked — unlock it to delete.");
   removeHex(current, selected.q, selected.r);
   await persistAndRefresh();
 }
 
 function wire() {
-  $("btn-new").addEventListener("click", onNewWorld);
+  wireNewWorldMenu();
   $("btn-save").addEventListener("click", onSave);
   $("btn-delete").addEventListener("click", onDelete);
   $("btn-export").addEventListener("click", onExport);
@@ -1543,6 +1758,7 @@ function wire() {
   $("import-file").addEventListener("change", onImportFile);
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("btn-labels").addEventListener("click", onToggleLabels);
+  $("btn-legend").addEventListener("click", () => toggleLegend());
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
@@ -1552,15 +1768,15 @@ function wire() {
   $("btn-home").addEventListener("click", () => recenter());
   $("btn-help").addEventListener("click", () => toggleHelp());
   $("btn-help-close").addEventListener("click", () => toggleHelp(false));
-  $("btn-river-undo").addEventListener("click", onUndoRiverPoint);
-  $("btn-river-finish").addEventListener("click", onFinishDrawRiver);
-  $("btn-river-cancel").addEventListener("click", onCancelDrawRiver);
+  $("btn-draw-undo").addEventListener("click", onUndoDraftPoint);
+  $("btn-draw-finish").addEventListener("click", onFinishDraft);
+  $("btn-draw-cancel").addEventListener("click", onCancelDraft);
   $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
   $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
   $("help-overlay").addEventListener("click", (e) => {
     if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
   });
-  window.addEventListener("keydown", onRiverDraftKey); // river drawing intercepts Esc/Enter first
+  window.addEventListener("keydown", onDraftKey); // river/road drawing intercepts Esc/Enter first
   window.addEventListener("keydown", onHelpKey); // Esc closes help before other handlers
   window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
   window.addEventListener("keydown", onDungeonKey);

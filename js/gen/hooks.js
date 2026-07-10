@@ -64,12 +64,27 @@ export function rollHookPattern(tables, rng, hasSubjects) {
 export function chooseDistantTarget(rng, origin, isOccupied, opts = {}) {
   const min = opts.minDistance ?? 2;
   const max = opts.maxDistance ?? 6;
+  const reach = opts.maxReach ?? 40; // farthest to look before giving up
+  // Preferred band: a random straight axial walk (a clean compass bearing).
   for (let attempt = 0; attempt < 24; attempt++) {
     const dist = min + Math.floor(rng() * (max - min + 1));
     const [dq, dr] = NEIGHBOR_DIRS[Math.floor(rng() * NEIGHBOR_DIRS.length)];
     const q = origin.q + dq * dist;
     const r = origin.r + dr * dist;
     if (!isOccupied(q, r)) return { q, r, distance: dist };
+  }
+  // Dense / heavily-explored map: nothing free in the preferred band. Push the
+  // target outward ring by ring past `max` — a distant site can legitimately be
+  // far — trying every straight direction at each step until we clear the
+  // occupied area. Still a straight axial walk, so the bearing stays clean.
+  for (let dist = max + 1; dist <= reach; dist++) {
+    const start = Math.floor(rng() * NEIGHBOR_DIRS.length);
+    for (let k = 0; k < NEIGHBOR_DIRS.length; k++) {
+      const [dq, dr] = NEIGHBOR_DIRS[(start + k) % NEIGHBOR_DIRS.length];
+      const q = origin.q + dq * dist;
+      const r = origin.r + dr * dist;
+      if (!isOccupied(q, r)) return { q, r, distance: dist };
+    }
   }
   return null;
 }

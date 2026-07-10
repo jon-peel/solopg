@@ -17,7 +17,7 @@ const base = (over = {}) => ({
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "river"];
+const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "draw"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -47,15 +47,29 @@ test("placed cell: build actions enabled; Generate stays enabled (Random child g
   assert.equal(byId(m, "generate").enabled, true);
 });
 
-test("River slot: always offers Draw; offers Remove only on a hex with a manual river", () => {
-  const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "river");
+test("Draw slot: offers River + Road; Remove entries only where a manual one runs", () => {
+  const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "draw");
   assert.equal(plain.kind, "submenu");
-  assert.deepEqual(plain.children.map((c) => c.id), ["drawRiver"]); // just Draw
-  const withRiver = byId(buildRadialModel(base({ placed: true, terrain: "Plains", manualRiverHere: "manual:0" })), "river");
-  const ids = withRiver.children.map((c) => c.id);
-  assert.deepEqual(ids, ["drawRiver", "removeRiver"]);
-  const rm = withRiver.children.find((c) => c.id === "removeRiver");
-  assert.equal(rm.value, "manual:0");
+  assert.deepEqual(plain.children.map((c) => c.id), ["drawRiver", "drawRoad"]); // just the two Draw actions
+  const withBoth = byId(buildRadialModel(base({ placed: true, terrain: "Plains", manualRiverHere: "manual:0", manualRoadHere: "manual:1" })), "draw");
+  assert.deepEqual(withBoth.children.map((c) => c.id), ["drawRiver", "drawRoad", "removeRiver", "removeRoad"]);
+  assert.equal(withBoth.children.find((c) => c.id === "removeRiver").value, "manual:0");
+  assert.equal(withBoth.children.find((c) => c.id === "removeRoad").value, "manual:1");
+});
+
+test("Regenerate slot: Lock/Unlock + This hex + area sizes; lock protects re-roll & delete", () => {
+  const reg = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "regenerate");
+  assert.equal(reg.kind, "submenu");
+  assert.deepEqual(reg.children.map((c) => c.id), ["toggleLock", "regenHex", "regenArea", "regenArea", "regenArea"]);
+  assert.equal(reg.children[0].label, "Lock");
+  assert.equal(reg.children[2].value, 1); // Small
+  assert.equal(byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "deleteHex").enabled, true);
+  // Locked: the toggle reads Unlock, This-hex regen is off, Delete is off.
+  const locked = buildRadialModel(base({ placed: true, terrain: "Plains", locked: true }));
+  const lreg = byId(locked, "regenerate");
+  assert.equal(lreg.children[0].label, "Unlock");
+  assert.equal(lreg.children.find((c) => c.id === "regenHex").enabled, false);
+  assert.equal(byId(locked, "deleteHex").enabled, false, "a locked hex can't be deleted");
 });
 
 test("Generate submenu: Random (anchored) gates on placed; Small/Medium/Large/Huge always fill-empty", () => {

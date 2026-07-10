@@ -14,8 +14,11 @@
 > See PLAN.md's "TERRAIN REWRITE" entry. The 3R.3–3R.5 detail below is kept for
 > history; the classifier/river code it references no longer exists.
 
-**Status: 📋 planning only.** No code in this pass. Every sub-phase carries its
-own **research/design step** — external research is done *there*, not now.
+**Status: ✅ feature-complete.** All sub-phases (3R.1–3R.8) are built, node-tested, and shipped;
+this document is now the design *history* + as-built record. The lone deferred item is
+**migration for pre-3R saved worlds** — explicitly out of scope (see 3R.8). Everything below the
+original "planning" framing is kept for the reasoning trail; the ✅ markers on each sub-phase track
+what actually landed. Every sub-phase carried its own **research/design step** — done there, not up front.
 
 This is a revisit of Phase 3 ("POIs + terrain-aware generation"), not Phase 6
 (Hooks) or Phase 7 (QoL/UX). It's **generation quality** — what the world *is* —
@@ -349,6 +352,13 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   old worlds right now).
 
 ### 3R.4 — Water v2: fresh vs salt, coastlines ✅ done
+> **Note (post-v13):** the continent-gate coastline mechanics below were part of the
+> elevation-era design; the v13 terrain rewrite folded Sea/Lake into the neighbour-affinity
+> oracle (`js/gen/affinity.js`). A later **flooding retune** (play feedback — Sea was averaging
+> ~31% of the map, up to 90%) cut Sea's spawn (`SPAWN.Sea` 2→0.8) and self-affinity
+> (`AFFINITY.Sea.Sea` 38→28), bringing water to a coastal minority (~10% median, worst ~40%;
+> flooded maps 24→8 of 40) while keeping coherent oceans on ~75% of maps. Guarded by an
+> `affinity.test.js` water-fraction sweep.
 - Split **Water → Lake (fresh) + Sea (salt)** as done — confirmed "Lake"/"Sea" over
   "Fresh"/"Salt". Implemented as **two full terrain values**, not a `Water` + subtype
   field: reading every consumer showed rendering (`terrain-style.js`, `terrain-art.js`)
@@ -857,60 +867,200 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
 
 ### 3R.6 — Settlements v2
 - **Document current types** (Thorp/Hamlet/Village/Town/City) — done above.
-- **Add Keep/Fort** — a **martial variant** rather than a new size tier (recommend: a
-  Village-equivalent "footprint" with a `kind: "keep"` overlay so sizing/roads treat
-  it consistently). To confirm which band and whether it's a separate spawn or a
-  reskin.
-- **Names** — settlements have none today. Add a seeded name generator (new tables),
-  reusing the existing hex `name`/notes plumbing where sensible.
+- **Spawn-density dial-down (step A) ✅ done** — the flat per-hex settlement `chance`
+  (`terrain-profile.js` `TERRAIN_PROFILE`) was cut ~4× from the pre-3R.6 rates, taking the land
+  settlement rate from ~30% to ~10%. (Step B below took it further — see there for current numbers.)
+  Pure-data change at the single `generateHex` choke-point; no schema/migration. Node suite
+  `settlement-density.test.js` pins the band + ties the constants to real `generateHex` output.
+- **Sparser + size-tiered (step B) ✅ done** — after play feedback ("too many settlements; big ones
+  cluster"), chances went to "very sparse", then a further retune (still too many overall; too many
+  in desert) landed at Plains 0.022, Hills 0.016, Forest 0.014, Mountains/Swamp 0.007, Desert 0.006
+  (Desert now the harshest — oasis-only, ~0–1 settlements even across dozens of desert hexes;
+  DEFAULT 0.014) — a Huge fill now ~5–11 settlements, down from ~33–47 — and big settlements were
+  made sparse + non-clustering. Model (a hex = 6 miles; a day =
+  ~4 hexes): (1) `data/settlement-size.json` reskewed so Town+City is ~10% of the roll (was ~20%),
+  Thorp/Hamlet dominant; (2) **soft proximity suppression** — `generateHex` takes `nearbyLargeCount`
+  (existing Town/City within 4 hexes, from `app.js`'s `nearbyLargeCount(q,r)`, mirroring
+  `neighborTerrains`) and scales the Town/City size-roll weights by `LARGE_SUPPRESSION(0.15)**count`
+  (`suppressLargeSizes`/`isLargeSize`). A big settlement near another *usually* rolls smaller, but
+  the weight never reaches 0 — a cluster stays **possible, just rare** (the user's "anything
+  possible; use probability to make it very rare"). Nothing is demoted/removed post-hoc, and the rng
+  stream is unchanged (reweight only) so determinism/POI rolls hold. No schema/migration. Measured
+  end-to-end: 0–2 large per Huge fill, none within a day of each other. **Forward hook:** the rivers
+  step will pass a bypass (e.g. `nearbyLargeCount: 0` on-river) so clusters form where a river/coast
+  gives a reason. This SUPERSEDES the min-spacing / per-region-cap idea below (a soft probabilistic
+  penalty was preferred over a hard geometric cap).
+- **Keep/Fort + drop Thorp ✅ done** — Thorp (near-identical to Hamlet) was removed; Hamlet is now
+  the smallest tier (size table reweighted, `SIZE_ORDER` trimmed, schema **v13→v14**, stamp-only —
+  no back-compat migration, per the user's no-back-compat directive). **Keep/Fort** landed as the recommended `kind: "keep"` **martial overlay**
+  (any size, not a new tier), rolled from its own `subRng` sub-stream conditional on the settlement
+  roll and terrain-biased via `TERRAIN_PROFILE.settlement.keepChance` (Mountains 0.4 … Plains 0.1 →
+  ~0–2 per Huge fill). New `keep.svg` sketch + rook (♜) marker; `settlementArt/Mark(size, kind)`;
+  node-tested. Naming (keep vs fort vs watchtower) can come with the Names sub-step.
+- **Names ✅ done** — every settlement gets an evocative seeded name
+  (`js/gen/settlement-name.js` `settlementName(seed, q, r, gen, {kind, terrain})`), **derived not
+  stored** (pure function of coords → no schema field; manual settlements named for free; regen
+  reshuffles). Prefix + terrain-flavored ending (Brackholt/Westercrag/Fenmoor), martial style for
+  keeps (Fort Marsh, Dun Keep), stutter-guarded. Element lists are JS consts (render path needs them
+  sync). Rendered as the default map label (GM `hex.name` still overrides) + panel line. Node-tested.
+  (Ended up NOT reusing the hex-name field for storage — deriving is cleaner and needs no plumbing.)
 - **Sparser spacing** — replace/augment the flat per-hex chance with a **minimum
   spacing / per-region cap** (Poisson-disc-style rejection or a density budget), and
   retune the high Plains 0.45. Objective target from the 3R.2 spacing metric.
-- **Hamlet clusters** — a large settlement seeds a few **farming hamlets** in nearby
-  hexes (a "breadbasket"). Needs region/chunk generation (3R.2 model) to place the
-  cluster coherently.
-- **River/coast boosts (ordering-dependent):** a settlement **on a river** gets a
-  size boost; a **river-mouth/estuary** hex gets a boosted chance of a **City** and a
-  larger settlement. Enforce order: water → rivers → **then** settlement sizing.
-- Schema: settlement `kind` (keep/fort), `name`, and river/coast linkage; migration.
+- **Hamlet clusters ✅ done** — a large (Town/City) settlement sprinkles a few **farming
+  hamlets** in the arable land (Plains/Hills) of its immediate ring — a "breadbasket". Kept a
+  deliberate SPRINKLING: `CLUSTER_HAMLET_CHANCE` per farmland neighbour, keyed by anchor size —
+  **City 0.45, Town 0.35** (a city earns more farms, and being on water more often means fewer
+  eligible neighbours, which the higher rate compensates for) — so most big towns get a hamlet or two
+  and a third stand alone (`settlement-water.js` `seedHamletClusters`, run by `syncRivers` after the
+  water passes — so anchors are their final boosted size — then a second idempotent `applyWaterBoosts`
+  so a riverside hamlet is sized consistently that same sync). Deterministic + idempotent via a per-hex
+  `clusterSeeded` decided-flag (no duplicates; a deleted hamlet isn't resurrected); doesn't override an
+  existing settlement. Measured: cities ~79% ringed / ~1.3 farms each vs towns ~52% / ~0.9 each, ~6
+  cluster hamlets per Huge fill. Node-tested. (Did NOT need region/chunk generation — the
+  immediate-ring approach reads as a breadbasket and stays deterministic under lazy reveal.)
+- **River→settlement gravity (side step) ✅ done** — a river tracing past a settlement now bends to
+  pass close to it. `computeRivers` takes a `settlementsByKey` map and biases the descent trace with a
+  size-weighted, radius-limited attraction (`PULL_SIZE_WEIGHT`, `pullRadius` = 3 for City, 2 for
+  Town-and-smaller), picking among non-climbing neighbours only so rivers still always reach water; a
+  steepest-descent fallback means no river is ever lost, and away from towns it's plain steepest
+  descent. New/auto traces only (existing/manual frozen). Tuned in the scratchpad (near-river
+  settlement adjacency ~doubled); node-tested. This is distinct from the size boost below (routing,
+  not sizing).
+- **River/coast boosts ✅ done** — a settlement **on/beside a river** or **on the coast** (sea-adjacent)
+  is bumped **+1** size tier; a **river-mouth/estuary** (both) gets **+2** (→ Towns/Cities). New pure
+  `js/gen/settlement-water.js` (`applyWaterBoosts`), run by `syncRivers` right after `computeRivers`
+  (enforcing the water → rivers → **then** sizing order). **Idempotent**: the rolled size is captured
+  once as `settlement.baseSize` and the effective `size` is re-derived from base + water context each
+  sync, so it never compounds. May exceed the terrain maxSize (water is the reason). A `waterBoost` tag
+  surfaces in the panel. Node-tested. (Delivered as deterministic tier bumps rather than a "City chance"
+  roll — cleaner and idempotent; a seeded probability is a one-liner if preferred.)
+- **Water settlement GENERATION ✅ done** (the "generate NEW settlements, not just boost" half) —
+  `settlement-water.js` `seedWaterSettlements`, run by `syncRivers` before the boost: scattered small
+  settlements **along a river's course** (Hamlet/Village base; the +1 riverside boost lifts a share to
+  **Towns**), a **port at most river mouths** (double whammy — where it meets the sea or a big lake:
+  `MOUTH_SETTLE_CHANCE` 0.6 so not every mouth settles, a **random base type** that the +2 estuary
+  boost lifts to mostly-City/occasional-Town, and `MOUTH_KEEP_CHANCE` 0.25 for the odd martial **keep**),
+  and **shore Cities on lakes** (big always, small sometimes). Deterministic + idempotent via a per-hex
+  `waterSeeded` decided-flag (no duplicates on the repeated syncs; a GM-deleted seed isn't resurrected).
+  Measured over 8 Huge seeds: mouths settle ~58% (mostly City, some Town, ~18% keeps); river courses
+  carry a scatter of Villages and Towns; landlocked seeds barely change. Node-tested. Tunable:
+  `RIVER_SETTLE_CHANCE`, `MOUTH_SETTLE_CHANCE`, `MOUTH_KEEP_CHANCE`, `BIG_LAKE_SIZE`, `SMALL_LAKE_CITY_CHANCE`.
+- Schema: no bump needed — `kind`, `baseSize`, `waterBoost` are all additive fields (no migration, per
+  the no-back-compat directive); `name` is derived, not stored.
 
 ### 3R.7 — Roads
-- **Connect settlements**, weighted by size — a **gravity model**: desirability ∝
-  `sizeA·sizeB / distance^k`; build a road when it clears a threshold. Larger
-  settlements "pull" roads from further away.
-- **Routing / pathfinding** — least-cost path over hexes:
-  - **Mountains** = high cost → route **around** a range when the detour ≤ *n* tiles;
-    if going around costs more than *n*, **cut through**, but the range **inflates the
-    effective distance** (so a long range can make the link fail the gravity threshold
-    entirely — exactly your "act as though further away").
-  - **Deserts** = very high cost → roads **almost never**; allow a rare **ancient dead-
-    straight road** that ignores terrain cost.
-- **Tiers/sizes** — from the gravity weight: **ancient wide paved roads** between major
-  cities down to local tracks. Render by width/style.
-- **Spurs / side roads** — a small settlement near an existing road links to it with a
-  short **spur** instead of a full long-haul road.
-- **Timing** — your proposal: when a settlement is generated, evaluate it against every
-  existing settlement **largest → smallest** and decide each link. *(This is close to a
-  known technique — a greedy gravity/Steiner network; the research step compares
-  incremental-per-settlement vs a batch network pass, and how to keep either
-  deterministic under area generation.)*
-- Represent as hex-path / hex-side edges (tiered). Node-tested: connectivity, mountain
-  avoidance-then-cut-through, desert suppression, spur behaviour.
+**Confirmed feel:** trunk + spurs; roads hug river valleys; tiered by importance; big pull /
+long roads — most settlements connected, some with several roads, an interesting few isolated.
+- **Network ✅ done** — a derived `world.roads[]` overlay (`js/gen/roads.js` `computeRoads`, run by
+  `syncRoads` after `syncRivers`). Built in **two phases**: **(1) trunk** — the big settlements
+  (Town/City) are joined into a **minimum-spanning forest** (Kruskal + union-find over A\* routes), which
+  *guarantees* all big places within reach land in **one connected network** (three nearby cities are
+  always joined — this fixed a playtest bug where cities sat unconnected); **(2) spurs** — every other
+  settlement (Village/Hamlet, or a remote Town) attaches (Dijkstra) to the **nearest** road hex (**a
+  crossroad**) or settlement within a size-scaled reach. City links reach far; nodes many others attach
+  to become **hubs with several roads**. Measured over 8 Huge seeds: ~15 roads/fill, **all big
+  settlements in one connected network + ~90% of all settlements** on it. The auto network is
+  **re-derived deterministically** each call (stays connected as the world grows); only GM-drawn
+  **manual** roads are kept verbatim (and seed the network).
+- **Routing / pathfinding ✅ done** — **Dijkstra** least-cost route over a road-tuned terrain cost
+  (`ROAD_COST` Plains 1 … Mountains 8, Desert 10; Sea/Lake impassable), so roads route **around**
+  ranges unless cutting through is genuinely cheaper, almost never cross desert, and never cross water.
+  River-adjacent hexes get a **valley discount** so roads hug rivers and cross at fords. **Reach is
+  size-scaled** (`REACH` City 64 … Hamlet 8) — a remote small place is left roadless — and a small
+  seeded **isolation roll** (`ISO_CHANCE`) leaves the odd well-placed one unconnected too.
+- **Tiers/sizes ✅ done** — tier by the OWNING settlement: City = **highway** (t1), Town = **road**
+  (t2), Village/Hamlet = **track/spur** (t3, dashed). `map.js` `drawRoads` draws tiered tan polylines
+  with a dark casing — **under** the settlement icons, **over** rivers (solid = bridge, dashed spur =
+  ford), **nudged off-centre** so a road along a river sits beside it (both visible); a crossroad end is
+  left long to meet the road it joins, a settlement end trimmed so its icon stays clean.
+- **Spurs / crossroads ✅ done** — folded into the attachment model above (a small settlement links to
+  the nearest network hex, forming a crossroad, rather than a full long-haul road).
+- **Timing** — a **batch two-phase** recompute each `syncRoads`: the auto network is re-derived
+  deterministically from the current terrain + settlements (so it stays connected as the world grows),
+  while GM-drawn manual roads are kept verbatim.
+- **Merging ✅ done** — an existing road hex is cheap to travel (`ROAD_REUSE_COST`), so a new route
+  merges onto it and shares the corridor rather than paralleling (double roads become one); spurs attach
+  network-first (join the connected trunk, not a random neighbour); `drawRoads` draws lowest-tier-first
+  and offsets to a canonical side so shared segments read as one bigger road. Measured: ~15–28% of
+  road-steps shared per Huge fill.
+- Represented as `{id, a, b, tier, path, junction}` hex-path edges. Node-tested: three-cities-connected
+  (one component), long city links, crossroad spurs, reach-cap isolation, water impassability, mountain
+  avoidance, valley-hug discount, corridor merging, determinism + manual-kept, hub multi-connection.
+  Shared `MinHeap` in `js/core/minheap.js`. Schema **v15**.
+- **Manual draw ✅ done** — the radial "River" menu became a **Draw** submenu (River / Road, + Remove
+  river/road where a manual one runs). The river-draft plumbing was generalised to a `draftKind`, so
+  Finish builds a `manual` river or a `manual` road (`buildManualRoad` — a solid tier-2 road kept
+  verbatim by `computeRoads`, seeding the auto network); `map.js` previews it as a dashed tan line.
+  Verified end-to-end over the DevTools protocol.
+- **Ancient desert road ✅ done** — a rare seeded dead-straight road (`roads.js`, `kind: "ancient"`)
+  between big settlements whose straight line crosses ≥ 3 desert hexes and no water (`ANCIENT_CHANCE`
+  0.14); rendered pale + dotted + straight, distinct from the curving tan roads; keyed in the legend.
+- **Bridges/fords ✅ done (3R.8)** via draw order (solid over = bridge, dashed under = ford; see 3R.8).
+  Manual road/river draw already shipped (3R.7). *(Coastal-port markers were tried and dropped — no value.)*
 
 ### 3R.8 — Integration: pipeline, regeneration, rendering, migration, tuning
 - Wire the full **deterministic region pipeline**: terrain → water/coastline → rivers
   → settlements (with boosts) → roads. Point the **3R.1 "Generate Area"** tool at it.
-- **Regeneration policy** — whole-region regenerate; single-hex re-roll inside a
-  coherent region without breaking coastlines/rivers/roads (respect the `locked`/
-  `manual` flag; re-stitch edges).
-- **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, optional
-  region labels; legend + LOD updates. (Rivers' line rendering already shipped in 3R.5,
-  pulled forward on request — see that section.) **Requested tweak:** recolour
-  Hills as a blend of Mountains' grey and Plains' green (`terrain-style.js`
-  `TERRAIN_COLORS`) so the Mountains→Hills→Plains elevation band reads as a visual
-  gradient, reinforcing the 3R.3 biome-coherence work.
-- **Migration/compat** for pre-3R worlds. **Performance** pass (large-area gen stays
-  snappy). Final **tuning** against the 3R.2 metrics.
+- **Regeneration policy ✅ done** — the radial "Regenerate" slot became a submenu: **Lock / Unlock**
+  this hex, **This hex** re-roll, and **Small / Medium / Large** area re-roll. A per-hex `locked` flag
+  (additive; padlock marker on the map) **protects** a hex from regenerate AND delete. `onRegenerateArea`
+  re-rolls every existing UNLOCKED hex in the disc (bumping each hex's `gen`); locked hexes are kept and
+  the manual rivers/roads stay frozen, while the derived overlays (auto rivers/roads/regions) re-stitch.
+  Verified end-to-end over the DevTools protocol (lock → padlock shows, Delete/regen disabled).
+- **Region names ✅ done** — the big terrain tracts carry evocative names ("the Marrowwood",
+  "the Wolf Sloughs", "the Nether Range"), shown **on hover** (no always-on labels — matching the
+  settlement-name hover). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain clumps
+  (≥ 16 hexes) and names each via a seeded `regionName(seed, terrain, anchorKey)` (prefix + terrain
+  collective noun). Derived, not stored: `map.js` memoises a hex→name map per (seed, hex-count); the
+  hover readout falls back to the region name when the hex has no GM name / settlement.
+- **Legend ✅ done** — a toggleable bottom-left key (command-bar "Legend" button): terrain colour
+  swatches (built from `terrain-style.js` `TERRAIN_COLORS`/`TERRAIN_ICONS` so it can't drift), route
+  tiers (highway/road/track/river), and a settlement/keep note.
+- **Bridges / fords ✅ done — draw order only, no glyph.** `map.js` draws dashed tracks/spurs
+  (tier 3) UNDER the river (the water runs across them = a **ford**), then the river, then solid
+  roads + the ancient road OVER it (= a **bridge**). `roadFordsRiver(road)` picks the pass; roads are
+  already nudged off-centre so one hugging a river stays beside it and only a true crossing is covered.
+  Nothing in the legend (self-evident). *(Two earlier versions were scrapped per play feedback: a
+  `crossings.js` transverse-crossing detector drawing a pale bridge deck + ford ripples — over-
+  engineered; and a legend note + a ⚓ coastal-port marker (`ports.js`) — "no point to this".)*
+- **Rendering pass** — roads (tiered), settlement tiers + Keep/Fort icon, region labels + legend
+  (✅ above). **Network LOD ✅ done:** roads/rivers draw full-styled (casing, tier widths, track
+  dashes) only at the detail zoom; once hexes shrink past `DETAIL_PX` they switch to a thin SOLID
+  skeleton (`ROAD_TIERS[].far`, `RIVER_WIDTH_FAR`, no dashes) — driven by a zoom-only `netDetail`
+  flag (independent of the icons toggle) — so a zoomed-out Huge map reads as a delicate network
+  instead of fat dashed tubes on tiny hexes. (Rivers' line rendering already shipped in 3R.5,
+  pulled forward on request — see that section.) **Requested tweak ✅ done (pulled forward):**
+  Hills recoloured `#b08d4f` → **`#8c9e71`** (`terrain-style.js` `TERRAIN_COLORS`), a grey-green
+  midpoint of Mountains grey + Plains green, so the Mountains→Hills→Plains band reads as an
+  elevation gradient.
+- **Performance ✅ checked** — a full **Huge fill (721 hexes)** runs the whole pipeline in **~31 ms
+  average** (worst ~48 ms over 6 seeds): terrain fill ~10 ms, rivers ~4 ms, settlements ~1 ms, **roads
+  ~15 ms** (the largest — all-pairs A\* over the big settlements + ancient-road scan, both distance-
+  pruned), regions ~1 ms. Well within budget; no optimisation needed. Roads scale with the big-
+  settlement count (O(n²) A\*), but density caps that at ~7 avg / ~13 observed.
+- **Migration/compat for pre-3R worlds — NO MIGRATION (deferred, deliberate).** Old saved worlds are
+  NOT migrated to the 3R overlays for now. A migration pass may come later, but it is explicitly out of
+  scope for this phase — do not add one without a fresh decision. (Requested 2026-07: "NO MIGRATION.
+  At a later point maybe… for now, NO MIGRATION.")
+- **Final tuning against the 3R.2 metrics ✅ done — measured, all on/beating target, NO changes needed.**
+  Re-ran `test/stats-harness.js` (3 seeds, radius 25, ~1951 hexes) and the full-pipeline
+  `measure.mjs` (8 Huge fills) over the finished pipeline:
+  - **Terrain coherence** (vs 3R.2 baseline): **lone-hex rate 23–25% → 6.2–6.6%**; **clump median
+    1–2 → 3–5** (Mountains mean 10–14, max 130+ — real ranges). Terrain histogram still tracks the
+    base weights (Forest/Plains ~20–24%, Mountains ~12–20%).
+  - **Settlements:** **nearest-neighbour spacing ~1.1 hex → 4.5–5.5 hex** (no more clumping); raw
+    size table stays Hamlet-majority (56/33/8/3 %); the final mix is Village-heavy (≈ Village 45 /
+    Hamlet 28 / Town 14 / City 13 %) as the water boosts intend (~3 cities + 3 towns per Huge fill).
+  - **Water:** Sea+Lake ≈ 10 % median (coastal minority), per the flooding retune.
+  - **Roads:** 13.9/fill; **big settlements on the network 49/49 = 100 %** (one connected component).
+  - **Cluster hamlets:** City 79 % ringed (1.33 farms), Town 52 % (0.92) — exactly the tuned targets.
+  - **Rivers:** 0–10/fill (avg ~4.25), **terrain-driven** — scattered peaks yield none, dense ranges
+    (99–145 Mountain hexes) give 9–10; sources are deep-interior by design, so this variety is
+    intended, not a tuning gap. Left as-is.
+  Conclusion: the finished pipeline meets or beats every baseline target; no constants changed.
+
+**Phase 3R is feature-complete.**
 
 ---
 
@@ -923,17 +1073,20 @@ Development order mirrors it, so each sub-phase builds on a finished layer.
   Water+subtype field — see 3R.4's write-up for why).
 - **Elevation/moisture:** ✅ adopted as first-class per-hex fields (3R.2) — the
   keystone that makes terrain coherence, sea level, and rivers all fall out.
-- **Keep/Fort:** new size tier vs martial overlay on an existing band. *Leaning overlay.*
-- **Road generation:** incremental per-settlement vs batch network pass.
-- **Regen vs manual edits:** per-hex `locked` flag semantics.
+- **Keep/Fort:** ✅ decided in 3R.6 — a **martial overlay** (`settlement.kind = "keep"`, a per-terrain
+  `keepChance`), not a new size tier. (The old Thorp tier was dropped at the same time.)
+- **Road generation:** ✅ decided in 3R.7 — a **batch network pass** (`computeRoads`: Kruskal MST trunk
+  over the big settlements + greedy spurs), recomputed each sync; only manual roads are frozen.
+- **Regen vs manual edits:** ✅ decided in 3R.8 — a per-hex **`locked`** flag protects a hex from both
+  re-roll and delete; area-regenerate re-rolls only the unlocked hexes and keeps manual rivers/roads.
 
 ## Ideas worth folding in (things that pair well)
 
 - **Elevation + moisture fields** (as above) — the single highest-leverage addition.
 - **Named regions/biomes** ("the Blackpine", "the Salt Marches") — pairs with the
   Phase 7.7 **search** feature and gives GMs flavour hooks.
-- **Bridges/fords** where a road crosses a river; **ports** where a road meets a
-  coastal city — cheap emergent detail once rivers+roads+coast exist.
+- **Bridges/fords** where a road crosses a river — ✅ done in 3R.8 (draw order: solid road over the
+  river = bridge, dashed track under = ford; no glyph). Coastal **ports** were tried and dropped (no value).
 - **Travel tie-in (future, not in scope):** roads speed travel / rivers slow crossing —
   hooks into the existing scale-bar & travel-tier work.
 - **Hook/POI synergy:** rivers, roads, and coasts are natural hook geography ("bandits

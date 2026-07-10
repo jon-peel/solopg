@@ -11,6 +11,9 @@ import {
   SIZE_ORDER,
   KNOWN_TERRAINS,
   biasKey,
+  isLargeSize,
+  suppressLargeSizes,
+  LARGE_SUPPRESSION,
 } from "../js/gen/terrain-profile.js";
 import { THEME_GLYPHS } from "../js/ui/poi-style.js";
 
@@ -53,18 +56,59 @@ test("Desert caps at Town; Mountains/Swamp at Hamlet", () => {
   assert.equal(TERRAIN_PROFILE.Swamp.settlement.maxSize, "Hamlet");
 });
 
+test("isLargeSize: Town/City are large; Village and smaller are not", () => {
+  assert.ok(isLargeSize("Town") && isLargeSize("City"));
+  for (const s of ["Hamlet", "Village"]) assert.ok(!isLargeSize(s), `${s} is not large`);
+});
+
+test("Thorp is gone; Hamlet is the smallest tier", () => {
+  assert.equal(SIZE_ORDER[0], "Hamlet");
+  assert.ok(!SIZE_ORDER.includes("Thorp"));
+  const table = JSON.parse(readFileSync("./data/settlement-size.json", "utf8"));
+  assert.ok(!table.entries.some((e) => e.value.size === "Thorp"), "no Thorp in the size table");
+});
+
+test("shipped settlement-size skews small: Town+City ~10% of weight, Hamlet the majority (3R.6)", () => {
+  const table = JSON.parse(readFileSync("./data/settlement-size.json", "utf8"));
+  const w = Object.fromEntries(table.entries.map((e) => [e.value.size, e.weight]));
+  const total = Object.values(w).reduce((a, b) => a + b, 0);
+  const largeFrac = (w.Town + w.City) / total;
+  assert.ok(largeFrac >= 0.08 && largeFrac <= 0.12, `large weight fraction ${largeFrac} outside 8–12%`);
+  assert.ok(w.Hamlet / total > 0.5, "Hamlet (smallest tier) should be the majority");
+});
+
+test("suppressLargeSizes scales only large weights by factor**count, never mutating or zeroing", () => {
+  const base = cappedSizeTable(sizeTable, "City"); // full [Thorp..City], weight 1 each here
+  const snapshot = JSON.parse(JSON.stringify(base));
+  const out = suppressLargeSizes(base, 2);
+  const bw = Object.fromEntries(base.entries.map((e) => [e.value.size, e.weight ?? 1]));
+  const ow = Object.fromEntries(out.entries.map((e) => [e.value.size, e.weight ?? 1]));
+  for (const s of ["Thorp", "Hamlet", "Village"]) assert.equal(ow[s], bw[s], `${s} weight changed`);
+  for (const s of ["Town", "City"]) {
+    assert.ok(Math.abs(ow[s] - bw[s] * LARGE_SUPPRESSION ** 2) < 1e-9, `${s} not scaled`);
+    assert.ok(ow[s] > 0, `${s} weight must stay > 0 (clustering possible, just rare)`);
+  }
+  assert.deepEqual(base, snapshot); // input untouched
+  assert.equal(suppressLargeSizes(base, 0), base); // no-op at count 0
+});
+
 test("cappedSizeTable excludes oversized sizes and never mutates base", () => {
   const snapshot = JSON.parse(JSON.stringify(sizeTable));
   const capped = cappedSizeTable(sizeTable, "Town");
   const sizes = capped.entries.map((e) => e.value.size);
-  assert.deepEqual(sizes, ["Thorp", "Hamlet", "Village", "Town"]);
+  assert.deepEqual(sizes, ["Hamlet", "Village", "Town"]);
   assert.ok(!sizes.includes("City"));
   assert.deepEqual(sizeTable, snapshot); // unchanged
 });
 
-test("Water POI weights exclude dungeon (no explorable on open water)", () => {
-  const types = Object.keys(TERRAIN_PROFILE.Water.poi.weights);
-  assert.ok(!types.includes("dungeon"), "Water should not auto-roll a dungeon");
+test("open water auto-rolls only a rare lone landmark — no shrine/dungeon/camp/tower", () => {
+  const water = TERRAIN_PROFILE.Water.poi;
+  assert.deepEqual(Object.keys(water.weights), ["landmark"], "landmark is the only auto water POI");
+  assert.ok(water.chance <= 0.01, `water POI chance stays rare (got ${water.chance})`);
+  // Lake/Sea alias to Water, so their auto-POI table is landmark-only too.
+  for (const t of ["Lake", "Sea"]) {
+    assert.deepEqual(poiTypeTable(t).entries.map((e) => e.value), ["landmark"], `${t} auto-POI is landmark-only`);
+  }
 });
 
 test("dungeon is an allowed POI type on every land terrain", () => {

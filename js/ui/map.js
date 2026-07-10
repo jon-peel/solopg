@@ -21,6 +21,8 @@ import {
 import { glyphForPoi } from "./poi-style.js";
 import { artFor } from "./terrain-art.js";
 import { settlementArt, settlementMark } from "./settlement-art.js";
+import { settlementName } from "../gen/settlement-name.js";
+import { computeRegions } from "../gen/regions.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -29,6 +31,7 @@ const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
 const DETAIL_PX = 26; // at/above: pencil sketches + corner markers (drop to small view sooner)
 const MARK_MIN_PX = 7; // below: nothing; between: simplified dots
+const TERRAIN_ICON_ALPHA = 0.45; // terrain motifs recede into the background; settlements stay opaque
 
 let canvas = null;
 let ctx = null;
@@ -45,6 +48,8 @@ let lastPpm = null; // last pixels-per-mile emitted to onView (fire only on chan
 let hookTargets = new Set(); // axial keys "q,r" of open, unpinned hook destinations
 let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destinations
 let riverDraft = null; // in-progress manual river being drawn: [{q,r}, ...] | null
+let roadDraft = null;  // in-progress manual road being drawn: [{q,r}, ...] | null
+let regionCache = { seed: null, count: -1, byHex: new Map() }; // memoised hex -> region name (js/gen/regions.js)
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -69,6 +74,7 @@ export function attachMap(canvasEl, cbs = {}) {
 
 export function setWorld(w) {
   world = w;
+  regionCache = { seed: null, count: -1, byHex: new Map() }; // invalidate named regions for the new world
   render();
 }
 
@@ -168,6 +174,14 @@ export function render() {
   const onScreen = HEX_SIZE * camera.scale;
   const detail = iconsEnabled && onScreen >= DETAIL_PX;
   const simplified = iconsEnabled && onScreen >= MARK_MIN_PX && onScreen < DETAIL_PX;
+  // Network LOD is zoom-only (roads/rivers draw regardless of the icons toggle):
+  // full styling when close, a thin solid skeleton once hexes shrink past detail.
+  const netDetail = onScreen >= DETAIL_PX;
+  // Two passes so the water/road network layers correctly: first the hex FILLS +
+  // terrain motifs (background), then rivers + roads, then the settlement/POI/hook
+  // MARKERS on top — so a town icon sits cleanly ON the network, not under it. The
+  // first pass collects the visible hexes so the marker pass reuses its cull.
+  const visible = [];
   for (const hex of placedHexes(world)) {
     const { q, r } = hex.coords;
     const c = axialToPixel(q, r, HEX_SIZE);
@@ -180,24 +194,40 @@ export function render() {
       continue;
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
-    if (detail) {
-      drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
-      drawDetailMarkers(c.x, c.y, hex);
-    } else if (simplified) {
-      drawSimplifiedMarkers(c.x, c.y, hex);
-    }
-    // Hook destinations: pinned leads (a distinct pin) take precedence over the
-    // amber "a lead exists here" ring; both visible at all zooms.
-    const hk = axialKey(q, r);
-    if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
-    else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
+    // Terrain motif is background (under the network); a settled tile skips it —
+    // its settlement marker (drawn later, over the roads) stands in for it.
+    if (detail && !(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
+    visible.push({ hex, c });
   }
 
-  // 2a. Rivers (3R.5): one pass over the whole registry, on top of terrain art
-  //     at every zoom (a river is worth seeing even zoomed out), and drawn even
-  //     across unexplored hexes so it visibly reaches the sea.
-  drawRivers(minX, minY, maxX, maxY, margin);
+  // 2a. Roads + rivers, UNDER the markers below. Draw order IS the bridge/ford:
+  //     dashed tracks/spurs go UNDER the river (a ford — water runs over them),
+  //     then the river, then solid roads OVER it (a bridge). Roads are nudged
+  //     off-centre so one running along a river sits beside it (see drawRoads).
+  drawRoads(minX, minY, maxX, maxY, margin, roadFordsRiver, netDetail); // fords, under the water
+  drawRivers(minX, minY, maxX, maxY, margin, netDetail);
   drawRiverDraft(); // the manual river being traced (if any), on top
+  drawRoads(minX, minY, maxX, maxY, margin, (rd) => !roadFordsRiver(rd), netDetail); // bridges, over
+  drawRoadDraft(); // the manual road being traced (if any), on top
+
+  // 2a″. Markers on placed hexes (settlement/POI + hook rings), on top of the
+  //      water/road network so the icons stay legible.
+  for (const { hex, c } of visible) {
+    if (detail) drawDetailMarkers(c.x, c.y, hex);
+    else if (simplified) drawSimplifiedMarkers(c.x, c.y, hex);
+    // Hook destinations: pinned leads (a distinct pin) take precedence over the
+    // amber "a lead exists here" ring; both visible at all zooms.
+    const hk = axialKey(hex.coords.q, hex.coords.r);
+    if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
+    else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
+    // A locked hex (protected from regenerate/delete) shows a small padlock.
+    if (detail && hex.locked) {
+      const off = HEX_SIZE * 0.52, sz = HEX_SIZE * 0.4;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `${sz}px sans-serif`;
+      drawMarker(c.x - off, c.y - off, "🔒", sz, "#fff");
+    }
+  }
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
@@ -222,6 +252,16 @@ export function render() {
   if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
     strokeHex(c.x, c.y, "rgba(230,232,238,0.35)", 2);
+    // Reveal a name on hover (names are hidden by default): a GM's own hex name
+    // wins, then a settlement's name, else the region this tract belongs to.
+    const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
+    if (detail && hh && hh.placed) {
+      const label = hh.name
+        || (hh.settlement && hh.settlement.present
+          ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain })
+          : regionNameAt(hovered.q, hovered.r));
+      if (label) drawHexLabel(c.x, c.y, label);
+    }
   }
 
   // 3. Selection highlight (works for empty or filled cells).
@@ -302,6 +342,24 @@ function drawHookLine(a, b) {
   ctx.restore();
 }
 
+// Named regions (3R.8): memoise a hex -> region-name map per (seed, hex count) so
+// we only flood-fill when the world grows. The name shows on HOVER (see the hover
+// block in render) — no always-on labels cluttering the map.
+function regionNameAt(q, r) {
+  if (!world) return null;
+  const hexes = placedHexes(world);
+  if (!(regionCache.seed === world.seed && regionCache.count === hexes.length)) {
+    const terrainByKey = new Map();
+    for (const h of hexes) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+    const byHex = new Map();
+    for (const reg of computeRegions(world.seed, terrainByKey, { minSize: 16 })) {
+      for (const k of reg.keys) byHex.set(k, reg.name);
+    }
+    regionCache = { seed: world.seed, count: hexes.length, byHex };
+  }
+  return regionCache.byHex.get(axialKey(q, r)) || null;
+}
+
 // Rivers (Phase 3R.5, "curated rivers"): each world.rivers[] entry is a full
 // watercourse traced from a source to the sea (js/gen/river-trace.js), stored
 // as `path` — an array of axial coords, source-first. We draw the whole thing
@@ -312,7 +370,25 @@ function drawHookLine(a, b) {
 // rivers entirely off-screen, and the canvas clips the rest, so a long river
 // only really costs its visible span.
 const RIVER_COLOR = "#6fd0f0";
-const RIVER_WIDTH = 3.4; // world px at scale 1 (before the /camera.scale divide)
+const RIVER_WIDTH = 3.4; // constant screen px at the detail zoom
+const RIVER_WIDTH_FAR = 1.5; // thinner in the zoomed-out overview so it doesn't dominate tiny hexes
+
+// Roads (3R.7): tiered tan polylines linking settlements. Tier 1 highways
+// (City–City) are widest, tier 3 tracks/spurs thinnest and dashed. A dark casing
+// under the fill lifts them off the terrain. `width` is the detail-zoom screen px;
+// `far` is the zoomed-out overview width — thin + solid (no dash), so a big map
+// reads as a clean network skeleton instead of fat dashed tubes on tiny hexes.
+const ROAD_TIERS = {
+  1: { width: 4.4, far: 2.1, color: "#d9b25c" }, // highway (City–City)
+  2: { width: 2.9, far: 1.5, color: "#c39a54" }, // road
+  3: { width: 2.6, far: 1.2, color: "#c69a58", dash: [7, 4] }, // track / spur (dashed = ford)
+};
+const ROAD_CASING = "#4a3a1f";
+const ANCIENT_COLOR = "#d8cba6"; // pale bone — a weathered ancient desert road (dead-straight, dotted)
+const ROAD_END_TRIM = 0.5; // pull each end back this fraction of its last segment,
+                           // so the centred settlement icon sits cleanly where the road arrives
+const ROAD_OFFSET = HEX_SIZE * 0.2; // world px: nudge roads off hex-centre (perpendicular to
+                                    // travel) so a road along a river sits beside it, not on it
 
 // Smooth a polyline through its points: anchor each curve segment at the
 // midpoint between consecutive vertices and use the vertex itself as the
@@ -336,13 +412,13 @@ function strokeSmoothPath(pts) {
   ctx.stroke();
 }
 
-function drawRivers(minX, minY, maxX, maxY, margin) {
+function drawRivers(minX, minY, maxX, maxY, margin, detail) {
   if (!world || !Array.isArray(world.rivers) || !world.rivers.length) return;
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = RIVER_COLOR;
-  ctx.lineWidth = RIVER_WIDTH / camera.scale;
+  ctx.lineWidth = (detail ? RIVER_WIDTH : RIVER_WIDTH_FAR) / camera.scale;
   for (const river of world.rivers) {
     const path = river && river.path;
     if (!path || path.length < 2) continue;
@@ -391,6 +467,133 @@ function strokeDashed(pts) {
   ctx.restore();
 }
 
+function lerpPt(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
+
+// Shift a polyline sideways by `off` world px (perpendicular to the local travel
+// direction). Used so a road hugging a river valley draws beside the river instead
+// of on top of it. The offset side is CANONICAL — it depends only on the segment's
+// orientation, not on which way the road is traversed — so two roads sharing a
+// corridor (in either direction) offset to the SAME side and merge into one line
+// instead of doubling up.
+function offsetPolyline(pts, off) {
+  if (!off || pts.length < 2) return pts;
+  const out = new Array(pts.length);
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    let tx = b.x - a.x, ty = b.y - a.y;
+    const len = Math.hypot(tx, ty) || 1;
+    tx /= len; ty /= len;
+    let nx = -ty, ny = tx; // perpendicular
+    if (nx < 0 || (nx === 0 && ny < 0)) { nx = -nx; ny = -ny; } // canonical side (orientation-only)
+    out[i] = { x: pts[i].x + nx * off, y: pts[i].y + ny * off };
+  }
+  return out;
+}
+
+// A dashed track/spur (tier 3, not the ancient road) FORDS a river — it's drawn
+// UNDER the river so the water runs across it. Everything else (solid roads +
+// the ancient road) is a BRIDGE, drawn OVER the river. No crossing glyph: the
+// bridge/ford reads purely from which layer wins where they meet.
+function roadFordsRiver(road) {
+  return road.kind !== "ancient" && (road.tier || 2) >= 3;
+}
+
+// Roads (3R.7): a pass over world.roads[] matching `keep`. Each is a smoothed tan
+// polyline through hex centres, tiered by width/colour, with a dark casing under
+// the fill for contrast. Whole-road bounding-box cull like rivers; endpoints
+// trimmed half a segment so the centred settlement icon stays clean. Called twice
+// per frame — fords before the river, bridges after — so crossings layer right.
+function drawRoads(minX, minY, maxX, maxY, margin, keep, detail) {
+  if (!world || !Array.isArray(world.roads) || !world.roads.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // Draw lowest tier first so where roads share a corridor the BIGGER one (drawn
+  // last) shows on top — overlapping roads read as one bigger road.
+  const ordered = world.roads.filter(keep).sort((a, b) => (a.tier || 2) - (b.tier || 2));
+  for (const road of ordered) {
+    const path = road && road.path;
+    if (!path || path.length < 2) continue;
+    const pts = new Array(path.length);
+    let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+    for (let i = 0; i < path.length; i++) {
+      const c = axialToPixel(path[i].q, path[i].r, HEX_SIZE);
+      pts[i] = c;
+      if (c.x < bMinX) bMinX = c.x;
+      if (c.x > bMaxX) bMaxX = c.x;
+      if (c.y < bMinY) bMinY = c.y;
+      if (c.y > bMaxY) bMaxY = c.y;
+    }
+    if (bMaxX < minX - margin || bMinX > maxX + margin || bMaxY < minY - margin || bMinY > maxY + margin) {
+      continue;
+    }
+    // Trim the settlement end(s) back toward their neighbour so the town icon
+    // stays clean; a crossroad end (road.junction) is left long so it meets the
+    // road it joins. Then nudge the line off-centre so it sits beside any river.
+    pts[0] = lerpPt(pts[0], pts[1], ROAD_END_TRIM); // a is always the owning settlement
+    if (!road.junction) pts[pts.length - 1] = lerpPt(pts[pts.length - 1], pts[pts.length - 2], ROAD_END_TRIM);
+    if (road.kind === "ancient") {
+      strokeAncient(offsetPolyline([pts[0], pts[pts.length - 1]], ROAD_OFFSET), detail); // dead-straight
+    } else {
+      strokeRoad(offsetPolyline(pts, ROAD_OFFSET), road, detail);
+    }
+  }
+  ctx.restore();
+}
+
+function strokeRoad(pts, road, detail) {
+  const spec = ROAD_TIERS[road.tier] || ROAD_TIERS[2];
+  ctx.save();
+  if (!detail) {
+    // Overview (zoomed out): a thin SOLID line with a hairline casing — no dashes
+    // (they turn to noise at this scale). The network reads as a clean skeleton.
+    const w = spec.far / camera.scale;
+    ctx.strokeStyle = ROAD_CASING;
+    ctx.lineWidth = w + 0.8 / camera.scale;
+    strokeSmoothPath(pts);
+    ctx.strokeStyle = spec.color;
+    ctx.lineWidth = w;
+    strokeSmoothPath(pts);
+    ctx.restore();
+    return;
+  }
+  const w = spec.width / camera.scale;
+  // A dashed track gets the same dark casing as a solid road (dashed too), so its
+  // dashes read clearly against the terrain instead of washing out.
+  if (spec.dash) ctx.setLineDash(spec.dash.map((d) => d / camera.scale));
+  ctx.strokeStyle = ROAD_CASING; // dark casing first...
+  ctx.lineWidth = w + 1.8 / camera.scale;
+  strokeSmoothPath(pts);
+  ctx.strokeStyle = spec.color; // ...then the tan fill on top
+  ctx.lineWidth = w;
+  strokeSmoothPath(pts);
+  ctx.restore();
+}
+
+// An ancient desert road: a pale, dead-straight, dotted line (weathered/broken).
+// Zoomed out the dots vanish into noise, so it becomes a faint thin solid line.
+function strokeAncient(pts, detail) {
+  ctx.save();
+  ctx.lineCap = "round";
+  if (!detail) {
+    ctx.strokeStyle = ANCIENT_COLOR;
+    ctx.lineWidth = 1.1 / camera.scale;
+    strokeSmoothPath(pts);
+    ctx.restore();
+    return;
+  }
+  const w = 2.4 / camera.scale;
+  ctx.setLineDash([2 / camera.scale, 6 / camera.scale]);
+  ctx.strokeStyle = ROAD_CASING;
+  ctx.lineWidth = w + 1.2 / camera.scale;
+  strokeSmoothPath(pts);
+  ctx.strokeStyle = ANCIENT_COLOR;
+  ctx.lineWidth = w;
+  strokeSmoothPath(pts);
+  ctx.restore();
+}
+
 /** Set (or clear) the in-progress manual river being traced; re-renders. */
 export function setRiverDraft(points) {
   riverDraft = Array.isArray(points) && points.length ? points : null;
@@ -421,6 +624,36 @@ function drawRiverDraft() {
   ctx.restore();
 }
 
+/** Set (or clear) the in-progress manual road being traced; re-renders. */
+export function setRoadDraft(points) {
+  roadDraft = Array.isArray(points) && points.length ? points : null;
+  render();
+}
+
+// The manual road being drawn: a dashed bright-tan line through the clicked hex
+// centres, with a dot on each point so the GM sees exactly what's captured.
+function drawRoadDraft() {
+  if (!roadDraft || !roadDraft.length) return;
+  const pts = roadDraft.map((p) => axialToPixel(p.q, p.r, HEX_SIZE));
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#f4d68a";
+  ctx.lineWidth = (ROAD_TIERS[1].width + 0.5) / camera.scale;
+  if (pts.length >= 2) {
+    ctx.setLineDash([6 / camera.scale, 4 / camera.scale]);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = "#f4d68a";
+  const rr = 3.2 / camera.scale;
+  for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, rr, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
+
 // Cache of tile <img>s keyed by url; re-render once each finishes loading.
 const tileCache = new Map();
 function tileImage(url) {
@@ -435,6 +668,10 @@ function tileImage(url) {
 }
 
 function drawTerrainIcon(cx, cy, terrain, q, r) {
+  // Semi-transparent so the motif recedes into the tile (settlement icons, drawn
+  // fully opaque, stand out against it). Restored before returning.
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = prevAlpha * TERRAIN_ICON_ALPHA;
   // Deterministic variant per cell so it's stable without storing it.
   const variants = artFor(terrain);
   if (variants.length) {
@@ -443,37 +680,40 @@ function drawTerrainIcon(cx, cy, terrain, q, r) {
     if (img.complete && img.naturalWidth > 0) {
       const side = HEX_SIZE * 1.9;
       ctx.drawImage(img, cx - side / 2, cy - side / 2, side, side);
+      ctx.globalAlpha = prevAlpha;
       return;
     }
     // else fall through to the emoji until the SVG has loaded
   }
   const glyph = iconForTerrain(terrain, hashString(`${q},${r}`) % 2);
-  if (!glyph) return;
-  ctx.font = `${HEX_SIZE * 0.9}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(glyph, cx, cy);
+  if (glyph) {
+    ctx.font = `${HEX_SIZE * 0.9}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(glyph, cx, cy);
+  }
+  ctx.globalAlpha = prevAlpha;
 }
 
-// Detail tier: settlement sketch top-right (corner-marker fallback until the SVG
-// loads) + POI emoji badge bottom-right (glyph for 1, count for >1).
+// Detail tier: settlement sketch centered + enlarged (it stands in for the
+// terrain motif, which is skipped on settled tiles; corner-marker fallback until
+// the SVG loads) + POI emoji badge bottom-right (glyph for 1, count for >1).
 function drawDetailMarkers(cx, cy, hex) {
   const off = HEX_SIZE * 0.5;
   const size = HEX_SIZE * 0.44;
 
   if (hex.settlement && hex.settlement.present) {
-    const sx = cx + off;
-    const sy = cy - off;
-    const url = settlementArt(hex.settlement.size);
+    const url = settlementArt(hex.settlement.size, hex.settlement.kind);
     const img = url ? tileImage(url) : null;
     if (img && img.complete && img.naturalWidth > 0) {
-      const side = HEX_SIZE * 1.0;
-      ctx.drawImage(img, sx - side / 2, sy - side / 2, side, side);
+      const side = HEX_SIZE * 1.9; // same footprint the terrain motif used
+      ctx.drawImage(img, cx - side / 2, cy - side / 2, side, side);
     } else {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = `${size}px sans-serif`;
-      drawMarker(sx, sy, settlementMark(hex.settlement.size), size, "#fff");
+      const ms = HEX_SIZE * 0.85;
+      ctx.font = `${ms}px sans-serif`;
+      drawMarker(cx, cy, settlementMark(hex.settlement.size, hex.settlement.kind), ms, "#fff");
     }
   }
 
@@ -494,6 +734,9 @@ function drawDetailMarkers(cx, cy, hex) {
     drawMarker(cx - off, cy + off, "🗒", size, "#fff");
   }
 
+  // Only a GM's explicit hex name labels the map by default. A settlement's
+  // derived name is shown on HOVER only (see the hover pass in render()) — auto
+  // labels on every town cluttered the map.
   if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
 }
 
@@ -521,7 +764,7 @@ function drawSimplifiedMarkers(cx, cy, hex) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
-    drawMarker(cx, cy, settlementMark(hex.settlement.size), size, "#fff");
+    drawMarker(cx, cy, settlementMark(hex.settlement.size, hex.settlement.kind), size, "#fff");
   }
   const pois = Array.isArray(hex.pois) ? hex.pois : [];
   if (pois.length) {

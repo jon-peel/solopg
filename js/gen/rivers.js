@@ -29,8 +29,9 @@
 // It's order-dependent by design (like the terrain it sits on), and cheap:
 // a Dijkstra + a handful of short descents over the placed hexes.
 
-import { neighbors, axialKey, parseKey } from "../core/hexgeo.js";
+import { neighbors, axialKey, parseKey, hexDisc, axialDistance } from "../core/hexgeo.js";
 import { subRng } from "../core/rng.js";
+import { MinHeap } from "../core/minheap.js";
 
 const WATER = new Set(["Sea", "Lake"]);
 
@@ -52,28 +53,21 @@ const MIN_SOURCE_D = 40;
 // rather than every high peak.
 const SOURCE_CHANCE = 0.7;
 
-// Minimal binary min-heap keyed by numeric `d`.
-class MinHeap {
-  constructor() { this.a = []; }
-  get size() { return this.a.length; }
-  push(item) {
-    const a = this.a; a.push(item); let i = a.length - 1;
-    while (i > 0) { const p = (i - 1) >> 1; if (a[p].d <= a[i].d) break; [a[p], a[i]] = [a[i], a[p]]; i = p; }
-  }
-  pop() {
-    const a = this.a; const top = a[0]; const last = a.pop();
-    if (a.length) {
-      a[0] = last; let i = 0;
-      for (;;) {
-        const l = 2 * i + 1, r = 2 * i + 2; let m = i;
-        if (l < a.length && a[l].d < a[m].d) m = l;
-        if (r < a.length && a[r].d < a[m].d) m = r;
-        if (m === i) break; [a[m], a[i]] = [a[i], a[m]]; i = m;
-      }
-    }
-    return top;
-  }
-}
+// --- Settlement gravity (rivers bend toward nearby settlements) --------------
+// A river tracing down the cost field is nudged to pass CLOSE TO settlements: at
+// each step it prefers the hex that best trades low D (still heading to water)
+// against a settlement "attraction". Bigger settlements pull harder (SIZE) and
+// farther (RADIUS), so when two compete a river drifts to the larger. The pull
+// only ever picks among NON-CLIMBING neighbours (D not increasing), so a river
+// still always reaches water — it just chooses the downhill branch (or an
+// equal-cost sidestep) nearest a town. Away from settlements the attraction is
+// 0 and the pick reduces to plain steepest descent (an equal-cost step can only
+// win when a settlement pulls it), so unsettled country is unchanged.
+const PULL_K = 4; // attraction weight vs. one unit of cost-field D (tuned in the scratchpad)
+const PULL_SIZE_WEIGHT = { Hamlet: 1.5, Village: 2.5, Town: 4, City: 7 };
+// Reach (hexes ≈ 6 miles each): a City (and up) pulls from a day's ride; smaller
+// settlements only a couple of hexes ("a hex or two, not far out of the way").
+const pullRadius = (size) => (size === "City" ? 3 : 2);
 
 /**
  * Extend the river network over the currently-revealed hexes. APPEND-ONLY:
@@ -88,10 +82,14 @@ class MinHeap {
  *   placed hex (only these coordinates exist to the router).
  * @param {{ id:string, source:{q:number,r:number}, path:{q:number,r:number}[] }[]} [existingRivers]
  *   rivers already on the world; kept as-is.
+ * @param {Map<string,string>} [settlementsByKey] axialKey -> settlement size, for
+ *   every placed settlement. Newly-traced rivers bend toward these (see the
+ *   settlement-gravity note above); omit/empty for no gravity. Existing/manual
+ *   rivers are frozen and never re-bent.
  * @returns {{ id:string, source:{q:number,r:number}, path:{q:number,r:number}[], reachedWater:boolean }[]}
  *   existingRivers followed by any newly-formed ones.
  */
-export function computeRivers(seed, terrainByKey, existingRivers = []) {
+export function computeRivers(seed, terrainByKey, existingRivers = [], settlementsByKey = new Map()) {
   const T = (q, r) => terrainByKey.get(axialKey(q, r));
   const coords = [];
   for (const key of terrainByKey.keys()) coords.push(parseKey(key));
@@ -159,33 +157,66 @@ export function computeRivers(seed, terrainByKey, existingRivers = []) {
   // Biggest (deepest) rivers first, so smaller tributaries merge INTO them.
   sources.sort((a, b) => (b.d - a.d) || (a.q - b.q) || (a.r - b.r));
 
-  // 4. Trace each NEW source down D to major water, merging at confluences.
-  for (const s of sources) {
-    const path = [{ q: s.q, r: s.r }];
-    const seen = new Set([axialKey(s.q, s.r)]);
-    let cur = s; let reached = false;
-    for (let step = 0; step < 1000; step++) {
-      const ck = axialKey(cur.q, cur.r);
-      if (step > 0 && claimed.has(ck)) { reached = true; break; } // joined a trunk
-      let best = null; let bestD = D.get(ck) ?? Infinity;
-      for (const n of neighbors(cur.q, cur.r)) {
-        if (isMajor(n.q, n.r)) { best = { q: n.q, r: n.r, water: true }; break; }
-        const nk = axialKey(n.q, n.r);
-        const nd = D.get(nk);
-        if (nd === undefined || seen.has(nk)) continue;
-        if (nd < bestD) { bestD = nd; best = { q: n.q, r: n.r }; }
-      }
-      if (!best) break;
-      path.push({ q: best.q, r: best.r });
-      if (best.water) { reached = true; break; }
-      seen.add(axialKey(best.q, best.r)); cur = best;
+  // Settlement attraction field A: stamp each settlement's size-weighted,
+  // radius-limited bump onto the hexes around it (summed where they overlap).
+  const attract = new Map();
+  for (const [key, size] of settlementsByKey) {
+    const w = PULL_SIZE_WEIGHT[size];
+    if (!w) continue;
+    const { q, r } = parseKey(key);
+    const rad = pullRadius(size);
+    for (const c of hexDisc(q, r, rad)) {
+      const bump = w * (rad + 1 - axialDistance(q, r, c.q, c.r)); // peaks on/adjacent, linear falloff
+      const ck = axialKey(c.q, c.r);
+      attract.set(ck, (attract.get(ck) ?? 0) + bump);
     }
+  }
+  const attractionAt = (q, r) => attract.get(axialKey(q, r)) ?? 0;
+
+  // 4. Trace each NEW source down D to major water, merging at confluences.
+  // Try with settlement gravity first; if that trace fails to reach (a rare
+  // dead-end on an equal-cost detour), retry with no pull (plain steepest
+  // descent) so a river is never lost to the gravity bias.
+  for (const s of sources) {
+    let { path, reached } = traceRiver(s, D, isMajor, claimed, attractionAt, PULL_K);
+    if (!reached) ({ path, reached } = traceRiver(s, D, isMajor, claimed, attractionAt, 0));
     if (reached && path.length >= 3) {
       for (const p of path) claimed.add(axialKey(p.q, p.r));
       rivers.push({ id: `river:${s.q},${s.r}`, source: { q: s.q, r: s.r }, path, reachedWater: true });
     }
   }
   return rivers;
+}
+
+// Trace one source down the cost field D to major water (or into a claimed trunk
+// = a confluence), biased toward settlements by `attractionAt` scaled by pullK.
+// Each step picks the unseen neighbour with D NOT ABOVE the current hex's (never
+// climbs → always progresses to water) that maximizes pullK*attraction - D. With
+// pullK 0 (or no settlement near) this is exactly steepest descent. Returns the
+// path (source-first) and whether it reached water/a trunk.
+function traceRiver(s, D, isMajor, claimed, attractionAt, pullK) {
+  const path = [{ q: s.q, r: s.r }];
+  const seen = new Set([axialKey(s.q, s.r)]);
+  let cur = s; let reached = false;
+  for (let step = 0; step < 1000; step++) {
+    const ck = axialKey(cur.q, cur.r);
+    if (step > 0 && claimed.has(ck)) { reached = true; break; } // joined a trunk
+    const dcur = D.get(ck) ?? Infinity;
+    let best = null; let bestScore = -Infinity; let water = false;
+    for (const n of neighbors(cur.q, cur.r)) {
+      if (isMajor(n.q, n.r)) { best = { q: n.q, r: n.r }; water = true; break; }
+      const nk = axialKey(n.q, n.r);
+      const nd = D.get(nk);
+      if (nd === undefined || seen.has(nk) || nd > dcur) continue; // unplaced, visited, or uphill
+      const score = pullK * attractionAt(n.q, n.r) - nd;
+      if (score > bestScore) { bestScore = score; best = { q: n.q, r: n.r }; }
+    }
+    if (!best) break;
+    path.push({ q: best.q, r: best.r });
+    if (water) { reached = true; break; }
+    seen.add(axialKey(best.q, best.r)); cur = best;
+  }
+  return { path, reached };
 }
 
 // Extend a manual river's still-open ends against the current cost field. Only

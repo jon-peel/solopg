@@ -33,8 +33,9 @@ is done (see [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md)) �
 **fixed-slot ring** of its actions (Terrain / POI / Settlement / Hook / Neighbours / Regenerate / Delete /
 Generate); inapplicable slots are **greyed-out (never hidden)** with a reason, submenus open as a **second
 outer ring**, and a submenu's "Random" anchors nearest the cursor. Pure model `js/ui/radial-model.js`
-(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Phase 3R — world coherence started:
-3R.1 "Generate Area" radial tool is done** (see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)) —
+(node-tested), overlay `js/ui/radial-menu.js`; no schema change. **Phase 3R — world coherence is
+feature-complete (3R.1–3R.8; schema v15); the running log below records each sub-phase as built.**
+**3R.1 "Generate Area" radial tool is done** (see [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md)) —
 folded into the existing **"Generate" slot** (Random + **Small/Medium/Large/Huge** hex-radius disc,
 radius 1/2/3/15 — Huge added later as a bulk-fill/testing aid, up to 721 hexes in one click, ~36ms
 measured), always **fill-empty only**; new `hexRing`/`hexDisc` geometry in `js/core/hexgeo.js`; v1 rides
@@ -308,16 +309,185 @@ BACK one level (or closes at the top) instead of only suppressing the OS menu (`
 `poi.chance` 0.2 → 0.03 (`terrain-profile.js`), so Sea/Lake tiles are almost always empty (still no
 dungeons/settlements on water). Right-click-back browser-verified (into a submenu → right-click back to
 top → right-click closes); no console errors.
-**Next: 3R.6 — Settlements v2** (names, Keep/Fort martial overlay, sparser spacing / per-region cap,
-hamlet clusters, and river/coast size boosts — real rivers now exist to key off; see
-`docs/plans/phase-3r-world-coherence.md` §3R.6). Optional first: tune river density / stream-order width
-to taste, mountain ranges as features.
+**3R.6 — Settlements v2 started: steps A+B — sparser, size-tiered settlements.** **A** cut the
+auto-generation settlement chances (`terrain-profile.js` `TERRAIN_PROFILE`) ~4× from the pre-3R.6
+rates; **B** then took them to "very sparse" and a follow-up play-feedback retune landed at Plains
+0.022, Hills 0.016, Forest 0.014, Mountains/Swamp 0.007, Desert 0.006 (Desert harshest — oasis-only;
+DEFAULT 0.014) — a Huge (r15) fill drops from ~33–47 settlements to ~5–11, so settlements read as
+genuine landmarks and the map stays open for the later river-town step. **B** also made *big* settlements sparse and non-clustering per the user's model (a hex = 6
+miles; big towns a day's travel = ~4 hexes apart, unless there's a reason — that reason arrives with
+rivers): (1) `data/settlement-size.json` reskewed so Town+City is ~10% of the roll (was ~20%),
+Thorp/Hamlet dominate; (2) a **soft proximity suppression** — `generateHex` takes a `nearbyLargeCount`
+(existing Town/City within 4 hexes, computed by `app.js`'s new `nearbyLargeCount(q,r)` helper,
+mirroring `neighborTerrains`) and multiplies the Town/City size-roll weights by
+`LARGE_SUPPRESSION(0.15)**count` (`terrain-profile.js` `suppressLargeSizes`/`isLargeSize`). Big
+settlements near another therefore *usually* roll smaller, but the weight never hits 0 — a cluster is
+possible, just rare. Nothing is demoted/removed after the fact ("leave the settlement alone; use
+probability"), and the rng stream is unchanged (reweight only) so determinism/POI rolls hold. No
+schema bump / migration (generation-rule + data change; placed hexes keep their settlements).
+Measured end-to-end: 0–2 large per Huge fill, none within a day of each other. Forward hook: the
+rivers step passes a bypass so on-river/coast clusters can form. Remaining 3R.6: names, Keep/Fort
+martial overlay, hamlet clusters, and the river/coast size boosts — see
+`docs/plans/phase-3r-world-coherence.md` §3R.6. Optional aside: tune river density / stream-order
+width to taste, mountain ranges as features.
+**River→settlement gravity (side step, on request).** A river tracing past a settlement now bends to
+pass CLOSE to it (the screenshot case: a river skirting two hexes from a town). `computeRivers` takes
+a `settlementsByKey` map and stamps a size-weighted, radius-limited **attraction field** around each
+settlement (`PULL_SIZE_WEIGHT` Hamlet1.5…City7; reach `pullRadius` = **3 for City, 2 for Town-and-smaller**
+— "a hex or two, and toward the bigger one when two compete"). The trace's per-step pick maximizes
+`PULL_K(4)·attraction − D`, choosing among **non-climbing** neighbours only (D never increases), so a
+river still always reaches water — it just takes the downhill branch (or an equal-cost sidestep)
+nearest a town; away from settlements attraction is 0 and it reduces to plain steepest descent
+(unsettled country unchanged). A **steepest-descent fallback** re-traces any source whose gravity pass
+dead-ends, so a river is never lost. Applies to **newly-traced** rivers only — existing/manual rivers
+stay frozen (append-only), so this won't re-bend an already-drawn river next to a newly-dropped town.
+Constants tuned in the scratchpad (adjacency of near-river settlements ~doubled, 21→38 of 55 over 10
+seeds; 0 rivers lost, no path bloat); `app.js`'s `syncRivers` builds `settlementsByKey`. No schema
+change. `test/rivers.test.js` covers the pull, the bounded reach, inertness without settlements, and
+determinism.
+**Water flooding retune (play feedback — "some parts of the map are flooded"; `js/gen/affinity.js`).**
+Measured across 40 seeds, Sea averaged **31%** of the map (median 30%, up to **90%**) — 24/40 maps
+were >25% water. Sea's frontier spawn (`SPAWN.Sea` 2 → **0.8**) and self-affinity (`AFFINITY.Sea.Sea`
+38 → **28**) were dialed down so water is a **coastal minority** (now median **~10%**, mean ~14%, worst
+~40%; flooded maps 24→8 of 40) while oceans stay coherent and ~75% of maps still get a major sea (real
+coastlines + river sinks). Lake left as-is (already ~3%). All affinity properties hold (origin land,
+Sea/Lake forbid, Sea still conforms decisively, lone-hex <8%); a new `affinity.test.js` sweep guards
+the water mean/median so a future bump can't silently re-flood the world.
+**Keep/Fort + Thorp removal (3R.6).** The **Thorp** tier was dropped (it was near-identical to
+Hamlet — now the smallest tier); `data/settlement-size.json` reweighted (Hamlet 22 / Village 13 /
+Town 3 / City 1, Town+City still ~10%), `SIZE_ORDER` trimmed, `thorp.svg` deleted, schema **v13→v14**
+(stamp-only — **no back-compat migration**, per the user directive; old worlds may show stale Thorps,
+the fix is "New World"). **Keep/Fort** is a rare **martial overlay**
+(`settlement.kind = "keep"`), NOT a size tier — a settlement of any size can be a keep. It's rolled
+from its own `subRng` sub-stream (never shifts the main rng / POI rolls), conditional on the
+already-rare settlement roll and terrain-biased by `TERRAIN_PROFILE.settlement.keepChance`
+(Mountains 0.4, Hills/Desert 0.35, Swamp 0.2, Forest 0.12, Plains 0.1 → ~0–2 keeps per Huge fill).
+Render: new `assets/settlement/keep.svg` (stone tower + battlements + pennant); `settlementArt`/
+`settlementMark` take an optional `kind` and return the keep sketch / a rook glyph (♜) at any size;
+`map.js` passes `hex.settlement.kind` in both LOD tiers; panel shows "— Keep (fortified)".
+**Settlement names (3R.6).** Every settlement now has an evocative seeded name (`js/gen/settlement-name.js`
+`settlementName(seed, q, r, gen, {kind, terrain})`) — **DERIVED, not stored** (a pure function of
+coords, so no schema field, and a manually-placed settlement is named for free; regenerating a hex
+reshuffles it). Prefix + ending composition with **terrain-flavored** suffixes (Brackholt in forest,
+Westercrag in mountains, Fenmoor in swamp) and a distinct **martial** style for keeps (Fort Marsh, Dun
+Keep, Stonemote); a guard prevents prefix/suffix stutters ("Fenfen"). Element lists are JS consts
+(like the `SHRINE_SETTING`/`CAMP_SETTING` flavor arrays), since the render path needs them
+synchronously. Shown in the panel ("Settlement: Brackholt (Town)") and on the map **on hover only**
+(auto-labelling every town cluttered the map — a GM's explicit `hex.name` still labels always).
+`panel.js` gets `seed` via the selection model; `map.js` uses `world.seed`. No schema change.
+Node-tested (determinism, shape, keep/terrain flavor, regen).
+**Settled-tile rendering (play feedback, done in small steps).** At the detail zoom a settled tile
+now **skips the terrain motif** and draws its **settlement icon big and centred** (the `HEX_SIZE·1.9`
+footprint the terrain motif used), instead of the terrain glyph + a small corner marker — terrain
+still reads from the fill colour; unsettled tiles keep their motif (`map.js`).
+**River/coast size boosts (3R.6).** Civilisation follows water: a settlement **on/beside a river** or
+**on the coast** (sea-adjacent) is bumped **+1** size tier, and one at a **river mouth / estuary**
+(both) **+2** — the "reason to grow/cluster" the generation-time size-suppression left room for. New
+pure `js/gen/settlement-water.js` (`applyWaterBoosts`/`settlementWaterContext`/`raiseSize`), called by
+`app.js`'s `syncRivers` right after `computeRivers`. **Idempotent by construction**: the rolled size is
+captured once as `settlement.baseSize` and the effective `size` is always re-derived from base + the
+current water context, so the repeated `syncRivers` calls never compound. The boost MAY exceed a
+terrain's normal maxSize (the water is the reason — a river-valley town, a great estuary port). A
+`settlement.waterBoost` tag ("estuary"/"river"/"coast") shows in the panel ("… · on a river"). No
+schema change (additive fields, no migration per the no-back-compat directive). Measured on Huge fills:
+watered regions shift up ~a tier (Hamlets→Villages, the odd estuary City), landlocked seeds unchanged.
+**Water settlement GENERATION (3R.6, distinct from the boost above).** Water bodies now *seed NEW*
+settlements (`settlement-water.js` `seedWaterSettlements`, run by `syncRivers` before the boost):
+scattered **small settlements along a river's course** (`RIVER_SETTLE_CHANCE` 0.08 per mid-course
+hex → Hamlet/Village, which the +1 riverside boost lifts so **some become Towns**),
+a **port at most river MOUTHS** where it meets the sea or a big lake (the "double whammy"):
+`MOUTH_SETTLE_CHANCE` 0.6 so ~40% of mouths stay wild, a **random base type** (City/Town/Hamlet)
+that the **+2 estuary boost** then lifts — so a mouth reads mostly City, sometimes Town — and
+`MOUTH_KEEP_CHANCE` 0.25 makes a few martial **keeps** guarding the crossing; plus **shore Cities on
+lakes** (big lakes always ≥ `BIG_LAKE_SIZE`; small lakes sometimes, `SMALL_LAKE_CITY_CHANCE`).
+Deterministic + **idempotent** via a per-hex `waterSeeded` decided-flag — the repeated `syncRivers`
+calls never duplicate, and a settlement a GM deletes is **not resurrected**. Measured over 8 Huge
+seeds: mouths settle ~58% (mostly City, the odd Town, ~18% keeps), and river courses carry a healthy
+scatter of Villages and **Towns**; landlocked seeds barely change.
+**Hamlet clusters (3R.6).** A large (Town/City) settlement now sprinkles a few **farming Hamlets** in
+the arable land (Plains/Hills) of its immediate ring — a "breadbasket". A deliberate **sprinkling**:
+`seedHamletClusters` (`settlement-water.js`, run by `syncRivers` after the water passes so anchors are
+final-sized, then a second idempotent `applyWaterBoosts`) rolls `CLUSTER_HAMLET_CHANCE` per farmland
+neighbour, keyed by anchor size — **City 0.45, Town 0.35** (a city earns more farms, and it more often
+sits on water so fewer neighbours are eligible; the higher rate compensates). Measured: cities ~79%
+ringed / ~1.3 farms each vs towns ~52% / ~0.9 each; ~6 cluster hamlets per Huge fill overall, a third
+of big towns still standing alone. Deterministic + idempotent via a per-hex `clusterSeeded` decided-flag (no duplicates; a deleted
+hamlet isn't resurrected); never overrides an existing settlement.
+**3R.7 — Roads (network + rendering).** A derived `world.roads[]` overlay (the sibling of
+`world.rivers[]`), recomputed by `syncRoads` after `syncRivers`. `js/gen/roads.js` `computeRoads` builds
+the network in **two phases**. **(1) Trunk:** the big settlements (Town/City) are joined into a
+**minimum-spanning forest** (Kruskal + union-find over **A\*** least-cost routes) — this *guarantees*
+every big place within reach of another lands in **one connected network** (three nearby cities are
+always joined, as a chain/crossroads — this fixed the playtest bug where cities sat unconnected). City
+links reach far (`trunkReach` City–City 64 … Town–Town 30); cities never roll isolated. **(2) Spurs:**
+every other settlement (a Village/Hamlet, or a Town too remote for the trunk) attaches via **Dijkstra**
+to the **nearest** thing it can reach — an existing road hex (**a crossroad**) or another settlement —
+within a size-scaled `REACH` (City 64 … Hamlet 8); a small `ISO_CHANCE` leaves the odd small place
+roadless, and a remote one out of reach simply isn't connected. Routing is over the road-tuned cost
+field (`ROAD_COST` Plains 1 … Mountains 8, Desert 10, Sea/Lake impassable) so roads route **around**
+ranges / avoid desert / never cross water, with a **valley discount** on river-adjacent hexes. An
+already-built road hex is **cheap to travel** (`ROAD_REUSE_COST`), so a new route **merges onto** an
+existing road and shares the corridor rather than running parallel — double roads become one (spurs
+attach network-first so they join the connected trunk, not a random neighbour). Nodes many others
+attach to become **hubs with several roads**. **Tiers** by the owning settlement: City = highway (t1),
+Town = road (t2), Village/Hamlet = track/spur (t3, dashed = ford). The **auto network is re-derived
+deterministically** each call (a pure function of the revealed terrain + settlements, so it stays
+connected as the world grows); only GM-drawn **manual** roads are kept verbatim (and seed the network).
+Rendered by `map.js` `drawRoads` as tiered tan polylines with a dark casing — **under** the settlement
+icons (a town sits on the network), **over** rivers (solid = bridge, dashed spur = ford), **nudged
+off-centre to a canonical side** so a road along a river sits beside it AND two roads sharing a corridor
+merge into one line; drawn **lowest-tier-first** so a shared segment reads as the bigger road; a
+crossroad end is left long to meet the road it joins, a settlement end trimmed so its icon stays clean. Measured over 8 Huge seeds:
+~15 roads/fill, **all big settlements in ONE connected network + ~90% of ALL settlements** on it (the
+rest the intended isolated few). Shared `MinHeap` extracted to
+`js/core/minheap.js` (reused by rivers + roads). Schema **v15** (backfill `roads: []`, stamp-only migration).
+**Manual draw (3R.7).** The radial "River" menu became a **Draw** submenu (River / Road, + Remove
+river/road where a manual one runs). The river-draft plumbing (`js/ui/app.js` — clicked anchors joined
+by straight hex-lines, Undo/Finish/Cancel bar, Enter/Esc/Ctrl-Z keys) was **generalised** to a
+`draftKind` ("river"|"road"): Finish builds a `manual` river (`buildManualRiver`) or a `manual` road
+(`js/gen/roads.js` `buildManualRoad` — a solid tier-2 road kept verbatim by `computeRoads`, seeding the
+auto network so settlements spur onto it). `map.js` `setRoadDraft`/`drawRoadDraft` preview it as a
+dashed tan line. Verified end-to-end over the DevTools protocol (Draw → Road → trace → Finish renders a
+manual road).
+**Ancient desert roads + legend (3R.8).** A rare, seeded, **dead-straight ancient road** now cuts
+across the sands where a normal road never would (`roads.js` — between big settlements whose straight
+line crosses ≥ 3 desert hexes and no water, `ANCIENT_CHANCE` 0.14); rendered pale + dotted + straight
+(`kind: "ancient"`), distinct from the curving tan roads. A toggleable **Legend** (command-bar button)
+keys the terrain colours (from `terrain-style.js`), route tiers, ancient road, river, and settlements.
+**Named regions (3R.8).** The big terrain tracts carry evocative names ("the Marrowwood", "the Wolf
+Sloughs", "the Nether Range"), shown **on hover** (no always-on labels cluttering the map — matching
+the settlement-name hover). `js/gen/regions.js` `computeRegions` flood-fills connected same-terrain
+clumps ≥ 16 hexes and names each by a pure `regionName(seed, terrain, anchorKey)` (a seeded prefix + a
+terrain-flavoured collective noun — Peaks/Marches/Wood/Downs/Sands/Sea…). DERIVED, not stored: `map.js`
+memoises a hex→name map per (seed, hex-count); the hover readout shows the GM's hex name, else a
+settlement name, else the region name. Node-tested.
 **Map notes & labels (7.5) add `name`/`note` to a hex — schema bumped to v7; 3R.3 added
 `elevation`/`moisture` (v8); 3R.4 added `continent` (v9/v10); 3R.5 rivers (v11 `riverEdges` → v12
 `world.rivers[]`); v13 the terrain rewrite REMOVED elevation/moisture/continent and the trace-based
 rivers (neighbour-affinity terrain, `js/gen/affinity.js`); 3R.6 rivers return as a derived
-major-water drainage overlay (`js/gen/rivers.js`), no schema change.**
-**Schema v13. 236 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
+major-water drainage overlay (`js/gen/rivers.js`), no schema change; 3R.7 adds `world.roads[]` (v15).**
+**Regeneration policy (3R.8).** The radial "Regenerate" slot is now a submenu — **Lock/Unlock** this
+hex, re-roll **This hex**, or re-roll a **Small/Medium/Large** area. A per-hex `locked` flag (additive;
+padlock map marker) protects a hex from regenerate AND delete; `onRegenerateArea` re-rolls every
+existing UNLOCKED hex in the disc (bumping `gen`), keeping locked hexes + manual rivers/roads while the
+derived overlays re-stitch.
+**3R.8 wrap-up (integration + polish).** **Legend → icon button:** the command-bar "Legend" text
+button became a small **🗺 button** pinned bottom-left, opening the key panel above it (`index.html`,
+`css/app.css`). **Bridges/fords:** no glyph — pure **draw order** in `map.js` (dashed tracks/spurs draw
+UNDER the river = a ford; solid roads + the ancient road draw OVER it = a bridge; `roadFordsRiver`
+picks the pass). A first glyph-drawing version (`crossings.js`) and a **coastal-port ⚓ marker**
+(`ports.js`) were both built, then removed as over-engineered / no value. **Network LOD:** roads/rivers
+draw full-styled (casing, tier widths, track dashes) only at the detail zoom; once hexes shrink past
+`DETAIL_PX` they switch to a thin SOLID skeleton (`ROAD_TIERS[].far`, `RIVER_WIDTH_FAR`), so a
+zoomed-out Huge map reads as a delicate network, not fat tubes. **Hooks fix:** `chooseDistantTarget`
+now pushes outward past a dense fill (Read map / Follow trail / distant hooks were silently failing on
+Huge maps), and generating/advancing a hook jumps to the **Hooks** tab with it selected. **Fewer water
+POIs:** open water auto-rolls only a rare lone landmark (`terrain-profile.js` chance 0.03 → 0.003),
+never sea-shrines. **NO MIGRATION** for pre-3R worlds (deferred, deliberate). **Final tuning ✅:**
+re-measured vs the 3R.2 baseline — lone-hex 24 % → 6 %, clump median 1–2 → 3–5, settlement spacing
+1.1 → 4.5–5.5 hex, roads 100 % connected, cluster hamlets on target; no constants changed. **Phase 3R
+is feature-complete.**
+**Schema v15. 299 `node --test` passing** (run as `test/*.test.js` — `node --test`'s default discovery
 treats any file under `test/` as a suite, which would otherwise snag the non-test
 `stats-harness.js` diagnostic script). Work merges to **`main`** via PR.
 
@@ -352,15 +522,18 @@ YAGNI; everything persists.
   `subRng(seed, "hex", q, r, …)` (order-independent). `gen` counter on a hex lets "regenerate"
   produce a different result deterministically. **Render-time choices (which art variant) are
   derived from coords and NOT stored.**
-- **Schema + migration.** `SCHEMA_VERSION` (currently **11**) lives in `js/world/world.js`.
-  `migrateWorld()` in `js/data/portability.js` upgrades older worlds and runs on both import and
-  load. Bump + add a migration step whenever the persisted shape changes.
-- **No backward-compatibility burden right now.** Pre-release, with no real worlds worth
-  preserving: don't write migrations for old export formats, don't worry about whether cached
-  IndexedDB data matches the current shape — a schema/shape change can just break old worlds; the
-  fix is to start a new one. Skip defensive fallbacks/back-compat shims for data shape changes for
-  the same reason. **Revisit this once there's real save data worth protecting** — this note
-  itself should be removed at that point.
+- **Schema version.** `SCHEMA_VERSION` (currently **15**) lives in `js/world/world.js`. Bump it
+  when the persisted shape changes — it marks the current shape and guards `importWorld` against
+  loading a *newer* world into an older app. `migrateWorld()` in `js/data/portability.js` runs on
+  import and load. Per the no-back-compat policy below, a schema bump gets only a **version STAMP**
+  (`if (data.schemaVersion < N) data.schemaVersion = N;`), **not** a data-transform step.
+- **⛔ NO backward-compatibility. (User directive — do not violate.)** Pre-release, the user would
+  rather **throw away every world and start over on every test** than carry back-compat code. So:
+  **do not write migration transforms**, `kind`/shape backfills, or defensive fallbacks for old
+  data shapes. When the persisted shape changes, bump `SCHEMA_VERSION` and stamp it — old worlds may
+  render wrong or break, and the fix is "New World". This is deliberate: such code is unneeded weight
+  right now. **The user will explicitly say when this changes** (once they have real save data worth
+  protecting); only then do we add real migrations and revisit this note.
 - **Data-driven content.** Roll tables are JSON in `/data` using the
   [canonical schema](#canonical-table-schema). *Rules* (per-terrain settlement caps / POI weights,
   terrain coherence via elevation+moisture) are small pure JS consts/functions
@@ -393,7 +566,11 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           affinity.js (TERRAINS, terrainAt/neighborTerrainsOf — v13 neighbour-affinity hex oracle;
                     a revealed hex rolls a weighted terrain biased by its already-revealed neighbours)
           rivers.js (computeRivers/buildManualRiver — v13 emergent drainage: terrain-cost field to the
-                    nearest major water body, sources in deep-interior mountains; append-only + manual rivers)
+                    nearest major water body, sources in deep-interior mountains; append-only + manual rivers
+                    + settlement gravity: new traces bend toward nearby towns, size-weighted)
+          settlement-name.js (settlementName — derived seeded place-name; terrain-flavored, martial for keeps)
+          settlement-water.js (applyWaterBoosts — river/coast/estuary size boost; seedWaterSettlements —
+                    generate settlements along rivers + City at mouths/lakes; idempotent via baseSize/waterSeeded)
           dungeon.js (generateDungeon, DUNGEON_BUILD)   dungeon-layout.js (layoutLevel, deriveDoors)
           feature-detail.js (describeFeature/featureName/featureDescription — Tier-1 shrine/camp/landmark)
           tower.js (generateTower, TOWER_BUILD — Tier-2 mapped tower interior, orientation:"up")
@@ -413,9 +590,9 @@ package.json                    dev-only: "type":"module", scripts: test / serve
           hook-{pattern,verb,source,explore,threat,rescue,warning,opportunity,commodity,event,cargo,recipient,clue,payoff,patron,reward,return} (JSON)
 /assets   terrain/*.svg  settlement/*.svg
 /test     node --test suites, run as `test/*.test.js` (rng, dice, table, world, hexgeo, hex,
-          noise, biome, river, terrain-coherence, terrain-profile, terrain-art, settlement-art, poi,
-          migration, dungeon, dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a
-          diagnostic script
+          noise, biome, river, terrain-coherence, terrain-profile, settlement-density,
+          settlement-name, settlement-water, terrain-art, settlement-art, poi, migration, dungeon,
+          dungeon-layout, feature-detail, tower, hooks); stats-harness.js is a diagnostic script
           (not a suite — `node --test`'s directory-based discovery would otherwise pick up ANY
           file under test/, hence the explicit `*.test.js` glob), run via `node
           test/stats-harness.js [seed] [radius]` (3R.2 — terrain/settlement generation baseline)
@@ -438,10 +615,11 @@ graph TD
 
 ---
 
-## Current data model (as built, schema v11)
+## Current data model (as built, schema v15)
 
-- **World:** `{ schemaVersion:11, id, name, seed, hexScale, hexes:{}, hooks:[], createdAt, updatedAt }`
-  (IndexedDB holds a **list** of worlds). No `factions` (deferred).
+- **World:** `{ schemaVersion:15, id, name, seed, hexScale, hexes:{}, hooks:[], rivers:[], roads:[], createdAt, updatedAt }`
+  (IndexedDB holds a **list** of worlds). `rivers[]`/`roads[]` are **derived overlays** (recomputed by
+  `syncRivers`/`syncRoads` from the revealed terrain + settlements; manual entries are frozen). No `factions` (deferred).
 - **Hook** (Phase 6; top-level `world.hooks[]`):
   `{ id:"hook:<n>", build, pattern, verb, subject:{poiId?,name,type}, origin:{q,r}, target:{q,r,poiId?},
   bearing, distance, targetTerrain, claim, source, status }` plus per-kind fields — `chain:{total,step,prize}`,
@@ -450,7 +628,8 @@ graph TD
   Prose composed at render (`hookName`/`hookDescription`).
 - **Hex** (keyed by `axialKey(q,r)` = `"q,r"`):
   `{ key, coords:{q,r}, placed, terrain, terrainFeature|null,
-  settlement, pois:[], explored, gen, name?, note? }`. `name`/`note` (v7) are optional GM annotations —
+  settlement, pois:[], explored, gen, name?, note?, locked? }`. `locked` (3R.8) protects a hex from
+  regenerate + delete. `name`/`note` (v7) are optional GM annotations —
   `name` shows as a map label. `terrain` (one of `affinity.js`'s `TERRAINS`: Sea/Lake/Swamp/Plains/
   Forest/Hills/Mountains/Desert) is chosen by the **v13 neighbour-affinity hex oracle** — a weighted
   roll biased by already-revealed neighbours (`terrainAt`), deliberately reveal-order-dependent (NOT a
@@ -458,8 +637,9 @@ graph TD
   (v8–v12) were **removed at v13** when the elevation classifier and per-hex river edges were deleted;
   old saves load as-is (extra fields ignored). Rivers are no longer per-hex — they live in
   `world.rivers[]` (see below), derived from the revealed terrain.
-- **settlement:** `{ present:false }` or `{ present:true, size }` where size ∈
-  `Thorp, Hamlet, Village, Town, City` (capped per terrain; none on Lake/Sea).
+- **settlement:** `{ present:false }` or `{ present:true, size, kind? }` where size ∈
+  `Hamlet, Village, Town, City` (capped per terrain; none on Lake/Sea; Thorp dropped at v14).
+  Optional `kind:"keep"` is a rare terrain-biased **martial overlay** (a fortified site, any size).
 - **POI:** `{ id:"poi:<n>", type, name, occupant, detail }`; `occupant` is
   `{kind:"lair",creature}` | `{kind:"occupied",by}` | `{kind:"none"}`. **Dungeon** POIs carry a
   terrain-biased `detail.theme` (drives the map glyph) and gain a generated interior at
@@ -496,7 +676,7 @@ graph TD
 | **5 — Other POI types detailed** (shrine/camp/landmark + tower) | ✅ done | [phase-5-poi-detail.md](docs/plans/phase-5-poi-detail.md) |
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ▶ **in progress** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.7+ backlog 📋** [phase-7-backlog.md](docs/plans/phase-7-backlog.md) |
-| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ▶ **in progress** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested; interleaves with 7. **3R.1 "Generate Area" ✅ · 3R.2 audit+research+model-decision ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅** (Lake/Sea via a `continent` land/ocean gate — revised after manual testing found "inland seas"; real coastlines now; rivers grow incrementally from mountain sources like sea contagion, for performance; schema v11); next 3R.6 (settlements v2). |
+| **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
 | 8 — Additional small oracles | ◻ later | see catalog below |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/8 need only the map + POIs; 7 is polish. Factions are a

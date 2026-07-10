@@ -172,5 +172,21 @@ export function migrateWorld(data) {
     data.rivers = [];
     data.schemaVersion = 13;
   }
+  if (data.schemaVersion < 14) {
+    // Thorp tier dropped + optional settlement.kind ("keep") added. Per the
+    // no-back-compat policy (see PLAN.md "No backward-compatibility burden"), we
+    // do NOT transform old data — just stamp the version. An old world with Thorp
+    // settlements still loads (Thorp renders via the fallback marker); if it looks
+    // off, start a fresh world. Restore a real migration here only once there's
+    // save data worth protecting.
+    data.schemaVersion = 14;
+  }
+  if (data.schemaVersion < 15) {
+    // top-level `roads` array (Phase 3R.7) — a derived overlay like `rivers`,
+    // recomputed from terrain + settlements on load. Backfill empty; syncRoads
+    // repopulates it (see world.js:83 note).
+    if (!Array.isArray(data.roads)) data.roads = [];
+    data.schemaVersion = 15;
+  }
   return data;
 }
