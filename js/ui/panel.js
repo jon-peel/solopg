@@ -397,17 +397,22 @@ function factionCard(faction, model) {
     box.appendChild(div);
   }
 
-  const holding = (faction.holdings || [])[0];
-  if (holding && model.onCenterFaction) {
+  // Every holding gets a jump link (8.9) — click-to-centre like a hook's
+  // Target/Origin. One holding → a single "Jump to holding"; several → one link
+  // per site, each centring the map on that hex.
+  const holdings = faction.holdings || [];
+  if (holdings.length && model.onCenterFaction) {
     const legend = document.createElement("div");
     legend.className = "hook-legend";
-    const a = document.createElement("button");
-    a.type = "button";
-    a.className = "legend-link";
-    a.title = "Centre the map on this faction's holding";
-    a.textContent = "Jump to holding";
-    a.addEventListener("click", () => model.onCenterFaction(faction.id));
-    legend.appendChild(a);
+    holdings.forEach((h, i) => {
+      const a = document.createElement("button");
+      a.type = "button";
+      a.className = "legend-link";
+      a.title = "Centre the map on this holding";
+      a.textContent = holdings.length === 1 ? "Jump to holding" : `Holding ${i + 1} · (${h.q}, ${h.r})`;
+      a.addEventListener("click", () => model.onCenterFaction(faction.id, i));
+      legend.appendChild(a);
+    });
     box.appendChild(legend);
   }
   return box;
@@ -641,6 +646,26 @@ export function renderSelectionPanel(model) {
       frow.className = "tile-actions";
       frow.appendChild(actionButton("Generate faction here", model.onGenerateFaction));
       sel.appendChild(frow);
+    }
+
+    // Claim for faction (Phase 8.9) — attach this hex to an EXISTING faction's
+    // holdings (a gang with several camps). A picker + button, shown only when a
+    // faction exists to claim for. Same <select>+button idiom as the Travel tab.
+    if (model.onClaimHolding && (model.factions || []).length) {
+      const crow = document.createElement("div");
+      crow.className = "tile-actions";
+      const pick = document.createElement("select");
+      pick.className = "faction-select";
+      pick.setAttribute("aria-label", "Faction to claim for");
+      for (const f of model.factions) {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = f.name;
+        pick.appendChild(opt);
+      }
+      crow.appendChild(pick);
+      crow.appendChild(actionButton("Claim for faction", () => model.onClaimHolding(pick.value)));
+      sel.appendChild(crow);
     }
   }
 

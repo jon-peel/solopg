@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   generateFaction,
   promoteFaction,
+  addHolding,
   factionLabel,
   factionDescription,
   FACTION_BUILD,
@@ -140,6 +141,46 @@ test("promoteFaction is deterministic and otherwise well-formed", () => {
   assert.equal(a.goal.progress, 0);
   assert.deepEqual(a.clock, { turns: 0, sinceTurn: 0 });
   assert.equal(a.status, "active");
+});
+
+// --- Multiple holdings (8.9) ----------------------------------------------
+
+test("addHolding appends a new holding and reports it added", () => {
+  const f = make(1, 0, 0, 0);
+  assert.equal(f.holdings.length, 1);
+  const added = addHolding(f, { q: 5, r: -2 });
+  assert.equal(added, true);
+  assert.equal(f.holdings.length, 2);
+  assert.deepEqual(f.holdings[1], { q: 5, r: -2 });
+});
+
+test("addHolding dedupes by (q,r) — same hex twice is a no-op", () => {
+  const f = make(1, 0, 0, 0); // holding at (0,0)
+  assert.equal(addHolding(f, { q: 0, r: 0 }), false);
+  assert.equal(f.holdings.length, 1);
+});
+
+test("addHolding preserves poiId when supplied, omits it otherwise", () => {
+  const f = make(1, 0, 0, 0);
+  addHolding(f, { q: 1, r: 1, poiId: "poi:3" });
+  addHolding(f, { q: 2, r: 2 });
+  assert.deepEqual(f.holdings[1], { q: 1, r: 1, poiId: "poi:3" });
+  assert.deepEqual(f.holdings[2], { q: 2, r: 2 });
+});
+
+test("addHolding dedupes by coords, not poiId — same poiId at a new hex still adds", () => {
+  const f = make(1, 0, 0, 0);
+  assert.equal(addHolding(f, { q: 1, r: 0, poiId: "poi:0" }), true);
+  assert.equal(addHolding(f, { q: 2, r: 0, poiId: "poi:0" }), true);
+  assert.equal(f.holdings.length, 3);
+});
+
+test("addHolding on one faction leaves another untouched", () => {
+  const a = make(1, 0, 0, 0);
+  const b = make(1, 9, 9, 1);
+  addHolding(a, { q: 3, r: 3 });
+  assert.equal(a.holdings.length, 2);
+  assert.equal(b.holdings.length, 1);
 });
 
 test("factionLabel / factionDescription are pure functions of the picks", () => {

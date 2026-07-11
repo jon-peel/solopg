@@ -104,6 +104,25 @@ export function promoteFaction(tables, rng, ctx) {
   });
 }
 
+/**
+ * Attach a holding to an existing faction (Phase 8.9) — the "reuse one faction
+ * across the map" seam (a gang with several camps). Dedupes by (q,r): the same
+ * hex can't be claimed twice by the SAME faction (two different factions
+ * contesting a hex is allowed). Mutates the faction.
+ * @param {object} faction
+ * @param {{ q:number, r:number, poiId?:string }} holding
+ * @returns {boolean} true if added, false if the faction already held that hex
+ */
+export function addHolding(faction, holding) {
+  if (!Array.isArray(faction.holdings)) faction.holdings = [];
+  const dup = faction.holdings.some((h) => h.q === holding.q && h.r === holding.r);
+  if (dup) return false;
+  const h = { q: holding.q, r: holding.r };
+  if (holding.poiId) h.poiId = holding.poiId;
+  faction.holdings.push(h);
+  return true;
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the factions list (just the name). */

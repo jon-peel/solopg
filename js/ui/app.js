@@ -26,7 +26,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -578,6 +578,8 @@ function renderSelection() {
     onPromotePoi,
     onCenterFaction,
     factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
+    factions: hex && hex.placed ? getFactions(current) : [],
+    onClaimHolding: hex && hex.placed ? onClaimHolding : undefined,
   });
 }
 
@@ -1655,12 +1657,31 @@ function onCenterHook(id, which) {
   if (pt) recenterOn(pt.q, pt.r);
 }
 
-// Centre the map on a faction's (first) holding — click-to-jump from the
-// Factions tab, mirroring a hook card's Target link (Phase 8.7).
-function onCenterFaction(id) {
+// Centre the map on a faction's holding — click-to-jump from the Factions tab
+// (Phase 8.7). `index` selects which holding (8.9); defaults to the first, so
+// the 8.8 POI "Faction:" link (no index) still lands on holding 0.
+function onCenterFaction(id, index = 0) {
   const f = getFactions(current).find((x) => x.id === id);
-  const hold = f && (f.holdings || [])[0];
+  const hold = f && (f.holdings || [])[index];
   if (hold) recenterOn(hold.q, hold.r);
+}
+
+// Claim the selected placed hex for an existing faction (Phase 8.9) — attaches
+// it (with its primary POI, if any) to that faction's holdings[]. Dedupes: a
+// faction can't hold the same hex twice.
+async function onClaimHolding(factionId) {
+  if (!current || !selected) return;
+  const faction = getFactions(current).find((f) => f.id === factionId);
+  if (!faction) return;
+  const { q, r } = selected;
+  const hex = getHex(current, q, r);
+  const poiId = hex && Array.isArray(hex.pois) && hex.pois[0] ? hex.pois[0].id : undefined;
+  if (!addHolding(faction, { q, r, poiId })) {
+    return logLine(`${faction.name} already holds (${q}, ${r}).`);
+  }
+  setPanelTab("factions");
+  await persistAndRefresh();
+  logLine(`${faction.name} claims (${q}, ${r}) — now ${faction.holdings.length} holdings.`);
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the
