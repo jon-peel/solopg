@@ -3,6 +3,7 @@
 import { glyphForPoi } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
+import { factionLabel, factionDescription } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
 
 const panel = () => document.getElementById("panel");
@@ -11,7 +12,7 @@ const panel = () => document.getElementById("panel");
 // The panel shows one tab at a time; each region is built once (in showWorld)
 // and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", travel: "travel-panel" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", travel: "travel-panel", factions: "factions-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -28,7 +29,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "travel"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "travel" | "factions"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -122,6 +123,30 @@ function renderPoiSection(sel, hex, model) {
         box.appendChild(div);
       }
     }
+    // Promote (Phase 8.8): an occupied POI can be wrapped into a full faction.
+    // Once promoted it shows a link to its faction instead (no double-promote).
+    const occupant = selectedPoi.occupant;
+    if (occupant && occupant.kind === "occupied") {
+      if (occupant.factionId) {
+        const name = model.factionNameById && model.factionNameById(occupant.factionId);
+        const row = document.createElement("div");
+        row.className = "hook-legend";
+        const a = document.createElement("button");
+        a.type = "button";
+        a.className = "legend-link";
+        a.textContent = `Faction: ${name || occupant.factionId}`;
+        a.title = "Centre the map on this faction's holding";
+        if (model.onCenterFaction) a.addEventListener("click", () => model.onCenterFaction(occupant.factionId));
+        row.appendChild(a);
+        box.appendChild(row);
+      } else if (model.onPromotePoi) {
+        const row = document.createElement("div");
+        row.className = "tile-actions";
+        row.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(selectedPoi.id)));
+        box.appendChild(row);
+      }
+    }
+
     const back = document.createElement("button");
     back.className = "link-back";
     back.textContent = "← Back to hex";
@@ -347,6 +372,90 @@ export function renderGlobalHooks(model) {
   );
 }
 
+// One faction's card: name + archetype/disposition/goal prose, and — when it has
+// a holding — a click-to-centre link (mirrors a hook card's Target legend link).
+function factionCard(faction, model) {
+  const box = document.createElement("div");
+  box.className = "hook"; // reuse the hook-card styling
+  const dot = model.factionColorFor ? model.factionColorFor(faction.id) : null;
+
+  const title = document.createElement("div");
+  title.className = "poi-detail-title";
+  if (dot) {
+    const swatch = document.createElement("span");
+    swatch.className = "dot";
+    swatch.style.background = dot;
+    title.append(swatch, " ");
+  }
+  title.append(factionLabel(faction));
+  box.appendChild(title);
+
+  for (const line of factionDescription(faction)) {
+    const div = document.createElement("div");
+    div.className = "log-line";
+    div.textContent = line;
+    box.appendChild(div);
+  }
+
+  // Every holding gets a jump link (8.9) — click-to-centre like a hook's
+  // Target/Origin. One holding → a single "Jump to holding"; several → one link
+  // per site, each centring the map on that hex.
+  const holdings = faction.holdings || [];
+  if (holdings.length && model.onCenterFaction) {
+    const legend = document.createElement("div");
+    legend.className = "hook-legend";
+    holdings.forEach((h, i) => {
+      const a = document.createElement("button");
+      a.type = "button";
+      a.className = "legend-link";
+      a.title = "Centre the map on this holding";
+      a.textContent = holdings.length === 1 ? "Jump to holding" : `Holding ${i + 1} · (${h.q}, ${h.r})`;
+      a.addEventListener("click", () => model.onCenterFaction(faction.id, i));
+      legend.appendChild(a);
+    });
+    box.appendChild(legend);
+  }
+  return box;
+}
+
+/**
+ * Render the Factions tab (Phase 8.7) into #factions-panel — one card per
+ * faction, with a count badge on the tab. Mirrors the Hooks tab (7.3).
+ * @param {{ factions: object[], onCenterFaction?: (id:string)=>void,
+ *   factionColorFor?: (id:string)=>string }} model
+ */
+export function renderFactionsPanel(model) {
+  const host = document.getElementById("factions-panel");
+  if (!host) return;
+  host.innerHTML = "";
+  const factions = (model && model.factions) || [];
+  setTabBadge("factions-tab-badge", factions.length);
+
+  if (!factions.length) {
+    const empty = document.createElement("div");
+    empty.className = "panel-hint";
+    empty.textContent = 'No factions yet — select a placed hex and press "Generate faction here" on the Detail tab.';
+    host.appendChild(empty);
+    return;
+  }
+
+  const head = document.createElement("div");
+  head.className = "hooks-head";
+  head.textContent = `${factions.length} faction${factions.length === 1 ? "" : "s"}`;
+  host.appendChild(head);
+
+  // Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the
+  // day clock. Shown when at least one faction is active.
+  if (model.onAdvanceFactionTurn && factions.some((f) => (f.status || "active") === "active")) {
+    const row = document.createElement("div");
+    row.className = "tile-actions";
+    row.appendChild(actionButton("Advance faction turn", model.onAdvanceFactionTurn));
+    host.appendChild(row);
+  }
+
+  for (const faction of factions) host.appendChild(factionCard(faction, model));
+}
+
 // Encumbrance tier labels (Phase 8.4), matching ENCUMBRANCE_FACTOR's keys
 // (js/gen/travel.js) and the existing B/X travel-tip tooltip's phrasing.
 const ENCUMBRANCE_LABELS = {
@@ -538,6 +647,36 @@ export function renderSelectionPanel(model) {
         sel.appendChild(row);
       }
     }
+
+    // Generate faction (Phase 8.7) — a panel action (the ring is full), mirroring
+    // "Generate hook": the selected placed hex becomes the new faction's one
+    // starting holding. A radial slot can come later (parent plan defers it).
+    if (model.onGenerateFaction) {
+      const frow = document.createElement("div");
+      frow.className = "tile-actions";
+      frow.appendChild(actionButton("Generate faction here", model.onGenerateFaction));
+      sel.appendChild(frow);
+    }
+
+    // Claim for faction (Phase 8.9) — attach this hex to an EXISTING faction's
+    // holdings (a gang with several camps). A picker + button, shown only when a
+    // faction exists to claim for. Same <select>+button idiom as the Travel tab.
+    if (model.onClaimHolding && (model.factions || []).length) {
+      const crow = document.createElement("div");
+      crow.className = "tile-actions";
+      const pick = document.createElement("select");
+      pick.className = "faction-select";
+      pick.setAttribute("aria-label", "Faction to claim for");
+      for (const f of model.factions) {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = f.name;
+        pick.appendChild(opt);
+      }
+      crow.appendChild(pick);
+      crow.appendChild(actionButton("Claim for faction", () => model.onClaimHolding(pick.value)));
+      sel.appendChild(crow);
+    }
   }
 
   // Annotations (name + notes) work for any selected cell — even an ungenerated
@@ -727,6 +866,7 @@ export function showWorld(world, opts = {}) {
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
     mkTab("travel", "Travel"),
+    mkTab("factions", "Factions", "factions-tab-badge"),
   );
   el.appendChild(tabs);
   // Detail region: the selected hex (or dungeon room) details.
@@ -749,6 +889,11 @@ export function showWorld(world, opts = {}) {
   travel.id = "travel-panel";
   travel.hidden = true;
   el.appendChild(travel);
+  // Factions region (Phase 8.7): the world's factions (filled by renderFactionsPanel).
+  const factions = document.createElement("div");
+  factions.id = "factions-panel";
+  factions.hidden = true;
+  el.appendChild(factions);
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.

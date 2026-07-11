@@ -10,6 +10,9 @@ import {
   removeHex,
   nextUnplacedKey,
   setPartyPosition,
+  addFaction,
+  getFactions,
+  removeFaction,
 } from "../js/world/world.js";
 import { axialKey } from "../js/core/hexgeo.js";
 import { exportWorld, importWorld } from "../js/data/portability.js";
@@ -48,6 +51,20 @@ test("setPartyPosition moves the marker and returns the world", () => {
   const ret = setPartyPosition(w, 3, -2);
   assert.equal(ret, w);
   assert.deepEqual(w.party, { q: 3, r: -2 });
+});
+
+test("addFaction / getFactions / removeFaction manage the roster (Phase 8.7)", () => {
+  const w = createWorld({ name: "Powers", seed: 1 });
+  assert.deepEqual(getFactions(w), []);
+  const ret = addFaction(w, { id: "faction:0", name: "The Ashen Hand" });
+  assert.equal(ret, w);
+  addFaction(w, { id: "faction:1", name: "House Umber" });
+  assert.equal(getFactions(w).length, 2);
+  removeFaction(w, "faction:0");
+  assert.deepEqual(getFactions(w).map((f) => f.id), ["faction:1"]);
+  // Removing an unknown id is a no-op.
+  removeFaction(w, "faction:99");
+  assert.equal(getFactions(w).length, 1);
 });
 
 test("export -> import round-trips losslessly", () => {

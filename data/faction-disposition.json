@@ -1,0 +1,10 @@
+{
+  "id": "faction-disposition",
+  "title": "Faction disposition toward the party and locals",
+  "entries": [
+    { "weight": 3, "value": "hostile" },
+    { "weight": 3, "value": "wary" },
+    { "weight": 2, "value": "neutral" },
+    { "weight": 1, "value": "friendly" }
+  ]
+}

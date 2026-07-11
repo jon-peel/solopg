@@ -1,0 +1,14 @@
+{
+  "id": "faction-archetype",
+  "title": "Faction archetype (what kind of power it is)",
+  "entries": [
+    { "weight": 3, "value": "bandits" },
+    { "weight": 2, "value": "cult" },
+    { "weight": 2, "value": "merchant guild" },
+    { "weight": 2, "value": "noble house" },
+    { "weight": 2, "value": "monstrous tribe" },
+    { "weight": 1, "value": "hermit order" },
+    { "weight": 1, "value": "mercenary company" },
+    { "weight": 1, "value": "thieves' guild" }
+  ]
+}

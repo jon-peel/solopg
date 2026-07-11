@@ -14,9 +14,13 @@ nav/onboarding, POI dot polish). **Phase 3R (world coherence)** is also feature-
 terrain, rivers, roads, and settlement placement. **Phase 8 Arc A (Travel & Party Movement)** is
 complete — a party marker + session day clock, a per-terrain **travel** model (pace, encumbrance,
 getting lost), **day-at-a-time** travel (toward a hex, or an 8-point compass into the unknown that
-generates terrain and reveals line-of-sight), and a "Progress N days" control. See
-[PLAN.md](./PLAN.md) for what's next (Phase 8 Arc B **Factions**, Phase 9 small oracles, Phase 10
-backlog).
+generates terrain and reveals line-of-sight), and a "Progress N days" control. **Phase 8 Arc B
+(Factions)** is also complete — factions with a **goal doom-clock**, **disposition**, **strength**,
+and **holdings across the map**; **generate** or **promote** an occupied POI into one, **claim**
+extra holdings, and **faction turns** (manual or auto-fired as days pass) that advance goals and
+**move/expand** factions by archetype (a bandit camp roams, a cult's reach spreads). See
+[PLAN.md](./PLAN.md) for what's next (Phase 8 **Arc C** faction-emitted / auto-firing hooks, Phase 9
+small oracles, Phase 10 backlog).
 
 ## Running
 

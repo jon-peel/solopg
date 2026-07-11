@@ -18,7 +18,7 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
-import { glyphForPoi, poiDotColor } from "./poi-style.js";
+import { glyphForPoi, poiDotColor, factionColor } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
@@ -278,6 +278,21 @@ export function render() {
     if (t && o && !(t.q === o.q && t.r === o.r)) drawHookLine(o, t); // under the rings
     if (o) drawHookFocus(o, FOCUS_ORIGIN);
     if (t) drawHookFocus(t, FOCUS_TARGET);
+  }
+
+  // 4b. Faction holdings (Phase 8.7) — a per-faction coloured hex ring + a
+  //     banner badge, UNDER the party marker. Every holding of a faction shares
+  //     its colour so a power reads as one across the map. Like the party/hook
+  //     markers, drawn at every zoom regardless of whether a hex is placed there.
+  if (world && Array.isArray(world.factions)) {
+    world.factions.forEach((f, i) => {
+      const color = factionColor(i);
+      for (const hold of f.holdings || []) {
+        const hc = axialToPixel(hold.q, hold.r, HEX_SIZE);
+        if (hc.x < minX - margin || hc.x > maxX + margin || hc.y < minY - margin || hc.y > maxY + margin) continue;
+        drawFactionMark(hc.x, hc.y, color, detail);
+      }
+    });
   }
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
@@ -864,6 +879,21 @@ function drawPinnedMark(cx, cy, detail) {
     ctx.textBaseline = "middle";
     ctx.font = `${size}px sans-serif`;
     drawMarker(cx - off, cy - off, "📌", size, "#b794f6");
+  }
+}
+
+// Faction holding (Phase 8.7): a hex ring in the faction's colour + a banner
+// badge (bottom-right, a free corner) in the detail tier. ⚑ is a dingbat (not an
+// emoji), so it takes the faction colour — matching the hook flag convention.
+function drawFactionMark(cx, cy, color, detail) {
+  strokeHex(cx, cy, color, 2.5);
+  if (detail) {
+    const off = HEX_SIZE * 0.5;
+    const size = HEX_SIZE * 0.44;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${size}px sans-serif`;
+    drawMarker(cx + off, cy + off, "⚑", size, color);
   }
 }
 

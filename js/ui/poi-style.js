@@ -48,6 +48,24 @@ export const POI_DOT_COLORS = {
   tower: "#8a5a3c",
 };
 
+// Per-faction map colour (Phase 8.7) — cycled by faction order so each power
+// reads as one across all its holdings. Kept clear of the party marker (magenta
+// #ff4fd8) and the hook rings (amber / violet) so the map layers stay legible.
+export const FACTION_COLORS = [
+  "#2f8fd0", // blue
+  "#e0663c", // burnt orange
+  "#4bbf87", // emerald
+  "#c9a13b", // ochre
+  "#8a6bd6", // indigo
+  "#3fb0b0", // teal-cyan
+];
+
+/** Map colour for the Nth faction (cycles the palette; safe for negatives). */
+export function factionColor(index) {
+  const n = FACTION_COLORS.length;
+  return FACTION_COLORS[((index % n) + n) % n];
+}
+
 export function glyphForPoiType(type) {
   return POI_GLYPHS[type] || LEGACY_POI_GLYPHS[type] || "❖";
 }

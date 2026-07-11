@@ -172,6 +172,31 @@ export function setPartyEncumbrance(world, encumbrance) {
   return world;
 }
 
+// --- Factions (Phase 8.7, Arc B) -----------------------------------------
+// world.factions[] was reserved by the v16 bump (8.1); these populate it. Hooks
+// mutate world.hooks directly, but factions get accessors — the plan lists them
+// and 8.8 (promote) / 8.9 (claim holding) / 8.10 (turns) want the seam.
+
+/** Append a faction to the world's roster. Mutates and returns the world. */
+export function addFaction(world, faction) {
+  if (!Array.isArray(world.factions)) world.factions = [];
+  world.factions.push(faction);
+  return world;
+}
+
+/** All factions on the world (never null). */
+export function getFactions(world) {
+  return world.factions || [];
+}
+
+/** Remove a faction by id. Mutates and returns the world. */
+export function removeFaction(world, id) {
+  if (Array.isArray(world.factions)) {
+    world.factions = world.factions.filter((f) => f.id !== id);
+  }
+  return world;
+}
+
 function newId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();

@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { migrateWorld, importWorld, exportWorld } from "../js/data/portability.js";
 import { createWorld, SCHEMA_VERSION, setPartyPosition } from "../js/world/world.js";
+import { generateFaction } from "../js/gen/factions.js";
+import { validateTable } from "../js/core/table.js";
+import { subRng } from "../js/core/rng.js";
 
 function v2World() {
   return {
@@ -198,4 +202,18 @@ test("party/factions round-trip through export/import", () => {
   const restored = importWorld(exportWorld(world));
   assert.deepEqual(restored.party, { q: 2, r: 1 });
   assert.equal(restored.factions.length, 1);
+});
+
+test("a fully-generated faction round-trips identically (Phase 8.7, no schema bump)", () => {
+  const world = createWorld({ name: "Powers", seed: 5 });
+  assert.equal(world.schemaVersion, SCHEMA_VERSION); // 8.7 populates factions, no bump
+  const tables = new Map(
+    ["faction-archetype", "faction-goal", "faction-disposition"].map((id) => [
+      id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8"))),
+    ]),
+  );
+  const faction = generateFaction(tables, subRng(5, "faction", 3, -1, 0), { q: 3, r: -1, index: 0, seed: 5 });
+  world.factions.push(faction);
+  const restored = importWorld(exportWorld(world));
+  assert.deepEqual(restored.factions[0], faction);
 });
