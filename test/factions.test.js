@@ -12,6 +12,9 @@ import {
   factionLabel,
   factionDescription,
   factionHookContext,
+  autoHookChance,
+  rollAutoHookCount,
+  AUTO_HOOK_CAP,
   FACTION_BUILD,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
@@ -448,4 +451,67 @@ test("factionHookContext is deterministic for a given rng + tables", () => {
   const t = hookTables();
   const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
   assert.deepEqual(factionHookContext(f, seq(0.3, 0.1), t), factionHookContext(f, seq(0.3, 0.1), t));
+});
+
+// --- Auto-fire faction hooks (Phase 8.12) --------------------------------
+
+const activeFaction = (extra = {}) => ({
+  id: "faction:0", status: "active", strength: 3, holdings: [{ q: 5, r: 0 }], ...extra,
+});
+const PARTY = { q: 0, r: 0 };
+
+test("autoHookChance is 0 for an inactive faction, no party, or no holding", () => {
+  assert.equal(autoHookChance(activeFaction({ status: "dormant" }), PARTY), 0);
+  assert.equal(autoHookChance(activeFaction({ status: "destroyed" }), PARTY), 0);
+  assert.equal(autoHookChance(activeFaction(), null), 0);
+  assert.equal(autoHookChance(activeFaction({ holdings: [] }), PARTY), 0);
+  assert.equal(autoHookChance(null, PARTY), 0);
+});
+
+test("autoHookChance rises with strength and falls with distance", () => {
+  const weak = autoHookChance(activeFaction({ strength: 2 }), PARTY);
+  const strong = autoHookChance(activeFaction({ strength: 4 }), PARTY);
+  assert.ok(strong > weak, `strong ${strong} > weak ${weak}`);
+
+  const near = autoHookChance(activeFaction({ holdings: [{ q: 1, r: 0 }] }), PARTY);
+  const far = autoHookChance(activeFaction({ holdings: [{ q: 12, r: 0 }] }), PARTY);
+  assert.ok(near > far, `near ${near} > far ${far}`);
+});
+
+test("autoHookChance never exceeds the cap", () => {
+  // A very strong faction the party stands on would exceed 0.2 uncapped.
+  const c = autoHookChance(activeFaction({ strength: 99, holdings: [{ q: 0, r: 0 }] }), PARTY);
+  assert.ok(c <= 0.2 + 1e-9, `chance ${c} <= cap`);
+});
+
+test("rollAutoHookCount is 0 when the chance is 0 or days < 1", () => {
+  const alwaysLow = () => 0.999;
+  assert.equal(rollAutoHookCount(activeFaction({ status: "dormant" }), PARTY, 30, () => 0), 0);
+  assert.equal(rollAutoHookCount(activeFaction(), PARTY, 0, () => 0), 0);
+  assert.equal(rollAutoHookCount(activeFaction(), PARTY, 30, alwaysLow), 0); // rolls never beat the chance
+});
+
+test("rollAutoHookCount is capped at AUTO_HOOK_CAP even if every day hits", () => {
+  const alwaysHit = () => 0; // 0 < any positive chance → every day fires
+  const n = rollAutoHookCount(activeFaction({ strength: 4, holdings: [{ q: 0, r: 0 }] }), PARTY, 50, alwaysHit);
+  assert.equal(n, AUTO_HOOK_CAP);
+});
+
+test("rollAutoHookCount is deterministic for a given rng stream", () => {
+  const f = activeFaction({ strength: 4, holdings: [{ q: 1, r: 0 }] });
+  const a = rollAutoHookCount(f, PARTY, 40, subRng(9, "autohook", "faction:0", 0));
+  const b = rollAutoHookCount(f, PARTY, 40, subRng(9, "autohook", "faction:0", 0));
+  assert.equal(a, b);
+});
+
+test("a louder/nearer faction fires more often than a faint one (statistical)", () => {
+  // Sum counts across many independent day-streams; loud+near should out-fire faint+far.
+  const loud = activeFaction({ strength: 4, holdings: [{ q: 1, r: 0 }] });
+  const faint = activeFaction({ strength: 2, holdings: [{ q: 11, r: 0 }] });
+  let loudTotal = 0, faintTotal = 0;
+  for (let s = 0; s < 200; s++) {
+    loudTotal += rollAutoHookCount(loud, PARTY, 7, subRng(s, "autohook", "loud", 0));
+    faintTotal += rollAutoHookCount(faint, PARTY, 7, subRng(s, "autohook", "faint", 0));
+  }
+  assert.ok(loudTotal > faintTotal, `loud ${loudTotal} > faint ${faintTotal}`);
 });

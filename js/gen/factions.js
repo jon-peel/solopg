@@ -14,7 +14,7 @@
 
 import { rollTable } from "../core/table.js";
 import { subRng } from "../core/rng.js";
-import { neighbors, axialKey } from "../core/hexgeo.js";
+import { neighbors, axialKey, axialDistance } from "../core/hexgeo.js";
 import { TRAVEL_COST } from "./travel.js";
 import { factionName } from "./faction-name.js";
 
@@ -321,6 +321,48 @@ export function factionHookContext(faction, rng, tables) {
     ? rumour
     : rollTable(tables.get("hook-source"), rng).value;
   return { verb: "threat", claim, source };
+}
+
+// --- Auto-fire faction hooks (Phase 8.12) --------------------------------
+// As days pass, a faction's deeds reach the party on their own — likelier when the
+// faction is LOUD (strength) and NEAR (party → its lair): "news by distance". This
+// is where strength (stable since 8.13) is finally read. Rules-as-JS-consts.
+const AUTO_HOOK_BASE = 0.02; // per strength-point per day, at the party's doorstep
+const AUTO_HOOK_MAX = 0.2;   // cap — even a strong neighbour isn't a firehose
+export const AUTO_HOOK_CAP = 2; // most auto-hooks one advance spawns per faction
+
+/**
+ * Per-day chance an active faction's deeds reach the party. 0 for an inactive
+ * faction, or with no party / no holding. Rises with strength, falls with the
+ * party→lair distance, capped at AUTO_HOOK_MAX. Pure.
+ * @param {object} faction
+ * @param {{q:number,r:number}} party party marker position
+ * @returns {number} probability in [0, AUTO_HOOK_MAX]
+ */
+export function autoHookChance(faction, party) {
+  if (!faction || (faction.status || "active") !== "active") return 0;
+  const lair = (faction.holdings || [])[0];
+  if (!lair || !party) return 0;
+  const dist = axialDistance(party.q, party.r, lair.q, lair.r);
+  return Math.min((AUTO_HOOK_BASE * (faction.strength || 1)) / (1 + dist), AUTO_HOOK_MAX);
+}
+
+/**
+ * How many hooks a faction auto-emits over `days` elapsed — one roll per day at
+ * autoHookChance, capped at AUTO_HOOK_CAP so a long march doesn't flood. Pure and
+ * deterministic for a given rng stream (the app seeds it on the session day).
+ * @param {object} faction
+ * @param {{q:number,r:number}} party
+ * @param {number} days elapsed days
+ * @param {() => number} rng
+ * @returns {number}
+ */
+export function rollAutoHookCount(faction, party, days, rng) {
+  const chance = autoHookChance(faction, party);
+  if (chance <= 0 || !(days >= 1)) return 0;
+  let count = 0;
+  for (let i = 0; i < days; i++) if (rng() < chance) count++;
+  return Math.min(count, AUTO_HOOK_CAP);
 }
 
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
