@@ -271,6 +271,31 @@ function hookCard(hook, model) {
     box.appendChild(div);
   }
 
+  // A faction-emitted hook (8.11) is tagged back to its faction via sourcePower —
+  // surface who stirred it, with a jump-to-faction link (the id is stored; the name
+  // and link are resolved at render). Shows even when the card isn't selected.
+  if (hook.sourcePower && model.factionNameById) {
+    const name = model.factionNameById(hook.sourcePower);
+    const tag = document.createElement("div");
+    tag.className = "hook-legend";
+    tag.addEventListener("click", (e) => e.stopPropagation()); // don't toggle the card
+    if (name && model.onCenterFaction) {
+      const a = document.createElement("button");
+      a.type = "button";
+      a.className = "legend-link";
+      a.title = "Centre the map on this faction's holding";
+      a.textContent = `Stirred up by ${name}`;
+      a.addEventListener("click", () => model.onCenterFaction(hook.sourcePower));
+      tag.appendChild(a);
+    } else {
+      const span = document.createElement("span");
+      span.className = "muted";
+      span.textContent = name ? `Stirred up by ${name}` : "Stirred up by a faction (gone)";
+      tag.appendChild(span);
+    }
+    box.appendChild(tag);
+  }
+
   // Selected: the two coloured rings on the map are mirrored here as links —
   // click one to centre the map on that hex (selection/tab stay put).
   if (selected) {

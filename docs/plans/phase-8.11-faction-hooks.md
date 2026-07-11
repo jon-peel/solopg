@@ -41,8 +41,10 @@ Ruined Tower, 18 miles to the south-east (Hills). Reward: 400 gp from the Reeve.
   makes the *hearing* automatic on the day-tick, scaled by **proximity × strength** — that's where
   distance-from-the-party belongs, and where `strength` (frozen in 8.13) is finally read.
 
-**Status:** 📝 rebuilt around "points at the lair" (was: a generic biased hook — dropped because it
-read as an unrelated far site).
+**Status:** ✅ done. Rebuilt around "points at the lair" (was: a generic biased hook — dropped because
+it read as an unrelated far site), then a variety pass (deed table + per-stir seed) after play showed
+repeat stirs reading the same, and the "Stirred up by ‹faction›" tag (Chunk C). **Next in Arc C:
+8.12** (auto-fire on the day-tick, reads `strength`).
 
 > Plan → approve → build → `node --test` → commit/push → manual checklist (project convention).
 
@@ -126,7 +128,7 @@ the ‹terrain›"). New import: `axialDistance` from `hexgeo`.
 |---|---|---|
 | **A — core** | Rework `factionHookContext` (→ `threat` + goal rumour), drop the old pattern bias; keep `GOAL_RUMOUR`. Rework the node tests. | `node --test test/factions.test.js` |
 | **B — emit** | Rework `onStirTrouble` (lair subject + nearest-settlement origin + threat); add `nearestSettlementTo`/lair-name helpers + `opts.subjects` + `axialDistance` import. | Browser: "Stir up trouble" → a hook heard in the nearest town, naming the faction, pointing at its lair |
-| **C — tag** | "Stirred up by ‹faction›" line + jump-link on the emitted hook. | Browser: the hook shows its origin faction; the link centres on it |
+| **C — tag** ✅ | "Stirred up by ‹faction›" line + jump-link on the hook card (both the global + pinned lists), via `factionNameById`/`onCenterFaction` on the hooks model. | Browser: the hook shows its origin faction; the link centres on it |
 
 ## Tests (`node --test`, pure logic only)
 

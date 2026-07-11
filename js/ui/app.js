@@ -1248,6 +1248,9 @@ function refreshGlobalHooks() {
     onResolveHook,
     onIgnoreHook,
     onRemoveHook,
+    // Resolve a faction hook's sourcePower tag to a name + jump (8.11 Chunk C).
+    factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
+    onCenterFaction,
   });
 }
 
