@@ -14,6 +14,8 @@
 
 import { rollTable } from "../core/table.js";
 import { subRng } from "../core/rng.js";
+import { neighbors, axialKey } from "../core/hexgeo.js";
+import { TRAVEL_COST } from "./travel.js";
 import { factionName } from "./faction-name.js";
 
 // Faction-shape version, stamped on every generated faction. Bump on shape change.
@@ -134,16 +136,79 @@ const DRIFT_CHANCE = 0.34;
 // Disposition scale — drift steps one place along it (clamped at the ends).
 const DISPOSITIONS = ["hostile", "wary", "neutral", "friendly"];
 
+// Archetype -> how a faction acts on the map each turn (Phase 8.13): a roaming
+// warband MOVES its camp; a rooted power SPREADS its footprint; a hermit STAYS.
+// Unknown archetypes default to static (safe).
+const ARCHETYPE_MOBILITY = {
+  bandits: "roaming", "monstrous tribe": "roaming", "mercenary company": "roaming",
+  cult: "spreading", "thieves' guild": "spreading", "merchant guild": "spreading", "noble house": "spreading",
+  "hermit order": "static",
+};
+export const HOLDING_CAP = 6; // a spreading faction stops growing here (tunable)
+
 const isActive = (f) => (f.status || "active") === "active";
 const ensureClock = (f) => (f.clock || (f.clock = { turns: 0, sinceTurn: 0 }));
 
+// A hex is a movement/expansion candidate only if it is PLACED and passable on
+// foot — reusing travel's single source of truth (TRAVEL_COST 0 = Sea/Lake, so
+// factions never step onto water; naval travel stays out of scope). Movement
+// therefore stays within the revealed map (no lazy tile generation here).
+function passableNeighborsOf(world, q, r) {
+  const hexes = (world && world.hexes) || {};
+  return neighbors(q, r)
+    .filter((n) => {
+      const h = hexes[axialKey(n.q, n.r)];
+      return h && h.placed && (TRAVEL_COST[h.terrain] || 0) > 0;
+    })
+    .sort((a, b) => a.q - b.q || a.r - b.r); // stable order before the rng pick
+}
+
+// The faction's spatial act for one turn (Phase 8.13), by archetype mobility.
+// Deterministic: consumes the turn's rng only when there's a candidate hex.
+function moveOrSpread(world, faction, rng) {
+  const mobility = ARCHETYPE_MOBILITY[faction.archetype] || "static";
+  if (mobility === "static") return;
+  const holdings = faction.holdings || (faction.holdings = []);
+  const held = new Set(holdings.map((h) => axialKey(h.q, h.r)));
+
+  if (mobility === "roaming") {
+    const primary = holdings[0];
+    if (!primary) return;
+    const cands = passableNeighborsOf(world, primary.q, primary.r)
+      .filter((n) => !held.has(axialKey(n.q, n.r)));
+    if (!cands.length) return;
+    const pick = cands[Math.floor(rng() * cands.length)];
+    holdings[0] = { q: pick.q, r: pick.r }; // camp is now in the field — poiId dropped
+    return;
+  }
+
+  // spreading — claim one passable placed hex adjacent to the blob, up to the cap.
+  if (holdings.length >= HOLDING_CAP) return;
+  const seen = new Set();
+  const frontier = [];
+  for (const h of holdings) {
+    for (const n of passableNeighborsOf(world, h.q, h.r)) {
+      const k = axialKey(n.q, n.r);
+      if (held.has(k) || seen.has(k)) continue;
+      seen.add(k);
+      frontier.push(n);
+    }
+  }
+  if (!frontier.length) return;
+  frontier.sort((a, b) => a.q - b.q || a.r - b.r);
+  const pick = frontier[Math.floor(rng() * frontier.length)];
+  holdings.push({ q: pick.q, r: pick.r });
+}
+
 /**
  * Advance ONE turn for one faction (pure; mutates the faction). The goal
- * doom-clock ticks a segment; disposition and strength occasionally drift. rng
- * calls happen in a fixed order so the outcome is deterministic for a given
- * stream. Not exported — reached via advanceFactionTurn / advanceFactionDays.
+ * doom-clock ticks a segment, disposition occasionally drifts, and the faction
+ * acts on the map by its archetype (move/spread/stay, 8.13). Strength is left
+ * alone — a stable inherent value reserved for 8.12 hook loudness. rng calls
+ * happen in a fixed order so the outcome is deterministic for a given stream.
+ * Not exported — reached via advanceFactionTurn / advanceFactionDays.
  */
-function tickFaction(faction, rng) {
+function tickFaction(world, faction, rng) {
   const g = faction.goal || (faction.goal = { progress: 0, max: 0 });
   g.progress = Math.min((g.progress ?? 0) + 1, g.max ?? 0); // doom clock, capped
   if (rng() < DRIFT_CHANCE) {
@@ -153,9 +218,7 @@ function tickFaction(faction, rng) {
       faction.disposition = DISPOSITIONS[j];
     }
   }
-  if (rng() < DRIFT_CHANCE) {
-    faction.strength = Math.max(1, (faction.strength ?? 1) + (rng() < 0.5 ? -1 : 1));
-  }
+  moveOrSpread(world, faction, rng);
   const clock = ensureClock(faction);
   clock.turns = (clock.turns ?? 0) + 1;
   return faction;
@@ -177,7 +240,7 @@ export function advanceFactionTurn(world, seed) {
   let n = 0;
   for (const f of world.factions || []) {
     if (!isActive(f)) continue;
-    tickFaction(f, turnRng(seed, f));
+    tickFaction(world, f, turnRng(seed, f));
     n++;
   }
   return n;
@@ -202,7 +265,7 @@ export function advanceFactionDays(world, days, seed) {
     const clock = ensureClock(f);
     clock.sinceTurn = (clock.sinceTurn || 0) + days;
     while (clock.sinceTurn >= TURN_LENGTH_DAYS) {
-      tickFaction(f, turnRng(seed, f));
+      tickFaction(world, f, turnRng(seed, f));
       clock.sinceTurn -= TURN_LENGTH_DAYS;
       fired++;
     }

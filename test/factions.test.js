@@ -8,6 +8,7 @@ import {
   advanceFactionTurn,
   advanceFactionDays,
   TURN_LENGTH_DAYS,
+  HOLDING_CAP,
   factionLabel,
   factionDescription,
   FACTION_BUILD,
@@ -15,6 +16,7 @@ import {
 import { factionName } from "../js/gen/faction-name.js";
 import { validateTable } from "../js/core/table.js";
 import { subRng } from "../js/core/rng.js";
+import { neighbors, axialKey } from "../js/core/hexgeo.js";
 
 function tables() {
   const ids = ["faction-archetype", "faction-goal", "faction-disposition"];
@@ -275,6 +277,99 @@ test("a faction created mid-timeline doesn't retroactively catch up", () => {
   advanceFactionDays(world, TURN_LENGTH_DAYS, 1); // one more turn-length for everyone
   assert.equal(early.clock.turns, 4); // 3 + 1
   assert.equal(late.clock.turns, 1); // only the days since it existed
+});
+
+// --- Movement & expansion (8.13) ------------------------------------------
+
+// A patch of placed Plains over q,r in [-2,2]; `sea` hexes are impassable, `skip`
+// hexes are left unplaced (a hole in the map).
+function placedWorld({ seed = 1, sea = [], skip = [] } = {}) {
+  const seaSet = new Set(sea.map(([q, r]) => axialKey(q, r)));
+  const skipSet = new Set(skip.map(([q, r]) => axialKey(q, r)));
+  const hexes = {};
+  for (let q = -2; q <= 2; q++) for (let r = -2; r <= 2; r++) {
+    const k = axialKey(q, r);
+    if (skipSet.has(k)) continue;
+    hexes[k] = { coords: { q, r }, placed: true, terrain: seaSet.has(k) ? "Sea" : "Plains" };
+  }
+  return { seed, hexes, factions: [] };
+}
+
+function factionAt(seed, q, r, n, archetype) {
+  const rng = subRng(seed, "faction", q, r, n);
+  return generateFaction(tables(), rng, { q, r, index: n, seed, archetype });
+}
+
+test("a roaming faction moves its camp to a passable placed neighbour, dropping poiId", () => {
+  const world = placedWorld({ seed: 1 });
+  const f = factionAt(1, 0, 0, 0, "bandits");
+  f.holdings[0].poiId = "poi:0"; // started at a named POI
+  world.factions.push(f);
+  advanceFactionTurn(world, world.seed);
+  const now = f.holdings[0];
+  assert.ok(neighbors(0, 0).some((nb) => nb.q === now.q && nb.r === now.r), "moved to an adjacent hex");
+  assert.equal(world.hexes[axialKey(now.q, now.r)].terrain !== "Sea", true);
+  assert.ok(!("poiId" in now), "poiId dropped now the camp roams in the field");
+});
+
+test("a roaming faction with no passable placed neighbour stays put", () => {
+  // Only (0,0) is placed; all six neighbours are unplaced → nowhere to go.
+  const world = { seed: 1, hexes: { [axialKey(0, 0)]: { coords: { q: 0, r: 0 }, placed: true, terrain: "Plains" } }, factions: [] };
+  const f = factionAt(1, 0, 0, 0, "bandits");
+  world.factions.push(f);
+  advanceFactionTurn(world, world.seed);
+  assert.deepEqual(f.holdings[0], { q: 0, r: 0 });
+});
+
+test("a spreading faction claims one adjacent hex per turn, up to the cap", () => {
+  const world = placedWorld({ seed: 2 });
+  const f = factionAt(2, 0, 0, 0, "cult");
+  world.factions.push(f);
+  advanceFactionTurn(world, world.seed);
+  assert.equal(f.holdings.length, 2, "grew by one on the first turn");
+  const nb = neighbors(0, 0).some((n) => n.q === f.holdings[1].q && n.r === f.holdings[1].r);
+  assert.ok(nb, "the new holding is adjacent to the first");
+  for (let i = 0; i < 20; i++) advanceFactionTurn(world, world.seed);
+  assert.equal(f.holdings.length, HOLDING_CAP, "stops growing at the cap");
+});
+
+test("a static faction (hermit order) never changes its holdings", () => {
+  const world = placedWorld({ seed: 3 });
+  const f = factionAt(3, 0, 0, 0, "hermit order");
+  world.factions.push(f);
+  const before = JSON.stringify(f.holdings);
+  for (let i = 0; i < 10; i++) advanceFactionTurn(world, world.seed);
+  assert.equal(JSON.stringify(f.holdings), before);
+});
+
+test("movement/expansion never lands on water or an unplaced hex", () => {
+  const world = placedWorld({ seed: 4, sea: [[1, 0], [0, 1], [-1, 1]], skip: [[-1, 0]] });
+  const f = factionAt(4, 0, 0, 0, "cult");
+  world.factions.push(f);
+  for (let i = 0; i < 30; i++) advanceFactionTurn(world, world.seed);
+  for (const h of f.holdings) {
+    const hex = world.hexes[axialKey(h.q, h.r)];
+    assert.ok(hex && hex.placed && hex.terrain !== "Sea", `holding (${h.q},${h.r}) is placed & passable`);
+  }
+});
+
+test("movement/expansion is deterministic for a given world + seed", () => {
+  const run = () => {
+    const world = placedWorld({ seed: 5 });
+    const f = factionAt(5, 0, 0, 0, "cult");
+    world.factions.push(f);
+    for (let i = 0; i < 8; i++) advanceFactionTurn(world, world.seed);
+    return f.holdings;
+  };
+  assert.deepEqual(run(), run());
+});
+
+test("day-driven turns move/expand too, not just the manual button", () => {
+  const world = placedWorld({ seed: 6 });
+  const f = factionAt(6, 0, 0, 0, "cult");
+  world.factions.push(f);
+  advanceFactionDays(world, TURN_LENGTH_DAYS, world.seed);
+  assert.equal(f.holdings.length, 2);
 });
 
 test("factionLabel / factionDescription are pure functions of the picks", () => {
