@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BRANCH="claude/phase-8-arch-b-plan-5hwe7c"
+BRANCH="claude/arch-c-onboarding-dkx4yl"
 PORT="${1:-8000}"
 
 # Always operate on the repo this script lives in (so it serves index.html at root).
