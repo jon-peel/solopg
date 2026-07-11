@@ -1525,7 +1525,11 @@ async function onGenerateHook(opts = {}) {
     const n = nextHookId(current);
     // Origin is the selected cell, or an explicit override (a faction's seat, 8.11).
     const origin = opts.origin || { q: selected.q, r: selected.r };
-    const rng = subRng(current.seed, "hook", origin.q, origin.r, n);
+    // opts.nonce (faction stirs) mixes into the seed so repeat stirs from the same
+    // origin never collide; normal hooks keep their original seed unchanged.
+    const rng = opts.nonce
+      ? subRng(current.seed, "hook", origin.q, origin.r, n, opts.nonce)
+      : subRng(current.seed, "hook", origin.q, origin.r, n);
 
     // Faction hooks (8.11) inject their own subject (the lair); everything else
     // draws candidates from the whole map.
@@ -1586,7 +1590,7 @@ async function onGenerateHook(opts = {}) {
       // A development at an existing on-map POI (rollHookPattern guarantees subjects).
       hook = generateHook(tables, rng, { subjects, origin, index: n, pattern: "return", verb: "return", source: opts.source });
     } else {
-      hook = generateHook(tables, rng, { subjects, origin, index: n, verb: opts.verb, source: opts.source });
+      hook = generateHook(tables, rng, { subjects, origin, index: n, verb: opts.verb, claim: opts.claim, source: opts.source });
     }
 
     if (!hook) return logLine("Nothing to gossip about here.");
@@ -1746,7 +1750,13 @@ async function onStirTrouble(factionId) {
   const origin = nearestSettlementTo(current, lair)
     || (current.party ? { q: current.party.q, r: current.party.r } : null)
     || { q: lair.q, r: lair.r };
-  const { verb, source } = factionHookContext(faction);
+  // Per-stir stream keyed on the faction + how many hooks it has already stirred,
+  // so every stir rolls a fresh deed/opening (never the same twice in a row) and
+  // it's reload-safe (derived from the persisted hooks list).
+  const stirOrdinal = (current.hooks || []).filter((h) => h.sourcePower === faction.id).length;
+  const rng = subRng(current.seed, "stir", faction.id, stirOrdinal);
+  const tables = await loadTables(["faction-deed", "hook-source"]);
+  const { verb, claim, source } = factionHookContext(faction, rng, tables);
   // A synthetic subject: the lair place "occupied by" the faction, so the engine's
   // threat prose prints the FACTION as the menace and the holding as its lair.
   const lairPoi = lairHex && (lairHex.pois || []).find((p) => p.id === lair.poiId);
@@ -1759,8 +1769,9 @@ async function onStirTrouble(factionId) {
     occupant: { kind: "occupied", by: faction.name },
   };
   await onGenerateHook({
-    origin, forcePattern: "known", verb, source,
+    origin, forcePattern: "known", verb, claim, source,
     subjects: [subject], sourcePower: faction.id,
+    nonce: `${faction.id}:${stirOrdinal}`, // varies the engine's reward roll per stir too
   });
 }
 

@@ -132,7 +132,9 @@ export function generateHook(tables, rng, ctx) {
   const subject = pickSubject(rng, subjects, origin, verb);
   const target = { q: subject.q, r: subject.r, poiId: subject.poiId };
 
-  const claim = rollTable(tables.get(`hook-${verb}`), rng).value;
+  // ctx.claim lets a caller supply the deed text (Phase 8.11 faction hooks pass a
+  // faction-deed roll); otherwise roll the verb's own claim table.
+  const claim = ctx.claim || rollTable(tables.get(`hook-${verb}`), rng).value;
   const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
 
   // A THREAT names the menace (the occupant), to be tracked to its lair (the

@@ -295,19 +295,32 @@ const GOAL_RUMOUR = {
   "raid the frontier":       "Smoke on the frontier",
 };
 
+// How often a stir opens with the faction's goal rumour vs a rolled witness — so
+// consecutive stirs don't all start the same way (the "every hook reads the same"
+// fix). Tunable.
+const RUMOUR_CHANCE = 0.5;
+
 /**
  * The hook-engine context a faction contributes when it stirs up trouble
  * (Phase 8.11). Always a `threat` (so the faction is named and the hook points at
- * its lair); the goal supplies the rumour `source`, absent when the goal is
- * unmapped so the engine rolls a source instead. Pure — no rng needed.
+ * its lair). The `claim` is a rolled faction-deed (vivid, varied — the party hears
+ * a *different* crime each time), and the `source` alternates between the goal
+ * rumour and a rolled witness so the opening varies too. Pure given tables + rng;
+ * deterministic (fixed roll order: deed, then the source coin-flip/roll).
  * @param {object} faction
- * @returns {{ verb:string, source?:string }}
+ * @param {() => number} rng dedicated per-stir stream
+ * @param {Map<string,object>} tables incl. faction-deed + hook-source
+ * @returns {{ verb:string, claim:string, source?:string }}
  */
-export function factionHookContext(faction) {
-  return {
-    verb: "threat",
-    source: (faction && faction.goal && GOAL_RUMOUR[faction.goal.kind]) || undefined,
-  };
+export function factionHookContext(faction, rng, tables) {
+  const claim = rollTable(tables.get("faction-deed"), rng).value;
+  const rumour = (faction && faction.goal && GOAL_RUMOUR[faction.goal.kind]) || null;
+  // Goal rumour part of the time (ties the opening to the faction's aim); else a
+  // rolled witness ("A frightened merchant") so openings don't repeat.
+  const source = rumour && rng() < RUMOUR_CHANCE
+    ? rumour
+    : rollTable(tables.get("hook-source"), rng).value;
+  return { verb: "threat", claim, source };
 }
 
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);

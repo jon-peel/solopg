@@ -90,6 +90,17 @@ test("generateHook returns null when there is nothing to point at", () => {
   assert.equal(generateHook(tables(), mulberry32(1), { subjects: [], origin: ORIGIN }), null);
 });
 
+test("ctx.claim overrides the rolled claim (Phase 8.11 faction deed)", () => {
+  const t = tables();
+  const h = generateHook(t, mulberry32(1), {
+    subjects: subjects(), origin: ORIGIN, index: 0, verb: "threat",
+    claim: "have carried off a merchant's heir for ransom",
+  });
+  assert.equal(h.claim, "have carried off a merchant's heir for ransom");
+  // Not one of the rolled hook-threat entries — it was supplied, not rolled.
+  assert.ok(!valuesOf(t.get("hook-threat")).has(h.claim));
+});
+
 test("proximity bias: a much nearer subject is chosen far more often", () => {
   const t = tables();
   const near = { poiId: "poi:near", name: "Near", type: "shrine", q: 1, r: 0, occupant: { kind: "none" } };

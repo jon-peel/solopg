@@ -1,0 +1,20 @@
+{
+  "id": "faction-deed",
+  "title": "Faction deed (reads \"<Faction> <deed>\") — the trouble a faction stirs up",
+  "entries": [
+    { "value": "have carried off a merchant's heir for ransom" },
+    { "value": "put the outlying farms to the torch" },
+    { "value": "waylaid the tithe-wagons on the road" },
+    { "value": "dragged three villagers into the dark" },
+    { "value": "sacked a waystation and left no survivors" },
+    { "value": "have been exacting a blood-tribute from the hamlets" },
+    { "value": "seized a noble's envoy and her whole retinue" },
+    { "value": "burned a wayside shrine and scattered its keepers" },
+    { "value": "press-ganged the young folk of a border village" },
+    { "value": "looted a pilgrim caravan bound for the shrine" },
+    { "value": "have grown bold, raiding now by daylight" },
+    { "value": "butchered a merchant train to the last mule" },
+    { "value": "hold the river ford and bleed all who cross" },
+    { "value": "spirited a village's children away in the night" }
+  ]
+}

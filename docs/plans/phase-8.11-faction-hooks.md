@@ -61,32 +61,36 @@ hook.sourcePower = faction.id   // e.g. "faction:2"  (absent on all normal hooks
 Stored on the hook, resolved to a name **at render time** (compose-at-render rule). Otherwise the hook
 is an ordinary `threat` hook — same list, same Resolve/Ignore/Pin lifecycle.
 
-## Flavour: goal → rumour (a rule → JS const)
+## Flavour & variety (a faction hook must not read the same twice)
 
-The engine takes an injectable `verb` + `source`, so no engine change is needed. In `factions.js`:
+A faction hook is always a `threat` — the only verb whose engine prose names the menace (→ the
+faction) and carries a `lair` (→ the holding to travel to). But "always threat, same lair" reads
+identical every stir (the first cut did — five stirs looked like one), so the **varying** parts have to
+carry it:
+
+- **The deed** — a rolled **`data/faction-deed.json`** entry (vivid, victim-bearing: *"have carried
+  off a merchant's heir for ransom"*, *"seized a noble's envoy…"*), passed as **`ctx.claim`** (a tiny
+  additive engine hook: `claim = ctx.claim || roll`). Replaces the generic 7-entry `hook-threat` so
+  consecutive stirs differ.
+- **The opening** — the `source` alternates (`RUMOUR_CHANCE`) between the faction's **goal rumour**
+  (`GOAL_RUMOUR`, ties the opening to its aim) and a **rolled witness** (*"A nervous merchant"*), so
+  stirs don't all start alike.
+- **The seed** — each stir draws from a **per-stir stream** keyed on the faction + how many hooks it
+  has already stirred (`subRng(seed,"stir",id,ordinal)`), so repeats never collide, and it's
+  reload-safe (derived from the persisted hooks list).
 
 ```js
-// Goal -> the "word on the wind" that reaches town, used as the hook's `source`.
-const GOAL_RUMOUR = {
-  "seize the region":        "Word of a gathering power",
-  "hoard wealth":            "Talk of coin changing hands",
-  "drive out rivals":        "Rumour of a turf war",
-  "spread the faith":        "Whispers of new converts",
-  "awaken something buried": "Uneasy talk from the diggings",
-  "restore a fallen house":  "Old banners seen again",
-  "control the trade roads": "Merchants grumbling on the road",
-  "raid the frontier":       "Smoke on the frontier",
-};
+const GOAL_RUMOUR = { /* goal -> "word on the wind" that reaches town */ };
+const RUMOUR_CHANCE = 0.5;
 
-// A faction hook is always a `threat` — the ONLY verb whose engine prose names the
-// menace (so the faction is named) and carries a `lair` (so it points home). Verb
-// variety (warning/rescue that still name the faction) waits on a faction-specific
-// claim table — a later refinement.
-export function factionHookContext(faction) {
-  return {
-    verb: "threat",
-    source: (faction.goal && GOAL_RUMOUR[faction.goal.kind]) || undefined,
-  };
+// Pure given tables + a per-stir rng; roll order fixed (deed, then the source flip).
+export function factionHookContext(faction, rng, tables) {
+  const claim = rollTable(tables.get("faction-deed"), rng).value;
+  const rumour = (faction && faction.goal && GOAL_RUMOUR[faction.goal.kind]) || null;
+  const source = rumour && rng() < RUMOUR_CHANCE
+    ? rumour
+    : rollTable(tables.get("hook-source"), rng).value;
+  return { verb: "threat", claim, source };
 }
 ```
 
