@@ -5,7 +5,7 @@ faction object, its generator + tables + derived name, a manual **"Generate fact
 **Factions** panel tab, and **holding markers on the map from the first slice** (per the phase steer —
 no panel-only deferral). Everything in Arc B (8.8 promote, 8.9 holdings, 8.10 turns) builds on this.
 
-**Status:** 📋 planning — awaiting approval.
+**Status:** ✅ done (no schema bump — v16 already reserved `factions:[]`).
 
 > Plan → approve → build → `node --test` → commit/push → manual checklist (project convention).
 

@@ -9,7 +9,7 @@ gated to expansion — because the user scoped strength to that one job.
 This is the parent plan's 8.13 "roaming / region" stretch, **promoted to a committed step** and
 widened to cover expansion too. Arc C hooks (8.11 `sourcePower`, 8.12 auto-fire) still follow.
 
-**Status:** 📋 planning.
+**Status:** ✅ done (built ahead of Arc C per user steer; strength drift removed — strength now reserved for 8.12).
 
 > Plan → approve → build → `node --test` → commit/push → manual checklist (project convention).
 

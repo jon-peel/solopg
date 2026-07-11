@@ -6,7 +6,7 @@ hidden lair. A **"Claim for faction"** action attaches any placed hex (with its 
 to an existing faction's `holdings[]`; the Factions panel lists every holding with click-to-jump, and
 the map already draws them all (8.7's marker pass loops every holding).
 
-**Status:** 📋 planning.
+**Status:** ✅ done.
 
 > Plan → approve → build → `node --test` → commit/push → manual checklist (project convention).
 

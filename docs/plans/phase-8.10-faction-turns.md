@@ -6,7 +6,7 @@ drifts, and their strength occasionally changes. Turns fire two ways: **automati
 (the `advanceDays` chokepoint from 8.6) and via a **manual "Advance faction turn"** button (GM pacing,
 independent of time). Needs 8.7 (faction objects) + 8.6 (the day chokepoint) — both done.
 
-**Status:** 📋 planning.
+**Status:** ✅ done (clock resolved with the relative accumulator; day stays session-only).
 
 > Plan → approve → build → `node --test` → commit/push → manual checklist (project convention).
 

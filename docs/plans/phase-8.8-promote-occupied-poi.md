@@ -5,7 +5,7 @@ label (`poi.occupant = { kind:"occupied", by:"Bandits" }`) into a full faction o
 the GM already has on the map becomes a real power **without reading as a brand-new one**. Builds
 directly on 8.7's `generateFaction` + Factions tab + holding markers.
 
-**Status:** 📋 planning — awaiting approval.
+**Status:** ✅ done.
 
 > Plan → approve → build → `node --test` → commit/push → manual checklist (project convention).
 

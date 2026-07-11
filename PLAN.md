@@ -10,7 +10,9 @@ remembers the evolving map.
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
 **Status (current):** Phases 0–7 complete, plus Phase 3R (world coherence) and **Phase 8 Arc A
-(Travel & Party Movement, 8.1–8.6)** — see the Phase 8 note near the end of this running log. Phase 4
+(Travel & Party Movement, 8.1–8.6) + Arc B (Factions, 8.7–8.10) + 8.13 (faction movement &
+expansion)** — see the Phase 8 notes near the end of this running log. Only **Arc C (Type-2 hooks,
+8.11–8.12)** remains in Phase 8. Phase 4
 delivered the full dungeon arc (base interiors +
 Dungeon View; themed/explorable 4.5–4.8 arc; the 4.9.1–4.9.14 depth-&-connectivity sub-project —
 sizes, room-graphs + loops, doors/secret doors, inter-level + vertical stairs, multiple
@@ -532,6 +534,31 @@ attach), and **roads are now APPEND-ONLY** (an established road never re-routes 
 settlements/rivers appear — mirrors the rivers rule; `roads.js` keeps every existing road verbatim).
 **Arc B (Factions) is next** (8.7 generate faction → 8.10 turns); Arc C (8.11–8.13) after.
 
+**Phase 8 — Arc B (Factions, 8.7–8.10) + 8.13 (movement/expansion) are complete** (see
+[phase-8-factions.md](docs/plans/phase-8-factions.md) + the per-step docs). No schema bump — v16
+already reserved `factions: []`, and each addition self-heals via the `FACTION_BUILD` stamp. New pure
+`js/gen/factions.js` holds the whole faction model plus `js/gen/faction-name.js` (derived seeded name,
+`settlement-name.js` technique but STORED — a faction is an object with identity, not a coordinate)
+and three `data/faction-*.json` tables. **8.7** `generateFaction` + a "Generate faction here" Detail
+action + a **Factions** panel tab + per-faction **holding markers** (coloured ring + banner, `map.js`,
+`FACTION_COLORS` in `poi-style.js`); world accessors `addFaction`/`getFactions`/`removeFaction`.
+**8.8** `promoteFaction` wraps an occupied POI's occupier label into a faction, seeding archetype +
+disposition from the label (`OCCUPIER_SEED`) so it reads as the same threat; tags `occupant.factionId`
+(no double-promote). **8.9** `addHolding` (dedupe by q,r) + a "Claim for faction" picker → one gang,
+several camps; the panel lists every holding with click-to-jump. **8.10** faction turns:
+`advanceFactionTurn` (manual, all active) + `advanceFactionDays` (day-driven) tick the goal doom-clock
+and drift disposition; **a turn = `TURN_LENGTH_DAYS` (7)**, auto-fired from the `advanceDays`
+chokepoint. The **session-only-day clock tension is resolved** by making `clock.sinceTurn` a *relative*
+accumulator (days banked since a faction's last turn) — reload-safe, so the day stays session-only and
+a late faction never catches up; a manual "Advance faction turn" button gives day-independent GM
+pacing. **8.13** (brought forward per steer) makes a turn **spatial** by archetype: **roamers**
+(bandits/tribe/mercenary) migrate their camp a hex; **spreaders** (cult/guild/house) claim an adjacent
+hex up to `HOLDING_CAP` (6); **hermits** stay — reusing travel passability (never onto Sea/Lake),
+within the revealed map; markers update for free. Strength's random drift was dropped — **strength is
+now a stable value reserved for 8.12 hook loudness**. Suite at 395 `node --test`. **Only Arc C
+remains** (8.11 `sourcePower` + faction-emitted hooks; 8.12 auto-fire hooks on day-tick, where
+strength is finally read; plus the region-hook half of the old 8.13 stretch).
+
 ---
 
 ## Foundational decisions (confirmed)
@@ -725,7 +752,7 @@ graph TD
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ✅ **done** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.9 POI dot polish ✅** [phase-7.9-poi-dot-polish.md](docs/plans/phase-7.9-poi-dot-polish.md) · **7.14 radial right-click back ✅** (landed inside the 3R water-polish work). Remaining backlog items moved to **Phase 10**. |
 | **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
-| 8 — Factions (+ Travel & Party Movement) | 📋 **planning** | dedicated phase: generation **plus operating rules** (goals advancing, disposition, holdings, faction turns/doom clock, reuse of one faction across the map), bundled with a minimal party-movement mechanic (party marker, move-toward/along-a-bearing, getting lost, "progress N days") to give faction turns a clock — see [phase-8-factions.md](docs/plans/phase-8-factions.md) |
+| 8 — Factions (+ Travel & Party Movement) | 🔨 **in progress** (Arc A ✅, Arc B ✅, 8.13 ✅; only Arc C 8.11–8.12 left) | **Arc A** (Travel 8.1–8.6 ✅) + **Arc B** (Factions: **8.7 generate ✅ · 8.8 promote ✅ · 8.9 holdings ✅ · 8.10 turns ✅**) + **8.13 movement/expansion ✅** (brought forward). Generation **plus operating rules** (goals advancing, disposition drift, holdings, faction turns/doom clock, archetype-driven movement & expansion, reuse of one faction across the map), on the party-movement clock. **Remaining: Arc C** (8.11 faction-emitted hooks, 8.12 auto-fire on day-tick). See [phase-8-factions.md](docs/plans/phase-8-factions.md) |
 | 9 — Additional small oracles | ▶ **queued (2nd)** | see catalog below |
 | 10 — Backlog | ▶ **queued (3rd)** | leftover QoL/UX items + misc ideas — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) and [phase-10-backlog.md](docs/plans/phase-10-backlog.md) |
 
