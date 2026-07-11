@@ -443,6 +443,16 @@ export function renderFactionsPanel(model) {
   head.className = "hooks-head";
   head.textContent = `${factions.length} faction${factions.length === 1 ? "" : "s"}`;
   host.appendChild(head);
+
+  // Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the
+  // day clock. Shown when at least one faction is active.
+  if (model.onAdvanceFactionTurn && factions.some((f) => (f.status || "active") === "active")) {
+    const row = document.createElement("div");
+    row.className = "tile-actions";
+    row.appendChild(actionButton("Advance faction turn", model.onAdvanceFactionTurn));
+    host.appendChild(row);
+  }
+
   for (const faction of factions) host.appendChild(factionCard(faction, model));
 }
 

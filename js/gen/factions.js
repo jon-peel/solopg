@@ -13,6 +13,7 @@
 // same way HOOK_BUILD / DUNGEON_BUILD do.
 
 import { rollTable } from "../core/table.js";
+import { subRng } from "../core/rng.js";
 import { factionName } from "./faction-name.js";
 
 // Faction-shape version, stamped on every generated faction. Bump on shape change.
@@ -61,6 +62,8 @@ export function generateFaction(tables, rng, ctx) {
     goal: { kind: goalKind, progress: 0, max },
     strength,
     holdings: [holding],
+    // turns: total faction turns taken; sinceTurn: days banked toward the next
+    // day-driven turn (a RELATIVE accumulator, reload-safe — see 8.10).
     clock: { turns: 0, sinceTurn: 0 },
     origin: ctx.origin || null,
     status: ctx.status || "active",
@@ -123,6 +126,90 @@ export function addHolding(faction, holding) {
   return true;
 }
 
+// --- Faction turns (Phase 8.10) ------------------------------------------
+// TUNING (JS consts, retunable like every generation number): how many days make
+// one faction turn, and how often disposition/strength drift on a turn.
+export const TURN_LENGTH_DAYS = 7;
+const DRIFT_CHANCE = 0.34;
+// Disposition scale — drift steps one place along it (clamped at the ends).
+const DISPOSITIONS = ["hostile", "wary", "neutral", "friendly"];
+
+const isActive = (f) => (f.status || "active") === "active";
+const ensureClock = (f) => (f.clock || (f.clock = { turns: 0, sinceTurn: 0 }));
+
+/**
+ * Advance ONE turn for one faction (pure; mutates the faction). The goal
+ * doom-clock ticks a segment; disposition and strength occasionally drift. rng
+ * calls happen in a fixed order so the outcome is deterministic for a given
+ * stream. Not exported — reached via advanceFactionTurn / advanceFactionDays.
+ */
+function tickFaction(faction, rng) {
+  const g = faction.goal || (faction.goal = { progress: 0, max: 0 });
+  g.progress = Math.min((g.progress ?? 0) + 1, g.max ?? 0); // doom clock, capped
+  if (rng() < DRIFT_CHANCE) {
+    const i = DISPOSITIONS.indexOf(faction.disposition);
+    if (i >= 0) {
+      const j = Math.max(0, Math.min(DISPOSITIONS.length - 1, i + (rng() < 0.5 ? -1 : 1)));
+      faction.disposition = DISPOSITIONS[j];
+    }
+  }
+  if (rng() < DRIFT_CHANCE) {
+    faction.strength = Math.max(1, (faction.strength ?? 1) + (rng() < 0.5 ? -1 : 1));
+  }
+  const clock = ensureClock(faction);
+  clock.turns = (clock.turns ?? 0) + 1;
+  return faction;
+}
+
+// Deterministic per-turn stream: keyed on the faction id + its turn ordinal, so
+// consecutive turns differ and any turn is reproducible from the world seed.
+const turnRng = (seed, faction) => subRng(seed, "factionturn", faction.id, ensureClock(faction).turns);
+
+/**
+ * MANUAL turn (Phase 8.10) — advance exactly one turn for every ACTIVE faction,
+ * independent of the day clock (leaves `clock.sinceTurn` untouched). Mutates the
+ * world. Returns how many factions ticked.
+ * @param {object} world
+ * @param {number|string} seed world seed
+ * @returns {number}
+ */
+export function advanceFactionTurn(world, seed) {
+  let n = 0;
+  for (const f of world.factions || []) {
+    if (!isActive(f)) continue;
+    tickFaction(f, turnRng(seed, f));
+    n++;
+  }
+  return n;
+}
+
+/**
+ * DAY-DRIVEN turns (Phase 8.10) — accumulate `days` per active faction and fire a
+ * turn for each whole TURN_LENGTH_DAYS, carrying the remainder in
+ * `clock.sinceTurn`. `sinceTurn` is a RELATIVE accumulator (days since the last
+ * turn), so it is reload-safe even though the day counter is session-only, and a
+ * faction created late only counts days from its creation. Mutates the world.
+ * @param {object} world
+ * @param {number} days days elapsed
+ * @param {number|string} seed world seed
+ * @returns {number} total turns fired across all factions
+ */
+export function advanceFactionDays(world, days, seed) {
+  if (!Number.isFinite(days) || days < 1) return 0;
+  let fired = 0;
+  for (const f of world.factions || []) {
+    if (!isActive(f)) continue;
+    const clock = ensureClock(f);
+    clock.sinceTurn = (clock.sinceTurn || 0) + days;
+    while (clock.sinceTurn >= TURN_LENGTH_DAYS) {
+      tickFaction(f, turnRng(seed, f));
+      clock.sinceTurn -= TURN_LENGTH_DAYS;
+      fired++;
+    }
+  }
+  return fired;
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the factions list (just the name). */
@@ -140,10 +227,12 @@ export function factionDescription(faction) {
   if (!faction) return [];
   const g = faction.goal || {};
   const holdings = Array.isArray(faction.holdings) ? faction.holdings.length : 0;
+  const clock = faction.clock || {};
   const lines = [
     `${cap(faction.archetype)} · ${faction.disposition}`,
     `Goal: ${g.kind} (${g.progress ?? 0} / ${g.max ?? 0})`,
     `${holdings} holding${holdings === 1 ? "" : "s"} · strength ${faction.strength}`,
+    `Turn ${clock.turns ?? 0} · ${clock.sinceTurn ?? 0}/${TURN_LENGTH_DAYS} d to next`,
   ];
   if (faction.status && faction.status !== "active") lines.push(`Status: ${faction.status}`);
   return lines;

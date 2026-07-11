@@ -26,7 +26,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -329,16 +329,35 @@ function renderDayReadout() {
 function advanceDays(n) {
   if (!Number.isFinite(n) || n < 1) return;
   sessionDay += n;
-  // (8.10/8.12: fire faction turns / roll auto-hooks for the elapsed days here.)
+  // Fire any faction turns the elapsed days earn (Phase 8.10). Mutates
+  // current.factions; the caller persists (travel + onProgressDays both do).
+  // (8.12 will also roll auto-hooks for the elapsed days here.)
+  if (current) {
+    const turns = advanceFactionDays(current, n, current.seed);
+    if (turns > 0) logLine(`${turns} faction turn${turns === 1 ? "" : "s"} passed.`);
+  }
   renderDayReadout();
 }
 
-// "Progress N days" while stationary (Phase 8.6) — no movement, no world change,
-// no persistence (the clock is session-only); just advances the day counter.
-function onProgressDays() {
+// "Progress N days" while stationary (Phase 8.6) — advances the (session-only)
+// day counter. Since 8.10, elapsed days can fire faction turns (persisted state),
+// so persist + refresh when the world has factions. The day itself is still not
+// persisted — only the faction clock/goal changes are.
+async function onProgressDays() {
   const input = $("progress-days");
   const n = Math.max(1, Math.floor(Number(input && input.value) || 1));
   advanceDays(n);
+  if (current && getFactions(current).length) await persistAndRefresh();
+}
+
+// Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the day
+// clock: fires exactly one turn for every active faction and persists.
+async function onAdvanceFactionTurn() {
+  if (!current) return;
+  const n = advanceFactionTurn(current, current.seed);
+  if (!n) return logLine("No active factions to advance.");
+  await persistAndRefresh();
+  logLine(`Advanced a faction turn for ${n} faction${n === 1 ? "" : "s"}.`);
 }
 
 // Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
@@ -1239,6 +1258,7 @@ function refreshFactions() {
   renderFactionsPanel({
     factions,
     onCenterFaction,
+    onAdvanceFactionTurn,
     factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
   });
 }

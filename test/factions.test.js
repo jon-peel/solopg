@@ -5,6 +5,9 @@ import {
   generateFaction,
   promoteFaction,
   addHolding,
+  advanceFactionTurn,
+  advanceFactionDays,
+  TURN_LENGTH_DAYS,
   factionLabel,
   factionDescription,
   FACTION_BUILD,
@@ -183,11 +186,103 @@ test("addHolding on one faction leaves another untouched", () => {
   assert.equal(b.holdings.length, 1);
 });
 
+// --- Faction turns (8.10) -------------------------------------------------
+
+test("advanceFactionDays only fires a turn once a full turn-length has banked", () => {
+  const f = make(1, 0, 0, 0);
+  assert.equal(advanceFactionDays({ factions: [f] }, TURN_LENGTH_DAYS - 1, 1), 0);
+  assert.equal(f.clock.turns, 0);
+  assert.equal(f.clock.sinceTurn, TURN_LENGTH_DAYS - 1);
+  // One more day tips it over → exactly one turn, remainder 0.
+  assert.equal(advanceFactionDays({ factions: [f] }, 1, 1), 1);
+  assert.equal(f.clock.turns, 1);
+  assert.equal(f.clock.sinceTurn, 0);
+});
+
+test("advanceFactionDays fires multiple turns and carries the remainder", () => {
+  const f = make(1, 0, 0, 0);
+  const fired = advanceFactionDays({ factions: [f] }, 2 * TURN_LENGTH_DAYS + 3, 1);
+  assert.equal(fired, 2);
+  assert.equal(f.clock.turns, 2);
+  assert.equal(f.clock.sinceTurn, 3); // remainder carried, not lost
+});
+
+test("the day accumulator carries across separate advances", () => {
+  const f = make(1, 0, 0, 0);
+  advanceFactionDays({ factions: [f] }, TURN_LENGTH_DAYS - 2, 1); // banked, no turn
+  assert.equal(f.clock.turns, 0);
+  advanceFactionDays({ factions: [f] }, 2, 1); // now crosses the line
+  assert.equal(f.clock.turns, 1);
+});
+
+test("advanceFactionTurn fires one manual turn per active faction, sinceTurn untouched", () => {
+  const a = make(1, 0, 0, 0);
+  const b = make(1, 5, 5, 1);
+  const before = { a: a.clock.sinceTurn, b: b.clock.sinceTurn };
+  const n = advanceFactionTurn({ factions: [a, b] }, 1);
+  assert.equal(n, 2);
+  assert.equal(a.clock.turns, 1);
+  assert.equal(b.clock.turns, 1);
+  assert.equal(a.goal.progress, 1);
+  // Manual turns are independent of the day clock.
+  assert.equal(a.clock.sinceTurn, before.a);
+  assert.equal(b.clock.sinceTurn, before.b);
+});
+
+test("goal progress ticks each turn and caps at max", () => {
+  const f = make(1, 0, 0, 0);
+  const max = f.goal.max;
+  for (let i = 0; i < max + 3; i++) advanceFactionTurn({ factions: [f] }, 1);
+  assert.equal(f.goal.progress, max); // never exceeds max
+  assert.equal(f.clock.turns, max + 3); // but the turn counter keeps climbing
+});
+
+test("only active factions tick (dormant/destroyed are skipped)", () => {
+  const a = make(1, 0, 0, 0); a.status = "dormant";
+  const b = make(1, 5, 5, 1); b.status = "destroyed";
+  const c = make(1, 9, 9, 2); // active
+  assert.equal(advanceFactionTurn({ factions: [a, b, c] }, 1), 1);
+  assert.equal(a.clock.turns, 0);
+  assert.equal(b.clock.turns, 0);
+  assert.equal(c.clock.turns, 1);
+  assert.equal(advanceFactionDays({ factions: [a, b, c] }, TURN_LENGTH_DAYS, 1), 1); // only c
+});
+
+test("faction turns are deterministic for a given seed + state", () => {
+  const run = () => {
+    const f = make(1, 2, 3, 0);
+    advanceFactionDays({ factions: [f] }, 5 * TURN_LENGTH_DAYS, 77);
+    return f;
+  };
+  assert.deepEqual(run(), run());
+});
+
+test("disposition drift never leaves the scale", () => {
+  const valid = new Set(["hostile", "wary", "neutral", "friendly"]);
+  const f = make(1, 0, 0, 0);
+  for (let i = 0; i < 200; i++) {
+    advanceFactionTurn({ factions: [f] }, 1);
+    assert.ok(valid.has(f.disposition), `disposition ${f.disposition} stays on the scale`);
+  }
+});
+
+test("a faction created mid-timeline doesn't retroactively catch up", () => {
+  const early = make(1, 0, 0, 0);
+  const world = { factions: [early] };
+  advanceFactionDays(world, 3 * TURN_LENGTH_DAYS, 1); // early has run a while
+  const late = make(1, 5, 5, 1); // brand new: sinceTurn 0
+  world.factions.push(late);
+  advanceFactionDays(world, TURN_LENGTH_DAYS, 1); // one more turn-length for everyone
+  assert.equal(early.clock.turns, 4); // 3 + 1
+  assert.equal(late.clock.turns, 1); // only the days since it existed
+});
+
 test("factionLabel / factionDescription are pure functions of the picks", () => {
   const f = {
     name: "The Ashen Hand", archetype: "cult", disposition: "wary",
     goal: { kind: "spread the faith", progress: 2, max: 6 },
     strength: 3, holdings: [{ q: 0, r: 0 }], status: "active",
+    clock: { turns: 1, sinceTurn: 3 },
   };
   assert.equal(factionLabel(f), "The Ashen Hand");
   const lines = factionDescription(f);
@@ -195,6 +290,7 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
     "Cult · wary",
     "Goal: spread the faith (2 / 6)",
     "1 holding · strength 3",
+    `Turn 1 · 3/${TURN_LENGTH_DAYS} d to next`,
   ]);
   // Plural + a non-active status surface too.
   const f2 = { ...f, holdings: [{ q: 0, r: 0 }, { q: 1, r: 1 }], status: "dormant" };
