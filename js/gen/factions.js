@@ -327,7 +327,7 @@ export function factionHookContext(faction, rng, tables) {
 // As days pass, a faction's deeds reach the party on their own — likelier when the
 // faction is LOUD (strength) and NEAR (party → its lair): "news by distance". This
 // is where strength (stable since 8.13) is finally read. Rules-as-JS-consts.
-const AUTO_HOOK_BASE = 0.02; // per strength-point per day, at the party's doorstep
+const AUTO_HOOK_BASE = 0.04; // per strength-point per day, at the party's doorstep
 const AUTO_HOOK_MAX = 0.2;   // cap — even a strong neighbour isn't a firehose
 export const AUTO_HOOK_CAP = 2; // most auto-hooks one advance spawns per faction
 

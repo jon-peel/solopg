@@ -26,7 +26,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext, rollAutoHookCount } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -132,6 +132,10 @@ const HOOK_TABLE_IDS = [
 
 // Tables the faction generator rolls on (Phase 8.7), loaded on demand.
 const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition"];
+// Tables a faction hook (8.11/8.12) needs: the deed + witness source (rolled by
+// factionHookContext) and the reward tables (a threat carries a bounty). The claim
+// and source are supplied, so hook-threat/hook-source aren't rolled by the engine.
+const FACTION_HOOK_TABLE_IDS = ["faction-deed", "hook-source", "hook-patron", "hook-reward"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -326,17 +330,42 @@ function renderDayReadout() {
 // travelling (8.4) and the stationary "Progress" control — goes through here,
 // so Arc B/C have ONE seam to hook: 8.10 faction turns and 8.12 auto-hooks will
 // fire as days pass. For now it only bumps the (session-only) clock.
-function advanceDays(n) {
+async function advanceDays(n) {
   if (!Number.isFinite(n) || n < 1) return;
   sessionDay += n;
-  // Fire any faction turns the elapsed days earn (Phase 8.10). Mutates
-  // current.factions; the caller persists (travel + onProgressDays both do).
-  // (8.12 will also roll auto-hooks for the elapsed days here.)
+  // Fire any faction turns the elapsed days earn (Phase 8.10), then roll auto-hooks
+  // for the elapsed days (Phase 8.12). Both mutate current.factions/current.hooks;
+  // the caller persists once afterward (travel + onProgressDays both do).
   if (current) {
     const turns = advanceFactionDays(current, n, current.seed);
     if (turns > 0) logLine(`${turns} faction turn${turns === 1 ? "" : "s"} passed.`);
+    await autoFireFactionHooks(n);
   }
   renderDayReadout();
+}
+
+// Phase 8.12 — as days pass, active factions occasionally emit a hook on their own,
+// chance scaled by proximity (party → lair) × strength (rollAutoHookCount). Pushes
+// silently and logs a quiet line; the caller's single persistAndRefresh saves them.
+async function autoFireFactionHooks(days) {
+  const party = current.party ? { q: current.party.q, r: current.party.r } : null;
+  if (!party) return;
+  const factions = getFactions(current).filter((f) => (f.status || "active") === "active");
+  if (!factions.length) return;
+  const dayStart = sessionDay - days; // the day before this advance — a stable per-advance seed
+  let tables = null;
+  for (const f of factions) {
+    const rng = subRng(current.seed, "autohook", f.id, dayStart);
+    const count = rollAutoHookCount(f, party, days, rng);
+    for (let i = 0; i < count; i++) {
+      if (!tables) tables = await loadTables(FACTION_HOOK_TABLE_IDS);
+      if (!Array.isArray(current.hooks)) current.hooks = [];
+      const hook = buildFactionHook(f, tables);
+      if (!hook) break;
+      current.hooks.push(hook);
+      logLine(`Word reaches you — ${hookName(hook)} (${f.name}).`);
+    }
+  }
 }
 
 // "Progress N days" while stationary (Phase 8.6) — advances the (session-only)
@@ -346,7 +375,7 @@ function advanceDays(n) {
 async function onProgressDays() {
   const input = $("progress-days");
   const n = Math.max(1, Math.floor(Number(input && input.value) || 1));
-  advanceDays(n);
+  await advanceDays(n);
   if (current && getFactions(current).length) await persistAndRefresh();
 }
 
@@ -675,7 +704,7 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 // tab (same "jump to the tab" convention as a new hook).
 async function applyTravel(result, aimLabel, aimKind) {
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
-  if (result.daySpent) advanceDays(1); // one press = one day, through the shared clock
+  if (result.daySpent) await advanceDays(1); // one press = one day, through the shared clock
   lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
   setPanelTab("travel");
   await persistAndRefresh();
@@ -1736,29 +1765,23 @@ function lairPlaceName(hex, lair) {
   return hex && hex.terrain ? `a camp in the ${hex.terrain.toLowerCase()}` : "a hidden camp";
 }
 
-// "Stir up trouble" (Phase 8.11) — the faction's deed becomes a hook that NAMES
-// the faction and points the party AT its lair. Word reaches the nearest town (the
-// hook's origin), the target is the faction's holding, and the engine's `threat`
-// verb does the rest (menace = the faction, lair = the holding). Tagged back via
-// sourcePower. Reuses onGenerateHook, so it surfaces on the Hooks tab like any hook.
-async function onStirTrouble(factionId) {
-  if (!current) return;
-  const faction = getFactions(current).find((f) => f.id === factionId);
-  if (!faction || (faction.status || "active") !== "active") return;
+// Build ONE faction hook (shared by the manual "Stir up trouble" button, 8.11, and
+// the day-tick auto-fire, 8.12). Returns a fully-formed hook tagged back to the
+// faction, or null if it has no lair. Pushes/persist/UI are the caller's job — so
+// the auto path can emit several silently and persist once. The deed/opening are
+// seeded on the faction + how many hooks it has already emitted (reload-safe), so
+// consecutive hooks never read the same.
+function buildFactionHook(faction, tables) {
   const lair = (faction.holdings || [])[0];
-  if (!lair) return logLine(`${faction.name} has no lair to stir from.`);
+  if (!lair) return null;
   const lairHex = getHex(current, lair.q, lair.r);
   // Where the party hears it: nearest town, else the party's position, else the
   // lair itself — so the hook has a real leg to travel.
   const origin = nearestSettlementTo(current, lair)
     || (current.party ? { q: current.party.q, r: current.party.r } : null)
     || { q: lair.q, r: lair.r };
-  // Per-stir stream keyed on the faction + how many hooks it has already stirred,
-  // so every stir rolls a fresh deed/opening (never the same twice in a row) and
-  // it's reload-safe (derived from the persisted hooks list).
-  const stirOrdinal = (current.hooks || []).filter((h) => h.sourcePower === faction.id).length;
-  const rng = subRng(current.seed, "stir", faction.id, stirOrdinal);
-  const tables = await loadTables(["faction-deed", "hook-source"]);
+  const ordinal = (current.hooks || []).filter((h) => h.sourcePower === faction.id).length;
+  const rng = subRng(current.seed, "stir", faction.id, ordinal);
   const { verb, claim, source } = factionHookContext(faction, rng, tables);
   // A synthetic subject: the lair place "occupied by" the faction, so the engine's
   // threat prose prints the FACTION as the menace and the holding as its lair.
@@ -1771,11 +1794,33 @@ async function onStirTrouble(factionId) {
     terrain: lairHex ? lairHex.terrain : null,
     occupant: { kind: "occupied", by: faction.name },
   };
-  await onGenerateHook({
-    origin, forcePattern: "known", verb, claim, source,
-    subjects: [subject], sourcePower: faction.id,
-    nonce: `${faction.id}:${stirOrdinal}`, // varies the engine's reward roll per stir too
-  });
+  const n = nextHookId(current);
+  // nonce keeps the engine's reward roll distinct per emission even from one town.
+  const hrng = subRng(current.seed, "hook", origin.q, origin.r, n, `${faction.id}:${ordinal}`);
+  const hook = generateHook(tables, hrng, { subjects: [subject], origin, index: n, verb, claim, source });
+  if (!hook) return null;
+  hook.sourcePower = faction.id; // tag it back to the faction (8.11)
+  return hook;
+}
+
+// "Stir up trouble" (Phase 8.11) — the manual button: build one faction hook, push
+// it, and surface it on the Hooks tab (the auto path, 8.12, reuses buildFactionHook
+// without the tab-jump). The hook NAMES the faction, describes a varied deed, and
+// points the party AT its lair.
+async function onStirTrouble(factionId) {
+  if (!current) return;
+  const faction = getFactions(current).find((f) => f.id === factionId);
+  if (!faction || (faction.status || "active") !== "active") return;
+  if (!(faction.holdings || [])[0]) return logLine(`${faction.name} has no lair to stir from.`);
+  if (!Array.isArray(current.hooks)) current.hooks = [];
+  const tables = await loadTables(FACTION_HOOK_TABLE_IDS);
+  const hook = buildFactionHook(faction, tables);
+  if (!hook) return logLine(`${faction.name} has nowhere to stir from.`);
+  current.hooks.push(hook);
+  selectedHookId = hook.id;
+  setPanelTab("hooks");
+  await persistAndRefresh();
+  logLine(`New hook — ${hookName(hook)} (stirred up by ${faction.name}).`);
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the

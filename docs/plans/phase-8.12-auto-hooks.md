@@ -55,8 +55,9 @@ export function rollAutoHookCount(faction, party, days, rng) {
 }
 ```
 
-Feel (tunable after play): a **strength-4 faction the party is standing on** ≈ 8%/day (~1 per ~12 days);
-**5 hexes off** ≈ 1.3%/day (a rare whisper); a **strength-2 faction 10 hexes away** ≈ near-silent.
+Feel (tunable after play, `AUTO_HOOK_BASE = 0.04`): a **strength-4 faction the party stands on/next to**
+≈ 8–16%/day (news most weeks, capped at 2 per advance); **5 hexes off** ≈ 2–3%/day (an occasional
+whisper); a **strength-2 faction 10 hexes away** ≈ near-silent.
 
 ### Determinism / the session-only clock
 The day counter is session-only (not persisted), so the roll is seeded on the **session day**:
