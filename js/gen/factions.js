@@ -273,6 +273,60 @@ export function advanceFactionDays(world, days, seed) {
   return fired;
 }
 
+// --- Faction-emitted hooks (Phase 8.11, Arc C) ---------------------------
+// A faction "stirs up trouble": it emits a NORMAL hook through the unchanged
+// hooks.js engine, biased so the shape reads as this kind of power. The engine
+// takes an injectable verb/pattern/source, so biasing needs no engine change —
+// factionHookContext just PICKS those; the app hands them in. Rules-as-JS-consts
+// (tunable like every generation number), and factions.js stays free of any
+// hooks.js import (it only returns strings).
+
+// Archetype -> which hook patterns/verbs fit it. A roaming raider menaces
+// (threat/warning); a merchant guild deals (opportunity/escort); a noble house
+// calls for aid (rescue/return). Unknown archetype -> no bias (engine rolls).
+const FACTION_HOOK_BIAS = {
+  bandits:             { patterns: ["known", "distant"],      verbs: ["threat", "warning"] },
+  "monstrous tribe":   { patterns: ["known", "distant"],      verbs: ["threat", "warning"] },
+  "mercenary company": { patterns: ["known", "escort"],       verbs: ["threat", "rescue"]  },
+  cult:                { patterns: ["known", "distant"],       verbs: ["warning", "threat"] },
+  "thieves' guild":    { patterns: ["known", "opportunity"],  verbs: ["warning"]           },
+  "merchant guild":    { patterns: ["opportunity", "escort"], verbs: ["explore"]           },
+  "noble house":       { patterns: ["known", "return"],       verbs: ["rescue", "warning"] },
+  "hermit order":      { patterns: ["known", "return"],       verbs: ["explore", "warning"]},
+};
+
+// Goal -> a themed rumour, used as the hook's `source` (the "what set this off"
+// prefix in the prose) so the flavour ties back to what the faction is after.
+const GOAL_RUMOUR = {
+  "seize the region":        "Word of a gathering power",
+  "hoard wealth":            "Talk of coin changing hands",
+  "drive out rivals":        "Rumour of a turf war",
+  "spread the faith":        "Whispers of new converts",
+  "awaken something buried": "Uneasy talk from the diggings",
+  "restore a fallen house":  "Old banners seen again",
+  "control the trade roads": "Merchants grumbling on the road",
+  "raid the frontier":       "Smoke on the frontier",
+};
+
+/**
+ * The hook-engine context a faction contributes when it stirs up trouble
+ * (Phase 8.11). Pure and deterministic: consumes the rng in a fixed order
+ * (pattern, then verb; the goal rumour costs no roll). An unmapped archetype
+ * returns undefined pattern/verb so the engine rolls them freely.
+ * @param {object} faction
+ * @param {() => number} rng
+ * @returns {{ pattern?:string, verb?:string, source?:string }}
+ */
+export function factionHookContext(faction, rng) {
+  const bias = FACTION_HOOK_BIAS[faction.archetype];
+  const pick = (a) => a[Math.floor(rng() * a.length)];
+  return {
+    pattern: bias ? pick(bias.patterns) : undefined,
+    verb: bias ? pick(bias.verbs) : undefined,
+    source: (faction.goal && GOAL_RUMOUR[faction.goal.kind]) || undefined,
+  };
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the factions list (just the name). */

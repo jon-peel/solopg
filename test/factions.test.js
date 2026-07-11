@@ -11,6 +11,7 @@ import {
   HOLDING_CAP,
   factionLabel,
   factionDescription,
+  factionHookContext,
   FACTION_BUILD,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
@@ -392,4 +393,82 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
   const lines2 = factionDescription(f2);
   assert.ok(lines2.includes("2 holdings · strength 3"));
   assert.ok(lines2.includes("Status: dormant"));
+});
+
+// --- Faction-emitted hook flavour (Phase 8.11) ---------------------------
+
+// A tiny deterministic rng that walks a fixed list of values, so a test can pin
+// exactly which pattern/verb a pick lands on.
+const seq = (...vals) => {
+  let i = 0;
+  return () => vals[i++ % vals.length];
+};
+
+// Every archetype's declared bias set (kept in sync with FACTION_HOOK_BIAS).
+const BIAS = {
+  bandits:             { patterns: ["known", "distant"],      verbs: ["threat", "warning"] },
+  "monstrous tribe":   { patterns: ["known", "distant"],      verbs: ["threat", "warning"] },
+  "mercenary company": { patterns: ["known", "escort"],       verbs: ["threat", "rescue"]  },
+  cult:                { patterns: ["known", "distant"],       verbs: ["warning", "threat"] },
+  "thieves' guild":    { patterns: ["known", "opportunity"],  verbs: ["warning"]           },
+  "merchant guild":    { patterns: ["opportunity", "escort"], verbs: ["explore"]           },
+  "noble house":       { patterns: ["known", "return"],       verbs: ["rescue", "warning"] },
+  "hermit order":      { patterns: ["known", "return"],       verbs: ["explore", "warning"]},
+};
+
+test("factionHookContext keeps pattern + verb inside the archetype's bias set", () => {
+  for (const [archetype, want] of Object.entries(BIAS)) {
+    const f = { archetype, goal: { kind: "hoard wealth" } };
+    // Exercise both ends of each list by feeding low and high rng values.
+    for (const r of [0, 0.99]) {
+      const ctx = factionHookContext(f, seq(r));
+      assert.ok(want.patterns.includes(ctx.pattern), `${archetype} pattern ${ctx.pattern}`);
+      assert.ok(want.verbs.includes(ctx.verb), `${archetype} verb ${ctx.verb}`);
+    }
+  }
+});
+
+test("an unmapped archetype leaves pattern/verb undefined (engine rolls freely)", () => {
+  const f = { archetype: "star-cult of the deep", goal: { kind: "raid the frontier" } };
+  const ctx = factionHookContext(f, seq(0.5));
+  assert.equal(ctx.pattern, undefined);
+  assert.equal(ctx.verb, undefined);
+  // The goal rumour still resolves.
+  assert.equal(ctx.source, "Smoke on the frontier");
+});
+
+test("a known goal maps to its themed rumour source", () => {
+  const cases = [
+    ["seize the region", "Word of a gathering power"],
+    ["control the trade roads", "Merchants grumbling on the road"],
+    ["spread the faith", "Whispers of new converts"],
+  ];
+  for (const [kind, rumour] of cases) {
+    const ctx = factionHookContext({ archetype: "cult", goal: { kind } }, seq(0));
+    assert.equal(ctx.source, rumour);
+  }
+});
+
+test("an unmapped or absent goal yields no source (engine rolls the source)", () => {
+  assert.equal(factionHookContext({ archetype: "cult", goal: { kind: "brew tea" } }, seq(0)).source, undefined);
+  assert.equal(factionHookContext({ archetype: "cult" }, seq(0)).source, undefined);
+});
+
+test("factionHookContext is deterministic for a given rng sequence", () => {
+  const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
+  const a = factionHookContext(f, seq(0.1, 0.9));
+  const b = factionHookContext(f, seq(0.1, 0.9));
+  assert.deepEqual(a, b);
+});
+
+test("pattern is picked before verb (fixed rng order)", () => {
+  // bandits: patterns ["known","distant"], verbs ["threat","warning"]. First rng
+  // picks the pattern, second picks the verb — 0 → first of each, 0.99 → second.
+  const f = { archetype: "bandits", goal: { kind: "hoard wealth" } };
+  assert.deepEqual(factionHookContext(f, seq(0, 0.99)), {
+    pattern: "known", verb: "warning", source: "Talk of coin changing hands",
+  });
+  assert.deepEqual(factionHookContext(f, seq(0.99, 0)), {
+    pattern: "distant", verb: "threat", source: "Talk of coin changing hands",
+  });
 });
