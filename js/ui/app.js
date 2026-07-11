@@ -26,7 +26,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -1259,6 +1259,7 @@ function refreshFactions() {
     factions,
     onCenterFaction,
     onAdvanceFactionTurn,
+    onStirTrouble,
     factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
   });
 }
@@ -1516,13 +1517,14 @@ const HOOK_NOTE = {
 async function onGenerateHook(opts = {}) {
   // The origin is wherever the GM is looking. A hook — especially a read map —
   // can be made from any selected cell, placed or not.
-  if (!current || !selected) return;
+  if (!current || (!selected && !opts.origin)) return;
   try {
     // Distant/Map hooks build new tiles, so load the hex/POI tables too.
     const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));
     if (!Array.isArray(current.hooks)) current.hooks = [];
     const n = nextHookId(current);
-    const origin = { q: selected.q, r: selected.r };
+    // Origin is the selected cell, or an explicit override (a faction's seat, 8.11).
+    const origin = opts.origin || { q: selected.q, r: selected.r };
     const rng = subRng(current.seed, "hook", origin.q, origin.r, n);
 
     const subjects = hookSubjects(current);
@@ -1567,7 +1569,7 @@ async function onGenerateHook(opts = {}) {
         const { subject, path } = buildMapTargetAndPath(tables, origin, spot);
         hook = generateHook(tables, rng, {
           subjects: [subject], origin, index: n, pattern: "map",
-          distance: spot.distance, path, source: opts.source,
+          distance: spot.distance, path, verb: opts.verb, source: opts.source,
         });
       } else {
         const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
@@ -1575,16 +1577,18 @@ async function onGenerateHook(opts = {}) {
         hook = generateHook(tables, rng, {
           subjects: [subjectFromHex(targetHex, targetHex.pois[0])],
           origin, index: n, pattern: "distant", distance: spot.distance,
+          verb: opts.verb, source: opts.source,
         });
       }
     } else if (pattern === "return") {
       // A development at an existing on-map POI (rollHookPattern guarantees subjects).
-      hook = generateHook(tables, rng, { subjects, origin, index: n, pattern: "return", verb: "return" });
+      hook = generateHook(tables, rng, { subjects, origin, index: n, pattern: "return", verb: "return", source: opts.source });
     } else {
-      hook = generateHook(tables, rng, { subjects, origin, index: n });
+      hook = generateHook(tables, rng, { subjects, origin, index: n, verb: opts.verb, source: opts.source });
     }
 
     if (!hook) return logLine("Nothing to gossip about here.");
+    if (opts.sourcePower) hook.sourcePower = opts.sourcePower; // tag a Type-2 (faction-emitted) hook (8.11)
     current.hooks.push(hook);
     // Surface the new lead: jump to the Hooks tab with it selected (and its
     // endpoints highlighted on the map) so it's never a silent "nothing happened".
@@ -1702,6 +1706,26 @@ async function onClaimHolding(factionId) {
   setPanelTab("factions");
   await persistAndRefresh();
   logLine(`${faction.name} claims (${q}, ${r}) — now ${faction.holdings.length} holdings.`);
+}
+
+// "Stir up trouble" (Phase 8.11) — a faction emits a NORMAL hook from its seat
+// (holdings[0]), biased by archetype/goal (factionHookContext) and tagged back to
+// it via sourcePower. Reuses onGenerateHook wholesale, so a faction hook surfaces
+// on the Hooks tab exactly like a manual one.
+async function onStirTrouble(factionId) {
+  if (!current) return;
+  const faction = getFactions(current).find((f) => f.id === factionId);
+  if (!faction || (faction.status || "active") !== "active") return;
+  const seat = (faction.holdings || [])[0];
+  if (!seat) return logLine(`${faction.name} has no holding to stir from.`);
+  // Flavour picks come off a dedicated substream; the hook re-seeds inside
+  // onGenerateHook (keyed on origin + ordinal), so both halves stay deterministic.
+  const rng = subRng(current.seed, "stir", faction.id, nextHookId(current));
+  const { pattern, verb, source } = factionHookContext(faction, rng);
+  await onGenerateHook({
+    origin: { q: seat.q, r: seat.r },
+    forcePattern: pattern, verb, source, sourcePower: faction.id,
+  });
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the
