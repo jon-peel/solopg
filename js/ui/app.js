@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc, neighbors } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors, axialDistance } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -1527,7 +1527,9 @@ async function onGenerateHook(opts = {}) {
     const origin = opts.origin || { q: selected.q, r: selected.r };
     const rng = subRng(current.seed, "hook", origin.q, origin.r, n);
 
-    const subjects = hookSubjects(current);
+    // Faction hooks (8.11) inject their own subject (the lair); everything else
+    // draws candidates from the whole map.
+    const subjects = opts.subjects || hookSubjects(current);
     const pattern = opts.forcePattern || rollHookPattern(tables, rng, subjects.length > 0);
 
     let hook;
@@ -1708,23 +1710,57 @@ async function onClaimHolding(factionId) {
   logLine(`${faction.name} claims (${q}, ${r}) — now ${faction.holdings.length} holdings.`);
 }
 
-// "Stir up trouble" (Phase 8.11) — a faction emits a NORMAL hook from its seat
-// (holdings[0]), biased by archetype/goal (factionHookContext) and tagged back to
-// it via sourcePower. Reuses onGenerateHook wholesale, so a faction hook surfaces
-// on the Hooks tab exactly like a manual one.
+// The placed settlement nearest a point — where word of a faction's deeds reaches
+// the party (8.11: "word spreads down to town"). null if the map has no settlement.
+function nearestSettlementTo(world, pt) {
+  let best = null, bestD = Infinity;
+  for (const h of placedHexes(world)) {
+    if (!(h.settlement && h.settlement.present)) continue;
+    const d = axialDistance(pt.q, pt.r, h.coords.q, h.coords.r);
+    if (d < bestD) { bestD = d; best = { q: h.coords.q, r: h.coords.r }; }
+  }
+  return best;
+}
+
+// A readable "lair" name for a holding with no POI of its own: its settlement/GM
+// name, else a camp in the terrain (so the threat prose still reads as a place).
+function lairPlaceName(hex, lair) {
+  if (hex && (hex.name || (hex.settlement && hex.settlement.present))) return destinationLabel(hex, lair.q, lair.r);
+  return hex && hex.terrain ? `a camp in the ${hex.terrain.toLowerCase()}` : "a hidden camp";
+}
+
+// "Stir up trouble" (Phase 8.11) — the faction's deed becomes a hook that NAMES
+// the faction and points the party AT its lair. Word reaches the nearest town (the
+// hook's origin), the target is the faction's holding, and the engine's `threat`
+// verb does the rest (menace = the faction, lair = the holding). Tagged back via
+// sourcePower. Reuses onGenerateHook, so it surfaces on the Hooks tab like any hook.
 async function onStirTrouble(factionId) {
   if (!current) return;
   const faction = getFactions(current).find((f) => f.id === factionId);
   if (!faction || (faction.status || "active") !== "active") return;
-  const seat = (faction.holdings || [])[0];
-  if (!seat) return logLine(`${faction.name} has no holding to stir from.`);
-  // Flavour picks come off a dedicated substream; the hook re-seeds inside
-  // onGenerateHook (keyed on origin + ordinal), so both halves stay deterministic.
-  const rng = subRng(current.seed, "stir", faction.id, nextHookId(current));
-  const { pattern, verb, source } = factionHookContext(faction, rng);
+  const lair = (faction.holdings || [])[0];
+  if (!lair) return logLine(`${faction.name} has no lair to stir from.`);
+  const lairHex = getHex(current, lair.q, lair.r);
+  // Where the party hears it: nearest town, else the party's position, else the
+  // lair itself — so the hook has a real leg to travel.
+  const origin = nearestSettlementTo(current, lair)
+    || (current.party ? { q: current.party.q, r: current.party.r } : null)
+    || { q: lair.q, r: lair.r };
+  const { verb, source } = factionHookContext(faction);
+  // A synthetic subject: the lair place "occupied by" the faction, so the engine's
+  // threat prose prints the FACTION as the menace and the holding as its lair.
+  const lairPoi = lairHex && (lairHex.pois || []).find((p) => p.id === lair.poiId);
+  const subject = {
+    poiId: lair.poiId,
+    name: lairPoi ? poiBaseName(lairPoi) : lairPlaceName(lairHex, lair),
+    type: lairPoi ? lairPoi.type : "lair",
+    q: lair.q, r: lair.r,
+    terrain: lairHex ? lairHex.terrain : null,
+    occupant: { kind: "occupied", by: faction.name },
+  };
   await onGenerateHook({
-    origin: { q: seat.q, r: seat.r },
-    forcePattern: pattern, verb, source, sourcePower: faction.id,
+    origin, forcePattern: "known", verb, source,
+    subjects: [subject], sourcePower: faction.id,
   });
 }
 

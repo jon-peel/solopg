@@ -275,28 +275,15 @@ export function advanceFactionDays(world, days, seed) {
 
 // --- Faction-emitted hooks (Phase 8.11, Arc C) ---------------------------
 // A faction "stirs up trouble": it emits a NORMAL hook through the unchanged
-// hooks.js engine, biased so the shape reads as this kind of power. The engine
-// takes an injectable verb/pattern/source, so biasing needs no engine change —
-// factionHookContext just PICKS those; the app hands them in. Rules-as-JS-consts
-// (tunable like every generation number), and factions.js stays free of any
-// hooks.js import (it only returns strings).
+// hooks.js engine, but a faction hook is NOT a generic one — it NAMES the faction,
+// describes what it did, and points the party AT the faction's lair. That last
+// part is why it's always a `threat`: `threat` is the only engine verb whose prose
+// prints the menace name (→ the faction) AND carries a `lair` (→ the holding to go
+// to). The app builds a synthetic lair-subject and hands the engine verb + source;
+// factions.js just supplies those strings (no hooks.js import).
 
-// Archetype -> which hook patterns/verbs fit it. A roaming raider menaces
-// (threat/warning); a merchant guild deals (opportunity/escort); a noble house
-// calls for aid (rescue/return). Unknown archetype -> no bias (engine rolls).
-const FACTION_HOOK_BIAS = {
-  bandits:             { patterns: ["known", "distant"],      verbs: ["threat", "warning"] },
-  "monstrous tribe":   { patterns: ["known", "distant"],      verbs: ["threat", "warning"] },
-  "mercenary company": { patterns: ["known", "escort"],       verbs: ["threat", "rescue"]  },
-  cult:                { patterns: ["known", "distant"],       verbs: ["warning", "threat"] },
-  "thieves' guild":    { patterns: ["known", "opportunity"],  verbs: ["warning"]           },
-  "merchant guild":    { patterns: ["opportunity", "escort"], verbs: ["explore"]           },
-  "noble house":       { patterns: ["known", "return"],       verbs: ["rescue", "warning"] },
-  "hermit order":      { patterns: ["known", "return"],       verbs: ["explore", "warning"]},
-};
-
-// Goal -> a themed rumour, used as the hook's `source` (the "what set this off"
-// prefix in the prose) so the flavour ties back to what the faction is after.
+// Goal -> the "word on the wind" that reaches town, used as the hook's `source`.
+// A rule (which goal reads as which rumour), so a JS const, tunable like the rest.
 const GOAL_RUMOUR = {
   "seize the region":        "Word of a gathering power",
   "hoard wealth":            "Talk of coin changing hands",
@@ -310,20 +297,16 @@ const GOAL_RUMOUR = {
 
 /**
  * The hook-engine context a faction contributes when it stirs up trouble
- * (Phase 8.11). Pure and deterministic: consumes the rng in a fixed order
- * (pattern, then verb; the goal rumour costs no roll). An unmapped archetype
- * returns undefined pattern/verb so the engine rolls them freely.
+ * (Phase 8.11). Always a `threat` (so the faction is named and the hook points at
+ * its lair); the goal supplies the rumour `source`, absent when the goal is
+ * unmapped so the engine rolls a source instead. Pure — no rng needed.
  * @param {object} faction
- * @param {() => number} rng
- * @returns {{ pattern?:string, verb?:string, source?:string }}
+ * @returns {{ verb:string, source?:string }}
  */
-export function factionHookContext(faction, rng) {
-  const bias = FACTION_HOOK_BIAS[faction.archetype];
-  const pick = (a) => a[Math.floor(rng() * a.length)];
+export function factionHookContext(faction) {
   return {
-    pattern: bias ? pick(bias.patterns) : undefined,
-    verb: bias ? pick(bias.verbs) : undefined,
-    source: (faction.goal && GOAL_RUMOUR[faction.goal.kind]) || undefined,
+    verb: "threat",
+    source: (faction && faction.goal && GOAL_RUMOUR[faction.goal.kind]) || undefined,
   };
 }
 

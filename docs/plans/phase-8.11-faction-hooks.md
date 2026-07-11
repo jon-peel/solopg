@@ -1,61 +1,72 @@
-# Phase 8.11 — `sourcePower` + faction-emitted hooks (Arc C opens)
+# Phase 8.11 — Faction-emitted hooks (points the party AT the faction)
 
-Closes the seam Phase 6 left open. Back then hooks were static and self-standing; the note said Type-2
-"a power stirs up trouble" hooks *"wait on a future faction feature"*. Arc B built that feature, so
-8.11 wires it up: a **"Stir up trouble"** action on a faction generates a **normal Type-1 hook**
-through the **unchanged `hooks.js` engine**, biased by the faction's archetype/goal, and **tagged
-back** to the faction via a new additive `sourcePower` field.
+Closes the seam Phase 6 left open (Type-2 "a power stirs up trouble" hooks *"wait on a future
+faction feature"*). Arc B built the faction, so 8.11 wires it up — but with a sharper idea of **what a
+faction hook is** than the first draft had.
 
-8.11 is the *manual* half of Arc C (a button press). **8.12** (auto-fire on the day-tick, where
-`strength` finally becomes "hook loudness") and the leftover **region-hook** follow, each with its own
-sub-plan when built.
+## What a faction hook IS (design)
 
-**Status:** 📝 planned.
+A generic Type-1 hook is a rumour pointing at a place. **If a faction hook were just that, we'd use
+the plain generator** — so a faction hook has to be something the plain generator *cannot* produce:
+
+> **It names the faction, describes something the faction did, and points the party AT the faction.**
+
+The distinguishing property is **causality**, not location. Distance is welcome — it gives the party
+somewhere to travel — *as long as the destination is the faction's lair*, with an in-world reason the
+party heard about it. That reason is **"word reached the nearest town."**
+
+### The 8.11 shape — predation → the lair (a `threat`)
+
+The party, **in the nearest settlement**, catches word that the faction has been **preying on the
+region** (raiding roads, carrying folk off, demanding tribute). The hook points at the **faction's
+lair** — go deal with them. This is the "bandits rob/kidnap a notable, word spreads down" case, and it
+reuses the hook engine's existing **`threat`** verb *exactly*:
+
+- **menace** = the faction (named),
+- **lair** = the faction's holding (the place to go),
+- **origin** = the nearest settlement (where the party hears it) → a real travel leg,
+- **reward** = the engine already rolls a bounty for a `threat` (a patron will pay).
+
+Reads like: *"Smoke on the frontier: The Red Company have been carrying folk off. Their lair: the
+Ruined Tower, 18 miles to the south-east (Hills). Reward: 400 gp from the Reeve."* — vague on purpose
+(who was taken, the ransom = GM's call), but unmistakably **this faction**, and it sends the party
+**to** them.
+
+### Deferred siblings (their own steps — noted so this one stays tight)
+- **Encroachment / takeover** — a faction moves *into* an existing site and chases out the occupants,
+  so a return visit is disrupted. This is the richest kind but it should **mutate a real POI's
+  occupant** on the map, which couples to 8.13's movement — a step of its own.
+- **Goal omen** — the doom clock advances and a symptom leaks out. A small later add.
+- **8.12 — news by distance.** 8.11 is the *manual* button (the GM says "this faction acts now"). 8.12
+  makes the *hearing* automatic on the day-tick, scaled by **proximity × strength** — that's where
+  distance-from-the-party belongs, and where `strength` (frozen in 8.13) is finally read.
+
+**Status:** 📝 rebuilt around "points at the lair" (was: a generic biased hook — dropped because it
+read as an unrelated far site).
 
 > Plan → approve → build → `node --test` → commit/push → manual checklist (project convention).
 
 ## No schema bump
 
-`sourcePower` is an **additive, optional** field on a hook — exactly like every other additive hook
-field (it self-heals: an old hook simply lacks it and shows no tag). Export/import already round-trips
-the whole `world.hooks[]` array verbatim (`portability.js` carries `data.hooks`), so the tag rides for
-free. **`SCHEMA_VERSION` stays 16.**
+`sourcePower` is an **additive, optional** hook field (self-heals: an old hook lacks it, shows no tag).
+Export/import already round-trips the whole `world.hooks[]` (`portability.js` carries `data.hooks`), so
+the tag rides for free. **`SCHEMA_VERSION` stays 16.**
 
 ## The `sourcePower` field
-
-A hook that a faction emitted carries the faction's id:
 
 ```js
 hook.sourcePower = faction.id   // e.g. "faction:2"  (absent on all normal hooks)
 ```
 
-Stored on the hook, resolved to a name **at render time** (compose-at-render rule — the id is the
-pick, the "Stirred up by …" line is not stored). The hook is otherwise a completely ordinary hook:
-same `generateHook`/`buildLocalHook`/… output, same list, same Resolve/Ignore/Pin lifecycle.
+Stored on the hook, resolved to a name **at render time** (compose-at-render rule). Otherwise the hook
+is an ordinary `threat` hook — same list, same Resolve/Ignore/Pin lifecycle.
 
-## Flavour: archetype → verb/pattern, goal → rumour (a rule → JS const)
+## Flavour: goal → rumour (a rule → JS const)
 
-The engine already takes an injectable `ctx.verb`, `ctx.pattern`, and `ctx.source`, so biasing needs
-**no engine change** — we just pick those from the faction and hand them in. Rules-as-JS-consts, in
-`factions.js`, retunable like every other generation constant:
+The engine takes an injectable `verb` + `source`, so no engine change is needed. In `factions.js`:
 
 ```js
-// Which hook shapes read as "this kind of power stirring": patterns + verbs that
-// fit the archetype. A weighted-free pick over the SAME hooks.js engine.
-const FACTION_HOOK_BIAS = {
-  bandits:             { patterns: ["known", "distant"],     verbs: ["threat", "warning"] },
-  "monstrous tribe":   { patterns: ["known", "distant"],     verbs: ["threat", "warning"] },
-  "mercenary company": { patterns: ["known", "escort"],      verbs: ["threat", "rescue"]  },
-  cult:                { patterns: ["known", "distant"],     verbs: ["warning", "threat"] },
-  "thieves' guild":    { patterns: ["known", "opportunity"], verbs: ["warning"]           },
-  "merchant guild":    { patterns: ["opportunity", "escort"],verbs: ["explore"]           },
-  "noble house":       { patterns: ["known", "return"],      verbs: ["rescue", "warning"] },
-  "hermit order":      { patterns: ["known", "return"],      verbs: ["explore", "warning"]},
-};
-// Unknown archetype → no bias: pattern/verb come back undefined and the engine rolls freely.
-
-// Goal → a themed rumour used as the hook's `source` (the "who/what set this off"
-// prefix in the prose). Ties the hook's flavour to what the faction is working toward.
+// Goal -> the "word on the wind" that reaches town, used as the hook's `source`.
 const GOAL_RUMOUR = {
   "seize the region":        "Word of a gathering power",
   "hoard wealth":            "Talk of coin changing hands",
@@ -63,124 +74,76 @@ const GOAL_RUMOUR = {
   "spread the faith":        "Whispers of new converts",
   "awaken something buried": "Uneasy talk from the diggings",
   "restore a fallen house":  "Old banners seen again",
-  "control the trade roads":  "Merchants grumbling on the road",
-  "raid the frontier":        "Smoke on the frontier",
+  "control the trade roads": "Merchants grumbling on the road",
+  "raid the frontier":       "Smoke on the frontier",
 };
-```
 
-Pure, node-testable helper (mirrors the other pure faction fns; consumes the rng in a fixed order so
-it's deterministic):
-
-```js
-export function factionHookContext(faction, rng) {
-  const bias = FACTION_HOOK_BIAS[faction.archetype];
-  const pick = (a) => a[Math.floor(rng() * a.length)];
+// A faction hook is always a `threat` — the ONLY verb whose engine prose names the
+// menace (so the faction is named) and carries a `lair` (so it points home). Verb
+// variety (warning/rescue that still name the faction) waits on a faction-specific
+// claim table — a later refinement.
+export function factionHookContext(faction) {
   return {
-    pattern: bias ? pick(bias.patterns) : undefined, // undefined → engine rolls
-    verb:    bias ? pick(bias.verbs)    : undefined,
-    source:  (faction.goal && GOAL_RUMOUR[faction.goal.kind]) || undefined,
+    verb: "threat",
+    source: (faction.goal && GOAL_RUMOUR[faction.goal.kind]) || undefined,
   };
 }
 ```
 
-`factions.js` does **not** import `hooks.js` — it only returns strings the app hands to the engine, so
-no new coupling is introduced.
+## Wiring (`app.js`)
 
-## Origin: the faction's seat
+`onGenerateHook(opts)` already grew `origin`/`verb`/`source`/`sourcePower` (Chunk 2). Add **one** more:
+`opts.subjects` — override the candidate subjects (`const subjects = opts.subjects || hookSubjects(current);`),
+so a faction hook can inject *its lair* as the sole subject rather than the whole map.
 
-The hook radiates from **`holdings[0]`** (always a placed hex — holdings are only ever placed/claimed/
-roamed-to placed hexes). Because `hooks.js`'s `pickSubject` already weights candidate POIs by
-proximity to the origin, using the seat as origin makes a faction's trouble land on **places near it**
-(often its own holdings) for free — no extra targeting code.
+`onStirTrouble(factionId)` becomes:
+- pick the **lair** = the faction's seat (`holdings[0]`);
+- **origin** = `nearestSettlementTo(lair)`, falling back to the party position, then the lair;
+- build a **synthetic subject** for the lair whose `occupant = { kind:"occupied", by: faction.name }`
+  — that's what makes the engine's `threat` prose print the **faction** as the menace and the holding
+  as the **lair** place; `poiId` links back to the real site (so map jumps land on it);
+- call `onGenerateHook({ origin, forcePattern:"known", verb:"threat", source, subjects:[lair], sourcePower: faction.id })`.
 
-## Wiring (`app.js`) — reuse `onGenerateHook`, don't fork it
-
-`onGenerateHook(opts)` already exists and already handles every pattern (distant/escort/chain/map/…).
-Extend it with three opt fields so a faction can drive it, then add a thin wrapper:
-
-- **`opts.origin`** — override the origin (default stays `selected`); relax the guard to
-  `if (!current || (!selected && !opts.origin)) return;`.
-- **`opts.verb`** — thread into the `generateHook(...)` ctx on the verb-carrying branches
-  (known/distant/map). Harmless where a pattern fixes its own verb (opportunity/event/escort/chain/
-  return ignore it).
-- **`opts.source`** — already threaded to the local/escort/chain/map builders; **add it** to the
-  known/distant/return `generateHook` ctx too (the engine takes `ctx.source`; absent → rolled, so the
-  plain "Generate hook" button is unchanged).
-- After the hook is built, before `push`: `if (opts.sourcePower) hook.sourcePower = opts.sourcePower;`.
-
-```js
-// "Stir up trouble" (8.11): a faction emits a normal hook from its seat, biased by
-// archetype/goal and tagged back to it. Reuses onGenerateHook wholesale.
-async function onStirTrouble(factionId) {
-  if (!current) return;
-  const faction = getFactions(current).find((f) => f.id === factionId);
-  if (!faction || (faction.status || "active") !== "active") return;
-  const seat = (faction.holdings || [])[0];
-  if (!seat) return logLine(`${faction.name} has no holding to stir from.`);
-  // Flavour picks come off a dedicated substream; the hook itself re-seeds inside
-  // onGenerateHook (keyed on origin+ordinal), so both halves stay deterministic.
-  const rng = subRng(current.seed, "stir", faction.id, nextHookId(current));
-  const { pattern, verb, source } = factionHookContext(faction, rng);
-  await onGenerateHook({ origin: { q: seat.q, r: seat.r }, forcePattern: pattern, verb, source,
-                         sourcePower: faction.id });
-}
-```
-
-`onGenerateHook` already jumps to the Hooks tab with the new hook selected and logs it, so a faction
-hook surfaces exactly like a manual one — never a silent no-op.
+Two small helpers: `nearestSettlementTo(world, pt)` (closest placed `hex.settlement.present`), and a
+lair place-name (`poiBaseName` if the holding has a POI, else the settlement/GM name, else "a camp in
+the ‹terrain›"). New import: `axialDistance` from `hexgeo`.
 
 ## UI
 
-- **Factions tab** (`panel.js` `factionCard`): a **"Stir up trouble"** action button per **active**
-  faction (gated on `model.onStirTrouble` + a holding), wired through the factions-panel model in
-  `refreshFactions()`.
-- **Hooks tab** (`panel.js` hook card): when `hook.sourcePower` is set, show a small
-  **"Stirred up by <faction name>"** line with a jump-to-faction link — resolved via a
-  `factionNameById` + `onCenterFaction` callback added to the hooks-panel model (both already exist on
-  the Detail model, so it's the same idiom). This keeps `hooks.js` engine-pure (the name lookup lives
-  in the app/panel layer, not in `hookDescription`).
+- **Factions tab** — the per-faction **"Stir up trouble"** button (already shipped in Chunk 2) now
+  produces a lair-pointing threat.
+- **Hooks tab** — when `hook.sourcePower` is set, show **"Stirred up by ‹faction›"** with a
+  jump-to-faction link (Chunk C), resolved via `factionNameById` + `onCenterFaction` on the hooks
+  model (same idiom as the Detail tab). Keeps `hooks.js` engine-pure.
 
-## Files
+## Build chunks (test after each)
 
-| File | Change |
-|---|---|
-| `js/gen/factions.js` | `FACTION_HOOK_BIAS` + `GOAL_RUMOUR` consts; export pure `factionHookContext(faction, rng)` |
-| `js/ui/app.js` | extend `onGenerateHook(opts)` (origin/verb/source/sourcePower threading); add `onStirTrouble`; add it to the factions-panel model; add `factionNameById`/`onCenterFaction` to the hooks-panel model |
-| `js/ui/panel.js` | `factionCard` "Stir up trouble" button; hook card "Stirred up by …" tag when `hook.sourcePower` |
-| `test/factions.test.js` | `factionHookContext` tests (bias membership, goal→rumour, unknown-archetype passthrough, determinism) |
-
-`hooks.js` is **not touched** — the engine stays exactly as-is (the plan's "unchanged engine"
-requirement).
+| Chunk | Change | How you test it |
+|---|---|---|
+| **A — core** | Rework `factionHookContext` (→ `threat` + goal rumour), drop the old pattern bias; keep `GOAL_RUMOUR`. Rework the node tests. | `node --test test/factions.test.js` |
+| **B — emit** | Rework `onStirTrouble` (lair subject + nearest-settlement origin + threat); add `nearestSettlementTo`/lair-name helpers + `opts.subjects` + `axialDistance` import. | Browser: "Stir up trouble" → a hook heard in the nearest town, naming the faction, pointing at its lair |
+| **C — tag** | "Stirred up by ‹faction›" line + jump-link on the emitted hook. | Browser: the hook shows its origin faction; the link centres on it |
 
 ## Tests (`node --test`, pure logic only)
 
-- **archetype bias** — for each mapped archetype, `factionHookContext` returns a `pattern` in that
-  archetype's `patterns` and a `verb` in its `verbs`.
-- **unknown archetype** — `pattern`/`verb` come back `undefined` (engine rolls freely).
-- **goal → rumour** — a known goal maps to its `GOAL_RUMOUR` string; an unmapped/absent goal → `source`
-  undefined.
-- **determinism** — same faction + same seeded rng sequence → identical `{pattern, verb, source}`.
-
-(The `sourcePower` stamping + reuse of `onGenerateHook` live in the UI layer; the hook it produces is
-already covered by `hooks.test.js`. The node-testable seam is `factionHookContext`.)
+- `factionHookContext` returns `verb: "threat"` always.
+- a known goal → its `GOAL_RUMOUR` string; an unmapped/absent goal → `source` undefined.
+- (the lair-subject construction + nearest-settlement pick live in the UI layer; the `threat` hook they
+  produce is already covered by `hooks.test.js`.)
 
 ## Manual checklist (`./run-local.sh`)
 
 ```
-[ ] "Stir up trouble" on an active faction (Factions tab) → a new hook appears on the Hooks tab,
-    tagged "Stirred up by <faction>", pointing at a place near the faction's seat
-[ ] A bandits / monstrous-tribe faction reads as a threat/warning; a merchant guild as trade/errand
-[ ] The "Stirred up by <faction>" link on the hook centres the map on that faction's holding
-[ ] Stir twice from the same faction → two different hooks (successive ordinals differ)
-[ ] Reload, then Export → Import → the hook keeps its sourcePower tag (still schema v16)
+[ ] Generate a faction on/near a settlement, then "Stir up trouble" → a hook appears on the Hooks tab
+    that NAMES the faction, reads as a threat ("<Faction> have been raiding the roads"), and gives the
+    faction's holding as the lair with a distance/bearing FROM a town
+[ ] The hook's → Target centres the map on the faction's holding (you can travel there)
+[ ] A faction with a goal opens with that goal's rumour ("Smoke on the frontier: ...")
+[ ] Stir twice → two different threats (claim/reward vary), both pointing at the same lair
+[ ] Reload + Export→Import → the hook keeps its sourcePower tag (schema v16)
 ```
 
-## Out of scope (the rest of Phase 8, each its own sub-plan)
-
-- **8.12 — auto-fire hooks on the day-tick.** In the `advanceDays` chokepoint, a small per-day chance
-  **scaled by proximity × faction `strength`** ("news propagation by distance") emits a hook with **no
-  button press**. This is where `strength` — frozen as a stable value in 8.13 — is finally read. It
-  reuses 8.11's `factionHookContext` + the `sourcePower` tag; only the *trigger* is new.
-- **Region hook** — the leftover half of the old 8.13 stretch: a region-wide "something is stirring"
-  area-hook (not pinned to one target POI). Confirm shape when 8.12 lands; may slip to a later phase.
-- **Contested/again:** no faction-vs-faction hook interplay here — one faction, one hook, one press.
+## Out of scope (this step)
+- Encroachment/takeover (mutating a POI's occupant), goal omens — their own steps.
+- Auto-firing without a button + reading `strength` — 8.12.
+- Per-archetype deed tables (so `warning`/`rescue` can also name the faction) — a later refinement.
