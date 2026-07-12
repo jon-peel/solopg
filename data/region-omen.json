@@ -1,0 +1,18 @@
+{
+  "id": "region-omen",
+  "title": "Region omen (reads \"Something stirs in <region>: <omen>\") — a whole tract escalating",
+  "entries": [
+    { "value": "the land itself seems to hold its breath" },
+    { "value": "war-drums echo from every direction after dark" },
+    { "value": "refugees stream out of the interior with only what they can carry" },
+    { "value": "the birds have gone quiet, and the roads with them" },
+    { "value": "smoke hangs over the horizon for days on end" },
+    { "value": "shrines are found defaced, their keepers fled" },
+    { "value": "no caravan has come through in a fortnight" },
+    { "value": "hard-eyed strangers watch every waystation" },
+    { "value": "the militia has stopped patrolling the far tracks" },
+    { "value": "the wells and springs are said to have turned foul" },
+    { "value": "every hamlet tells of something moving at night" },
+    { "value": "old boundary stones have been thrown down" }
+  ]
+}

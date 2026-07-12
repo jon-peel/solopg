@@ -365,6 +365,54 @@ export function rollAutoHookCount(faction, party, days, rng) {
   return Math.min(count, AUTO_HOOK_CAP);
 }
 
+// --- Region "something is stirring" hooks (Phase 8.14) -------------------
+// A broad, un-pinned escalation signal for a whole named tract — driven by
+// ESCALATION pressure among the factions seated in it (strength weighted by
+// doom-clock progress, plus contest tension when several share a tract), NOT by
+// party proximity (that's 8.12). So it reads as "the region is tipping over", and
+// it intensifies as goal clocks advance. Rules-as-JS-consts, tunable.
+const REGION_CONTEST_BONUS = 2; // each EXTRA faction sharing a region adds tension
+const REGION_STIR_BASE = 0.012; // per heat-point per day — rarer than a faction hook
+const REGION_STIR_MAX = 0.12;
+
+/**
+ * Escalation pressure among the active factions seated in one region. Each adds
+ * its strength weighted by how far its goal doom-clock has run (0.5×..1.5×);
+ * multiple powers add contest tension. Pure. 0 for an empty region.
+ * @param {object[]} factionsInRegion
+ * @returns {number}
+ */
+export function regionHeat(factionsInRegion) {
+  const fs = factionsInRegion || [];
+  let heat = 0;
+  for (const f of fs) {
+    const g = f.goal || {};
+    const frac = g.max ? Math.min((g.progress || 0) / g.max, 1) : 0;
+    heat += (f.strength || 1) * (0.5 + frac);
+  }
+  return heat + REGION_CONTEST_BONUS * Math.max(0, fs.length - 1);
+}
+
+/** Per-day chance a region stirs, capped. Pure. */
+export const regionStirChance = (factionsInRegion) =>
+  Math.min(REGION_STIR_BASE * regionHeat(factionsInRegion), REGION_STIR_MAX);
+
+/**
+ * Whether a region stirs over `days` elapsed — at most ONE per advance (a beat,
+ * not a stream; the app also dedupes to one open region hook per region). Pure and
+ * deterministic for a given rng stream.
+ * @param {object[]} factionsInRegion
+ * @param {number} days
+ * @param {() => number} rng
+ * @returns {boolean}
+ */
+export function rollRegionStir(factionsInRegion, days, rng) {
+  const chance = regionStirChance(factionsInRegion);
+  if (chance <= 0 || !(days >= 1)) return false;
+  for (let i = 0; i < days; i++) if (rng() < chance) return true;
+  return false;
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the factions list (just the name). */

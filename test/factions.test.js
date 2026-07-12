@@ -15,6 +15,9 @@ import {
   autoHookChance,
   rollAutoHookCount,
   AUTO_HOOK_CAP,
+  regionHeat,
+  regionStirChance,
+  rollRegionStir,
   FACTION_BUILD,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
@@ -514,4 +517,57 @@ test("a louder/nearer faction fires more often than a faint one (statistical)", 
     faintTotal += rollAutoHookCount(faint, PARTY, 7, subRng(s, "autohook", "faint", 0));
   }
   assert.ok(loudTotal > faintTotal, `loud ${loudTotal} > faint ${faintTotal}`);
+});
+
+// --- Region "something is stirring" hooks (Phase 8.14) -------------------
+
+const rf = (strength, progress, max = 8) => ({
+  status: "active", strength, goal: { kind: "seize the region", progress, max },
+});
+
+test("regionHeat is 0 for an empty region", () => {
+  assert.equal(regionHeat([]), 0);
+  assert.equal(regionHeat(undefined), 0);
+});
+
+test("regionHeat rises with strength, goal progress, and faction count", () => {
+  const base = regionHeat([rf(2, 0)]);
+  assert.ok(regionHeat([rf(4, 0)]) > base, "stronger → hotter");
+  assert.ok(regionHeat([rf(2, 8)]) > base, "further along the doom clock → hotter");
+  assert.ok(regionHeat([rf(2, 0), rf(2, 0)]) > regionHeat([rf(2, 0)]), "more factions → hotter (contest)");
+});
+
+test("a near-complete doom clock contributes about 1.5x strength", () => {
+  // full clock → (0.5 + 1.0) * strength = 1.5 * strength; single faction, no contest.
+  assert.ok(Math.abs(regionHeat([rf(4, 8, 8)]) - 6) < 1e-9);
+});
+
+test("regionStirChance never exceeds the cap", () => {
+  const many = Array.from({ length: 20 }, () => rf(4, 8));
+  assert.ok(regionStirChance(many) <= 0.12 + 1e-9);
+});
+
+test("rollRegionStir is false with no factions or days < 1, true when every day hits", () => {
+  assert.equal(rollRegionStir([], 30, () => 0), false);
+  assert.equal(rollRegionStir([rf(4, 8)], 0, () => 0), false);
+  assert.equal(rollRegionStir([rf(4, 8)], 20, () => 0), true);   // 0 < chance every day
+  assert.equal(rollRegionStir([rf(4, 8)], 20, () => 0.999), false); // never beats the chance
+});
+
+test("rollRegionStir is deterministic for a given rng stream", () => {
+  const fs = [rf(3, 4), rf(2, 6)];
+  const a = rollRegionStir(fs, 25, subRng(3, "regionstir", "region:0", 0));
+  const b = rollRegionStir(fs, 25, subRng(3, "regionstir", "region:0", 0));
+  assert.equal(a, b);
+});
+
+test("a hot region stirs more often than a quiet one (statistical)", () => {
+  const hot = [rf(4, 8), rf(3, 6)];   // two strong, advanced factions
+  const quiet = [rf(2, 0)];            // one weak, fresh faction
+  let hotN = 0, quietN = 0;
+  for (let s = 0; s < 300; s++) {
+    if (rollRegionStir(hot, 14, subRng(s, "regionstir", "hot", 0))) hotN++;
+    if (rollRegionStir(quiet, 14, subRng(s, "regionstir", "quiet", 0))) quietN++;
+  }
+  assert.ok(hotN > quietN, `hot ${hotN} > quiet ${quietN}`);
 });

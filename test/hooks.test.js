@@ -12,6 +12,7 @@ import {
   buildChainStep,
   buildLocalHook,
   buildEscortHook,
+  buildRegionHook,
   HOOK_BUILD,
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
@@ -26,6 +27,7 @@ function tables() {
     "hook-cargo", "hook-recipient",
     "hook-clue", "hook-payoff",
     "hook-patron", "hook-reward", "hook-return", "creatures",
+    "region-omen",
   ];
   return new Map(
     ids.map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
@@ -581,4 +583,43 @@ test("hookName + hookDescription compose prose from the picks (miles + terrain, 
   ]);
   // hexScale flows through to the mileage.
   assert.match(hookDescription(base, { hexScale: 10 })[0], /30 miles to the south \(Hills\)/);
+});
+
+// --- Region hooks (Phase 8.14) -------------------------------------------
+
+const REGION = { id: "region:3:-1", name: "the Blackwood", cq: 3.4, cr: -1.6 };
+
+test("buildRegionHook: pattern region, rounded-centroid target, an omen, no lair", () => {
+  const t = tables();
+  const h = buildRegionHook(t, mulberry32(5), { region: REGION, index: 2, sourcePower: "faction:1" });
+  assert.equal(h.pattern, "region");
+  assert.equal(h.verb, "region");
+  assert.equal(h.id, "hook:2");
+  assert.equal(h.subject.name, "the Blackwood");
+  assert.deepEqual(h.target, { q: 3, r: -2 }); // Math.round(3.4)=3, Math.round(-1.6)=-2
+  assert.deepEqual(h.origin, h.target);         // no travel leg
+  assert.equal(h.distance, 0);
+  assert.equal(h.bearing, null);
+  assert.equal(h.sourcePower, "faction:1");
+  assert.ok(valuesOf(t.get("region-omen")).has(h.claim));
+  assert.deepEqual(h.region, { id: REGION.id, name: REGION.name, cq: REGION.cq, cr: REGION.cr });
+});
+
+test("a region hook omits sourcePower when none is given", () => {
+  const h = buildRegionHook(tables(), mulberry32(1), { region: REGION, index: 0 });
+  assert.ok(!("sourcePower" in h));
+});
+
+test("hookName / hookDescription render the region branch", () => {
+  const h = buildRegionHook(tables(), mulberry32(7), { region: REGION, index: 0 });
+  assert.equal(hookName(h), "Stirring: the Blackwood");
+  const lines = hookDescription(h);
+  assert.match(lines[0], /^Something stirs in the Blackwood: /);
+  assert.match(lines[0], /\.$/);
+});
+
+test("buildRegionHook is deterministic for a given rng", () => {
+  const a = buildRegionHook(tables(), mulberry32(9), { region: REGION, index: 0 });
+  const b = buildRegionHook(tables(), mulberry32(9), { region: REGION, index: 0 });
+  assert.deepEqual(a, b);
 });
