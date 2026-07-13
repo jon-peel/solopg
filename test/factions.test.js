@@ -8,13 +8,9 @@ import {
   advanceFactionTurn,
   advanceFactionDays,
   TURN_LENGTH_DAYS,
-  HOLDING_CAP,
   factionLabel,
   factionDescription,
   factionHookContext,
-  autoHookChance,
-  rollAutoHookCount,
-  AUTO_HOOK_CAP,
   regionHeat,
   regionStirChance,
   rollRegionStir,
@@ -198,20 +194,19 @@ test("addHolding on one faction leaves another untouched", () => {
 
 test("advanceFactionDays only fires a turn once a full turn-length has banked", () => {
   const f = make(1, 0, 0, 0);
-  assert.equal(advanceFactionDays({ factions: [f] }, TURN_LENGTH_DAYS - 1, 1), 0);
-  assert.equal(f.clock.turns, 0);
+  advanceFactionDays({ factions: [f] }, TURN_LENGTH_DAYS - 1, 1);
+  assert.equal(f.clock.turns, 0); // not banked enough for a turn yet
   assert.equal(f.clock.sinceTurn, TURN_LENGTH_DAYS - 1);
   // One more day tips it over → exactly one turn, remainder 0.
-  assert.equal(advanceFactionDays({ factions: [f] }, 1, 1), 1);
+  advanceFactionDays({ factions: [f] }, 1, 1);
   assert.equal(f.clock.turns, 1);
   assert.equal(f.clock.sinceTurn, 0);
 });
 
 test("advanceFactionDays fires multiple turns and carries the remainder", () => {
   const f = make(1, 0, 0, 0);
-  const fired = advanceFactionDays({ factions: [f] }, 2 * TURN_LENGTH_DAYS + 3, 1);
-  assert.equal(fired, 2);
-  assert.equal(f.clock.turns, 2);
+  advanceFactionDays({ factions: [f] }, 2 * TURN_LENGTH_DAYS + 3, 1);
+  assert.equal(f.clock.turns, 2); // two whole turn-lengths fired
   assert.equal(f.clock.sinceTurn, 3); // remainder carried, not lost
 });
 
@@ -227,9 +222,8 @@ test("advanceFactionTurn fires one manual turn per active faction, sinceTurn unt
   const a = make(1, 0, 0, 0);
   const b = make(1, 5, 5, 1);
   const before = { a: a.clock.sinceTurn, b: b.clock.sinceTurn };
-  const n = advanceFactionTurn({ factions: [a, b] }, 1);
-  assert.equal(n, 2);
-  assert.equal(a.clock.turns, 1);
+  advanceFactionTurn({ factions: [a, b] }, 1);
+  assert.equal(a.clock.turns, 1); // both active factions ticked once
   assert.equal(b.clock.turns, 1);
   assert.equal(a.goal.progress, 1);
   // Manual turns are independent of the day clock.
@@ -249,11 +243,14 @@ test("only active factions tick (dormant/destroyed are skipped)", () => {
   const a = make(1, 0, 0, 0); a.status = "dormant";
   const b = make(1, 5, 5, 1); b.status = "destroyed";
   const c = make(1, 9, 9, 2); // active
-  assert.equal(advanceFactionTurn({ factions: [a, b, c] }, 1), 1);
+  advanceFactionTurn({ factions: [a, b, c] }, 1);
   assert.equal(a.clock.turns, 0);
   assert.equal(b.clock.turns, 0);
-  assert.equal(c.clock.turns, 1);
-  assert.equal(advanceFactionDays({ factions: [a, b, c] }, TURN_LENGTH_DAYS, 1), 1); // only c
+  assert.equal(c.clock.turns, 1); // only the active faction ticked
+  advanceFactionDays({ factions: [a, b, c] }, TURN_LENGTH_DAYS, 1);
+  assert.equal(c.clock.turns, 2); // only c fires again on the day clock
+  assert.equal(a.clock.turns, 0);
+  assert.equal(b.clock.turns, 0);
 });
 
 test("faction turns are deterministic for a given seed + state", () => {
@@ -327,7 +324,7 @@ test("a roaming faction with no passable placed neighbour stays put", () => {
   assert.deepEqual(f.holdings[0], { q: 0, r: 0 });
 });
 
-test("a spreading faction claims one adjacent hex per turn, up to the cap", () => {
+test("a spreading faction claims one adjacent hex per turn and keeps growing (no cap)", () => {
   const world = placedWorld({ seed: 2 });
   const f = factionAt(2, 0, 0, 0, "cult");
   world.factions.push(f);
@@ -335,8 +332,9 @@ test("a spreading faction claims one adjacent hex per turn, up to the cap", () =
   assert.equal(f.holdings.length, 2, "grew by one on the first turn");
   const nb = neighbors(0, 0).some((n) => n.q === f.holdings[1].q && n.r === f.holdings[1].r);
   assert.ok(nb, "the new holding is adjacent to the first");
-  for (let i = 0; i < 20; i++) advanceFactionTurn(world, world.seed);
-  assert.equal(f.holdings.length, HOLDING_CAP, "stops growing at the cap");
+  // No HOLDING_CAP any more: a lone faction fills the reachable ground unbounded.
+  for (let i = 0; i < 30; i++) advanceFactionTurn(world, world.seed);
+  assert.ok(f.holdings.length > 6, `grew to ${f.holdings.length} holdings, past the old cap of 6`);
 });
 
 test("an unmapped-mobility archetype defaults to static (never changes holdings)", () => {
@@ -455,67 +453,153 @@ test("factionHookContext is deterministic for a given rng + tables", () => {
   assert.deepEqual(factionHookContext(f, seq(0.3, 0.1), t), factionHookContext(f, seq(0.3, 0.1), t));
 });
 
-// --- Auto-fire faction hooks (Phase 8.12) --------------------------------
+// --- Expansion engine: contention, elimination, events (Phase 8.15) ------
+// moveOrSpread is reached through advanceFactionTurn (its per-turn rng is
+// subRng(seed,"factionturn",id,turns)), so these drive the turn and read the
+// returned FactionEvent[] and the mutated holdings.
 
-const activeFaction = (extra = {}) => ({
-  id: "faction:0", status: "active", strength: 3, holdings: [{ q: 5, r: 0 }], ...extra,
+// A plain spreading faction with a chosen strength and single holding (full
+// control over the contest, unlike the rolled generateFaction).
+const spreader = (id, q, r, strength) => ({
+  id, status: "active", archetype: "cult", strength, disposition: "neutral",
+  goal: { kind: "seize the region", progress: 0, max: 8 }, holdings: [{ q, r }],
+  clock: { turns: 0, sinceTurn: 0 },
 });
-const PARTY = { q: 0, r: 0 };
-
-test("autoHookChance is 0 for an inactive faction, no party, or no holding", () => {
-  assert.equal(autoHookChance(activeFaction({ status: "dormant" }), PARTY), 0);
-  assert.equal(autoHookChance(activeFaction({ status: "destroyed" }), PARTY), 0);
-  assert.equal(autoHookChance(activeFaction(), null), 0);
-  assert.equal(autoHookChance(activeFaction({ holdings: [] }), PARTY), 0);
-  assert.equal(autoHookChance(null, PARTY), 0);
+// An ACTIVE holder that never acts (unmapped archetype → static): a fixed
+// defender that stays put so we can isolate the attacker's contest.
+const staticHolder = (id, q, r, strength) => ({
+  id, status: "active", archetype: "wandering scholars", strength, disposition: "neutral",
+  goal: { kind: "seize the region", progress: 0, max: 8 }, holdings: [{ q, r }],
+  clock: { turns: 0, sinceTurn: 0 },
 });
-
-test("autoHookChance rises with strength and falls with distance", () => {
-  const weak = autoHookChance(activeFaction({ strength: 2 }), PARTY);
-  const strong = autoHookChance(activeFaction({ strength: 4 }), PARTY);
-  assert.ok(strong > weak, `strong ${strong} > weak ${weak}`);
-
-  const near = autoHookChance(activeFaction({ holdings: [{ q: 1, r: 0 }] }), PARTY);
-  const far = autoHookChance(activeFaction({ holdings: [{ q: 12, r: 0 }] }), PARTY);
-  assert.ok(near > far, `near ${near} > far ${far}`);
-});
-
-test("autoHookChance never exceeds the cap", () => {
-  // A very strong faction the party stands on would exceed 0.2 uncapped.
-  const c = autoHookChance(activeFaction({ strength: 99, holdings: [{ q: 0, r: 0 }] }), PARTY);
-  assert.ok(c <= 0.2 + 1e-9, `chance ${c} <= cap`);
+// A two-hex world: only (0,0) and (1,0) placed, so a faction at (0,0) has exactly
+// one frontier hex — (1,0) — forcing a contest when a rival holds it.
+const contestWorld = () => ({
+  seed: 0, factions: [],
+  hexes: {
+    [axialKey(0, 0)]: { coords: { q: 0, r: 0 }, placed: true, terrain: "Plains" },
+    [axialKey(1, 0)]: { coords: { q: 1, r: 0 }, placed: true, terrain: "Plains" },
+  },
 });
 
-test("rollAutoHookCount is 0 when the chance is 0 or days < 1", () => {
-  const alwaysLow = () => 0.999;
-  assert.equal(rollAutoHookCount(activeFaction({ status: "dormant" }), PARTY, 30, () => 0), 0);
-  assert.equal(rollAutoHookCount(activeFaction(), PARTY, 0, () => 0), 0);
-  assert.equal(rollAutoHookCount(activeFaction(), PARTY, 30, alwaysLow), 0); // rolls never beat the chance
+test("spreading onto empty ground returns a claim event and adds that hex", () => {
+  const world = placedWorld({ seed: 2 });
+  const f = factionAt(2, 0, 0, 0, "cult");
+  world.factions.push(f);
+  const events = advanceFactionTurn(world, world.seed);
+  const claim = events.find((e) => e.kind === "claim" && e.factionId === f.id);
+  assert.ok(claim, "emitted a claim event");
+  assert.ok(f.holdings.some((h) => h.q === claim.q && h.r === claim.r), "the claimed hex was added");
 });
 
-test("rollAutoHookCount is capped at AUTO_HOOK_CAP even if every day hits", () => {
-  const alwaysHit = () => 0; // 0 < any positive chance → every day fires
-  const n = rollAutoHookCount(activeFaction({ strength: 4, holdings: [{ q: 0, r: 0 }] }), PARTY, 50, alwaysHit);
-  assert.equal(n, AUTO_HOOK_CAP);
-});
-
-test("rollAutoHookCount is deterministic for a given rng stream", () => {
-  const f = activeFaction({ strength: 4, holdings: [{ q: 1, r: 0 }] });
-  const a = rollAutoHookCount(f, PARTY, 40, subRng(9, "autohook", "faction:0", 0));
-  const b = rollAutoHookCount(f, PARTY, 40, subRng(9, "autohook", "faction:0", 0));
-  assert.equal(a, b);
-});
-
-test("a louder/nearer faction fires more often than a faint one (statistical)", () => {
-  // Sum counts across many independent day-streams; loud+near should out-fire faint+far.
-  const loud = activeFaction({ strength: 4, holdings: [{ q: 1, r: 0 }] });
-  const faint = activeFaction({ strength: 2, holdings: [{ q: 11, r: 0 }] });
-  let loudTotal = 0, faintTotal = 0;
-  for (let s = 0; s < 200; s++) {
-    loudTotal += rollAutoHookCount(loud, PARTY, 7, subRng(s, "autohook", "loud", 0));
-    faintTotal += rollAutoHookCount(faint, PARTY, 7, subRng(s, "autohook", "faint", 0));
+test("a contest is strength-weighted and deterministic", () => {
+  // Attacker at (0,0) has only the rival hex (1,0) to grow into → forced contest.
+  const contest = (atkStrength, seed) => {
+    const world = contestWorld();
+    world.factions = [spreader("faction:0", 0, 0, atkStrength), staticHolder("faction:1", 1, 0, 1)];
+    return advanceFactionTurn(world, seed).some((e) => e.kind === "takeover");
+  };
+  let strongWins = 0, weakWins = 0;
+  for (let s = 0; s < 100; s++) {
+    if (contest(4, s)) strongWins++; // 4 vs 1 → ~0.8
+    if (contest(1, s)) weakWins++;   // 1 vs 1 → ~0.5
   }
-  assert.ok(loudTotal > faintTotal, `loud ${loudTotal} > faint ${faintTotal}`);
+  assert.ok(strongWins > weakWins, `strong ${strongWins} > weak ${weakWins}`);
+  assert.ok(strongWins >= 60, `a much stronger attacker wins the majority (${strongWins}/100)`);
+  // Same seed → same outcome.
+  assert.equal(contest(4, 7), contest(4, 7));
+});
+
+test("a won contest moves the hex loser→winner; a lost one changes nothing", () => {
+  // Find a 1-v-1 seed that the attacker wins, and one it loses (each ~50%).
+  const won = (seed) => {
+    const world = contestWorld();
+    world.factions = [spreader("faction:0", 0, 0, 1), staticHolder("faction:1", 1, 0, 1)];
+    return advanceFactionTurn(world, seed).some((e) => e.kind === "takeover");
+  };
+  let winSeed = -1, lossSeed = -1;
+  for (let s = 0; s < 500 && (winSeed < 0 || lossSeed < 0); s++) {
+    if (won(s)) { if (winSeed < 0) winSeed = s; } else if (lossSeed < 0) lossSeed = s;
+  }
+  assert.ok(winSeed >= 0 && lossSeed >= 0, "found both a winning and a losing seed");
+
+  // Win: hex moves, event names the loser.
+  {
+    const world = contestWorld();
+    const atk = spreader("faction:0", 0, 0, 1), def = staticHolder("faction:1", 1, 0, 1);
+    world.factions = [atk, def];
+    const events = advanceFactionTurn(world, winSeed);
+    assert.ok(events.some((e) => e.kind === "takeover" && e.fromFactionId === "faction:1"));
+    assert.ok(atk.holdings.some((h) => h.q === 1 && h.r === 0), "winner now holds it");
+    assert.ok(!def.holdings.some((h) => h.q === 1 && h.r === 0), "loser no longer holds it");
+  }
+  // Loss: repelled, nothing moves.
+  {
+    const world = contestWorld();
+    const atk = spreader("faction:0", 0, 0, 1), def = staticHolder("faction:1", 1, 0, 1);
+    world.factions = [atk, def];
+    const events = advanceFactionTurn(world, lossSeed);
+    assert.ok(events.some((e) => e.kind === "repelled" && e.fromFactionId === "faction:1"));
+    assert.equal(atk.holdings.length, 1, "attacker gained nothing");
+    assert.ok(def.holdings.some((h) => h.q === 1 && h.r === 0), "defender kept it");
+  }
+});
+
+test("a faction reduced to zero holdings is destroyed, emits eliminated, and stops acting", () => {
+  // An overwhelming attacker (1000 vs 1 → win prob ~0.999) takes the defender's
+  // only hex on the first seed that wins → the defender drops to 0 holdings.
+  for (let seed = 0; seed < 20; seed++) {
+    const w = contestWorld();
+    const atk = spreader("faction:0", 0, 0, 1000), def = staticHolder("faction:1", 1, 0, 1);
+    w.factions = [atk, def];
+    const events = advanceFactionTurn(w, seed);
+    if (!events.some((e) => e.kind === "eliminated")) continue;
+    assert.equal(def.status, "destroyed", "loser at 0 holdings is destroyed");
+    assert.equal(def.holdings.length, 0);
+    assert.ok(events.some((e) => e.kind === "eliminated" && e.factionId === "faction:1" && e.byFactionId === "faction:0"));
+    // A destroyed faction is skipped on the next turn (doesn't tick).
+    const before = def.clock.turns;
+    advanceFactionTurn(w, seed + 1);
+    assert.equal(def.clock.turns, before, "a destroyed faction no longer acts");
+    return;
+  }
+  assert.fail("expected an elimination within 20 seeds");
+});
+
+test("a roaming faction emits move (dropping poiId), avoids rival hexes, and stays when boxed in", () => {
+  // Open ground: the roamer relocates and drops its poiId.
+  const world = placedWorld({ seed: 1 });
+  const f = factionAt(1, 0, 0, 0, "bandits");
+  f.holdings[0].poiId = "poi:0"; // started at a named POI
+  world.factions.push(f);
+  const events = advanceFactionTurn(world, world.seed);
+  const mv = events.find((e) => e.kind === "move" && e.factionId === f.id);
+  assert.ok(mv, "emitted a move event");
+  assert.ok(!("poiId" in f.holdings[0]), "poiId dropped now the camp roams the field");
+  assert.deepEqual(f.holdings[0], { q: mv.q, r: mv.r });
+
+  // Boxed in by a rival: the only neighbour is rival-held → the roamer stays put.
+  const boxed = contestWorld();
+  const roamer = {
+    id: "faction:0", status: "active", archetype: "bandits", strength: 2, disposition: "hostile",
+    goal: { kind: "raid the frontier", progress: 0, max: 8 }, holdings: [{ q: 0, r: 0 }], clock: { turns: 0, sinceTurn: 0 },
+  };
+  boxed.factions = [roamer, staticHolder("faction:1", 1, 0, 2)];
+  const ev2 = advanceFactionTurn(boxed, boxed.seed);
+  assert.ok(!ev2.some((e) => e.factionId === "faction:0"), "a boxed-in roamer emits nothing");
+  assert.deepEqual(roamer.holdings[0], { q: 0, r: 0 }, "and does not move onto the rival hex");
+});
+
+test("advanceFactionTurn / advanceFactionDays return well-formed FactionEvent arrays", () => {
+  const KINDS = new Set(["claim", "move", "takeover", "repelled", "eliminated"]);
+  const world = placedWorld({ seed: 2 });
+  world.factions.push(factionAt(2, 0, 0, 0, "cult"));
+  const t = advanceFactionTurn(world, world.seed);
+  assert.ok(Array.isArray(t));
+  for (const e of t) { assert.ok(KINDS.has(e.kind)); assert.equal(typeof e.factionId, "string"); }
+  const d = advanceFactionDays(world, TURN_LENGTH_DAYS, world.seed);
+  assert.ok(Array.isArray(d));
+  for (const e of d) { assert.ok(KINDS.has(e.kind)); assert.equal(typeof e.factionId, "string"); }
 });
 
 // --- Region "something is stirring" hooks (Phase 8.14) -------------------

@@ -14,7 +14,7 @@
 
 import { rollTable } from "../core/table.js";
 import { subRng } from "../core/rng.js";
-import { neighbors, axialKey, axialDistance } from "../core/hexgeo.js";
+import { neighbors, axialKey } from "../core/hexgeo.js";
 import { TRAVEL_COST } from "./travel.js";
 import { factionName } from "./faction-name.js";
 
@@ -145,7 +145,6 @@ const ARCHETYPE_MOBILITY = {
   bandits: "roaming", "monstrous tribe": "roaming", "mercenary company": "roaming",
   cult: "spreading", "thieves' guild": "spreading", "merchant guild": "spreading", "noble house": "spreading",
 };
-export const HOLDING_CAP = 6; // a spreading faction stops growing here (tunable)
 
 const isActive = (f) => (f.status || "active") === "active";
 const ensureClock = (f) => (f.clock || (f.clock = { turns: 0, sinceTurn: 0 }));
@@ -164,27 +163,50 @@ function passableNeighborsOf(world, q, r) {
     .sort((a, b) => a.q - b.q || a.r - b.r); // stable order before the rng pick
 }
 
-// The faction's spatial act for one turn (Phase 8.13), by archetype mobility.
-// Deterministic: consumes the turn's rng only when there's a candidate hex.
+/**
+ * @typedef {{
+ *   kind: "claim"|"move"|"takeover"|"repelled"|"eliminated",
+ *   factionId: string,        // the acting faction (for "eliminated": the faction destroyed)
+ *   q?: number, r?: number,   // the hex acted on (absent on "eliminated")
+ *   fromFactionId?: string,   // "takeover"/"repelled": the rival that held/holds the hex
+ *   byFactionId?: string,     // "eliminated": the faction that finished it off
+ * }} FactionEvent
+ */
+
+// The first ACTIVE faction other than exceptId whose holdings include (q,r), or
+// null. The "who holds this hex" read that makes the frontier contestable. Pure.
+function holderOf(world, q, r, exceptId) {
+  for (const f of (world && world.factions) || []) {
+    if (!isActive(f) || f.id === exceptId) continue;
+    if ((f.holdings || []).some((h) => h.q === q && h.r === r)) return f;
+  }
+  return null;
+}
+
+// The faction's spatial act for one turn (Phase 8.15) — now uncapped, contested,
+// and event-emitting. A roaming warband relocates its camp; a spreading power grows
+// into open ground first and only fights a rival at the border. Returns 0–2 events.
+// Deterministic: draws the turn's rng only when there's a candidate hex, and the
+// contest roll (when it happens) is the last draw.
 function moveOrSpread(world, faction, rng) {
-  const mobility = ARCHETYPE_MOBILITY[faction.archetype] || "static";
-  if (mobility === "static") return;
+  const mobility = ARCHETYPE_MOBILITY[faction.archetype];
+  if (mobility !== "roaming" && mobility !== "spreading") return []; // unknown → static
   const holdings = faction.holdings || (faction.holdings = []);
   const held = new Set(holdings.map((h) => axialKey(h.q, h.r)));
 
   if (mobility === "roaming") {
     const primary = holdings[0];
-    if (!primary) return;
+    if (!primary) return [];
     const cands = passableNeighborsOf(world, primary.q, primary.r)
-      .filter((n) => !held.has(axialKey(n.q, n.r)));
-    if (!cands.length) return;
+      .filter((n) => !held.has(axialKey(n.q, n.r)) && !holderOf(world, n.q, n.r, faction.id));
+    if (!cands.length) return [];
     const pick = cands[Math.floor(rng() * cands.length)];
     holdings[0] = { q: pick.q, r: pick.r }; // camp is now in the field — poiId dropped
-    return;
+    return [{ kind: "move", factionId: faction.id, q: pick.q, r: pick.r }];
   }
 
-  // spreading — claim one passable placed hex adjacent to the blob, up to the cap.
-  if (holdings.length >= HOLDING_CAP) return;
+  // spreading (no cap): the frontier is every passable placed hex adjacent to the
+  // blob that this faction doesn't already hold, deduped and q,r-sorted.
   const seen = new Set();
   const frontier = [];
   for (const h of holdings) {
@@ -195,19 +217,47 @@ function moveOrSpread(world, faction, rng) {
       frontier.push(n);
     }
   }
-  if (!frontier.length) return;
+  if (!frontier.length) return [];
   frontier.sort((a, b) => a.q - b.q || a.r - b.r);
-  const pick = frontier[Math.floor(rng() * frontier.length)];
-  holdings.push({ q: pick.q, r: pick.r });
+  // Prefer empty ground; only contest a rival-held hex when there's no open frontier.
+  const empty = [], rival = [];
+  for (const n of frontier) (holderOf(world, n.q, n.r, faction.id) ? rival : empty).push(n);
+
+  if (empty.length) {
+    const pick = empty[Math.floor(rng() * empty.length)];
+    holdings.push({ q: pick.q, r: pick.r });
+    return [{ kind: "claim", factionId: faction.id, q: pick.q, r: pick.r }];
+  }
+  if (rival.length) {
+    const pick = rival[Math.floor(rng() * rival.length)];
+    const def = holderOf(world, pick.q, pick.r, faction.id);
+    const atk = faction.strength || 1, dfn = (def && def.strength) || 1;
+    if (rng() < atk / (atk + dfn)) {
+      // win: the hex moves from loser to winner
+      def.holdings = (def.holdings || []).filter((h) => !(h.q === pick.q && h.r === pick.r));
+      holdings.push({ q: pick.q, r: pick.r });
+      const events = [{ kind: "takeover", factionId: faction.id, q: pick.q, r: pick.r, fromFactionId: def.id }];
+      if (def.holdings.length === 0) {
+        def.status = "destroyed";
+        events.push({ kind: "eliminated", factionId: def.id, byFactionId: faction.id });
+      }
+      return events;
+    }
+    // loss: nothing changes
+    return [{ kind: "repelled", factionId: faction.id, q: pick.q, r: pick.r, fromFactionId: def.id }];
+  }
+  return [];
 }
 
 /**
  * Advance ONE turn for one faction (pure; mutates the faction). The goal
  * doom-clock ticks a segment, disposition occasionally drifts, and the faction
- * acts on the map by its archetype (move/spread/stay, 8.13). Strength is left
- * alone — a stable inherent value reserved for 8.12 hook loudness. rng calls
- * happen in a fixed order so the outcome is deterministic for a given stream.
- * Not exported — reached via advanceFactionTurn / advanceFactionDays.
+ * acts on the map by its archetype (move/spread/contest, 8.15). Strength now also
+ * decides contested hexes. rng calls happen in a fixed order (drift, then the
+ * spatial pick, then — only when contesting — the contest roll) so the outcome is
+ * deterministic for a given stream. Not exported — reached via
+ * advanceFactionTurn / advanceFactionDays.
+ * @returns {FactionEvent[]} what the faction did on the map this turn (0–2 events)
  */
 function tickFaction(world, faction, rng) {
   const g = faction.goal || (faction.goal = { progress: 0, max: 0 });
@@ -219,10 +269,10 @@ function tickFaction(world, faction, rng) {
       faction.disposition = DISPOSITIONS[j];
     }
   }
-  moveOrSpread(world, faction, rng);
+  const events = moveOrSpread(world, faction, rng);
   const clock = ensureClock(faction);
   clock.turns = (clock.turns ?? 0) + 1;
-  return faction;
+  return events;
 }
 
 // Deterministic per-turn stream: keyed on the faction id + its turn ordinal, so
@@ -232,19 +282,18 @@ const turnRng = (seed, faction) => subRng(seed, "factionturn", faction.id, ensur
 /**
  * MANUAL turn (Phase 8.10) — advance exactly one turn for every ACTIVE faction,
  * independent of the day clock (leaves `clock.sinceTurn` untouched). Mutates the
- * world. Returns how many factions ticked.
+ * world. A faction destroyed earlier in the loop is skipped by the isActive guard.
  * @param {object} world
  * @param {number|string} seed world seed
- * @returns {number}
+ * @returns {FactionEvent[]} every event across the factions ticked, in turn order
  */
 export function advanceFactionTurn(world, seed) {
-  let n = 0;
+  const events = [];
   for (const f of world.factions || []) {
     if (!isActive(f)) continue;
-    tickFaction(world, f, turnRng(seed, f));
-    n++;
+    events.push(...tickFaction(world, f, turnRng(seed, f)));
   }
-  return n;
+  return events;
 }
 
 /**
@@ -256,22 +305,21 @@ export function advanceFactionTurn(world, seed) {
  * @param {object} world
  * @param {number} days days elapsed
  * @param {number|string} seed world seed
- * @returns {number} total turns fired across all factions
+ * @returns {FactionEvent[]} every event across every turn fired, in turn order
  */
 export function advanceFactionDays(world, days, seed) {
-  if (!Number.isFinite(days) || days < 1) return 0;
-  let fired = 0;
+  if (!Number.isFinite(days) || days < 1) return [];
+  const events = [];
   for (const f of world.factions || []) {
     if (!isActive(f)) continue;
     const clock = ensureClock(f);
     clock.sinceTurn = (clock.sinceTurn || 0) + days;
     while (clock.sinceTurn >= TURN_LENGTH_DAYS) {
-      tickFaction(world, f, turnRng(seed, f));
+      events.push(...tickFaction(world, f, turnRng(seed, f)));
       clock.sinceTurn -= TURN_LENGTH_DAYS;
-      fired++;
     }
   }
-  return fired;
+  return events;
 }
 
 // --- Faction-emitted hooks (Phase 8.11, Arc C) ---------------------------
@@ -322,48 +370,6 @@ export function factionHookContext(faction, rng, tables) {
     ? rumour
     : rollTable(tables.get("hook-source"), rng).value;
   return { verb: "threat", claim, source };
-}
-
-// --- Auto-fire faction hooks (Phase 8.12) --------------------------------
-// As days pass, a faction's deeds reach the party on their own — likelier when the
-// faction is LOUD (strength) and NEAR (party → its lair): "news by distance". This
-// is where strength (stable since 8.13) is finally read. Rules-as-JS-consts.
-const AUTO_HOOK_BASE = 0.04; // per strength-point per day, at the party's doorstep
-const AUTO_HOOK_MAX = 0.2;   // cap — even a strong neighbour isn't a firehose
-export const AUTO_HOOK_CAP = 2; // most auto-hooks one advance spawns per faction
-
-/**
- * Per-day chance an active faction's deeds reach the party. 0 for an inactive
- * faction, or with no party / no holding. Rises with strength, falls with the
- * party→lair distance, capped at AUTO_HOOK_MAX. Pure.
- * @param {object} faction
- * @param {{q:number,r:number}} party party marker position
- * @returns {number} probability in [0, AUTO_HOOK_MAX]
- */
-export function autoHookChance(faction, party) {
-  if (!faction || (faction.status || "active") !== "active") return 0;
-  const lair = (faction.holdings || [])[0];
-  if (!lair || !party) return 0;
-  const dist = axialDistance(party.q, party.r, lair.q, lair.r);
-  return Math.min((AUTO_HOOK_BASE * (faction.strength || 1)) / (1 + dist), AUTO_HOOK_MAX);
-}
-
-/**
- * How many hooks a faction auto-emits over `days` elapsed — one roll per day at
- * autoHookChance, capped at AUTO_HOOK_CAP so a long march doesn't flood. Pure and
- * deterministic for a given rng stream (the app seeds it on the session day).
- * @param {object} faction
- * @param {{q:number,r:number}} party
- * @param {number} days elapsed days
- * @param {() => number} rng
- * @returns {number}
- */
-export function rollAutoHookCount(faction, party, days, rng) {
-  const chance = autoHookChance(faction, party);
-  if (chance <= 0 || !(days >= 1)) return 0;
-  let count = 0;
-  for (let i = 0; i < days; i++) if (rng() < chance) count++;
-  return Math.min(count, AUTO_HOOK_CAP);
 }
 
 // --- Region "something is stirring" hooks (Phase 8.14) -------------------
