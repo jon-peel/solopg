@@ -332,6 +332,37 @@ export function buildRegionHook(tables, rng, ctx) {
   };
 }
 
+/**
+ * Build an EXPANSION hook (Phase 8.15) — a faction's on-map growth reaching a
+ * place worth an adventure lead. Points at the AFFECTED place and stores the actor
+ * (faction name) so the sentence composes at render. The app supplies the place
+ * name + a flavour `claim` (expansionHookContext) and tags the faction via
+ * sourcePower; the engine is otherwise unchanged.
+ * @param {{ actor:string, claim:string,
+ *   subject:{name:string,type:string,q:number,r:number,poiId?:string,terrain?:string},
+ *   origin:{q:number,r:number}, index?:number, sourcePower?:string }} ctx
+ */
+export function buildExpansionHook(ctx) {
+  const s = ctx.subject;
+  return {
+    id: ctx.index != null ? `hook:${ctx.index}` : undefined,
+    build: HOOK_BUILD,
+    pattern: "expansion",
+    verb: "expansion",
+    actor: ctx.actor,
+    subject: { name: s.name, type: s.type, poiId: s.poiId },
+    origin: { q: ctx.origin.q, r: ctx.origin.r },
+    target: { q: s.q, r: s.r, poiId: s.poiId },
+    bearing: bearingTo(ctx.origin, s),
+    distance: axialDistance(ctx.origin.q, ctx.origin.r, s.q, s.r),
+    targetTerrain: s.terrain || null,
+    claim: ctx.claim,
+    source: null,
+    status: "open",
+    ...(ctx.sourcePower ? { sourcePower: ctx.sourcePower } : {}),
+  };
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the hook list (e.g. "Threat: Ruin — Troll lair"). */
@@ -339,6 +370,7 @@ export function hookName(hook) {
   if (!hook) return null;
   if (hook.pattern === "chain") return `Hunt → ${hook.subject.name}`;
   if (hook.pattern === "region") return `Stirring: ${hook.subject.name}`;
+  if (hook.pattern === "expansion") return `${cap(hook.actor)}: ${hook.subject.name}`;
   return `${cap(hook.verb)}: ${hook.subject.name}`;
 }
 
@@ -386,6 +418,10 @@ export function hookDescription(hook, opts = {}) {
   } else if (hook.pattern === "region") {
     // A whole tract escalating — no target POI, no distance; just the omen.
     line0 = `Something stirs in ${hook.subject.name}: ${hook.claim}.`;
+  } else if (hook.pattern === "expansion") {
+    // A faction's growth reaching a place: name the faction (actor), what it did
+    // (claim), the place, and where it is (whither). No reward line.
+    line0 = `${cap(hook.actor)} ${hook.claim} ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "escort") {
     line0 = `${hook.source}: carry ${hook.cargo} to ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "map") {

@@ -14,6 +14,7 @@ import {
   buildLocalHook,
   buildEscortHook,
   buildRegionHook,
+  buildExpansionHook,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -27,7 +28,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext, rollAutoHookCount, rollRegionStir } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext, expansionHookContext, rollRegionStir } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRegions } from "../gen/regions.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
@@ -337,40 +338,112 @@ function renderDayReadout() {
 async function advanceDays(n) {
   if (!Number.isFinite(n) || n < 1) return;
   sessionDay += n;
-  // Fire any faction turns the elapsed days earn (Phase 8.10), then roll auto-hooks
-  // for the elapsed days (Phase 8.12). Both mutate current.factions/current.hooks;
-  // the caller persists once afterward (travel + onProgressDays both do).
+  // Fire the faction turns the elapsed days earn (Phase 8.10); each turn now returns
+  // events (8.15) that we (1) log and (2) turn into hooks. Then the region "stirring"
+  // pass (8.14). All mutate current.factions/current.hooks; the caller persists once.
   if (current) {
-    const turns = advanceFactionDays(current, n, current.seed);
-    if (turns > 0) logLine(`${turns} faction turn${turns === 1 ? "" : "s"} passed.`);
-    await autoFireFactionHooks(n);
+    const events = advanceFactionDays(current, n, current.seed);
+    logFactionEvents(events);
+    emitExpansionHooks(events);
+    const active = getFactions(current).filter((f) => (f.status || "active") === "active");
+    if (active.length) await autoFireRegionHooks(active, n, sessionDay - n);
   }
   renderDayReadout();
 }
 
-// Phase 8.12 — as days pass, active factions occasionally emit a hook on their own,
-// chance scaled by proximity (party → lair) × strength (rollAutoHookCount). Pushes
-// silently and logs a quiet line; the caller's single persistAndRefresh saves them.
-async function autoFireFactionHooks(days) {
-  const party = current.party ? { q: current.party.q, r: current.party.r } : null;
-  if (!party) return;
-  const factions = getFactions(current).filter((f) => (f.status || "active") === "active");
-  if (!factions.length) return;
-  const dayStart = sessionDay - days; // the day before this advance — a stable per-advance seed
-  let tables = null;
-  for (const f of factions) {
-    const rng = subRng(current.seed, "autohook", f.id, dayStart);
-    const count = rollAutoHookCount(f, party, days, rng);
-    for (let i = 0; i < count; i++) {
-      if (!tables) tables = await loadTables(FACTION_HOOK_TABLE_IDS);
-      if (!Array.isArray(current.hooks)) current.hooks = [];
-      const hook = buildFactionHook(f, tables);
-      if (!hook) break;
-      current.hooks.push(hook);
-      logLine(`Word reaches you — ${hookName(hook)} (${f.name}).`);
-    }
+// Phase 8.15 (B) — narrate every faction event on the turn (both the day-tick and
+// the manual button route through here). One legible line per event; names resolve
+// via getFactions and a place label via destinationLabel.
+function logFactionEvents(events) {
+  if (!Array.isArray(events) || !events.length) return;
+  const factions = getFactions(current);
+  const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
+  const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
+  for (const ev of events) {
+    if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} spreads into ${placeOf(ev.q, ev.r)}.`);
+    else if (ev.kind === "move") logLine(`${nameOf(ev.factionId)} moves camp to ${placeOf(ev.q, ev.r)}.`);
+    else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
+    else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
+    else if (ev.kind === "eliminated") logLine(`${nameOf(ev.factionId)} is destroyed.`);
   }
-  await autoFireRegionHooks(factions, days, dayStart);
+}
+
+// Phase 8.15 (C) — what a hex carries, deciding whether an expansion event is worth
+// a hook. Priority: settlement > poi > road > bare.
+function hexImpact(world, q, r) {
+  const hex = getHex(world, q, r);
+  if (hex && hex.settlement && hex.settlement.present) return "settlement";
+  if (hex && Array.isArray(hex.pois) && hex.pois.length) return "poi";
+  if (roadHexKeySet(world.roads).has(axialKey(q, r))) return "road";
+  return "bare";
+}
+
+// A spreading faction taking a POI hex chases out whoever held it and installs
+// itself as the new occupant (Phase 8.15 C). A roamer raid does NOT call this — the
+// camp leaves next turn — so only claim/takeover on a spreading faction rewrite.
+function rewriteOccupant(faction, q, r) {
+  const hex = getHex(current, q, r);
+  const poi = hex && (hex.pois || [])[0];
+  if (poi) poi.occupant = { kind: "occupied", by: faction.name, factionId: faction.id };
+}
+
+// The name a hook uses for the affected place, by impact class (Phase 8.15 C):
+// POI → its base name; settlement → its name; road → "the road by <town>" (or a
+// bare terrain road when no settlement is near).
+function placeLabel(world, q, r, impact) {
+  const hex = getHex(world, q, r);
+  if (impact === "poi") {
+    const poi = hex && (hex.pois || [])[0];
+    return poi ? poiBaseName(poi) : `(${q}, ${r})`;
+  }
+  if (impact === "settlement") return destinationLabel(hex, q, r);
+  const near = nearestSettlementTo(world, { q, r });
+  if (near) return `the road by ${destinationLabel(getHex(world, near.q, near.r), near.q, near.r)}`;
+  return hex && hex.terrain ? `the ${hex.terrain.toLowerCase()} road` : "the road";
+}
+
+// Phase 8.15 (C) — turn SIGNIFICANT expansion events into hooks. Only claim /
+// takeover / move onto a settlement / poi / road matter (bare → the log line is
+// enough; repelled / eliminated → log only). Capped at 2 hooks per faction per
+// advance so a busy turn doesn't flood. A spreading claim/takeover onto a POI also
+// rewrites the occupant (even past the hook cap — the faction holds it now). Pushes
+// to current.hooks + logs; the caller persists once.
+const EXPANSION_HOOKABLE = new Set(["claim", "takeover", "move"]);
+function emitExpansionHooks(events) {
+  if (!Array.isArray(events) || !events.length) return;
+  const perFaction = new Map(); // factionId -> hooks emitted this advance (cap 2)
+  for (const ev of events) {
+    if (!EXPANSION_HOOKABLE.has(ev.kind)) continue;
+    const faction = getFactions(current).find((f) => f.id === ev.factionId);
+    if (!faction) continue;
+    const impact = hexImpact(current, ev.q, ev.r);
+    if (impact === "bare") continue;
+    // Occupant rewrite is a state change, independent of the hook cap.
+    if (impact === "poi" && (ev.kind === "claim" || ev.kind === "takeover")) rewriteOccupant(faction, ev.q, ev.r);
+    if ((perFaction.get(ev.factionId) || 0) >= 2) continue;
+    perFaction.set(ev.factionId, (perFaction.get(ev.factionId) || 0) + 1);
+    if (!Array.isArray(current.hooks)) current.hooks = [];
+    const hex = getHex(current, ev.q, ev.r);
+    const poi = impact === "poi" && hex ? (hex.pois || [])[0] : null;
+    const origin = nearestSettlementTo(current, ev)
+      || (current.party ? { q: current.party.q, r: current.party.r } : { q: ev.q, r: ev.r });
+    const index = nextHookId(current);
+    const rng = subRng(current.seed, "expansion", faction.id, index);
+    const { claim } = expansionHookContext(faction, impact, rng);
+    const hook = buildExpansionHook({
+      actor: faction.name, claim,
+      subject: {
+        name: placeLabel(current, ev.q, ev.r, impact),
+        type: impact === "poi" ? "poi" : impact,
+        q: ev.q, r: ev.r,
+        poiId: poi ? poi.id : undefined,
+        terrain: hex ? hex.terrain : null,
+      },
+      origin, index, sourcePower: faction.id,
+    });
+    current.hooks.push(hook);
+    logLine(`Word from the frontier — ${hookName(hook)}.`);
+  }
 }
 
 // Phase 8.14 — a whole named tract "stirs" when the factions seated in it escalate
@@ -424,13 +497,18 @@ async function onProgressDays() {
 }
 
 // Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the day
-// clock: fires exactly one turn for every active faction and persists.
+// clock: fires exactly one turn for every active faction. The turn returns events
+// (8.15) that we log and turn into hooks, then persist. No day-driven region pass
+// here (that's the day clock's job).
 async function onAdvanceFactionTurn() {
   if (!current) return;
-  const n = advanceFactionTurn(current, current.seed);
-  if (!n) return logLine("No active factions to advance.");
+  const active = getFactions(current).filter((f) => (f.status || "active") === "active").length;
+  if (!active) return logLine("No active factions to advance.");
+  const events = advanceFactionTurn(current, current.seed);
+  logFactionEvents(events);
+  emitExpansionHooks(events);
+  if (!events.length) logLine("The factions bide their time — no change on the map.");
   await persistAndRefresh();
-  logLine(`Advanced a faction turn for ${n} faction${n === 1 ? "" : "s"}.`);
 }
 
 // Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
@@ -1848,9 +1926,9 @@ function buildFactionHook(faction, tables) {
 }
 
 // "Stir up trouble" (Phase 8.11) — the manual button: build one faction hook, push
-// it, and surface it on the Hooks tab (the auto path, 8.12, reuses buildFactionHook
-// without the tab-jump). The hook NAMES the faction, describes a varied deed, and
-// points the party AT its lair.
+// it, and surface it on the Hooks tab. A deliberate GM nudge that still stands
+// alongside the day-driven expansion hooks (8.15). The hook NAMES the faction,
+// describes a varied deed, and points the party AT its lair.
 async function onStirTrouble(factionId) {
   if (!current) return;
   const faction = getFactions(current).find((f) => f.id === factionId);
