@@ -13,7 +13,6 @@ import {
   buildLocalHook,
   buildEscortHook,
   buildRegionHook,
-  buildExpansionHook,
   HOOK_BUILD,
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
@@ -623,60 +622,4 @@ test("buildRegionHook is deterministic for a given rng", () => {
   const a = buildRegionHook(tables(), mulberry32(9), { region: REGION, index: 0 });
   const b = buildRegionHook(tables(), mulberry32(9), { region: REGION, index: 0 });
   assert.deepEqual(a, b);
-});
-
-// --- Expansion hooks (Phase 8.15) ----------------------------------------
-// A faction's on-map growth reaching a place worth a lead. Points at the AFFECTED
-// place; stores the actor (faction name) + a flavour claim; no reward. Pure builder
-// (the app supplies the place name/claim), so no tables/rng needed here.
-
-const EXP_CTX = {
-  actor: "The Ashen Hand",
-  claim: "have seized",
-  subject: { name: "Flooded cistern", type: "poi", q: 2, r: -1, poiId: "poi:0", terrain: "Swamp" },
-  origin: { q: 0, r: 0 },
-  index: 4,
-  sourcePower: "faction:2",
-};
-
-test("buildExpansionHook: pattern expansion, points at the place, stores actor + sourcePower", () => {
-  const h = buildExpansionHook(EXP_CTX);
-  assert.equal(h.pattern, "expansion");
-  assert.equal(h.verb, "expansion");
-  assert.equal(h.id, "hook:4");
-  assert.equal(h.build, HOOK_BUILD);
-  assert.equal(h.actor, "The Ashen Hand");
-  assert.equal(h.claim, "have seized");
-  assert.equal(h.sourcePower, "faction:2");
-  assert.deepEqual(h.subject, { name: "Flooded cistern", type: "poi", poiId: "poi:0" });
-  assert.deepEqual(h.target, { q: 2, r: -1, poiId: "poi:0" }); // → the place hex
-  assert.deepEqual(h.origin, { q: 0, r: 0 });
-  assert.equal(h.targetTerrain, "Swamp");
-  assert.equal(h.distance, axialDistance(0, 0, 2, -1));
-  assert.equal(h.bearing, bearingTo({ q: 0, r: 0 }, { q: 2, r: -1 }));
-  assert.equal(h.source, null);
-  assert.equal(h.status, "open");
-});
-
-test("buildExpansionHook omits sourcePower / id when not supplied", () => {
-  const { sourcePower, index, ...rest } = EXP_CTX;
-  const h = buildExpansionHook(rest);
-  assert.ok(!("sourcePower" in h));
-  assert.equal(h.id, undefined);
-});
-
-test("hookName / hookDescription render the expansion branch", () => {
-  const h = buildExpansionHook(EXP_CTX);
-  assert.equal(hookName(h), "The Ashen Hand: Flooded cistern");
-  const lines = hookDescription(h);
-  assert.equal(lines.length, 1); // one line, no reward
-  assert.match(lines[0], /^The Ashen Hand have seized Flooded cistern, /);
-  assert.match(lines[0], /\.$/);
-});
-
-test("an expansion hook on top of its origin reads 'close by'", () => {
-  const h = buildExpansionHook({ ...EXP_CTX, origin: { q: 2, r: -1 } });
-  assert.equal(h.distance, 0);
-  assert.equal(h.bearing, null);
-  assert.match(hookDescription(h)[0], /close by/);
 });

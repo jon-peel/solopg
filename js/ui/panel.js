@@ -692,23 +692,33 @@ export function renderSelectionPanel(model) {
       sel.appendChild(frow);
     }
 
-    // Claim for faction (Phase 8.9) — attach this hex to an EXISTING faction's
-    // holdings (a gang with several camps). A picker + button, shown only when a
-    // faction exists to claim for. Same <select>+button idiom as the Travel tab.
-    if (model.onClaimHolding && (model.factions || []).length) {
+    // Which faction runs this hex (Phase 8.15) — a single-owner picker. It shows
+    // the current holder (so the GM can see who runs the tile) and reassigns the
+    // hex on change; "None" clears it. Replaces the old add-only claim button.
+    if (model.onSetHexFaction && (model.factions || []).length) {
       const crow = document.createElement("div");
       crow.className = "tile-actions";
+      const label = document.createElement("span");
+      label.className = "faction-select-label";
+      label.textContent = "Run by:";
       const pick = document.createElement("select");
       pick.className = "faction-select";
-      pick.setAttribute("aria-label", "Faction to claim for");
+      pick.setAttribute("aria-label", "Faction that runs this hex");
+      const held = model.factions.find((f) => (f.holdings || []).some((hd) => hd.q === coord.q && hd.r === coord.r));
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "None";
+      pick.appendChild(none);
       for (const f of model.factions) {
         const opt = document.createElement("option");
         opt.value = f.id;
         opt.textContent = f.name;
+        if (held && held.id === f.id) opt.selected = true;
         pick.appendChild(opt);
       }
+      pick.addEventListener("change", () => model.onSetHexFaction(pick.value || null));
+      crow.appendChild(label);
       crow.appendChild(pick);
-      crow.appendChild(actionButton("Claim for faction", () => model.onClaimHolding(pick.value)));
       sel.appendChild(crow);
     }
   }

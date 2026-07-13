@@ -14,7 +14,6 @@ import {
   buildLocalHook,
   buildEscortHook,
   buildRegionHook,
-  buildExpansionHook,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -28,7 +27,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext, expansionHookContext, rollRegionStir } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext, rollRegionStir } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRegions } from "../gen/regions.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
@@ -338,13 +337,13 @@ function renderDayReadout() {
 async function advanceDays(n) {
   if (!Number.isFinite(n) || n < 1) return;
   sessionDay += n;
-  // Fire the faction turns the elapsed days earn (Phase 8.10); each turn now returns
-  // events (8.15) that we (1) log and (2) turn into hooks. Then the region "stirring"
+  // Fire the faction turns the elapsed days earn (Phase 8.10); each turn returns
+  // events (8.15) that we LOG as running commentary — expansion is played as
+  // subtext (the map + log), not auto-generated hooks. Then the region "stirring"
   // pass (8.14). All mutate current.factions/current.hooks; the caller persists once.
   if (current) {
     const events = advanceFactionDays(current, n, current.seed);
     logFactionEvents(events);
-    emitExpansionHooks(events);
     const active = getFactions(current).filter((f) => (f.status || "active") === "active");
     if (active.length) await autoFireRegionHooks(active, n, sessionDay - n);
   }
@@ -365,84 +364,6 @@ function logFactionEvents(events) {
     else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
     else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
     else if (ev.kind === "eliminated") logLine(`${nameOf(ev.factionId)} is destroyed.`);
-  }
-}
-
-// Phase 8.15 (C) — what a hex carries, deciding whether an expansion event is worth
-// a hook. Priority: settlement > poi > road > bare.
-function hexImpact(world, q, r) {
-  const hex = getHex(world, q, r);
-  if (hex && hex.settlement && hex.settlement.present) return "settlement";
-  if (hex && Array.isArray(hex.pois) && hex.pois.length) return "poi";
-  if (roadHexKeySet(world.roads).has(axialKey(q, r))) return "road";
-  return "bare";
-}
-
-// A spreading faction taking a POI hex chases out whoever held it and installs
-// itself as the new occupant (Phase 8.15 C). A roamer raid does NOT call this — the
-// camp leaves next turn — so only claim/takeover on a spreading faction rewrite.
-function rewriteOccupant(faction, q, r) {
-  const hex = getHex(current, q, r);
-  const poi = hex && (hex.pois || [])[0];
-  if (poi) poi.occupant = { kind: "occupied", by: faction.name, factionId: faction.id };
-}
-
-// The name a hook uses for the affected place, by impact class (Phase 8.15 C):
-// POI → its base name; settlement → its name; road → "the road by <town>" (or a
-// bare terrain road when no settlement is near).
-function placeLabel(world, q, r, impact) {
-  const hex = getHex(world, q, r);
-  if (impact === "poi") {
-    const poi = hex && (hex.pois || [])[0];
-    return poi ? poiBaseName(poi) : `(${q}, ${r})`;
-  }
-  if (impact === "settlement") return destinationLabel(hex, q, r);
-  const near = nearestSettlementTo(world, { q, r });
-  if (near) return `the road by ${destinationLabel(getHex(world, near.q, near.r), near.q, near.r)}`;
-  return hex && hex.terrain ? `the ${hex.terrain.toLowerCase()} road` : "the road";
-}
-
-// Phase 8.15 (C) — turn SIGNIFICANT expansion events into hooks. Only claim /
-// takeover / move onto a settlement / poi / road matter (bare → the log line is
-// enough; repelled / eliminated → log only). Capped at 2 hooks per faction per
-// advance so a busy turn doesn't flood. A spreading claim/takeover onto a POI also
-// rewrites the occupant (even past the hook cap — the faction holds it now). Pushes
-// to current.hooks + logs; the caller persists once.
-const EXPANSION_HOOKABLE = new Set(["claim", "takeover", "move"]);
-function emitExpansionHooks(events) {
-  if (!Array.isArray(events) || !events.length) return;
-  const perFaction = new Map(); // factionId -> hooks emitted this advance (cap 2)
-  for (const ev of events) {
-    if (!EXPANSION_HOOKABLE.has(ev.kind)) continue;
-    const faction = getFactions(current).find((f) => f.id === ev.factionId);
-    if (!faction) continue;
-    const impact = hexImpact(current, ev.q, ev.r);
-    if (impact === "bare") continue;
-    // Occupant rewrite is a state change, independent of the hook cap.
-    if (impact === "poi" && (ev.kind === "claim" || ev.kind === "takeover")) rewriteOccupant(faction, ev.q, ev.r);
-    if ((perFaction.get(ev.factionId) || 0) >= 2) continue;
-    perFaction.set(ev.factionId, (perFaction.get(ev.factionId) || 0) + 1);
-    if (!Array.isArray(current.hooks)) current.hooks = [];
-    const hex = getHex(current, ev.q, ev.r);
-    const poi = impact === "poi" && hex ? (hex.pois || [])[0] : null;
-    const origin = nearestSettlementTo(current, ev)
-      || (current.party ? { q: current.party.q, r: current.party.r } : { q: ev.q, r: ev.r });
-    const index = nextHookId(current);
-    const rng = subRng(current.seed, "expansion", faction.id, index);
-    const { claim } = expansionHookContext(faction, impact, rng);
-    const hook = buildExpansionHook({
-      actor: faction.name, claim,
-      subject: {
-        name: placeLabel(current, ev.q, ev.r, impact),
-        type: impact === "poi" ? "poi" : impact,
-        q: ev.q, r: ev.r,
-        poiId: poi ? poi.id : undefined,
-        terrain: hex ? hex.terrain : null,
-      },
-      origin, index, sourcePower: faction.id,
-    });
-    current.hooks.push(hook);
-    logLine(`Word from the frontier — ${hookName(hook)}.`);
   }
 }
 
@@ -498,15 +419,14 @@ async function onProgressDays() {
 
 // Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the day
 // clock: fires exactly one turn for every active faction. The turn returns events
-// (8.15) that we log and turn into hooks, then persist. No day-driven region pass
-// here (that's the day clock's job).
+// (8.15) that we log as running commentary (subtext, not hooks), then persist. No
+// day-driven region pass here (that's the day clock's job).
 async function onAdvanceFactionTurn() {
   if (!current) return;
   const active = getFactions(current).filter((f) => (f.status || "active") === "active").length;
   if (!active) return logLine("No active factions to advance.");
   const events = advanceFactionTurn(current, current.seed);
   logFactionEvents(events);
-  emitExpansionHooks(events);
   if (!events.length) logLine("The factions bide their time — no change on the map.");
   await persistAndRefresh();
 }
@@ -749,7 +669,7 @@ function renderSelection() {
     onCenterFaction,
     factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
     factions: hex && hex.placed ? getFactions(current) : [],
-    onClaimHolding: hex && hex.placed ? onClaimHolding : undefined,
+    onSetHexFaction: hex && hex.placed ? onSetHexFaction : undefined,
   });
 }
 
@@ -1850,22 +1770,26 @@ function onCenterFaction(id, index = 0) {
   if (hold) recenterOn(hold.q, hold.r);
 }
 
-// Claim the selected placed hex for an existing faction (Phase 8.9) — attaches
-// it (with its primary POI, if any) to that faction's holdings[]. Dedupes: a
-// faction can't hold the same hex twice.
-async function onClaimHolding(factionId) {
+// Set which faction runs the selected placed hex (Phase 8.15) — a single-owner
+// GM override from the hex detail picker. Clears the hex from any faction that
+// held it, then (for a real faction) attaches it with its primary POI. `null`
+// ("None") just clears ownership. Idempotent; persists only when something moved.
+async function onSetHexFaction(factionId) {
   if (!current || !selected) return;
-  const faction = getFactions(current).find((f) => f.id === factionId);
-  if (!faction) return;
   const { q, r } = selected;
   const hex = getHex(current, q, r);
   const poiId = hex && Array.isArray(hex.pois) && hex.pois[0] ? hex.pois[0].id : undefined;
-  if (!addHolding(faction, { q, r, poiId })) {
-    return logLine(`${faction.name} already holds (${q}, ${r}).`);
+  let changed = false;
+  for (const f of getFactions(current)) {
+    const before = (f.holdings || []).length;
+    f.holdings = (f.holdings || []).filter((h) => !(h.q === q && h.r === r));
+    if (f.holdings.length !== before) changed = true;
   }
-  setPanelTab("factions");
-  await persistAndRefresh();
-  logLine(`${faction.name} claims (${q}, ${r}) — now ${faction.holdings.length} holdings.`);
+  if (factionId) {
+    const faction = getFactions(current).find((f) => f.id === factionId);
+    if (faction && addHolding(faction, { q, r, poiId })) changed = true;
+  }
+  if (changed) await persistAndRefresh();
 }
 
 // The placed settlement nearest a point — where word of a faction's deeds reaches

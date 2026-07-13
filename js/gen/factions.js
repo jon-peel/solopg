@@ -420,39 +420,6 @@ export function rollRegionStir(factionsInRegion, days, rng) {
   return false;
 }
 
-// --- Expansion-hook flavour (Phase 8.15) ---------------------------------
-// When an expansion event becomes a hook, the faction's ARCHETYPE + what it
-// landed on (settlement / road / poi) choose the verb phrase. Rules-as-JS-consts
-// (small, archetype-keyed flavour), mirroring GOAL_RUMOUR. Phrasings read as
-// "‹Faction› ‹phrase› ‹place›", so they're written for a plural/collective subject.
-const SETTLEMENT_ACTION = {
-  cult: ["are winning converts in", "raise a shrine over"],
-  bandits: ["are extorting tribute from", "raid"],
-  "monstrous tribe": ["are raiding", "terrorise"],
-  "noble house": ["press their claim over", "install a magistrate in"],
-  "merchant guild": ["are cornering the trade of", "buy up"],
-  "thieves' guild": ["have opened a den in", "run a racket in"],
-  "mercenary company": ["garrison", "quarter their company in"],
-};
-const ROAD_ACTION = ["hold the road by", "waylay travellers near", "have set an ambush on the road by"];
-const POI_ACTION = ["have seized", "have occupied", "have taken"];
-
-/**
- * The verb phrase a faction contributes when its expansion becomes a hook, by the
- * impact class of the hex it took. Pure; deterministic for a given rng (one draw).
- * @param {object} faction
- * @param {"road"|"poi"|"settlement"} impact what the taken hex carried
- * @param {() => number} rng dedicated per-hook stream
- * @returns {{ claim:string }}
- */
-export function expansionHookContext(faction, impact, rng) {
-  const pick = (a) => a[Math.floor(rng() * a.length)];
-  if (impact === "road") return { claim: pick(ROAD_ACTION) };
-  if (impact === "poi") return { claim: pick(POI_ACTION) };
-  const opts = SETTLEMENT_ACTION[faction.archetype] || ["move against"];
-  return { claim: pick(opts) };
-}
-
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the factions list (just the name). */

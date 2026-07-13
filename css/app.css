@@ -460,6 +460,13 @@ button:hover {
   padding: 0.25rem 0.5rem;
 }
 
+/* "Run by:" label sitting beside the faction picker in the hex detail. */
+.faction-select-label {
+  align-self: center;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
 /* New World dropdown: a button that reveals a small size menu below it. */
 .menu-wrap {
   position: relative;

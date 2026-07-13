@@ -11,7 +11,6 @@ import {
   factionLabel,
   factionDescription,
   factionHookContext,
-  expansionHookContext,
   regionHeat,
   regionStirChance,
   rollRegionStir,
@@ -452,27 +451,6 @@ test("factionHookContext is deterministic for a given rng + tables", () => {
   const t = hookTables();
   const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
   assert.deepEqual(factionHookContext(f, seq(0.3, 0.1), t), factionHookContext(f, seq(0.3, 0.1), t));
-});
-
-// --- Expansion-hook flavour (Phase 8.15) ---------------------------------
-// The verb phrase an expansion event contributes, keyed by impact class: road/poi
-// from fixed lists, settlement from the archetype list (fallback for unknown).
-
-test("expansionHookContext picks an archetype-appropriate claim per impact class", () => {
-  const ROAD = new Set(["hold the road by", "waylay travellers near", "have set an ambush on the road by"]);
-  const POI = new Set(["have seized", "have occupied", "have taken"]);
-  const CULT = new Set(["are winning converts in", "raise a shrine over"]);
-  const cult = { archetype: "cult" };
-  assert.ok(ROAD.has(expansionHookContext(cult, "road", seq(0)).claim), "road claim from the road list");
-  assert.ok(POI.has(expansionHookContext(cult, "poi", seq(0)).claim), "poi claim from the poi list");
-  assert.ok(CULT.has(expansionHookContext(cult, "settlement", seq(0)).claim), "settlement claim from the cult list");
-  // An unmapped archetype falls back on a generic phrase for a settlement.
-  assert.equal(expansionHookContext({ archetype: "wandering scholars" }, "settlement", seq(0)).claim, "move against");
-});
-
-test("expansionHookContext is deterministic for a given rng", () => {
-  const f = { archetype: "bandits" };
-  assert.deepEqual(expansionHookContext(f, "settlement", seq(0.7)), expansionHookContext(f, "settlement", seq(0.7)));
 });
 
 // --- Expansion engine: contention, elimination, events (Phase 8.15) ------
