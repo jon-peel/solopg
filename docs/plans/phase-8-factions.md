@@ -1,5 +1,16 @@
 # Phase 8 — Factions (+ Travel & Party Movement)
 
+> **✅ As-built (Phase 8 complete, 8.1–8.15).** Arc A (Travel 8.1–8.6) and Arc B (Factions 8.7–8.10)
+> shipped as planned. **Arc C changed direction:** faction-emitted hooks (8.11), day-tick auto-fire
+> (8.12), and expansion→hooks (8.15 Chunk C) were all **built then removed** — factions are played as
+> **subtext** (the map's coloured territory + a per-turn log), not hooks. The region **"something is
+> stirring"** hook (8.14) is the one faction-adjacent lead kept. The **expansion arc (8.13–8.15)** is
+> the engine: turns are **uncapped and contested** (spread / move / seize a rival's hex strength-
+> weighted / be **destroyed** at 0 holdings). UI as-built: coloured-ring territory (no flag badge) + a
+> **"Run by"** owner picker (replacing "Claim for faction"). The diagram, tables, and Arc C sections
+> below are the **original plan**, kept as the historical record; see
+> [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md) and PLAN.md for the as-built.
+
 Factions turn the generic "occupier" label (`poi.occupant = {kind:"occupied", by:"Bandits"}`) into a
 real, persistent power with a **goal**, a **disposition**, and **holdings it can hold across the
 whole map** — and gives it **operating rules** (goals advance, holdings grow/shrink, disposition can

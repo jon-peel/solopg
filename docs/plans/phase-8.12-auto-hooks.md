@@ -1,5 +1,12 @@
 # Phase 8.12 — Auto-fire faction hooks on the day-tick
 
+> **⚠️ Superseded — this feature was removed.** The proximity auto-fire (`autoHookChance` /
+> `rollAutoHookCount`) shipped and was later **removed** in the 8.15 arc, along with the 8.11 faction
+> hooks it built on — factions are now played as **subtext**, not hooks. The day-tick still auto-fires
+> the region "something is stirring" hook (8.14), which stays. See
+> [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md) and PLAN.md for the as-built.
+> This doc is kept as the historical plan.
+
 The last of Arc C's committed steps. 8.11 gave the GM a **button** to make a faction stir trouble; 8.12
 makes it happen **on its own as days pass** — "news propagation by distance": a nearby, powerful
 faction's deeds are common gossip; a distant or weak one, a rare whisper. This is where **`strength`**

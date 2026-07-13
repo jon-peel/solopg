@@ -1,5 +1,11 @@
 # Phase 8.13 — Faction movement & expansion (brought forward)
 
+> **⚠️ Partly superseded by 8.15.** The spatial-turn foundation here shipped, but 8.15 reworked it:
+> **`HOLDING_CAP` (6) was removed** (growth is uncapped), spreading now **contests** a rival's border
+> hex (strength-weighted), a faction at 0 holdings is **destroyed**, and a turn **returns events** the
+> app logs. Strength is no longer "reserved for 8.12 hook loudness" — it **decides contested hexes**.
+> See [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md) for the as-built engine.
+
 Makes a faction turn a **spatial** act, not just numbers moving. Per the user steer (2026-07):
 **both** behaviours, **archetype-driven** — a roaming warband migrates its camp; a rooted power grows
 its footprint; a hermit stays. Also does a small **strength cleanup**: strength becomes a stable,
