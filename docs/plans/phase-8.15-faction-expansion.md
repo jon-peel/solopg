@@ -1,158 +1,449 @@
 # Phase 8.15 — Faction expansion as the engine (contention + world events)
 
-Corrects a priorities inversion: faction **influence and expansion** was always the primary purpose of
-factions, but 8.13 shipped it silent, capped, and minimal while the hooks (8.11/8.12/8.14) got the
-design attention. 8.15 makes expansion the **centrepiece** and turns hooks into a **consequence** of it.
-
-The whole change reduces to one architectural move: **a faction turn stops mutating the world silently
-and starts producing events.** Those events feed two things — **visibility** (the world visibly moving)
-and **hooks** (the fallout). The faction object, generation, and turn-clock are kept as-is.
-
-**Scope:** these are **global/regional powers** — a faction *is* its map footprint. Settlement-internal
-factions (guild politics inside one town) are a separate, finer layer, **out of scope** here.
-
-**Status:** 📝 planned.
-
-> Plan → approve → build per chunk → `node --test` → commit/push → manual checklist.
-
-## No schema bump
-
-Holdings can now *shrink* (contention) and `status` can become `"destroyed"` — both already in the v16
-faction shape. POI-takeover rewrites an existing `poi.occupant` (the 8.8 shape). Nothing new is
-persisted; the turn's **events are transient** (returned, logged, turned into hooks — never stored).
-**`SCHEMA_VERSION` stays 16.**
+> **This document is self-contained.** It assumes no prior knowledge of the app or of any earlier
+> discussion. Read the *Orientation*, *Glossary*, and *Conventions* first; then build the chunks in
+> order. Every design choice is already decided — you should not need to invent behaviour.
 
 ---
 
-## 1. The expansion engine (rework `moveOrSpread`, pure)
+## Orientation — what this application is
 
-Today `moveOrSpread(world, faction, rng)` mutates `holdings` and returns nothing. It becomes the heart
-of the turn and **returns the events it caused** (a turn can cause 0–2 events). Structural only — the
-app adds flavour:
+This repo (`solopg`) is a **browser-based "world oracle" for tabletop role-playing games** — a tool a
+solo player or a game master uses to generate and run an overworld. It is:
+
+- **Client-only, offline, no build step.** Plain HTML/CSS/**JavaScript ES modules** loaded straight
+  into the browser (`index.html`). There is no bundler, framework, or transpiler.
+- **A hex map.** The world is a grid of hexagonal tiles ("hexes") using **axial coordinates** `{q, r}`.
+  Each hex has terrain (Plains, Forest, Hills, Mountains, Swamp, Desert, Sea, Lake), and may carry a
+  settlement, rivers, roads, and points of interest.
+- **Deterministic from a seed.** Everything is regenerated reproducibly from a single integer
+  `world.seed` via seeded random sub-streams, so a world is shareable and stable.
+- **Persisted in the browser** (IndexedDB) with JSON export/import. **Node.js is used only for the
+  test runner and a local static server** — it is not a runtime dependency.
+- **System-agnostic OSR fantasy** — generic old-school content, no specific rules system.
+
+You will mostly touch three kinds of file:
+- `js/gen/*.js` — **pure generator/logic modules** (no DOM), unit-tested with `node --test`.
+- `js/ui/*.js` — the **browser glue** (DOM, canvas map, panels, event dispatch). Not unit-tested.
+- `data/*.json` — **content tables** rolled by a generic engine.
+
+## Glossary (objects this plan manipulates)
+
+- **world** — the top-level object: `{ seed, hexes, party, hooks[], factions[], roads[], rivers[], … }`.
+  `hexes` is a map keyed by `axialKey(q,r)` → hex. There is also an in-memory, **session-only** day
+  counter (`sessionDay` in `app.js`) that is *not* persisted.
+- **hex** — `{ coords:{q,r}, terrain, placed, explored, settlement?, pois?[] }`. `placed` means the
+  tile actually exists on the map. `settlement` (when present) is `{ present:true, kind, size, … }`.
+- **POI (point of interest)** — a site sitting on a hex, in `hex.pois[]`: `{ id:"poi:N", type, name,
+  occupant? }`. `type` is e.g. `dungeon`, `shrine`, `ruin`, `tower`, `camp`. `occupant` (optional) is
+  `{ kind:"occupied"|"lair"|"none", by?, creature?, factionId? }` — who currently holds the site.
+- **faction** — a **regional power**; it *is* its footprint on the map. Shape:
+  ```js
+  {
+    id: "faction:N", name, archetype, disposition,
+    goal: { kind, progress, max },     // a "doom clock"; progress rises 1 per faction turn, capped at max
+    strength,                          // small integer 2..4; how powerful the faction is
+    holdings: [ { q, r, poiId? } ],    // the hexes it controls (≥1); holdings[0] is its seat
+    clock: { turns, sinceTurn },       // turns taken; days banked toward the next day-driven turn
+    origin, status,                    // status: "active" | "dormant" | "destroyed"
+  }
+  ```
+  Two behaviour families, keyed by `archetype` (see `ARCHETYPE_MOBILITY` in `js/gen/factions.js`):
+  - **roaming** (`bandits`, `monstrous tribe`, `mercenary company`) — a single mobile camp.
+  - **spreading** (`cult`, `merchant guild`, `noble house`, `thieves' guild`) — grows its territory.
+- **faction turn** — the faction heartbeat. On each turn a faction advances its goal clock, may drift
+  disposition, and **acts on the map** (moves or spreads). A turn fires either **every
+  `TURN_LENGTH_DAYS` (= 7) in-world days** as time passes, **or** immediately via a manual
+  "Advance faction turn" button.
+- **hook** — an adventure lead in `world.hooks[]`, pointing at a place: `{ id:"hook:N", pattern, verb,
+  subject:{name,…}, origin:{q,r}, target:{q,r,poiId?}, claim, source, status:"open"|"resolved"|"ignored",
+  sourcePower? }`. `sourcePower` (optional) holds a **faction id**, tying the hook to the faction that
+  caused it (the panel renders a "Stirred up by ‹faction name›" link from it). Prose is **composed at
+  render time** from the stored fields (see `hookName`/`hookDescription` in `js/gen/hooks.js`) — the
+  sentence is not stored, the picks are.
+- **the day-tick chokepoint** — `advanceDays(n)` in `js/ui/app.js`. Both travelling and the stationary
+  "Progress N days" control route through it. It bumps `sessionDay`, fires the faction turns those days
+  earn, and (currently) rolls auto-hooks. **This is the single seam where time-driven faction behaviour
+  runs.**
+- **region** — a *derived*, named terrain tract (e.g. "the Blackwood"): a connected clump of same-terrain
+  hexes ≥ 16 tiles. Computed on demand by `computeRegions(seed, terrainByKey, {minSize})`
+  (`js/gen/regions.js`); not stored. (Used only tangentially here — see "keep the region hook".)
+
+## Conventions this codebase follows (obey these)
+
+- **Seeded determinism.** All randomness comes from `subRng(worldSeed, ...parts)`
+  (`js/core/rng.js`), which returns a `() => number` stream seeded by hashing the parts. The same parts
+  always produce the same stream. When you add randomness, key it on stable parts (ids, coords,
+  ordinals) so results are reproducible and reload-safe.
+- **Content vs rules.** Rollable *content* (names, phrases) lives in `data/*.json` tables rolled with
+  `rollTable(table, rng)` (`js/core/table.js`). *Rules* (which archetype does what, tuning numbers) live
+  as JS consts in the generator modules. This plan's flavour phrasing is small and archetype-keyed, so
+  it lives as **JS consts** (mirroring the existing `GOAL_RUMOUR` const in `factions.js`), not tables.
+- **Compose prose at render.** Store structured picks on the object; build the sentence in a
+  `*Description` function. Never store rendered prose.
+- **No data migrations.** Schema changes are a version *stamp*, not a transform. **This plan needs no
+  schema change** (see below), so leave `SCHEMA_VERSION` alone.
+- **Pure generators, thin UI.** Put logic (and its tests) in `js/gen/`; keep `js/ui/app.js` to wiring.
+
+## Prerequisites & baseline
+
+- **Branch:** work on `claude/arch-c-onboarding-dkx4yl` (or a fresh branch off it).
+- **Tests:** run `node --test` from the repo root. **Baseline is green — 419 tests pass.** Keep it
+  green after every chunk.
+- **Run the app:** `./run-local.sh` serves it at `http://localhost:8000` (it fetches + hard-resets the
+  branch named in the script, runs the tests, then serves). Hard-refresh the browser tab to pick up
+  changes.
+- **Key files you will edit:** `js/gen/factions.js`, `js/gen/hooks.js`, `js/ui/app.js`,
+  `test/factions.test.js`, `test/hooks.test.js`.
+- **Optional background** (not required): the sibling docs `phase-8.11-faction-hooks.md`,
+  `phase-8.13-movement-expansion.md`, and `phase-8.14-region-hooks.md` describe the current hook,
+  movement, and region mechanics this builds on.
+
+---
+
+## Why this change
+
+Factions exist to **grow and contend for influence** — that is their point. Today they *do* move and
+spread, but the mechanic is minimal and **completely silent** (it mutates the map with no log line and
+no consequence), and it is bounded by an arbitrary `HOLDING_CAP = 6`. Meanwhile faction-driven *hooks*
+became the elaborate part. This phase corrects that: **expansion becomes the primary, visible engine,
+and hooks become a consequence of it.**
+
+## The one architectural move
+
+**A faction turn stops mutating the world silently and instead returns a list of events.** Those events
+drive two things:
+1. **Visibility** — the app logs what each faction did (Chunk B).
+2. **Hooks** — significant events become adventure hooks (Chunk C).
+
+Everything else is a consequence of that. The faction object, generation, goal clock, and disposition
+drift are unchanged.
+
+## No schema bump
+
+Holdings can now *shrink* (a hex is lost to a rival) and `status` can become `"destroyed"` — both
+already valid in the v16 faction shape. A POI takeover overwrites an existing `poi.occupant` (an
+existing shape). Events are **transient** (returned, logged, turned into hooks — never persisted).
+**Leave `SCHEMA_VERSION` at 16.**
+
+---
+
+## Chunk A — the expansion engine (pure, in `js/gen/factions.js`)
+
+Rework the spatial turn so it is uncapped, contested, and **returns events**.
+
+### The Event type (returned by the turn; the app adds flavour)
 
 ```js
-// event kinds (structural; the app classifies impact + writes prose):
-// "claim"     spreading took an EMPTY passable hex
-// "move"      roaming relocated its camp to a passable hex
-// "takeover"  spreading WON a contested (rival-held) hex   → fromFactionId = loser
-// "repelled"  spreading tried a rival hex and LOST          → fromFactionId = holder (no ownership change)
-// "eliminated" a faction lost its last holding              → factionId = loser, byFactionId = winner
-{ kind, factionId, q, r, poiId?, fromFactionId?, byFactionId? }
+/** @typedef {{
+ *   kind: "claim"|"move"|"takeover"|"repelled"|"eliminated",
+ *   factionId: string,        // the acting faction (for "eliminated": the faction destroyed)
+ *   q?: number, r?: number,   // the hex acted on (absent on "eliminated")
+ *   fromFactionId?: string,   // "takeover"/"repelled": the rival that held/holds the hex
+ *   byFactionId?: string,     // "eliminated": the faction that finished it off
+ * }} FactionEvent */
 ```
 
-### Rules
-- **No cap.** `HOLDING_CAP` is removed — a spreading faction keeps growing one hex per turn.
-- **Spread, prefer empty, then contest.** Frontier = passable placed neighbours of any holding not
-  already held by this faction. Split into **empty** vs **rival-held**. If any empty → claim one
-  (`"claim"`). Else pick a rival hex and **contest** it.
-- **Contest = strength-weighted** (pure, one rng draw): attacker wins with `atk / (atk + def)`.
-  - win → the hex moves from loser to attacker (`"takeover"`, `fromFactionId` = loser);
-  - loss → nothing changes (`"repelled"`).
-- **Elimination.** When a takeover drops the loser to **0 holdings**, set its `status = "destroyed"`
-  and emit `"eliminated"`. A destroyed faction is skipped by all turn loops thereafter.
-- **Roaming** relocates `holdings[0]` to a passable neighbour **not held by another faction** (prefer
-  empty; drop `poiId` on the move as today) → `"move"`. Roamers don't hold territory; their interest is
-  *what they camp on* (road/settlement/POI → an event, below).
+Kinds:
+- **`claim`** — a spreading faction took an **empty** passable hex.
+- **`move`** — a roaming faction relocated its camp to a passable hex.
+- **`takeover`** — a spreading faction **won** a contested (rival-held) hex; `fromFactionId` = loser.
+- **`repelled`** — a spreading faction **tried** a rival hex and **lost**; nothing changed.
+- **`eliminated`** — a faction lost its last holding (emitted right after the `takeover` that did it).
 
-### Helpers (pure, in `factions.js`)
-- `holderOf(world, q, r, exceptId)` → the faction (≠ exceptId) whose holdings include `(q,r)`, or null.
-- Reuse `passableNeighborsOf` (unchanged) + the stable q,r sort before every rng pick (determinism).
+### `moveOrSpread(world, faction, rng)` → `FactionEvent[]`
 
-### Determinism
-Same per-turn stream as today (`subRng(seed,"factionturn",id,turnOrdinal)`), draws in a fixed order
-(disposition drift → spatial pick → contest roll). A turn is fully reproducible; events are derived.
+Currently returns nothing and stops at `HOLDING_CAP`. Rewrite it to return an array (0–2 events):
 
-## 2. Turns return an event log
+1. `mobility = ARCHETYPE_MOBILITY[faction.archetype]`. If neither `"roaming"` nor `"spreading"` (i.e.
+   an unknown archetype → treat as static), return `[]`.
+2. **Roaming:** candidates = `passableNeighborsOf(world, holdings[0])` (existing helper) **minus** any
+   hex held by *another active faction* (use `holderOf`, below) **and** minus this faction's own
+   holdings. If none, return `[]`. Otherwise pick one (`Math.floor(rng()*cands.length)` over the
+   already-sorted list — keep the stable q,r sort before the pick), set `holdings[0] = {q,r}` (drop
+   `poiId`), and return `[{ kind:"move", factionId, q, r }]`.
+3. **Spreading (no cap):** build the frontier = every `passableNeighborsOf` of every holding, not
+   already this faction's own, **deduped and q,r-sorted**. Split into `empty` (no other faction holds
+   it) and `rival` (held by another active faction).
+   - If `empty` is non-empty: pick one, `holdings.push({q,r})`, return `[{ kind:"claim", factionId,
+     q, r }]`.
+   - Else if `rival` is non-empty: pick one; let `def = holderOf(world, q, r, faction.id)`. **Contest**
+     (one rng draw): attacker wins iff `rng() < atk / (atk + def)` where `atk = faction.strength||1`,
+     `def = def.strength||1`.
+     - **Win:** remove `{q,r}` from `def.holdings`; `holdings.push({q,r})`. Events: start with
+       `[{ kind:"takeover", factionId, q, r, fromFactionId: def.id }]`. If `def.holdings.length === 0`,
+       set `def.status = "destroyed"` and append `{ kind:"eliminated", factionId: def.id,
+       byFactionId: faction.id }`.
+     - **Loss:** change nothing; return `[{ kind:"repelled", factionId, q, r, fromFactionId: def.id }]`.
+   - Else (frontier empty): return `[]`.
 
-`tickFaction` returns the events from `moveOrSpread` (goal/disposition still tick). `advanceFactionTurn`
-and `advanceFactionDays` **concatenate events across all active factions** and return the list (instead
-of a bare count). Callers already exist; they just get richer return values.
+Prefer-empty-then-contest means factions grow into open space first and only fight at the borders.
 
-## 3. Visibility (Chunk B) — the fastest win
+### `holderOf(world, q, r, exceptId)` (new pure helper)
 
-On every turn (day-tick **and** the manual "Advance faction turn" button), the app writes a plain log
-line per event, so the world is legible without any hooks:
+Returns the first **active** faction (`status` "active", and `id !== exceptId`) whose `holdings`
+include `(q,r)`, or `null`. Iterate `world.factions`.
 
-- `The Ashen Hand spreads into Millbrook.` / `… seizes the Sunken Abbey.`
-- `The Gnashers move camp onto the old road.`
-- `The Ashen Hand takes a holding from the Red Company.` / `The Red Company is destroyed.`
+### Wire it through the turn functions (change their return types)
 
-(Optional later polish: a one-line "latest move" on each faction card — deferred to keep the turn fns
-pure.)
+- **`tickFaction(world, faction, rng)`** — keep the goal-clock tick and disposition drift exactly as
+  they are (they draw rng first, then `moveOrSpread` draws — preserve that order for determinism).
+  Change it to **return the `FactionEvent[]` from `moveOrSpread`** (it currently returns `faction`).
+- **`advanceFactionTurn(world, seed)`** — currently returns a count. Change it to **collect and return
+  `FactionEvent[]`** concatenated across every active faction it ticks. (A faction destroyed earlier in
+  the loop is skipped by the existing `isActive` guard.)
+- **`advanceFactionDays(world, days, seed)`** — currently returns a turn count. Change it to **collect
+  and return `FactionEvent[]`** across every turn it fires.
 
-## 4. Expansion → hooks (Chunk C)
+Determinism is unchanged: the per-turn stream is still `subRng(seed,"factionturn",id,turns)`, and draws
+happen in a fixed order (disposition, then the spatial pick, then — only when contesting — the contest
+roll).
 
-The app classifies each `claim`/`move`/`takeover` event's hex — **`impact`** ∈
-`settlement | road | poi | bare` (from `hex.settlement`, `world.roads`, `hex.pois`; priority
-settlement > poi > road > bare) — and turns the **significant** ones into hooks (bare = log line only,
-so volume stays sane):
+### Remove `HOLDING_CAP`
 
-| impact | hook |
-|---|---|
-| **settlement** | archetype-flavoured: cult → wins converts · bandits/tribe → tribute/raid · noble house → presses a claim · merchant guild → corners the trade · thieves' guild → a den takes root |
-| **road** (roamers) | "the road by ‹place› is held — travellers waylaid" |
-| **poi** (spread takeover) | "‹Faction› has seized ‹POI›" **and rewrites `poi.occupant`** → `{kind:"occupied", by:‹label›, factionId}` so a return visit is disrupted (roamers only *raid* a POI — an event, no permanent occupant change) |
+Delete the const and its check. Contention + the finite revealed map are the limiter now. (A lone
+faction with no rivals will keep spreading slowly, one hex per turn — accepted.)
 
-**Flavour** is a pure, tested seam mirroring `factionHookContext`:
-`expansionHookContext(faction, impact, rng)` → `{ claim }`, drawing from JS-const phrasing maps
-(`SETTLEMENT_ACTION[archetype][]`, `ROAD_ACTION[]`, `POI_ACTION[]` — same rules-as-consts style as
-`GOAL_RUMOUR`, with a few phrasings each so repeats are rare). The hook is built pointing at the
-**affected hex** (target = the place), tagged `sourcePower = faction.id`, surfaced in the existing Hooks
-list (generalise `buildFactionHook` to take the target subject instead of always the lair).
+### Also delete the retired proximity-hook code
 
-**Retire the 8.12 proximity auto-fire.** Expansion-events are its causal replacement, so remove the
-proximity roll (`autoHookChance`/`rollAutoHookCount` + their use in `autoFireFactionHooks` + their
-tests). **Keep:** the manual "Stir up trouble" button (8.11, a GM nudge) and the region "stirring" hook
-(8.14, the aggregate signal), now fed naturally by expansion activity.
+Delete `autoHookChance` and `rollAutoHookCount` (and the `AUTO_HOOK_*` consts) — Chunk C removes their
+only caller. (Keep `regionHeat`/`regionStirChance`/`rollRegionStir` — the region hook stays.)
 
-## Files
+### Chunk A tests (`test/factions.test.js`)
+
+Remove the `autoHookChance`/`rollAutoHookCount` tests. Add (build small worlds the way the existing
+movement tests do — see the `placedWorld`/`factionAt` helpers already in the file):
+- **No cap:** a lone spreading faction grows past 6 holdings over enough turns.
+- **Claim:** spreading onto empty ground returns a `claim` event and adds the hex.
+- **Contention is strength-weighted + deterministic:** a much stronger attacker wins the large majority
+  of many seeded contests; same seed → same outcome; a win yields `takeover` and moves the hex from
+  loser to winner; a loss yields `repelled` and changes nothing.
+- **Elimination:** reducing a faction to 0 holdings sets `status:"destroyed"` and emits `eliminated`;
+  it is skipped on later turns.
+- **Roaming:** returns `move`, drops `poiId`, never steps onto a rival's hex; stays (`[]`) when boxed in.
+- **Return contract:** `advanceFactionTurn`/`advanceFactionDays` return well-formed `FactionEvent[]`.
+
+---
+
+## Chunk B — visibility (in `js/ui/app.js`)
+
+Make every turn legible. The turn functions now return events; **log one line per event** on both
+paths, and drop the old summary count lines.
+
+- Add `logFactionEvents(events)` that resolves faction names via `getFactions(current)` and a place
+  label via `destinationLabel(getHex(current,q,r), q, r)` (existing helper: returns a hex's GM name,
+  else its settlement name, else `"(q, r)"`), then logs:
+  - `claim` → `` `${name} spreads into ${place}.` ``
+  - `move` → `` `${name} moves camp to ${place}.` ``
+  - `takeover` → `` `${name} seizes ${place} from ${fromName}.` ``
+  - `repelled` → `` `${name} is driven back from ${place} (held by ${fromName}).` ``
+  - `eliminated` → `` `${name} is destroyed.` ``
+- In **`advanceDays`**: replace `const turns = advanceFactionDays(...)` + the `"N faction turns passed"`
+  log with `const events = advanceFactionDays(current, n, current.seed); logFactionEvents(events);` then
+  call the Chunk C hook step with those `events`.
+- In **`onAdvanceFactionTurn`** (the manual button): `const events = advanceFactionTurn(current,
+  current.seed);` For the "nothing to do" guard, check the **active-faction count** (
+  `getFactions(current).filter(f => (f.status||"active")==="active").length`) rather than the old return
+  count; then `logFactionEvents(events)`, run the Chunk C hook step, and persist.
+
+Test in the browser: generating a couple of factions and advancing turns now prints a running
+commentary, and the holding markers move.
+
+---
+
+## Chunk C — expansion → hooks (in `js/ui/app.js` + `js/gen/hooks.js`)
+
+Turn **significant** events into hooks, and rewrite a seized POI's occupant. Retire the proximity roll.
+
+### 1. Classify the hex (`app.js`, new helper)
+
+```js
+// Priority: settlement > poi > road > bare.
+function hexImpact(world, q, r) {
+  const hex = getHex(world, q, r);
+  if (hex && hex.settlement && hex.settlement.present) return "settlement";
+  if (hex && Array.isArray(hex.pois) && hex.pois.length) return "poi";
+  if (roadHexKeySet(world).has(axialKey(q, r))) return "road"; // roadHexKeySet: js/gen/travel.js, already imported
+  return "bare";
+}
+```
+
+### 2. Which events become hooks
+
+Only `claim`, `takeover`, and `move` events, and only when `hexImpact` is `settlement`, `poi`, or
+`road`. **`bare` → no hook** (the Chunk B log line is enough). `repelled` and `eliminated` → **no hook**
+(log only). This keeps volume sane; additionally **cap at 2 expansion hooks per faction per
+`advanceDays`/turn call** (mirrors the retired proximity cap): count per `factionId` as you go and skip
+beyond 2.
+
+### 3. Occupant rewrite (the "disrupted revisit")
+
+When a **spreading** faction takes a POI hex (`claim` or `takeover` — *not* a roamer `move`), rewrite
+the POI it now holds:
+```js
+const hex = getHex(current, q, r);
+const poi = hex && (hex.pois || [])[0];
+if (poi) poi.occupant = { kind: "occupied", by: faction.name, factionId: faction.id };
+```
+(Any prior occupant is overwritten — the faction chased them out.) A roamer `move` onto a POI is a
+**raid** — it produces the hook below but does **not** rewrite the occupant (the camp leaves next turn).
+
+### 4. Flavour seam (`factions.js`, pure, tested)
+
+Mirror the existing `factionHookContext`. Add archetype-keyed JS consts (write a few phrasings each so
+repeats are rare; phrasings read as `"‹Faction› ‹phrase› ‹place›"`, so write them for a plural/collective
+subject, e.g. *"are winning converts in"*):
+
+```js
+const SETTLEMENT_ACTION = {
+  cult: ["are winning converts in", "raise a shrine over"],
+  bandits: ["are extorting tribute from", "raid"],
+  "monstrous tribe": ["are raiding", "terrorise"],
+  "noble house": ["press their claim over", "install a magistrate in"],
+  "merchant guild": ["are cornering the trade of", "buy up"],
+  "thieves' guild": ["have opened a den in", "run a racket in"],
+  "mercenary company": ["garrison", "quarter their company in"],
+};
+const ROAD_ACTION = ["hold the road by", "waylay travellers near", "have set an ambush on the road by"];
+const POI_ACTION  = ["have seized", "have occupied", "have taken"];
+
+// Returns the verb phrase for this faction acting on this impact class. Pure.
+export function expansionHookContext(faction, impact, rng) {
+  const pick = (a) => a[Math.floor(rng() * a.length)];
+  if (impact === "road") return { claim: pick(ROAD_ACTION) };
+  if (impact === "poi")  return { claim: pick(POI_ACTION) };
+  const opts = SETTLEMENT_ACTION[faction.archetype] || ["move against"];
+  return { claim: pick(opts) };
+}
+```
+
+### 5. The expansion hook (a new `pattern:"expansion"`, in `hooks.js`)
+
+Add a small builder alongside `buildRegionHook` (engine otherwise unchanged). The hook points at the
+**affected place** and stores the actor name so the sentence can be composed at render:
+
+```js
+// ctx: { actor:string(faction name), claim:string, subject:{name,type,q,r,poiId?,terrain?},
+//        origin:{q,r}, index?:number, sourcePower?:string }
+export function buildExpansionHook(ctx) {
+  const s = ctx.subject;
+  return {
+    id: ctx.index != null ? `hook:${ctx.index}` : undefined,
+    build: HOOK_BUILD, pattern: "expansion", verb: "expansion",
+    actor: ctx.actor,
+    subject: { name: s.name, type: s.type, poiId: s.poiId },
+    origin: { q: ctx.origin.q, r: ctx.origin.r },
+    target: { q: s.q, r: s.r, poiId: s.poiId },
+    bearing: bearingTo(ctx.origin, s),
+    distance: axialDistance(ctx.origin.q, ctx.origin.r, s.q, s.r),
+    targetTerrain: s.terrain || null,
+    claim: ctx.claim, source: null, status: "open",
+    ...(ctx.sourcePower ? { sourcePower: ctx.sourcePower } : {}),
+  };
+}
+```
+
+Add prose branches (keep them beside the existing `region` branch):
+- `hookName`: `if (hook.pattern === "expansion") return \`${cap(hook.actor)}: ${hook.subject.name}\`;`
+- `hookDescription`: an `expansion` branch producing one line —
+  `` `${cap(hook.actor)} ${hook.claim} ${hook.subject.name}, ${whither}.` `` — where `whither` is the
+  existing distance/bearing phrase already computed in that function (e.g. *"18 miles to the
+  north-east (Hills)"*, or *"close by"* when distance 0). No reward line.
+
+Attribution shows twice, which is fine: the sentence names the faction (`actor`), and the panel also
+renders the existing "Stirred up by ‹faction›" link from `sourcePower`.
+
+### 6. Assemble + push (`app.js`, the Chunk C hook step)
+
+For each hookable event (respecting the per-faction cap of 2):
+```js
+const faction = getFactions(current).find(f => f.id === ev.factionId);
+if (!faction) continue;
+const impact = hexImpact(current, ev.q, ev.r);
+if (impact === "bare") continue;
+if (impact === "poi" && (ev.kind === "claim" || ev.kind === "takeover")) rewriteOccupant(faction, ev.q, ev.r);
+const place = placeLabel(current, ev.q, ev.r, impact); // POI base name / settlement name / "the road by <town>"
+const origin = nearestSettlementTo(current, ev)         // existing helper (js/ui/app.js); where word is heard
+   || (current.party ? { q: current.party.q, r: current.party.r } : ev);
+const rng = subRng(current.seed, "expansion", faction.id, nextHookId(current));
+const { claim } = expansionHookContext(faction, impact, rng);
+const hook = buildExpansionHook({
+  actor: faction.name, claim,
+  subject: { name: place, type: impact === "poi" ? "poi" : impact, q: ev.q, r: ev.r,
+             poiId: /* the POI id if impact poi */, terrain: getHex(current, ev.q, ev.r)?.terrain },
+  origin, index: nextHookId(current), sourcePower: faction.id,
+});
+current.hooks.push(hook);
+logLine(`Word from the frontier — ${hookName(hook)}.`);
+```
+Place naming (`placeLabel`): POI → its base name (see `poiBaseName` in `app.js`); settlement → its name
+(see `destinationLabel`); road → `` `the road by ${nearestSettlementName}` `` if a settlement exists,
+else `` `the ${terrain.toLowerCase()} road` ``. `nearestSettlementTo(world, pt)` already exists in
+`app.js`.
+
+### 7. Retire the proximity auto-fire
+
+In `autoFireFactionHooks`, **delete the per-faction proximity loop** (the `rollAutoHookCount` block) but
+**keep the call to `autoFireRegionHooks`** (the region "stirring" hook, Chunk 8.14). Rename the function
+if you like (e.g. `runFactionDayHooks`). The manual **"Stir up trouble"** button and its
+`buildFactionHook` stay untouched (a GM nudge). Wire the Chunk C hook step (steps 1–6) into `advanceDays`
+and `onAdvanceFactionTurn` using the `events` those paths now produce.
+
+### Chunk C tests
+- `test/factions.test.js`: `expansionHookContext` returns an archetype-appropriate claim for each
+  impact (road/poi from the fixed lists; settlement from the archetype list; unknown archetype →
+  fallback), and is deterministic for a given rng.
+- `test/hooks.test.js`: `buildExpansionHook` yields `pattern:"expansion"`, `target` = the place hex,
+  stores `actor`+`claim`+`sourcePower`; `hookName`/`hookDescription` render the branch (name appears,
+  ends with a period).
+
+---
+
+## Files touched
 
 | File | Change |
 |---|---|
-| `js/gen/factions.js` | remove `HOLDING_CAP`; rework `moveOrSpread` → returns events (no cap, contention, elimination); `holderOf`; `tickFaction`/`advanceFactionTurn`/`advanceFactionDays` return an event log; `expansionHookContext` + `SETTLEMENT_ACTION`/`ROAD_ACTION`/`POI_ACTION` consts; delete `autoHookChance`/`rollAutoHookCount` |
-| `js/gen/hooks.js` | generalise a faction-hook build to accept an arbitrary target subject (or a small `buildExpansionHook`) — engine otherwise unchanged |
-| `js/ui/app.js` | day-tick + manual turn: log the event list (Chunk B); classify impact + build/push expansion hooks + rewrite POI occupant (Chunk C); drop the proximity pass from `autoFireFactionHooks` (keep the region pass) |
-| `data/` | none required if flavour stays JS consts; (optional: move phrasings to tables later) |
-| `test/factions.test.js` | expansion-engine tests (below); remove the proximity-auto tests |
-| `test/hooks.test.js` | expansion-hook build test |
+| `js/gen/factions.js` | remove `HOLDING_CAP`; rework `moveOrSpread` → `FactionEvent[]`; add `holderOf`; `tickFaction`/`advanceFactionTurn`/`advanceFactionDays` return `FactionEvent[]`; add `expansionHookContext` + `SETTLEMENT_ACTION`/`ROAD_ACTION`/`POI_ACTION`; delete `autoHookChance`/`rollAutoHookCount` + `AUTO_HOOK_*` |
+| `js/gen/hooks.js` | add `buildExpansionHook` + `expansion` branches in `hookName`/`hookDescription` (engine otherwise unchanged) |
+| `js/ui/app.js` | `logFactionEvents`; `hexImpact`; the Chunk C hook step + occupant rewrite; adapt `advanceDays` + `onAdvanceFactionTurn` to the new `FactionEvent[]` returns; delete the proximity loop (keep the region pass) |
+| `test/factions.test.js` | expansion-engine tests + `expansionHookContext` tests; remove proximity tests |
+| `test/hooks.test.js` | `buildExpansionHook` test |
+| `data/` | none (flavour is JS consts) |
 
-## Build chunks (test after each)
+## Manual verification (`./run-local.sh`, browser)
 
-| Chunk | Scope | How you test it |
-|---|---|---|
-| **A — engine** (pure) | rework `moveOrSpread` (no cap, contention, elimination, returns events); turns return an event log. | `node --test` |
-| **B — visibility** | log every turn event on the day-tick + manual button. | Browser: advance turns → a running commentary of who moved/spread/seized/was destroyed; markers update |
-| **C — hooks** | impact classification → expansion hooks; POI-takeover rewrites occupant; retire 8.12 proximity. | Browser: a faction spreading onto a town/road/dungeon throws a tagged hook; a seized dungeon shows its new occupant on the map/POI list |
-
-## Tests (`node --test`, pure)
-- **No cap:** a spreading faction grows past 6 holdings over enough turns.
-- **Contention:** a spreading faction hemmed by a rival **contests**; the contest is strength-weighted
-  (a much stronger attacker wins the large majority of seeded trials) and deterministic for a stream; a
-  win moves the hex from loser to winner (`"takeover"`), a loss changes nothing (`"repelled"`).
-- **Elimination:** a faction reduced to 0 holdings gets `status:"destroyed"` + an `"eliminated"` event,
-  and is skipped thereafter.
-- **Roaming:** relocates onto a passable non-rival hex, drops `poiId`, emits `"move"`; stays put when
-  boxed in.
-- **Event log:** `advanceFactionTurn`/`advanceFactionDays` return the concatenated, well-formed events.
-- **Flavour:** `expansionHookContext` returns an archetype-appropriate claim per impact; deterministic.
-
-## Manual checklist (`./run-local.sh`)
 ```
-[ ] Two spreading factions grown toward each other → they contest the border; one takes the other's
-    hexes over turns; a faction can be wiped out ("… is destroyed")
-[ ] No cap: a lone spreading faction keeps growing past 6 holdings
-[ ] Every "Advance faction turn" prints what each faction did (spread / seized / took / destroyed)
-[ ] A faction spreading onto a settlement / road / dungeon throws a tagged hook naming the place
-[ ] A cult seizing a dungeon rewrites its occupant → revisiting the POI shows the new holder
-[ ] No more purely-random proximity hooks; region "stirring" + manual "stir" still work
-[ ] Reload / export→import unaffected (v16)
+[ ] New World ▾ → Large/Huge. Generate two SPREADING factions (e.g. two cults) a few hexes apart.
+[ ] Press "Advance faction turn" repeatedly (Factions tab). Each press prints what every faction did.
+[ ] The factions grow toward each other, contest the border, and one takes the other's hexes over time;
+    a faction can be wiped out ("… is destroyed") and stops acting.
+[ ] A lone spreading faction keeps growing past 6 holdings (no cap).
+[ ] When a faction spreads onto a settlement / road / dungeon, a hook appears in the Hooks tab naming
+    the place and tagged "Stirred up by ‹faction›".
+[ ] A faction seizing a dungeon rewrites its occupant → open that POI and it shows the new holder.
+[ ] "Progress 20" a few times reproduces the same via the day clock. No more purely-random proximity
+    hooks; the region "stirring" hook and the manual "Stir up trouble" button still work.
+[ ] Reload and Export→Import: unaffected (still schema v16).
 ```
+
+## Decisions already locked (do not re-litigate)
+
+1. Contested hex → **strength-weighted** roll `atk/(atk+def)`; winner takes it, loser loses it.
+2. A faction at **0 holdings → `destroyed`** and drops out.
+3. **No cap** on expansion.
+4. Expansion hooks are a **new `pattern:"expansion"`** (not shoe-horned into `threat`); origin = nearest
+   town to the affected place; **cap 2 per faction per advance**; `bare`/`repelled`/`eliminated` are
+   **log-only** (no hook).
+5. A **spreading** takeover/claim onto a POI **rewrites the occupant**; a roamer raid does not.
+6. **Retire** the 8.12 proximity auto-fire; **keep** the manual stir button and the region "stirring" hook.
 
 ## Out of scope (deliberate)
-- **New faction *types*** (necromancer, etc.) — a **content follow-on**, once the engine is tuned. The
-  engine keys off archetype *family* (roam/spread) + impact class, so a flavour-only type is just data
-  (an archetype row + a mobility mapping + phrasing rows) with **no engine change**.
-- **Novel behaviours** (a non-roam/spread mobility, non-territorial spread like a blight, naval
-  crossing) — would need an engine seam; none planned until a type calls for one.
-- **Settlement-internal factions** — a different layer, separate feature.
-- **Faction-vs-faction beyond hex contention** (armies, sieges) — contention is the whole resolver here.
+
+- **New faction *types*** (e.g. a necromancer/death-cult) — a **content follow-on**: because the engine
+  keys off mobility family + impact class, a flavour-only type is just data (an archetype row + a
+  mobility mapping + phrasing rows) with **no engine change**. Do it *after* this lands and is tuned.
+- **Novel behaviours** (a mobility that isn't roam/spread, a non-territorial "blight" spread, naval
+  crossing) — would need a new engine seam; none is assumed here.
+- **Settlement-internal factions** (guild politics inside one town) — a different, finer layer; separate
+  feature, maybe never.
+- **Army/siege resolution** beyond single-hex contention — contention is the whole resolver here.
