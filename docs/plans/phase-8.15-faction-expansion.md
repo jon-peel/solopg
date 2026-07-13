@@ -1,5 +1,26 @@
 # Phase 8.15 — Faction expansion as the engine (contention + world events)
 
+> **⚠️ As-built amendment (supersedes Chunk C below).** This phase shipped with one deliberate
+> change of direction from the plan: **faction expansion is played as SUBTEXT, not hooks.**
+> - **Chunk A (expansion engine) — shipped as written.** A faction turn is uncapped and contested and
+>   returns `FactionEvent[]` (`claim`/`move`/`takeover`/`repelled`/`eliminated`); `HOLDING_CAP` and the
+>   retired proximity code are gone; a faction at 0 holdings is `destroyed`.
+> - **Chunk B (visibility) — shipped as written.** Both the day-tick and the manual button log one line
+>   per event.
+> - **Chunk C (expansion → hooks) — built, then removed.** Play feedback: a GM would rather read the
+>   growing faction *in the fiction* (the map's coloured territory + the Chunk B log) than field a
+>   stream of auto-generated leads. So `buildExpansionHook` / `expansionHookContext` / `hexImpact` /
+>   the occupant rewrite / the `pattern:"expansion"` hook were all removed. The **manual "Stir up
+>   trouble" faction hook (8.11) was also removed** for the same reason — factions no longer emit hooks
+>   at all. The **region "something is stirring" hook (8.14) stays** (a broad tract-level signal, not a
+>   per-faction lead).
+> - **UI (not in the original plan):** the faction map **flag badge was removed** (coloured ring only,
+>   so a held POI's glyph stays visible), and the hex Detail tab's "Claim for faction" button became a
+>   single-owner **"Run by"** picker (shows the current holder; reassigns or clears on change).
+>
+> Everything from here down is the *original plan* and is kept for the engine/visibility design (Chunks
+> A–B). Treat the Chunk C sections as historical.
+
 > **This document is self-contained.** It assumes no prior knowledge of the app or of any earlier
 > discussion. Read the *Orientation*, *Glossary*, and *Conventions* first; then build the chunks in
 > order. Every design choice is already decided — you should not need to invent behaviour.

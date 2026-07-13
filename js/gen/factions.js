@@ -322,56 +322,6 @@ export function advanceFactionDays(world, days, seed) {
   return events;
 }
 
-// --- Faction-emitted hooks (Phase 8.11, Arc C) ---------------------------
-// A faction "stirs up trouble": it emits a NORMAL hook through the unchanged
-// hooks.js engine, but a faction hook is NOT a generic one — it NAMES the faction,
-// describes what it did, and points the party AT the faction's lair. That last
-// part is why it's always a `threat`: `threat` is the only engine verb whose prose
-// prints the menace name (→ the faction) AND carries a `lair` (→ the holding to go
-// to). The app builds a synthetic lair-subject and hands the engine verb + source;
-// factions.js just supplies those strings (no hooks.js import).
-
-// Goal -> the "word on the wind" that reaches town, used as the hook's `source`.
-// A rule (which goal reads as which rumour), so a JS const, tunable like the rest.
-const GOAL_RUMOUR = {
-  "seize the region":        "Word of a gathering power",
-  "hoard wealth":            "Talk of coin changing hands",
-  "drive out rivals":        "Rumour of a turf war",
-  "spread the faith":        "Whispers of new converts",
-  "awaken something buried": "Uneasy talk from the diggings",
-  "restore a fallen house":  "Old banners seen again",
-  "control the trade roads": "Merchants grumbling on the road",
-  "raid the frontier":       "Smoke on the frontier",
-};
-
-// How often a stir opens with the faction's goal rumour vs a rolled witness — so
-// consecutive stirs don't all start the same way (the "every hook reads the same"
-// fix). Tunable.
-const RUMOUR_CHANCE = 0.5;
-
-/**
- * The hook-engine context a faction contributes when it stirs up trouble
- * (Phase 8.11). Always a `threat` (so the faction is named and the hook points at
- * its lair). The `claim` is a rolled faction-deed (vivid, varied — the party hears
- * a *different* crime each time), and the `source` alternates between the goal
- * rumour and a rolled witness so the opening varies too. Pure given tables + rng;
- * deterministic (fixed roll order: deed, then the source coin-flip/roll).
- * @param {object} faction
- * @param {() => number} rng dedicated per-stir stream
- * @param {Map<string,object>} tables incl. faction-deed + hook-source
- * @returns {{ verb:string, claim:string, source?:string }}
- */
-export function factionHookContext(faction, rng, tables) {
-  const claim = rollTable(tables.get("faction-deed"), rng).value;
-  const rumour = (faction && faction.goal && GOAL_RUMOUR[faction.goal.kind]) || null;
-  // Goal rumour part of the time (ties the opening to the faction's aim); else a
-  // rolled witness ("A frightened merchant") so openings don't repeat.
-  const source = rumour && rng() < RUMOUR_CHANCE
-    ? rumour
-    : rollTable(tables.get("hook-source"), rng).value;
-  return { verb: "threat", claim, source };
-}
-
 // --- Region "something is stirring" hooks (Phase 8.14) -------------------
 // A broad, un-pinned escalation signal for a whole named tract — driven by
 // ESCALATION pressure among the factions seated in it (strength weighted by

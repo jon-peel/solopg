@@ -16,11 +16,15 @@ complete — a party marker + session day clock, a per-terrain **travel** model 
 getting lost), **day-at-a-time** travel (toward a hex, or an 8-point compass into the unknown that
 generates terrain and reveals line-of-sight), and a "Progress N days" control. **Phase 8 Arc B
 (Factions)** is also complete — factions with a **goal doom-clock**, **disposition**, **strength**,
-and **holdings across the map**; **generate** or **promote** an occupied POI into one, **claim**
-extra holdings, and **faction turns** (manual or auto-fired as days pass) that advance goals and
-**move/expand** factions by archetype (a bandit camp roams, a cult's reach spreads). See
-[PLAN.md](./PLAN.md) for what's next (Phase 8 **Arc C** faction-emitted / auto-firing hooks, Phase 9
-small oracles, Phase 10 backlog).
+and **holdings across the map**; **generate** or **promote** an occupied POI into one, set a hex's
+owner from a **"Run by"** picker, and **faction turns** (manual or auto-fired as days pass) that
+advance goals and **move/expand** factions by archetype (a bandit camp roams, a cult's reach spreads).
+The **expansion arc (8.13–8.15)** makes that contest the engine: growth is **uncapped and contested** —
+factions spread into open ground, fight for a rival's hex at the border (strength-weighted), and a
+faction that loses its last holding is **destroyed**. Every turn **narrates what each faction did**
+(the map's coloured territory + a running log) — expansion is played as **subtext, not hooks**. The one
+faction-adjacent lead is the region **"something is stirring"** signal (8.14). See [PLAN.md](./PLAN.md)
+for what's next (Phase 9 small oracles, Phase 10 backlog).
 
 ## Running
 

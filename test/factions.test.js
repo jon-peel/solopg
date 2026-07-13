@@ -10,7 +10,6 @@ import {
   TURN_LENGTH_DAYS,
   factionLabel,
   factionDescription,
-  factionHookContext,
   regionHeat,
   regionStirChance,
   rollRegionStir,
@@ -396,61 +395,6 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
   const lines2 = factionDescription(f2);
   assert.ok(lines2.includes("2 holdings · strength 3"));
   assert.ok(lines2.includes("Status: dormant"));
-});
-
-// --- Faction-emitted hook context (Phase 8.11) ---------------------------
-// A faction hook is always a `threat` pointing at the faction's lair; the deed is
-// a rolled faction-deed and the opening alternates rumour/witness so stirs vary.
-
-const hookTables = () => new Map(
-  ["faction-deed", "hook-source"].map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
-);
-const deedValues = () => valuesOf("faction-deed", hookTables());
-const sourceValues = () => valuesOf("hook-source", hookTables());
-
-// A deterministic rng that walks a fixed list, so a test pins each roll.
-const seq = (...vals) => { let i = 0; return () => vals[i++ % vals.length]; };
-
-test("factionHookContext is always a threat, with a rolled deed as the claim", () => {
-  const t = hookTables();
-  const deeds = deedValues();
-  for (const archetype of ["bandits", "cult", "merchant guild", "noble house", "mercenary company"]) {
-    const ctx = factionHookContext({ archetype, goal: { kind: "hoard wealth" } }, seq(0, 0), t);
-    assert.equal(ctx.verb, "threat");
-    assert.ok(deeds.has(ctx.claim), `deed ${ctx.claim} from the table`);
-  }
-});
-
-test("the opening is the goal rumour when the coin-flip is low, a witness when high", () => {
-  const t = hookTables();
-  const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
-  // Rolls: [deed pick, rumour coin-flip]. 0 < 0.5 → rumour; 0.99 ≥ 0.5 → witness.
-  assert.equal(factionHookContext(f, seq(0, 0), t).source, "Smoke on the frontier");
-  assert.ok(sourceValues().has(factionHookContext(f, seq(0, 0.99), t).source));
-});
-
-test("a faction with no mapped/absent goal always draws a witness source", () => {
-  const t = hookTables();
-  const src = factionHookContext({ archetype: "cult", goal: { kind: "brew tea" } }, seq(0, 0), t).source;
-  assert.ok(sourceValues().has(src), "falls back to a rolled hook-source");
-  const src2 = factionHookContext({ archetype: "cult" }, seq(0, 0), t).source;
-  assert.ok(sourceValues().has(src2));
-});
-
-test("per-stir seeding gives varied deeds across a run of stirs (variety fix)", () => {
-  const t = hookTables();
-  const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
-  // The app seeds each stir on (seed, "stir", factionId, ordinal). Six stirs should
-  // not all read the same — the whole point of the fix.
-  const deeds = new Set();
-  for (let n = 0; n < 6; n++) deeds.add(factionHookContext(f, subRng(1, "stir", "faction:0", n), t).claim);
-  assert.ok(deeds.size >= 3, `expected varied deeds, got ${[...deeds].join(" | ")}`);
-});
-
-test("factionHookContext is deterministic for a given rng + tables", () => {
-  const t = hookTables();
-  const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
-  assert.deepEqual(factionHookContext(f, seq(0.3, 0.1), t), factionHookContext(f, seq(0.3, 0.1), t));
 });
 
 // --- Expansion engine: contention, elimination, events (Phase 8.15) ------

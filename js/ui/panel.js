@@ -440,15 +440,6 @@ function factionCard(faction, model) {
     });
     box.appendChild(legend);
   }
-
-  // "Stir up trouble" (8.11) — an active faction with a seat emits a hook (its
-  // archetype/goal colour it), surfaced on the Hooks tab and tagged back here.
-  if (model.onStirTrouble && (faction.status || "active") === "active" && (faction.holdings || []).length) {
-    const row = document.createElement("div");
-    row.className = "tile-actions";
-    row.appendChild(actionButton("Stir up trouble", () => model.onStirTrouble(faction.id)));
-    box.appendChild(row);
-  }
   return box;
 }
 

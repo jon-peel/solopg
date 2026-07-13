@@ -9,10 +9,13 @@ remembers the evolving map.
 > [Roadmap & status](#roadmap--status)). Completed work is recorded in
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
-**Status (current):** Phases 0–7 complete, plus Phase 3R (world coherence) and **Phase 8 Arc A
-(Travel & Party Movement, 8.1–8.6) + Arc B (Factions, 8.7–8.10) + 8.13 (faction movement &
-expansion)** — see the Phase 8 notes near the end of this running log. Only **Arc C (Type-2 hooks,
-8.11–8.12)** remains in Phase 8. Phase 4
+**Status (current):** Phases 0–7 complete, plus Phase 3R (world coherence) and **Phase 8 complete
+(8.1–8.15)** — Arc A (Travel & Party Movement, 8.1–8.6) + Arc B (Factions, 8.7–8.10) + the
+**expansion arc (8.13–8.15)**, where faction turns become an **uncapped, contested** spatial engine
+(spread / move / seize / be destroyed) that is **played as subtext, not hooks** — see the Phase 8
+notes near the end of this running log. Faction-emitted hooks (the old 8.11/8.12 arc) were built and
+then **removed** in favour of that subtext; the region **"something is stirring"** signal (8.14) is
+the one faction-adjacent lead kept. Phase 4
 delivered the full dungeon arc (base interiors +
 Dungeon View; themed/explorable 4.5–4.8 arc; the 4.9.1–4.9.14 depth-&-connectivity sub-project —
 sizes, room-graphs + loops, doors/secret doors, inter-level + vertical stairs, multiple
@@ -559,6 +562,34 @@ now a stable value reserved for 8.12 hook loudness**. Suite at 395 `node --test`
 remains** (8.11 `sourcePower` + faction-emitted hooks; 8.12 auto-fire hooks on day-tick, where
 strength is finally read; plus the region-hook half of the old 8.13 stretch).
 
+**Phase 8 — the expansion arc (8.11–8.15) landed; factions are played as SUBTEXT, not hooks.**
+Arc C was built as planned and then **re-steered by play feedback**. What shipped:
+
+- **8.11 / 8.12 (built, then removed).** Faction-emitted hooks (`factionHookContext`, a manual
+  "Stir up trouble" button) and day-tick proximity auto-fire (`autoHookChance` / `rollAutoHookCount`)
+  worked, but read as noise — a GM would rather play a growing faction *in the fiction* than field a
+  stream of generated leads. Both were removed (along with the `data/faction-deed.json` table).
+- **8.14 (kept).** The region **"something is stirring"** hook — a broad, un-pinned escalation signal
+  for a whole named tract, driven by `regionHeat` (strength × doom-clock progress + contest tension),
+  auto-fired on the day-tick and tagged with the dominant faction via `sourcePower`. This is the one
+  faction-adjacent lead that stayed, because it reads as *the region tipping over*, not spam.
+- **8.15 — expansion is the engine.** A faction turn stops mutating the map silently and **returns
+  `FactionEvent[]`** (`claim` / `move` / `takeover` / `repelled` / `eliminated`). `HOLDING_CAP` is
+  gone — growth is **uncapped**, prefers empty ground, and **contests** a rival's border hex with a
+  strength-weighted roll `atk/(atk+def)`; the loser drops the hex, and a faction at **0 holdings
+  becomes `destroyed`** and stops acting (`holderOf` + the reworked `moveOrSpread`). The app **logs one
+  line per event** on both the day-tick and the manual "Advance faction turn" button (the subtext),
+  and a spreading claim/takeover onto a POI could rewrite its occupant. Expansion→hooks was built
+  (a `pattern:"expansion"` hook) and then **removed too** — same subtext steer.
+- **UI polish (8.15).** Faction territory is now **just the coloured hex ring** (the flag badge was
+  dropped — it hid the POI glyph). The hex Detail tab gained a single-owner **"Run by"** picker that
+  shows the current holder and reassigns (or clears with **None**) on change, replacing the old
+  add-only "Claim for faction" button.
+
+No schema bump — still **v16** (holdings can shrink, `status:"destroyed"` and a POI-occupant rewrite
+are all valid v16 shapes; events are transient). Suite green at `node --test`. **Phase 8 is complete;
+next is Phase 9 (small oracles), then Phase 10 (backlog).**
+
 ---
 
 ## Foundational decisions (confirmed)
@@ -752,13 +783,13 @@ graph TD
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ✅ **done** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.9 POI dot polish ✅** [phase-7.9-poi-dot-polish.md](docs/plans/phase-7.9-poi-dot-polish.md) · **7.14 radial right-click back ✅** (landed inside the 3R water-polish work). Remaining backlog items moved to **Phase 10**. |
 | **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
-| 8 — Factions (+ Travel & Party Movement) | 🔨 **in progress** (Arc A ✅, Arc B ✅, 8.13 ✅; only Arc C 8.11–8.12 left) | **Arc A** (Travel 8.1–8.6 ✅) + **Arc B** (Factions: **8.7 generate ✅ · 8.8 promote ✅ · 8.9 holdings ✅ · 8.10 turns ✅**) + **8.13 movement/expansion ✅** (brought forward). Generation **plus operating rules** (goals advancing, disposition drift, holdings, faction turns/doom clock, archetype-driven movement & expansion, reuse of one faction across the map), on the party-movement clock. **Remaining: Arc C** (8.11 faction-emitted hooks, 8.12 auto-fire on day-tick). See [phase-8-factions.md](docs/plans/phase-8-factions.md) |
+| 8 — Factions (+ Travel & Party Movement) | ✅ **done** (8.1–8.15) | **Arc A** (Travel 8.1–8.6 ✅) + **Arc B** (Factions: **8.7 generate ✅ · 8.8 promote ✅ · 8.9 holdings ✅ · 8.10 turns ✅**) + the **expansion arc 8.13–8.15 ✅**: faction turns are an **uncapped, contested** spatial engine (spread / move / seize a rival's hex strength-weighted / be **destroyed** at 0 holdings), **played as subtext** — every turn narrates what each faction did, on the map + a running log. **Faction-emitted hooks (8.11/8.12) and expansion→hooks (8.15) were built then removed** in favour of that subtext; the region **"something is stirring"** hook (8.14 ✅) is the one faction-adjacent lead kept. UI: coloured-ring territory (no flag badge) + a **"Run by"** owner picker. Still schema v16. See [phase-8-factions.md](docs/plans/phase-8-factions.md) + [phase-8.15-faction-expansion.md](docs/plans/phase-8.15-faction-expansion.md) |
 | 9 — Additional small oracles | ▶ **queued (2nd)** | see catalog below |
 | 10 — Backlog | ▶ **queued (3rd)** | leftover QoL/UX items + misc ideas — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) and [phase-10-backlog.md](docs/plans/phase-10-backlog.md) |
 
-Phases 0→1→2→3→4→5 are a hard chain; 6/9 need only the map + POIs; 7 is done; 8 (Factions) builds
-on 6 (Hooks) and the POI/occupant model. **Remaining work order: 8 → 9 → 10** — Factions, then the
-small-oracle catalog, then the Phase 10 backlog, worked in that sequence rather than opportunistically.
+Phases 0→1→2→3→4→5 are a hard chain; 6/9 need only the map + POIs; 7 and 8 are done. **Remaining work
+order: 9 → 10** — the small-oracle catalog, then the Phase 10 backlog, worked in that sequence rather
+than opportunistically.
 
 **Phase 4 (done) — Dungeons:** a dungeon POI carries a terrain-biased theme (map glyph) and opens
 into a multi-level **Dungeon View** — per-level room-graph maps with loops, doors/secret doors,
@@ -806,10 +837,11 @@ powers" (roaming/region/news-propagation) belong to **Phase 8 (Factions)**. See
 
 ## Backlog — other ideas (queued 8 then 9 then 10)
 
-- **Phase 8 — Factions (queued 1st)** — generation **plus operating rules** (goals advancing,
-  disposition, holdings, faction turns/doom clock, reuse of one faction across the map). POIs
-  currently use generic occupier labels only; no faction objects exist.
-- **Phase 9 — Additional small oracles (queued 2nd)** — pick from the
+- **Phase 8 — Factions ✅ done** — generation + operating rules (goals, disposition, holdings,
+  faction turns/doom clock) plus the **uncapped, contested expansion engine** played as subtext.
+  Content follow-on left for later: new faction *types* (e.g. a death-cult) are pure data (an
+  archetype row + a mobility mapping) with no engine change.
+- **Phase 9 — Additional small oracles (queued 1st)** — pick from the
   [catalog above](#small-oracle-catalog-for-phase-9-selection).
 - **Phase 10 — Backlog (queued 3rd)** — everything else: the remaining Phase 7 QoL/UX items
   (search/jump-to, undo/redo, print/GM-screen view, themes, radial keyboard/touch parity, hooks tab
