@@ -121,7 +121,6 @@ test("promoteFaction maps a known occupier label to its archetype + disposition"
   assert.equal(promote(1, 0, 0, 0, "Bandits").disposition, "hostile");
   assert.equal(promote(1, 2, 2, 0, "Smugglers").archetype, "thieves' guild");
   assert.equal(promote(1, 2, 2, 0, "Cultists").archetype, "cult");
-  assert.equal(promote(1, 2, 2, 0, "A hermit").archetype, "hermit order");
 });
 
 test("promoteFaction records the source POI as origin + its single holding", () => {
@@ -340,9 +339,9 @@ test("a spreading faction claims one adjacent hex per turn, up to the cap", () =
   assert.equal(f.holdings.length, HOLDING_CAP, "stops growing at the cap");
 });
 
-test("a static faction (hermit order) never changes its holdings", () => {
+test("an unmapped-mobility archetype defaults to static (never changes holdings)", () => {
   const world = placedWorld({ seed: 3 });
-  const f = factionAt(3, 0, 0, 0, "hermit order");
+  const f = factionAt(3, 0, 0, 0, "wandering scholars"); // not in ARCHETYPE_MOBILITY → static
   world.factions.push(f);
   const before = JSON.stringify(f.holdings);
   for (let i = 0; i < 10; i++) advanceFactionTurn(world, world.seed);
@@ -417,7 +416,7 @@ const seq = (...vals) => { let i = 0; return () => vals[i++ % vals.length]; };
 test("factionHookContext is always a threat, with a rolled deed as the claim", () => {
   const t = hookTables();
   const deeds = deedValues();
-  for (const archetype of ["bandits", "cult", "merchant guild", "noble house", "hermit order"]) {
+  for (const archetype of ["bandits", "cult", "merchant guild", "noble house", "mercenary company"]) {
     const ctx = factionHookContext({ archetype, goal: { kind: "hoard wealth" } }, seq(0, 0), t);
     assert.equal(ctx.verb, "threat");
     assert.ok(deeds.has(ctx.claim), `deed ${ctx.claim} from the table`);

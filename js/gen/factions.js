@@ -84,8 +84,9 @@ const OCCUPIER_SEED = {
   "Cultists": { archetype: "cult", disposition: "hostile" },
   "Pilgrims": { archetype: "cult", disposition: "neutral" },
   "Deserters": { archetype: "mercenary company", disposition: "wary" },
-  "A hermit": { archetype: "hermit order", disposition: "neutral" },
   "Refugees": { disposition: "friendly" }, // no clean archetype → rolled
+  // "A hermit" is a POI occupant, not a power — it has no faction archetype, so
+  // promoting one just rolls an archetype like any other unmapped occupier.
 };
 
 /**
@@ -137,12 +138,12 @@ const DRIFT_CHANCE = 0.34;
 const DISPOSITIONS = ["hostile", "wary", "neutral", "friendly"];
 
 // Archetype -> how a faction acts on the map each turn (Phase 8.13): a roaming
-// warband MOVES its camp; a rooted power SPREADS its footprint; a hermit STAYS.
-// Unknown archetypes default to static (safe).
+// warband MOVES its camp; a rooted power SPREADS its footprint. Every faction
+// archetype now seeks influence one way or the other; unknown archetypes default
+// to static (safe) so nothing crashes if a table adds an unmapped one.
 const ARCHETYPE_MOBILITY = {
   bandits: "roaming", "monstrous tribe": "roaming", "mercenary company": "roaming",
   cult: "spreading", "thieves' guild": "spreading", "merchant guild": "spreading", "noble house": "spreading",
-  "hermit order": "static",
 };
 export const HOLDING_CAP = 6; // a spreading faction stops growing here (tunable)
 
