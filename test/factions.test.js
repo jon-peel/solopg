@@ -11,6 +11,13 @@ import {
   HOLDING_CAP,
   factionLabel,
   factionDescription,
+  factionHookContext,
+  autoHookChance,
+  rollAutoHookCount,
+  AUTO_HOOK_CAP,
+  regionHeat,
+  regionStirChance,
+  rollRegionStir,
   FACTION_BUILD,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
@@ -114,7 +121,6 @@ test("promoteFaction maps a known occupier label to its archetype + disposition"
   assert.equal(promote(1, 0, 0, 0, "Bandits").disposition, "hostile");
   assert.equal(promote(1, 2, 2, 0, "Smugglers").archetype, "thieves' guild");
   assert.equal(promote(1, 2, 2, 0, "Cultists").archetype, "cult");
-  assert.equal(promote(1, 2, 2, 0, "A hermit").archetype, "hermit order");
 });
 
 test("promoteFaction records the source POI as origin + its single holding", () => {
@@ -333,9 +339,9 @@ test("a spreading faction claims one adjacent hex per turn, up to the cap", () =
   assert.equal(f.holdings.length, HOLDING_CAP, "stops growing at the cap");
 });
 
-test("a static faction (hermit order) never changes its holdings", () => {
+test("an unmapped-mobility archetype defaults to static (never changes holdings)", () => {
   const world = placedWorld({ seed: 3 });
-  const f = factionAt(3, 0, 0, 0, "hermit order");
+  const f = factionAt(3, 0, 0, 0, "wandering scholars"); // not in ARCHETYPE_MOBILITY → static
   world.factions.push(f);
   const before = JSON.stringify(f.holdings);
   for (let i = 0; i < 10; i++) advanceFactionTurn(world, world.seed);
@@ -392,4 +398,175 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
   const lines2 = factionDescription(f2);
   assert.ok(lines2.includes("2 holdings · strength 3"));
   assert.ok(lines2.includes("Status: dormant"));
+});
+
+// --- Faction-emitted hook context (Phase 8.11) ---------------------------
+// A faction hook is always a `threat` pointing at the faction's lair; the deed is
+// a rolled faction-deed and the opening alternates rumour/witness so stirs vary.
+
+const hookTables = () => new Map(
+  ["faction-deed", "hook-source"].map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
+);
+const deedValues = () => valuesOf("faction-deed", hookTables());
+const sourceValues = () => valuesOf("hook-source", hookTables());
+
+// A deterministic rng that walks a fixed list, so a test pins each roll.
+const seq = (...vals) => { let i = 0; return () => vals[i++ % vals.length]; };
+
+test("factionHookContext is always a threat, with a rolled deed as the claim", () => {
+  const t = hookTables();
+  const deeds = deedValues();
+  for (const archetype of ["bandits", "cult", "merchant guild", "noble house", "mercenary company"]) {
+    const ctx = factionHookContext({ archetype, goal: { kind: "hoard wealth" } }, seq(0, 0), t);
+    assert.equal(ctx.verb, "threat");
+    assert.ok(deeds.has(ctx.claim), `deed ${ctx.claim} from the table`);
+  }
+});
+
+test("the opening is the goal rumour when the coin-flip is low, a witness when high", () => {
+  const t = hookTables();
+  const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
+  // Rolls: [deed pick, rumour coin-flip]. 0 < 0.5 → rumour; 0.99 ≥ 0.5 → witness.
+  assert.equal(factionHookContext(f, seq(0, 0), t).source, "Smoke on the frontier");
+  assert.ok(sourceValues().has(factionHookContext(f, seq(0, 0.99), t).source));
+});
+
+test("a faction with no mapped/absent goal always draws a witness source", () => {
+  const t = hookTables();
+  const src = factionHookContext({ archetype: "cult", goal: { kind: "brew tea" } }, seq(0, 0), t).source;
+  assert.ok(sourceValues().has(src), "falls back to a rolled hook-source");
+  const src2 = factionHookContext({ archetype: "cult" }, seq(0, 0), t).source;
+  assert.ok(sourceValues().has(src2));
+});
+
+test("per-stir seeding gives varied deeds across a run of stirs (variety fix)", () => {
+  const t = hookTables();
+  const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
+  // The app seeds each stir on (seed, "stir", factionId, ordinal). Six stirs should
+  // not all read the same — the whole point of the fix.
+  const deeds = new Set();
+  for (let n = 0; n < 6; n++) deeds.add(factionHookContext(f, subRng(1, "stir", "faction:0", n), t).claim);
+  assert.ok(deeds.size >= 3, `expected varied deeds, got ${[...deeds].join(" | ")}`);
+});
+
+test("factionHookContext is deterministic for a given rng + tables", () => {
+  const t = hookTables();
+  const f = { archetype: "bandits", goal: { kind: "raid the frontier" } };
+  assert.deepEqual(factionHookContext(f, seq(0.3, 0.1), t), factionHookContext(f, seq(0.3, 0.1), t));
+});
+
+// --- Auto-fire faction hooks (Phase 8.12) --------------------------------
+
+const activeFaction = (extra = {}) => ({
+  id: "faction:0", status: "active", strength: 3, holdings: [{ q: 5, r: 0 }], ...extra,
+});
+const PARTY = { q: 0, r: 0 };
+
+test("autoHookChance is 0 for an inactive faction, no party, or no holding", () => {
+  assert.equal(autoHookChance(activeFaction({ status: "dormant" }), PARTY), 0);
+  assert.equal(autoHookChance(activeFaction({ status: "destroyed" }), PARTY), 0);
+  assert.equal(autoHookChance(activeFaction(), null), 0);
+  assert.equal(autoHookChance(activeFaction({ holdings: [] }), PARTY), 0);
+  assert.equal(autoHookChance(null, PARTY), 0);
+});
+
+test("autoHookChance rises with strength and falls with distance", () => {
+  const weak = autoHookChance(activeFaction({ strength: 2 }), PARTY);
+  const strong = autoHookChance(activeFaction({ strength: 4 }), PARTY);
+  assert.ok(strong > weak, `strong ${strong} > weak ${weak}`);
+
+  const near = autoHookChance(activeFaction({ holdings: [{ q: 1, r: 0 }] }), PARTY);
+  const far = autoHookChance(activeFaction({ holdings: [{ q: 12, r: 0 }] }), PARTY);
+  assert.ok(near > far, `near ${near} > far ${far}`);
+});
+
+test("autoHookChance never exceeds the cap", () => {
+  // A very strong faction the party stands on would exceed 0.2 uncapped.
+  const c = autoHookChance(activeFaction({ strength: 99, holdings: [{ q: 0, r: 0 }] }), PARTY);
+  assert.ok(c <= 0.2 + 1e-9, `chance ${c} <= cap`);
+});
+
+test("rollAutoHookCount is 0 when the chance is 0 or days < 1", () => {
+  const alwaysLow = () => 0.999;
+  assert.equal(rollAutoHookCount(activeFaction({ status: "dormant" }), PARTY, 30, () => 0), 0);
+  assert.equal(rollAutoHookCount(activeFaction(), PARTY, 0, () => 0), 0);
+  assert.equal(rollAutoHookCount(activeFaction(), PARTY, 30, alwaysLow), 0); // rolls never beat the chance
+});
+
+test("rollAutoHookCount is capped at AUTO_HOOK_CAP even if every day hits", () => {
+  const alwaysHit = () => 0; // 0 < any positive chance → every day fires
+  const n = rollAutoHookCount(activeFaction({ strength: 4, holdings: [{ q: 0, r: 0 }] }), PARTY, 50, alwaysHit);
+  assert.equal(n, AUTO_HOOK_CAP);
+});
+
+test("rollAutoHookCount is deterministic for a given rng stream", () => {
+  const f = activeFaction({ strength: 4, holdings: [{ q: 1, r: 0 }] });
+  const a = rollAutoHookCount(f, PARTY, 40, subRng(9, "autohook", "faction:0", 0));
+  const b = rollAutoHookCount(f, PARTY, 40, subRng(9, "autohook", "faction:0", 0));
+  assert.equal(a, b);
+});
+
+test("a louder/nearer faction fires more often than a faint one (statistical)", () => {
+  // Sum counts across many independent day-streams; loud+near should out-fire faint+far.
+  const loud = activeFaction({ strength: 4, holdings: [{ q: 1, r: 0 }] });
+  const faint = activeFaction({ strength: 2, holdings: [{ q: 11, r: 0 }] });
+  let loudTotal = 0, faintTotal = 0;
+  for (let s = 0; s < 200; s++) {
+    loudTotal += rollAutoHookCount(loud, PARTY, 7, subRng(s, "autohook", "loud", 0));
+    faintTotal += rollAutoHookCount(faint, PARTY, 7, subRng(s, "autohook", "faint", 0));
+  }
+  assert.ok(loudTotal > faintTotal, `loud ${loudTotal} > faint ${faintTotal}`);
+});
+
+// --- Region "something is stirring" hooks (Phase 8.14) -------------------
+
+const rf = (strength, progress, max = 8) => ({
+  status: "active", strength, goal: { kind: "seize the region", progress, max },
+});
+
+test("regionHeat is 0 for an empty region", () => {
+  assert.equal(regionHeat([]), 0);
+  assert.equal(regionHeat(undefined), 0);
+});
+
+test("regionHeat rises with strength, goal progress, and faction count", () => {
+  const base = regionHeat([rf(2, 0)]);
+  assert.ok(regionHeat([rf(4, 0)]) > base, "stronger → hotter");
+  assert.ok(regionHeat([rf(2, 8)]) > base, "further along the doom clock → hotter");
+  assert.ok(regionHeat([rf(2, 0), rf(2, 0)]) > regionHeat([rf(2, 0)]), "more factions → hotter (contest)");
+});
+
+test("a near-complete doom clock contributes about 1.5x strength", () => {
+  // full clock → (0.5 + 1.0) * strength = 1.5 * strength; single faction, no contest.
+  assert.ok(Math.abs(regionHeat([rf(4, 8, 8)]) - 6) < 1e-9);
+});
+
+test("regionStirChance never exceeds the cap", () => {
+  const many = Array.from({ length: 20 }, () => rf(4, 8));
+  assert.ok(regionStirChance(many) <= 0.12 + 1e-9);
+});
+
+test("rollRegionStir is false with no factions or days < 1, true when every day hits", () => {
+  assert.equal(rollRegionStir([], 30, () => 0), false);
+  assert.equal(rollRegionStir([rf(4, 8)], 0, () => 0), false);
+  assert.equal(rollRegionStir([rf(4, 8)], 20, () => 0), true);   // 0 < chance every day
+  assert.equal(rollRegionStir([rf(4, 8)], 20, () => 0.999), false); // never beats the chance
+});
+
+test("rollRegionStir is deterministic for a given rng stream", () => {
+  const fs = [rf(3, 4), rf(2, 6)];
+  const a = rollRegionStir(fs, 25, subRng(3, "regionstir", "region:0", 0));
+  const b = rollRegionStir(fs, 25, subRng(3, "regionstir", "region:0", 0));
+  assert.equal(a, b);
+});
+
+test("a hot region stirs more often than a quiet one (statistical)", () => {
+  const hot = [rf(4, 8), rf(3, 6)];   // two strong, advanced factions
+  const quiet = [rf(2, 0)];            // one weak, fresh faction
+  let hotN = 0, quietN = 0;
+  for (let s = 0; s < 300; s++) {
+    if (rollRegionStir(hot, 14, subRng(s, "regionstir", "hot", 0))) hotN++;
+    if (rollRegionStir(quiet, 14, subRng(s, "regionstir", "quiet", 0))) quietN++;
+  }
+  assert.ok(hotN > quietN, `hot ${hotN} > quiet ${quietN}`);
 });

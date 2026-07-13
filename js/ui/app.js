@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc, neighbors } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors, axialDistance } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -13,6 +13,7 @@ import {
   buildChainStep,
   buildLocalHook,
   buildEscortHook,
+  buildRegionHook,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -26,8 +27,9 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext, rollAutoHookCount, rollRegionStir } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
+import { computeRegions } from "../gen/regions.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes } from "../gen/travel.js";
@@ -132,6 +134,12 @@ const HOOK_TABLE_IDS = [
 
 // Tables the faction generator rolls on (Phase 8.7), loaded on demand.
 const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition"];
+// Tables a faction hook (8.11/8.12) needs: the deed + witness source (rolled by
+// factionHookContext) and the reward tables (a threat carries a bounty). The claim
+// and source are supplied, so hook-threat/hook-source aren't rolled by the engine.
+const FACTION_HOOK_TABLE_IDS = ["faction-deed", "hook-source", "hook-patron", "hook-reward"];
+// Region "something is stirring" hooks (8.14) just need the omen table.
+const REGION_HOOK_TABLE_IDS = ["region-omen"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -326,17 +334,82 @@ function renderDayReadout() {
 // travelling (8.4) and the stationary "Progress" control — goes through here,
 // so Arc B/C have ONE seam to hook: 8.10 faction turns and 8.12 auto-hooks will
 // fire as days pass. For now it only bumps the (session-only) clock.
-function advanceDays(n) {
+async function advanceDays(n) {
   if (!Number.isFinite(n) || n < 1) return;
   sessionDay += n;
-  // Fire any faction turns the elapsed days earn (Phase 8.10). Mutates
-  // current.factions; the caller persists (travel + onProgressDays both do).
-  // (8.12 will also roll auto-hooks for the elapsed days here.)
+  // Fire any faction turns the elapsed days earn (Phase 8.10), then roll auto-hooks
+  // for the elapsed days (Phase 8.12). Both mutate current.factions/current.hooks;
+  // the caller persists once afterward (travel + onProgressDays both do).
   if (current) {
     const turns = advanceFactionDays(current, n, current.seed);
     if (turns > 0) logLine(`${turns} faction turn${turns === 1 ? "" : "s"} passed.`);
+    await autoFireFactionHooks(n);
   }
   renderDayReadout();
+}
+
+// Phase 8.12 — as days pass, active factions occasionally emit a hook on their own,
+// chance scaled by proximity (party → lair) × strength (rollAutoHookCount). Pushes
+// silently and logs a quiet line; the caller's single persistAndRefresh saves them.
+async function autoFireFactionHooks(days) {
+  const party = current.party ? { q: current.party.q, r: current.party.r } : null;
+  if (!party) return;
+  const factions = getFactions(current).filter((f) => (f.status || "active") === "active");
+  if (!factions.length) return;
+  const dayStart = sessionDay - days; // the day before this advance — a stable per-advance seed
+  let tables = null;
+  for (const f of factions) {
+    const rng = subRng(current.seed, "autohook", f.id, dayStart);
+    const count = rollAutoHookCount(f, party, days, rng);
+    for (let i = 0; i < count; i++) {
+      if (!tables) tables = await loadTables(FACTION_HOOK_TABLE_IDS);
+      if (!Array.isArray(current.hooks)) current.hooks = [];
+      const hook = buildFactionHook(f, tables);
+      if (!hook) break;
+      current.hooks.push(hook);
+      logLine(`Word reaches you — ${hookName(hook)} (${f.name}).`);
+    }
+  }
+  await autoFireRegionHooks(factions, days, dayStart);
+}
+
+// Phase 8.14 — a whole named tract "stirs" when the factions seated in it escalate
+// (regionHeat: strength × doom-clock progress + contest tension). At most one open
+// region hook per region at a time (dedupe). Pushes silently; the caller persists.
+async function autoFireRegionHooks(factions, days, dayStart) {
+  const regions = computeRegions(current.seed, buildTerrainByKey(current), { minSize: 16 });
+  if (!regions.length) return;
+  // Which named region does each hex fall in? Then bucket factions by their seat.
+  const regionByKey = new Map();
+  for (const reg of regions) for (const k of reg.keys) regionByKey.set(k, reg);
+  const buckets = new Map(); // region.id -> { region, fs:[] }
+  for (const f of factions) {
+    const seat = (f.holdings || [])[0];
+    if (!seat) continue;
+    const reg = regionByKey.get(axialKey(seat.q, seat.r));
+    if (!reg) continue;
+    let b = buckets.get(reg.id);
+    if (!b) buckets.set(reg.id, (b = { region: reg, fs: [] }));
+    b.fs.push(f);
+  }
+  let tables = null;
+  for (const { region, fs } of buckets.values()) {
+    // One open region hook per region — let it stand until the GM resolves it.
+    const open = (current.hooks || []).some(
+      (h) => h.pattern === "region" && h.region && h.region.id === region.id && (h.status || "open") === "open",
+    );
+    if (open) continue;
+    if (!rollRegionStir(fs, days, subRng(current.seed, "regionstir", region.id, dayStart))) continue;
+    if (!tables) tables = await loadTables(REGION_HOOK_TABLE_IDS);
+    if (!Array.isArray(current.hooks)) current.hooks = [];
+    const dominant = fs.reduce((a, b) => ((b.strength || 0) > (a.strength || 0) ? b : a));
+    const n = nextHookId(current);
+    const hook = buildRegionHook(tables, subRng(current.seed, "regionhook", region.id, n), {
+      region, index: n, sourcePower: dominant.id,
+    });
+    current.hooks.push(hook);
+    logLine(`The ${region.name.replace(/^the /i, "")} is stirring — ${fs.length} faction${fs.length === 1 ? "" : "s"} at work.`);
+  }
 }
 
 // "Progress N days" while stationary (Phase 8.6) — advances the (session-only)
@@ -346,7 +419,7 @@ function advanceDays(n) {
 async function onProgressDays() {
   const input = $("progress-days");
   const n = Math.max(1, Math.floor(Number(input && input.value) || 1));
-  advanceDays(n);
+  await advanceDays(n);
   if (current && getFactions(current).length) await persistAndRefresh();
 }
 
@@ -675,7 +748,7 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 // tab (same "jump to the tab" convention as a new hook).
 async function applyTravel(result, aimLabel, aimKind) {
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
-  if (result.daySpent) advanceDays(1); // one press = one day, through the shared clock
+  if (result.daySpent) await advanceDays(1); // one press = one day, through the shared clock
   lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
   setPanelTab("travel");
   await persistAndRefresh();
@@ -1248,6 +1321,9 @@ function refreshGlobalHooks() {
     onResolveHook,
     onIgnoreHook,
     onRemoveHook,
+    // Resolve a faction hook's sourcePower tag to a name + jump (8.11 Chunk C).
+    factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
+    onCenterFaction,
   });
 }
 
@@ -1259,6 +1335,7 @@ function refreshFactions() {
     factions,
     onCenterFaction,
     onAdvanceFactionTurn,
+    onStirTrouble,
     factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
   });
 }
@@ -1516,16 +1593,23 @@ const HOOK_NOTE = {
 async function onGenerateHook(opts = {}) {
   // The origin is wherever the GM is looking. A hook — especially a read map —
   // can be made from any selected cell, placed or not.
-  if (!current || !selected) return;
+  if (!current || (!selected && !opts.origin)) return;
   try {
     // Distant/Map hooks build new tiles, so load the hex/POI tables too.
     const tables = await loadTables(HEX_TABLE_IDS.concat(HOOK_TABLE_IDS));
     if (!Array.isArray(current.hooks)) current.hooks = [];
     const n = nextHookId(current);
-    const origin = { q: selected.q, r: selected.r };
-    const rng = subRng(current.seed, "hook", origin.q, origin.r, n);
+    // Origin is the selected cell, or an explicit override (a faction's seat, 8.11).
+    const origin = opts.origin || { q: selected.q, r: selected.r };
+    // opts.nonce (faction stirs) mixes into the seed so repeat stirs from the same
+    // origin never collide; normal hooks keep their original seed unchanged.
+    const rng = opts.nonce
+      ? subRng(current.seed, "hook", origin.q, origin.r, n, opts.nonce)
+      : subRng(current.seed, "hook", origin.q, origin.r, n);
 
-    const subjects = hookSubjects(current);
+    // Faction hooks (8.11) inject their own subject (the lair); everything else
+    // draws candidates from the whole map.
+    const subjects = opts.subjects || hookSubjects(current);
     const pattern = opts.forcePattern || rollHookPattern(tables, rng, subjects.length > 0);
 
     let hook;
@@ -1567,7 +1651,7 @@ async function onGenerateHook(opts = {}) {
         const { subject, path } = buildMapTargetAndPath(tables, origin, spot);
         hook = generateHook(tables, rng, {
           subjects: [subject], origin, index: n, pattern: "map",
-          distance: spot.distance, path, source: opts.source,
+          distance: spot.distance, path, verb: opts.verb, source: opts.source,
         });
       } else {
         const targetHex = buildDistantTargetHex(tables, spot.q, spot.r);
@@ -1575,16 +1659,18 @@ async function onGenerateHook(opts = {}) {
         hook = generateHook(tables, rng, {
           subjects: [subjectFromHex(targetHex, targetHex.pois[0])],
           origin, index: n, pattern: "distant", distance: spot.distance,
+          verb: opts.verb, source: opts.source,
         });
       }
     } else if (pattern === "return") {
       // A development at an existing on-map POI (rollHookPattern guarantees subjects).
-      hook = generateHook(tables, rng, { subjects, origin, index: n, pattern: "return", verb: "return" });
+      hook = generateHook(tables, rng, { subjects, origin, index: n, pattern: "return", verb: "return", source: opts.source });
     } else {
-      hook = generateHook(tables, rng, { subjects, origin, index: n });
+      hook = generateHook(tables, rng, { subjects, origin, index: n, verb: opts.verb, claim: opts.claim, source: opts.source });
     }
 
     if (!hook) return logLine("Nothing to gossip about here.");
+    if (opts.sourcePower) hook.sourcePower = opts.sourcePower; // tag a Type-2 (faction-emitted) hook (8.11)
     current.hooks.push(hook);
     // Surface the new lead: jump to the Hooks tab with it selected (and its
     // endpoints highlighted on the map) so it's never a silent "nothing happened".
@@ -1702,6 +1788,83 @@ async function onClaimHolding(factionId) {
   setPanelTab("factions");
   await persistAndRefresh();
   logLine(`${faction.name} claims (${q}, ${r}) — now ${faction.holdings.length} holdings.`);
+}
+
+// The placed settlement nearest a point — where word of a faction's deeds reaches
+// the party (8.11: "word spreads down to town"). null if the map has no settlement.
+function nearestSettlementTo(world, pt) {
+  let best = null, bestD = Infinity;
+  for (const h of placedHexes(world)) {
+    if (!(h.settlement && h.settlement.present)) continue;
+    const d = axialDistance(pt.q, pt.r, h.coords.q, h.coords.r);
+    if (d < bestD) { bestD = d; best = { q: h.coords.q, r: h.coords.r }; }
+  }
+  return best;
+}
+
+// A readable "lair" name for a holding with no POI of its own: its settlement/GM
+// name, else a camp in the terrain (so the threat prose still reads as a place).
+function lairPlaceName(hex, lair) {
+  if (hex && (hex.name || (hex.settlement && hex.settlement.present))) return destinationLabel(hex, lair.q, lair.r);
+  return hex && hex.terrain ? `a camp in the ${hex.terrain.toLowerCase()}` : "a hidden camp";
+}
+
+// Build ONE faction hook (shared by the manual "Stir up trouble" button, 8.11, and
+// the day-tick auto-fire, 8.12). Returns a fully-formed hook tagged back to the
+// faction, or null if it has no lair. Pushes/persist/UI are the caller's job — so
+// the auto path can emit several silently and persist once. The deed/opening are
+// seeded on the faction + how many hooks it has already emitted (reload-safe), so
+// consecutive hooks never read the same.
+function buildFactionHook(faction, tables) {
+  const lair = (faction.holdings || [])[0];
+  if (!lair) return null;
+  const lairHex = getHex(current, lair.q, lair.r);
+  // Where the party hears it: nearest town, else the party's position, else the
+  // lair itself — so the hook has a real leg to travel.
+  const origin = nearestSettlementTo(current, lair)
+    || (current.party ? { q: current.party.q, r: current.party.r } : null)
+    || { q: lair.q, r: lair.r };
+  const ordinal = (current.hooks || []).filter((h) => h.sourcePower === faction.id).length;
+  const rng = subRng(current.seed, "stir", faction.id, ordinal);
+  const { verb, claim, source } = factionHookContext(faction, rng, tables);
+  // A synthetic subject: the lair place "occupied by" the faction, so the engine's
+  // threat prose prints the FACTION as the menace and the holding as its lair.
+  const lairPoi = lairHex && (lairHex.pois || []).find((p) => p.id === lair.poiId);
+  const subject = {
+    poiId: lair.poiId,
+    name: lairPoi ? poiBaseName(lairPoi) : lairPlaceName(lairHex, lair),
+    type: lairPoi ? lairPoi.type : "lair",
+    q: lair.q, r: lair.r,
+    terrain: lairHex ? lairHex.terrain : null,
+    occupant: { kind: "occupied", by: faction.name },
+  };
+  const n = nextHookId(current);
+  // nonce keeps the engine's reward roll distinct per emission even from one town.
+  const hrng = subRng(current.seed, "hook", origin.q, origin.r, n, `${faction.id}:${ordinal}`);
+  const hook = generateHook(tables, hrng, { subjects: [subject], origin, index: n, verb, claim, source });
+  if (!hook) return null;
+  hook.sourcePower = faction.id; // tag it back to the faction (8.11)
+  return hook;
+}
+
+// "Stir up trouble" (Phase 8.11) — the manual button: build one faction hook, push
+// it, and surface it on the Hooks tab (the auto path, 8.12, reuses buildFactionHook
+// without the tab-jump). The hook NAMES the faction, describes a varied deed, and
+// points the party AT its lair.
+async function onStirTrouble(factionId) {
+  if (!current) return;
+  const faction = getFactions(current).find((f) => f.id === factionId);
+  if (!faction || (faction.status || "active") !== "active") return;
+  if (!(faction.holdings || [])[0]) return logLine(`${faction.name} has no lair to stir from.`);
+  if (!Array.isArray(current.hooks)) current.hooks = [];
+  const tables = await loadTables(FACTION_HOOK_TABLE_IDS);
+  const hook = buildFactionHook(faction, tables);
+  if (!hook) return logLine(`${faction.name} has nowhere to stir from.`);
+  current.hooks.push(hook);
+  selectedHookId = hook.id;
+  setPanelTab("hooks");
+  await persistAndRefresh();
+  logLine(`New hook — ${hookName(hook)} (stirred up by ${faction.name}).`);
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the

@@ -132,7 +132,9 @@ export function generateHook(tables, rng, ctx) {
   const subject = pickSubject(rng, subjects, origin, verb);
   const target = { q: subject.q, r: subject.r, poiId: subject.poiId };
 
-  const claim = rollTable(tables.get(`hook-${verb}`), rng).value;
+  // ctx.claim lets a caller supply the deed text (Phase 8.11 faction hooks pass a
+  // faction-deed roll); otherwise roll the verb's own claim table.
+  const claim = ctx.claim || rollTable(tables.get(`hook-${verb}`), rng).value;
   const source = ctx.source || rollTable(tables.get("hook-source"), rng).value;
 
   // A THREAT names the menace (the occupant), to be tracked to its lair (the
@@ -298,12 +300,45 @@ export function startChain(tables, rng, ctx) {
   };
 }
 
+/**
+ * Build a REGION hook (Phase 8.14) — a broad "something is stirring" signal for a
+ * named terrain tract. It has NO lair and NO travel leg: target = the region's
+ * centroid (so the map can centre on it) and subject.name is the region name. The
+ * omen (claim) is rolled; the app tags the dominant faction via sourcePower.
+ * @param {Map<string,object>} tables incl. region-omen
+ * @param {() => number} rng
+ * @param {{ region:{id:string,name:string,cq:number,cr:number}, index?:number, sourcePower?:string }} ctx
+ */
+export function buildRegionHook(tables, rng, ctx) {
+  const reg = ctx.region;
+  const centroid = { q: Math.round(reg.cq), r: Math.round(reg.cr) };
+  const claim = rollTable(tables.get("region-omen"), rng).value;
+  return {
+    id: ctx.index != null ? `hook:${ctx.index}` : undefined,
+    build: HOOK_BUILD,
+    pattern: "region",
+    verb: "region",
+    subject: { name: reg.name, type: "region" },
+    region: { id: reg.id, name: reg.name, cq: reg.cq, cr: reg.cr },
+    origin: centroid,
+    target: centroid,
+    bearing: null,
+    distance: 0,
+    targetTerrain: null,
+    claim,
+    source: null,
+    status: "open",
+    ...(ctx.sourcePower ? { sourcePower: ctx.sourcePower } : {}),
+  };
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the hook list (e.g. "Threat: Ruin — Troll lair"). */
 export function hookName(hook) {
   if (!hook) return null;
   if (hook.pattern === "chain") return `Hunt → ${hook.subject.name}`;
+  if (hook.pattern === "region") return `Stirring: ${hook.subject.name}`;
   return `${cap(hook.verb)}: ${hook.subject.name}`;
 }
 
@@ -348,6 +383,9 @@ export function hookDescription(hook, opts = {}) {
     line0 = `A buyer here ${hook.claim} ${hook.subject.name}.`;
   } else if (hook.pattern === "event") {
     line0 = `${cap(hook.claim)} here.`;
+  } else if (hook.pattern === "region") {
+    // A whole tract escalating — no target POI, no distance; just the omen.
+    line0 = `Something stirs in ${hook.subject.name}: ${hook.claim}.`;
   } else if (hook.pattern === "escort") {
     line0 = `${hook.source}: carry ${hook.cargo} to ${hook.subject.name}, ${whither}.`;
   } else if (hook.pattern === "map") {
