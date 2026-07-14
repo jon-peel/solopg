@@ -335,6 +335,7 @@ async function advanceDays(n) {
   if (current) {
     const events = advanceFactionDays(current, n, current.seed);
     logFactionEvents(events);
+    applyFactionOccupancy(events);
   }
   renderDayReadout();
 }
@@ -356,6 +357,38 @@ function logFactionEvents(events) {
   }
 }
 
+// A POI's occupant follows faction control (8.17): mark `poi` as held by `faction`
+// (updates the occupant label + the name suffix). Leaves a monster LAIR alone — a
+// passing power doesn't clear a beast's den — and no-ops if the faction already
+// holds it. Returns true if it changed.
+function occupyPoiForFaction(poi, faction) {
+  if (!poi || !poi.occupant || !faction) return false;
+  if (poi.occupant.kind === "lair") return false;
+  if (poi.occupant.factionId === faction.id) return false;
+  poi.occupant = { kind: "occupied", by: faction.name, factionId: faction.id };
+  poi.name = `${poiBaseName(poi)} — ${faction.name}`;
+  return true;
+}
+
+// As factions spread, they gradually absorb the sites they roll over (8.17): for
+// each claim/takeover/move onto a hex that carries a POI, a small chance the POI
+// becomes theirs. (Seating on a POI — generate/promote — is deterministic; that's
+// handled at those call sites.) Seeded per (faction, hex) so it's reproducible.
+const OCCUPY_ON_SPREAD_CHANCE = 0.25;
+function applyFactionOccupancy(events) {
+  if (!Array.isArray(events)) return;
+  for (const ev of events) {
+    if (ev.kind !== "claim" && ev.kind !== "takeover" && ev.kind !== "move") continue;
+    const hex = getHex(current, ev.q, ev.r);
+    const poi = hex && (hex.pois || [])[0];
+    if (!poi) continue;
+    const faction = getFactions(current).find((f) => f.id === ev.factionId);
+    if (!faction) continue;
+    if (subRng(current.seed, "occupy", faction.id, ev.q, ev.r)() < OCCUPY_ON_SPREAD_CHANCE) {
+      occupyPoiForFaction(poi, faction);
+    }
+  }
+}
 
 // "Progress N days" while stationary (Phase 8.6) — advances the (session-only)
 // day counter. Since 8.10, elapsed days can fire faction turns (persisted state),
@@ -378,6 +411,7 @@ async function onAdvanceFactionTurn() {
   if (!active) return logLine("No active factions to advance.");
   const events = advanceFactionTurn(current, current.seed);
   logFactionEvents(events);
+  applyFactionOccupancy(events);
   if (!events.length) logLine("The factions bide their time — no change on the map.");
   await persistAndRefresh();
 }
@@ -1651,9 +1685,10 @@ async function onGenerateFaction() {
     const rng = subRng(current.seed, "faction", q, r, n);
     // Attach the holding to a POI here, if one is placed (a faction holds a site).
     const hex = getHex(current, q, r);
-    const poiId = hex && Array.isArray(hex.pois) && hex.pois[0] ? hex.pois[0].id : undefined;
-    const faction = generateFaction(tables, rng, { q, r, index: n, seed: current.seed, poiId });
+    const poi0 = hex && Array.isArray(hex.pois) ? hex.pois[0] : undefined;
+    const faction = generateFaction(tables, rng, { q, r, index: n, seed: current.seed, poiId: poi0 && poi0.id });
     addFaction(current, faction);
+    if (poi0) occupyPoiForFaction(poi0, faction); // seating on a POI takes it over (8.17)
     setPanelTab("factions");
     await persistAndRefresh();
     logLine(`New faction — ${faction.name} (${faction.archetype}).`);
@@ -1680,7 +1715,7 @@ async function onPromotePoi(poiId, archetype) {
     const rng = subRng(current.seed, "faction", q, r, n);
     const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant, archetype });
     addFaction(current, faction);
-    poi.occupant.factionId = faction.id; // link the POI to its new faction
+    occupyPoiForFaction(poi, faction); // the POI is now held by its new faction (8.17)
     setPanelTab("factions");
     await persistAndRefresh();
     logLine(`Promoted ${poi.occupant.by} → ${faction.name} (${faction.archetype}).`);
