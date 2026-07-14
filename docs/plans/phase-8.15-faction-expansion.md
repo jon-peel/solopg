@@ -11,9 +11,9 @@
 >   growing faction *in the fiction* (the map's coloured territory + the Chunk B log) than field a
 >   stream of auto-generated leads. So `buildExpansionHook` / `expansionHookContext` / `hexImpact` /
 >   the occupant rewrite / the `pattern:"expansion"` hook were all removed. The **manual "Stir up
->   trouble" faction hook (8.11) was also removed** for the same reason — factions no longer emit hooks
->   at all. The **region "something is stirring" hook (8.14) stays** (a broad tract-level signal, not a
->   per-faction lead).
+>   trouble" faction hook (8.11) and the region "something is stirring" hook (8.14) were also removed**
+>   for the same reason — factions emit **no hooks at all**. (The region *naming* engine, `computeRegions`,
+>   stays — it still labels tracts on the map.)
 > - **UI (not in the original plan):** the faction map **flag badge was removed** (coloured ring only,
 >   so a held POI's glyph stays visible), and the hex Detail tab's "Claim for faction" button became a
 >   single-owner **"Run by"** picker (shows the current holder; reassigns or clears on change).

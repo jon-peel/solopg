@@ -13,7 +13,6 @@ import {
   buildChainStep,
   buildLocalHook,
   buildEscortHook,
-  buildRegionHook,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -27,9 +26,8 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, rollRegionStir } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
-import { computeRegions } from "../gen/regions.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes } from "../gen/travel.js";
@@ -134,8 +132,6 @@ const HOOK_TABLE_IDS = [
 
 // Tables the faction generator rolls on (Phase 8.7), loaded on demand.
 const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition"];
-// Region "something is stirring" hooks (8.14) just need the omen table.
-const REGION_HOOK_TABLE_IDS = ["region-omen"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -335,13 +331,10 @@ async function advanceDays(n) {
   sessionDay += n;
   // Fire the faction turns the elapsed days earn (Phase 8.10); each turn returns
   // events (8.15) that we LOG as running commentary — expansion is played as
-  // subtext (the map + log), not auto-generated hooks. Then the region "stirring"
-  // pass (8.14). All mutate current.factions/current.hooks; the caller persists once.
+  // subtext (the map + log), not auto-generated hooks.
   if (current) {
     const events = advanceFactionDays(current, n, current.seed);
     logFactionEvents(events);
-    const active = getFactions(current).filter((f) => (f.status || "active") === "active");
-    if (active.length) await autoFireRegionHooks(active, n, sessionDay - n);
   }
   renderDayReadout();
 }
@@ -363,44 +356,6 @@ function logFactionEvents(events) {
   }
 }
 
-// Phase 8.14 — a whole named tract "stirs" when the factions seated in it escalate
-// (regionHeat: strength × doom-clock progress + contest tension). At most one open
-// region hook per region at a time (dedupe). Pushes silently; the caller persists.
-async function autoFireRegionHooks(factions, days, dayStart) {
-  const regions = computeRegions(current.seed, buildTerrainByKey(current), { minSize: 16 });
-  if (!regions.length) return;
-  // Which named region does each hex fall in? Then bucket factions by their seat.
-  const regionByKey = new Map();
-  for (const reg of regions) for (const k of reg.keys) regionByKey.set(k, reg);
-  const buckets = new Map(); // region.id -> { region, fs:[] }
-  for (const f of factions) {
-    const seat = (f.holdings || [])[0];
-    if (!seat) continue;
-    const reg = regionByKey.get(axialKey(seat.q, seat.r));
-    if (!reg) continue;
-    let b = buckets.get(reg.id);
-    if (!b) buckets.set(reg.id, (b = { region: reg, fs: [] }));
-    b.fs.push(f);
-  }
-  let tables = null;
-  for (const { region, fs } of buckets.values()) {
-    // One open region hook per region — let it stand until the GM resolves it.
-    const open = (current.hooks || []).some(
-      (h) => h.pattern === "region" && h.region && h.region.id === region.id && (h.status || "open") === "open",
-    );
-    if (open) continue;
-    if (!rollRegionStir(fs, days, subRng(current.seed, "regionstir", region.id, dayStart))) continue;
-    if (!tables) tables = await loadTables(REGION_HOOK_TABLE_IDS);
-    if (!Array.isArray(current.hooks)) current.hooks = [];
-    const dominant = fs.reduce((a, b) => ((b.strength || 0) > (a.strength || 0) ? b : a));
-    const n = nextHookId(current);
-    const hook = buildRegionHook(tables, subRng(current.seed, "regionhook", region.id, n), {
-      region, index: n, sourcePower: dominant.id,
-    });
-    current.hooks.push(hook);
-    logLine(`The ${region.name.replace(/^the /i, "")} is stirring — ${fs.length} faction${fs.length === 1 ? "" : "s"} at work.`);
-  }
-}
 
 // "Progress N days" while stationary (Phase 8.6) — advances the (session-only)
 // day counter. Since 8.10, elapsed days can fire faction turns (persisted state),

@@ -3,9 +3,9 @@
 > **⚠️ Superseded — this feature was removed.** 8.11's faction-emitted hooks (the "Stir up
 > trouble" button, `factionHookContext`, the `faction-deed` table) shipped and were later **removed**
 > in the 8.15 arc: factions are now played as **subtext** (the map's coloured territory + the per-turn
-> log), not hooks. The `sourcePower` hook field survives (still used by the region "something is
-> stirring" hook, 8.14). See [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md) and
-> PLAN.md for the as-built. This doc is kept as the historical plan.
+> log) and emit **no hooks at all** (the region "something is stirring" hook, 8.14, was later removed
+> too). See [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md) and PLAN.md for the
+> as-built. This doc is kept as the historical plan.
 
 Closes the seam Phase 6 left open (Type-2 "a power stirs up trouble" hooks *"wait on a future
 faction feature"*). Arc B built the faction, so 8.11 wires it up — but with a sharper idea of **what a

@@ -2,8 +2,8 @@
 
 > **⚠️ Superseded — this feature was removed.** The proximity auto-fire (`autoHookChance` /
 > `rollAutoHookCount`) shipped and was later **removed** in the 8.15 arc, along with the 8.11 faction
-> hooks it built on — factions are now played as **subtext**, not hooks. The day-tick still auto-fires
-> the region "something is stirring" hook (8.14), which stays. See
+> hooks it built on — factions are now played as **subtext** and emit **no hooks at all** (the region
+> "something is stirring" hook, 8.14, was later removed too). See
 > [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md) and PLAN.md for the as-built.
 > This doc is kept as the historical plan.
 

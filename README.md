@@ -22,9 +22,8 @@ advance goals and **move/expand** factions by archetype (a bandit camp roams, a 
 The **expansion arc (8.13–8.15)** makes that contest the engine: growth is **uncapped and contested** —
 factions spread into open ground, fight for a rival's hex at the border (strength-weighted), and a
 faction that loses its last holding is **destroyed**. Every turn **narrates what each faction did**
-(the map's coloured territory + a running log) — expansion is played as **subtext, not hooks**. The one
-faction-adjacent lead is the region **"something is stirring"** signal (8.14). See [PLAN.md](./PLAN.md)
-for what's next (Phase 9 small oracles, Phase 10 backlog).
+(the map's coloured territory + a running log) — factions are played entirely as **subtext**, and emit
+**no hooks**. See [PLAN.md](./PLAN.md) for what's next (Phase 9 small oracles, Phase 10 backlog).
 
 ## Running
 
