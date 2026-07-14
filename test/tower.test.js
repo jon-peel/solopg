@@ -80,3 +80,29 @@ test("generateTower is deterministic for a given seed + occupant", () => {
   const b = generateTower(tables(), mulberry32(12), { occupant: occupied });
   assert.deepEqual(a, b);
 });
+
+// --- Lord-infused towers (Phase 8.18) ------------------------------------
+
+test("a lord fills its tower with its family and sits as the master", () => {
+  const t = tables();
+  t.set("monster-families", JSON.parse(readFileSync("./data/monster-families.json", "utf8")));
+  const undead = new Set(
+    t.get("monster-families").entries.find((e) => e.value.family === "Undead").value.members.map((m) => m.value),
+  );
+  const tower = generateTower(t, mulberry32(4), {
+    occupant: { kind: "occupied", by: "Bandits" },
+    overlord: { family: "Undead", boss: "Necromancer", id: "faction:0" },
+  });
+  assert.equal(tower.overlordId, "faction:0", "interior stamped with its lord");
+  for (const lvl of tower.levels) assert.equal(lvl.family, "Undead");
+  const top = tower.levels[tower.levels.length - 1];
+  assert.equal(top.rooms[top.rooms.length - 1].monster.name, "Necromancer", "the lord is the master on top");
+  const names = tower.levels.flatMap((l) => l.rooms.filter((r) => r.monster).map((r) => r.monster.name));
+  assert.ok(names.every((n) => undead.has(n) || n === "Necromancer"), "every manned room is undead (or the lord)");
+  assert.ok(!names.includes("Bandits"), "the old garrison label is gone");
+});
+
+test("without a lord, a tower has no overlord stamp", () => {
+  const tower = generateTower(tables(), mulberry32(4), { occupant: { kind: "occupied", by: "Bandits" } });
+  assert.ok(!("overlordId" in tower));
+});

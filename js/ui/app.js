@@ -912,11 +912,12 @@ const onAddDungeon = (size) => addPoiToSelected("dungeon", { sizeHint: size });
 // interior shape + renderer as dungeons, with orientation:"up".
 const MAPPED_TYPES = new Set(["dungeon", "tower"]);
 
-// A lair-bound lord infuses its DUNGEON interior (8.18): the lord's monster family
-// fills the depths and the lord itself is the final boss (the entrance garrison stays
-// as the original holdouts). Family + boss by lord archetype; the lich also becomes
-// a proper "Lich" boss (the Undead family's own elite is a Vampire).
-const LORD_DUNGEON = {
+// A lair-bound lord infuses its mapped interior — DUNGEON depths or TOWER floors
+// (8.18): the lord's monster family fills it and the lord itself is the final boss
+// (a dungeon's entrance garrison stays as the original holdouts). Family + boss by
+// lord archetype; the lich becomes a proper "Lich" boss (the Undead family's own
+// elite is a Vampire).
+const LORD_INTERIOR = {
   lich:        { family: "Undead", boss: "Lich" },
   necromancer: { family: "Undead", boss: "Necromancer" },
   vampire:     { family: "Undead", boss: "Vampire" },
@@ -928,7 +929,7 @@ function overlordFor(poi) {
   const occ = poi && poi.occupant;
   if (!occ || !occ.factionId) return null;
   const f = getFactions(current).find((x) => x.id === occ.factionId);
-  const spec = f && LORD_DUNGEON[f.archetype];
+  const spec = f && LORD_INTERIOR[f.archetype];
   return spec ? { ...spec, id: f.id } : null;
 }
 
@@ -940,10 +941,10 @@ function interiorNeedsBuild(poi) {
   const wantBuild = poi.type === "tower" ? TOWER_BUILD : DUNGEON_BUILD;
   if (!d || d.build !== wantBuild) return true;
   if (!Array.isArray(d.levels) || d.levels.some((l) => !l || !l.layout)) return true;
-  // Re-form a dungeon when a lord has taken (or left) it (8.18): the interior is
-  // stamped with the lord it was built for; a mismatch means it must reflect the new
-  // holder. (This resets that dungeon's exploration — it changed hands.)
-  if (poi.type === "dungeon") {
+  // Re-form a dungeon/tower when a lord has taken (or left) it (8.18): the interior
+  // is stamped with the lord it was built for; a mismatch means it must reflect the
+  // new holder. (This resets that interior's exploration — it changed hands.)
+  if (poi.type === "dungeon" || poi.type === "tower") {
     const lord = overlordFor(poi);
     if ((d.overlordId || null) !== (lord ? lord.id : null)) return true;
   }
@@ -1006,6 +1007,7 @@ async function onSelectPoi(id) {
           poi.detail.dungeon = generateTower(tables, rng, {
             occupant: poi.occupant,
             terrain: hex.terrain,
+            overlord: overlordFor(poi), // 8.18: a lord fills its tower
           });
           poi.name = towerName(poi); // enrich the list label with the tower's kind
         } else {
