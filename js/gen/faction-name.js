@@ -42,6 +42,25 @@ const HOUSE = [
   "Ostrenne", "Falk", "Dree", "Wexford", "Ashcroft", "Ryker", "Valmont",
 ];
 
+// --- Lair-bound lords + rebellion (Phase 8.16) ---------------------------
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+// A necromancer/lich reads as a crypt-cabal ("The Hollow Ossuary").
+const UNDEAD_BODY = ["Cabal", "Ossuary", "Sepulchre", "Barrow", "Pall", "Coven", "Circle", "Hand"];
+// A vampire is a titled individual or a "court".
+const VAMP_TITLE = ["Count", "Countess", "Baron", "Baroness", "the Pale Lord", "the Crimson Lord"];
+// A hag / coven of the wilds.
+const HAG_ADJ = ["Bog", "Fen", "Mire", "Bramble", "Withered", "Grinning", "Weeping"];
+const HAG_BODY = ["Crone", "Hag", "Coven", "Sisters", "Grandmother", "Witch"];
+// A dragon is a NAMED individual wyrm ("Varethyx, the Ashen Wyrm").
+const DRAGON_NAMES = [
+  "Varethyx", "Sarnoth", "Vharzul", "Ignareth", "Cindraxus", "Aurgloth",
+  "Malzureth", "Thraxion", "Ormraxis", "Zaltheryn",
+];
+const WYRM = ["Wyrm", "Drake", "Wyrm", "Great Wyrm", "Serpent"];
+// Rebellion — a peasant rising or a breakaway banner.
+const REBEL_ADJ = ["Peasant", "Free", "Common", "Ragged", "Broken-Chain"];
+const REBEL_BODY = ["Free Banners", "Free Companies", "Peasants' Banner", "Ragged Host", "Sworn Commons"];
+
 /**
  * A seeded faction name.
  * @param {number|string} seed world seed
@@ -52,9 +71,27 @@ const HOUSE = [
 export function factionName(seed, n, opts = {}) {
   const rng = subRng(seed, "fname", n);
   const archetype = opts.archetype || "";
+  const kind = opts.kind || "";
 
   // Noble houses read as dynasties.
   if (archetype === "noble house") return `House ${pick(rng, HOUSE)}`;
+
+  // Lair-bound lords (8.16) read distinctly from the rank-and-file powers.
+  if (archetype === "dragon") return `${pick(rng, DRAGON_NAMES)}, the ${pick(rng, ADJ)} ${pick(rng, WYRM)}`;
+  if (archetype === "necromancer" || archetype === "lich") return `The ${pick(rng, ADJ)} ${pick(rng, UNDEAD_BODY)}`;
+  if (archetype === "vampire") return rng() < 0.5 ? `${pick(rng, VAMP_TITLE)} ${pick(rng, HOUSE)}` : `The ${pick(rng, ADJ)} Court`;
+  if (archetype === "hag") return `The ${pick(rng, HAG_ADJ)} ${pick(rng, HAG_BODY)}`;
+
+  // Rebellion (8.16) — a peasant rising or a breakaway house.
+  if (archetype === "rebellion") {
+    const r = rng();
+    if (r < 0.34) return `House ${pick(rng, HOUSE)} in Revolt`;
+    if (r < 0.67) return `The ${pick(rng, REBEL_ADJ)} Uprising`;
+    return `The ${pick(rng, REBEL_BODY)}`;
+  }
+
+  // A monstrous tribe with a known kind reads by its creatures (The Gnolls of the Waste).
+  if (archetype === "monstrous tribe" && kind) return `The ${cap(kind)} of ${pick(rng, OF_PLACE)}`;
 
   // Wilder powers lean tribal ("<Kin> of <Place>") half the time; everyone else
   // (and the other half) gets an order-name ("The <Adj> <Body>").

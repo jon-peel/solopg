@@ -10,6 +10,7 @@ import {
   TURN_LENGTH_DAYS,
   factionLabel,
   factionDescription,
+  eligibleLords,
   FACTION_BUILD,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
@@ -541,4 +542,85 @@ test("advanceFactionTurn / advanceFactionDays return well-formed FactionEvent ar
   const d = advanceFactionDays(world, TURN_LENGTH_DAYS, world.seed);
   assert.ok(Array.isArray(d));
   for (const e of d) { assert.ok(KINDS.has(e.kind)); assert.equal(typeof e.factionId, "string"); }
+});
+
+// --- More faction types (Phase 8.16) -------------------------------------
+// Tables incl. the monster-kind table (the shared tables() omits it, matching the
+// app-minimal set used elsewhere).
+const tablesK = () => new Map(
+  ["faction-archetype", "faction-goal", "faction-disposition", "faction-monster-kind"]
+    .map((id) => [id, validateTable(JSON.parse(readFileSync(`./data/${id}.json`, "utf8")))]),
+);
+
+test("a monstrous tribe rolls a KIND that flavours its name + card", () => {
+  const t = tablesK();
+  const kinds = valuesOf("faction-monster-kind", t);
+  const f = generateFaction(t, subRng(7, "faction", 0, 0, 0), { q: 0, r: 0, index: 0, seed: 7, archetype: "monstrous tribe" });
+  assert.ok(kinds.has(f.kind), `kind ${f.kind} from the table`);
+  const Kind = f.kind[0].toUpperCase() + f.kind.slice(1);
+  assert.match(f.name, new RegExp(`\\b${Kind}\\b`), "name folds in the kind");
+  assert.ok(factionDescription(f).some((l) => l.includes(f.kind)), "card shows the kind");
+});
+
+test("a non-tribe faction carries no kind", () => {
+  const f = generateFaction(tablesK(), subRng(7, "faction", 0, 0, 0), { q: 0, r: 0, index: 0, seed: 7, archetype: "cult" });
+  assert.ok(!("kind" in f));
+});
+
+test("boss archetypes get boss-tier strength; others keep the 2..4 baseline", () => {
+  const t = tablesK();
+  const range = (archetype, min, max) => {
+    for (let s = 0; s < 30; s++) {
+      const f = generateFaction(t, subRng(s, "z", 0, 0, 0), { q: 0, r: 0, index: 0, seed: s, archetype });
+      assert.ok(f.strength >= min && f.strength <= max, `${archetype} strength ${f.strength} in ${min}..${max}`);
+    }
+  };
+  range("dragon", 5, 6);
+  range("lich", 4, 5);
+  range("vampire", 4, 5);
+  range("necromancer", 3, 4);
+  range("hag", 3, 4);
+  range("bandits", 2, 4); // unlisted → default baseline
+});
+
+test("eligibleLords maps sites → lords, and the dragon is singular", () => {
+  const arche = (poi, terr, factions) => eligibleLords(poi, terr, factions).map((l) => l.archetype);
+  assert.deepEqual(arche("tower", "Plains"), ["necromancer"]);
+  assert.deepEqual(arche("dungeon", "Plains"), ["lich", "vampire"]);
+  assert.deepEqual(arche("dungeon", "Mountains"), ["lich", "vampire", "dragon"]);
+  assert.deepEqual(arche("shrine", "Plains"), ["vampire"]);
+  assert.deepEqual(arche("camp", "Swamp"), ["hag"]);
+  assert.deepEqual(arche("landmark", "Plains"), []);
+  // Each eligible option carries a label for the button.
+  assert.ok(eligibleLords("tower", "Plains").every((l) => typeof l.label === "string" && l.label));
+  // Singular: with a dragon already active, a mountain dungeon no longer offers it.
+  const withDragon = [{ archetype: "dragon", status: "active" }];
+  assert.ok(!arche("dungeon", "Mountains", withDragon).includes("dragon"));
+});
+
+test("promoteFaction raises a hostile lord of the chosen archetype", () => {
+  const f = promoteFaction(tablesK(), subRng(1, "faction", 2, 3, 0), {
+    q: 2, r: 3, poiId: "poi:0", index: 0, seed: 1, occupant: { by: "A hermit" }, archetype: "lich",
+  });
+  assert.equal(f.archetype, "lich");
+  assert.equal(f.disposition, "hostile");
+  assert.ok(f.strength >= 4 && f.strength <= 5, `lich strength ${f.strength}`);
+  assert.deepEqual(f.origin, { fromPOI: { q: 2, r: 3, poiId: "poi:0" } });
+});
+
+test("a lair-bound lord keeps its seat while its influence spreads", () => {
+  const world = placedWorld({ seed: 3 });
+  const f = generateFaction(tablesK(), subRng(3, "faction", 0, 0, 0), { q: 0, r: 0, index: 0, seed: 3, archetype: "necromancer" });
+  world.factions.push(f);
+  const seat = { ...f.holdings[0] };
+  for (let i = 0; i < 8; i++) advanceFactionTurn(world, world.seed);
+  assert.deepEqual(f.holdings[0], seat, "the lair (holding #0) never moves");
+  assert.ok(f.holdings.length > 1, "influence spread to new hexes");
+});
+
+test("rebellion is a rare rollable archetype in the table", () => {
+  const t = tables();
+  assert.ok(valuesOf("faction-archetype", t).has("rebellion"));
+  const reb = t.get("faction-archetype").entries.find((e) => e.value === "rebellion");
+  assert.ok(reb.weight <= 1, "low weight → rare");
 });

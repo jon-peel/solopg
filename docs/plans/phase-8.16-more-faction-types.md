@@ -7,19 +7,28 @@ a little variety. No new movement behaviour — every new type reuses **spreadin
 
 ## What ships
 
-1. **Lair-bound lords** — `necromancer`, `lich`, `dragon`. Each: **seated at a site**, **spreading**
-   (the lair — holding #0 — never moves; a spreader only *adds* surrounding hexes, so the lair stays
-   put while its influence creeps outward), **boss-tier strength**, hostile. They **never roll in the
-   random "Generate faction here"** — they arise **only by Promote** on the matching site:
-   - **necromancer** ← promote an occupied **tower**
-   - **lich** ← promote an occupied **dungeon**
-   - **dragon** ← promote an occupied **dungeon or a mountain/hills lair**; **singular** (at most one
-     per world). Where a site could be either, Promote offers a pick (lich / dragon).
+1. **Lair-bound lords** — `necromancer`, `lich`, `vampire`, `dragon`, `hag`. Each: **seated at a
+   site**, **spreading** (the lair — holding #0 — never moves; a spreader only *adds* surrounding
+   hexes, so the lair stays put while its influence creeps outward), **boss-tier strength**, hostile.
+   They **never roll in the random "Generate faction here"** — they arise **only by Promote**, and the
+   Promote action offers the lord(s) whose **site** matches (POI type + terrain). Eligibility (POI
+   types are dungeon/shrine/camp/landmark/tower — there is no "ruin" type):
+   - **necromancer** ← occupied **tower**
+   - **lich** ← occupied **dungeon**
+   - **vampire** ← occupied **dungeon or shrine** (a crypt / desecrated chapel)
+   - **dragon** ← occupied **dungeon** on **Mountains/Hills** terrain; **singular** (one per world)
+   - **hag** ← any occupied POI on **Swamp** terrain
+   A given site may offer more than one (e.g. a mountain dungeon → Lich / Vampire / Dragon); the GM
+   picks. Beholder is **not** a lord — it went to the dungeon roster (below), as its menace is met in
+   the depths, not spread across the map.
 2. **Rebellion** — a **rare** rollable archetype (low weight in the table), **spreading**, hostile;
    name flavour covers both a *peasant rising* and a *breakaway house*.
 3. **Monster-tribe diversity** — a rolled **kind** inside the existing `monstrous tribe` archetype,
-   woven into the name and the faction card: *"The Gnolls of the Waste"* · *"Monstrous tribe · gnolls"*.
+   woven into the name and the faction card: *"The Gnolls of the Waste"* · *"Monstrous tribe (gnolls)"*.
    Kinds: `goblins, orcs, gnolls, hobgoblins, kobolds, ogres, lizardfolk, beastmen, ratfolk`.
+4. **Dungeon roster (folded in)** — extend `data/monster-families.json` with the classic "big"
+   monsters as high-tier members, in **`OSE name (D&D name)`** form where OSE renames them (e.g.
+   `Eye of Terror (Beholder)`; `Medusa` unchanged). Verified per-monster against the OSE SRD.
 
 ## Data & schema
 
@@ -34,10 +43,11 @@ a little variety. No new movement behaviour — every new type reuses **spreadin
 - `data/faction-archetype.json`: add **`rebellion`** at a **low weight** (rare). (Bosses omitted — see
   above.)
 - `js/gen/factions.js`:
-  - `ARCHETYPE_MOBILITY`: add `necromancer`, `lich`, `dragon`, `rebellion` → all `"spreading"`.
+  - `ARCHETYPE_MOBILITY`: add `necromancer`, `lich`, `vampire`, `dragon`, `hag`, `rebellion` → all
+    `"spreading"`.
   - **Strength tiers** — a new `ARCHETYPE_STRENGTH` override (min/max), falling back to the current
-    `2..4` for unlisted archetypes: `necromancer 3..4`, `lich 4..5`, `dragon 5..6`, `rebellion 2..4`.
-    Read it in `generateFaction` in place of the flat `inRange(STRENGTH_*)`.
+    `2..4` for unlisted archetypes: `necromancer 3..4`, `lich 4..5`, `vampire 4..5`, `dragon 5..6`,
+    `hag 3..4`, `rebellion 2..4`. Read it in `generateFaction` in place of the flat `inRange(STRENGTH_*)`.
   - **Monster kind:** when `archetype === "monstrous tribe"`, roll a `kind` from a new
     `data/faction-monster-kind.json` and store it on the faction. Surface it in `factionDescription`
     (`Monstrous tribe · gnolls`).
@@ -50,21 +60,34 @@ a little variety. No new movement behaviour — every new type reuses **spreadin
     peasant-rising and breakaway-house).
   - `monstrous tribe` with a `kind` → fold the kind into the wild name (*"The Gnolls of the Waste"*).
 
-## Chunk B — Promote-seeding by site + boss rules (in `js/gen/factions.js` + `js/ui/app.js`)
+## Chunk B — Promote-seeding by site + boss rules (in `js/gen/factions.js` + `js/ui/app.js` + `panel.js`)
 
-- Extend the Promote path so the boss archetype is chosen by the **site**, not the occupier label:
-  tower → necromancer; dungeon → lich (or dragon); mountain/hills lair → dragon. Seed
-  archetype + a hostile disposition + the boss strength tier.
-- **Dragon uniqueness:** if the world already has an active `dragon`, the Promote UI does not offer
-  "dragon" again (and the core refuses it) — singular.
-- The Promote action surfaces the valid boss choice(s) for the selected site; a plain occupied POI
-  still promotes to a normal faction as today.
+- `js/gen/factions.js` (pure): a data-driven `LORD_SITES` map + `eligibleLords(poiType, terrain,
+  factions)` → the lord archetypes whose site matches, minus a singular lord that already exists
+  (dragon). `promoteFaction` takes an explicit `ctx.archetype` (the chosen lord) → seeds that archetype
+  + `hostile` disposition + its strength tier (bypasses the occupier-label seed).
+- `js/ui/app.js`: `onPromotePoi(poiId, archetype?)` — with an archetype it raises that lord; without,
+  the normal label-seeded promote. Compute `lordOptionsFor(poi)` (uses the selected hex terrain +
+  `getFactions`) and pass it into the selection-panel model.
+- `js/ui/panel.js`: alongside "Promote to faction", render one **"‹Raise a Lich› / ‹Awaken a Dragon›…"**
+  button per eligible lord.
+- **Dragon uniqueness:** `eligibleLords` drops `dragon` once an active one exists, so the button
+  disappears; the core also refuses a second.
 
 ## Chunk C — surfacing (in `js/ui/panel.js` / `factionDescription`)
 
 - Faction card shows the monster kind and reads the boss archetypes cleanly (`Necromancer · hostile`,
-  `Dragon · hostile`, `Monstrous tribe · gnolls`).
+  `Dragon · hostile`, `Monstrous tribe (gnolls) · wary`).
 - No map change — bosses draw as ordinary coloured-ring territory (the 8.15 convention).
+
+## Chunk D — dungeon roster (in `data/monster-families.json`)
+
+- Add the classic "big" monsters as high-tier members of the right families, in `OSE (D&D)` form
+  where OSE renames them: Aberrations → `Eye of Terror (Beholder)`, a mind-flayer-alike; Undead →
+  a death-knight-alike (alongside the existing Vampire elite); Reptiles → `Medusa`, a yuan-ti-alike.
+  Names verified against the OSE SRD; where OSE has no open equivalent, keep the plain name and flag it.
+- Additive weighted members only — elites and the family structure are unchanged (no generator/test
+  churn).
 
 ## Tests
 

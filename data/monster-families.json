@@ -11,7 +11,8 @@
       { "weight": 1, "value": "Wights", "tier": 3 },
       { "weight": 1, "value": "Wraiths", "tier": 4 },
       { "weight": 1, "value": "Mummies", "tier": 4 },
-      { "weight": 1, "value": "Spectres", "tier": 4 }
+      { "weight": 1, "value": "Spectres", "tier": 4 },
+      { "weight": 1, "value": "Death Knight", "tier": 4 }
     ] } },
     { "value": { "family": "Goblinoids", "elite": "Bugbear chief", "members": [
       { "weight": 3, "value": "Kobolds", "tier": 1 },
@@ -56,7 +57,9 @@
       { "weight": 2, "value": "Cave fisher", "tier": 2 },
       { "weight": 1, "value": "Ochre jelly", "tier": 3 },
       { "weight": 1, "value": "Gelatinous cube", "tier": 3 },
-      { "weight": 1, "value": "Gargoyles", "tier": 3 }
+      { "weight": 1, "value": "Gargoyles", "tier": 3 },
+      { "weight": 1, "value": "Eye of Terror (Beholder)", "tier": 4 },
+      { "weight": 1, "value": "Tentacled Horror (Mind Flayer)", "tier": 4 }
     ] } },
     { "value": { "family": "Bandits", "elite": "Bandit captain", "members": [
       { "weight": 3, "value": "Bandits", "tier": 1 },
@@ -71,7 +74,9 @@
       { "weight": 2, "value": "Lizard men", "tier": 2 },
       { "weight": 2, "value": "Troglodytes", "tier": 2 },
       { "weight": 1, "value": "Giant lizards", "tier": 3 },
-      { "weight": 1, "value": "Giant snakes", "tier": 3 }
+      { "weight": 1, "value": "Giant snakes", "tier": 3 },
+      { "weight": 1, "value": "Serpentfolk (Yuan-ti)", "tier": 3 },
+      { "weight": 1, "value": "Medusa", "tier": 4 }
     ] } },
     { "value": { "family": "Giants", "elite": "Cyclops", "members": [
       { "weight": 3, "value": "Ogres", "tier": 3 },

@@ -143,6 +143,11 @@ function renderPoiSection(sel, hex, model) {
         const row = document.createElement("div");
         row.className = "tile-actions";
         row.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(selectedPoi.id)));
+        // Lair-bound lords (8.16): a matching site can be raised into a boss instead.
+        const lords = model.lordOptionsFor ? model.lordOptionsFor(selectedPoi) : [];
+        for (const { archetype, label } of lords) {
+          row.appendChild(actionButton(label, () => model.onPromotePoi(selectedPoi.id, archetype)));
+        }
         box.appendChild(row);
       }
     }

@@ -29,6 +29,12 @@ export const FACTION_BUILD = 1;
 const GOAL_MIN = 5, GOAL_MAX = 8;       // clock segments to complete a goal (4 + d4)
 const STRENGTH_MIN = 2, STRENGTH_MAX = 4; // starting power/resource level (1 + d3)
 
+// Boss/rare archetypes (8.16) hit harder than the rolled 2..4 baseline; unlisted
+// archetypes fall back to STRENGTH_MIN..STRENGTH_MAX. Retunable, like every gen const.
+const ARCHETYPE_STRENGTH = {
+  necromancer: [3, 4], lich: [4, 5], vampire: [4, 5], dragon: [5, 6], hag: [3, 4],
+};
+
 const inRange = (rng, min, max) => min + Math.floor(rng() * (max - min + 1));
 
 /**
@@ -49,8 +55,17 @@ export function generateFaction(tables, rng, ctx) {
   const disposition = ctx.disposition || rollTable(tables.get("faction-disposition"), rng).value;
   const goalKind = rollTable(tables.get("faction-goal"), rng).value;
   const max = inRange(rng, GOAL_MIN, GOAL_MAX);
-  const strength = inRange(rng, STRENGTH_MIN, STRENGTH_MAX);
-  const name = ctx.name || factionName(ctx.seed, n, { archetype });
+  const [sMin, sMax] = ARCHETYPE_STRENGTH[archetype] || [STRENGTH_MIN, STRENGTH_MAX];
+  const strength = inRange(rng, sMin, sMax);
+  // A monstrous tribe carries a KIND (goblins/gnolls/…) that flavours its name and
+  // card (8.16). Rolled LAST so it never perturbs the other fields' draws, and only
+  // when the optional table is loaded (so generateFaction still works with a minimal
+  // table set). The name stream is separate (subRng "fname"), so order is safe.
+  let kind;
+  if (archetype === "monstrous tribe" && tables.get && tables.get("faction-monster-kind")) {
+    kind = rollTable(tables.get("faction-monster-kind"), rng).value;
+  }
+  const name = ctx.name || factionName(ctx.seed, n, { archetype, kind });
 
   const holding = { q: ctx.q, r: ctx.r };
   if (ctx.poiId) holding.poiId = ctx.poiId;
@@ -69,6 +84,7 @@ export function generateFaction(tables, rng, ctx) {
     clock: { turns: 0, sinceTurn: 0 },
     origin: ctx.origin || null,
     status: ctx.status || "active",
+    ...(kind ? { kind } : {}),
   };
 }
 
@@ -102,12 +118,52 @@ const OCCUPIER_SEED = {
 export function promoteFaction(tables, rng, ctx) {
   const label = ctx.occupant && ctx.occupant.by;
   const seed = OCCUPIER_SEED[label] || {};
+  // A promoted LORD (8.16) is chosen explicitly by its site (ctx.archetype) and is
+  // always hostile; otherwise seed archetype/disposition from the occupier label (8.8).
+  const archetype = ctx.archetype || seed.archetype; // undefined → generateFaction rolls it
+  const disposition = ctx.archetype ? "hostile" : seed.disposition;
   return generateFaction(tables, rng, {
     q: ctx.q, r: ctx.r, poiId: ctx.poiId, index: ctx.index, seed: ctx.seed,
-    archetype: seed.archetype,       // undefined → generateFaction rolls it
-    disposition: seed.disposition,   // undefined → generateFaction rolls it
+    archetype, disposition,
     origin: { fromPOI: { q: ctx.q, r: ctx.r, ...(ctx.poiId ? { poiId: ctx.poiId } : {}) } },
   });
+}
+
+// --- Lair-bound lords (Phase 8.16) ---------------------------------------
+// Spreading powers seated at a specific SITE, created ONLY by Promote (never in the
+// random archetype roll). Which lord a site can raise is a RULE (POI type + terrain),
+// so a JS const. A `unique` lord (the dragon) exists at most once per world.
+const LORD_SITES = {
+  necromancer: { poi: ["tower"], label: "Raise a necromancer" },
+  lich:        { poi: ["dungeon"], label: "Raise a lich" },
+  vampire:     { poi: ["dungeon", "shrine"], label: "Wake a vampire" },
+  dragon:      { poi: ["dungeon"], terrain: ["Mountains", "Hills"], unique: true, label: "Awaken a dragon" },
+  hag:         { terrain: ["Swamp"], label: "A hag claims it" },
+};
+
+/** Lord archetypes — never randomly rolled; only reached via Promote. */
+export const LORD_ARCHETYPES = Object.keys(LORD_SITES);
+
+/**
+ * Which lord(s) an occupied site can be promoted into (Phase 8.16), by POI type +
+ * terrain, minus a singular lord that already exists. Pure.
+ * @param {string} poiType e.g. "tower" | "dungeon" | "shrine"
+ * @param {string} terrain e.g. "Mountains" | "Swamp"
+ * @param {object[]} [factions] existing factions (for the singular check)
+ * @returns {{ archetype:string, label:string }[]}
+ */
+export function eligibleLords(poiType, terrain, factions = []) {
+  const exists = (a) => (factions || []).some((f) => f.archetype === a && (f.status || "active") === "active");
+  const out = [];
+  for (const archetype of LORD_ARCHETYPES) {
+    const site = LORD_SITES[archetype];
+    const poiOk = site.poi ? site.poi.includes(poiType) : true;
+    const terrOk = site.terrain ? site.terrain.includes(terrain) : true;
+    if (!(poiOk && terrOk)) continue;
+    if (site.unique && exists(archetype)) continue;
+    out.push({ archetype, label: site.label });
+  }
+  return out;
 }
 
 /**
@@ -144,6 +200,10 @@ const DISPOSITIONS = ["hostile", "wary", "neutral", "friendly"];
 const ARCHETYPE_MOBILITY = {
   bandits: "roaming", "monstrous tribe": "roaming", "mercenary company": "roaming",
   cult: "spreading", "thieves' guild": "spreading", "merchant guild": "spreading", "noble house": "spreading",
+  // 8.16 — lair-bound lords keep their seat (spreaders never move holding #0) while
+  // their influence grows; a rebellion spreads its rising. All spreading.
+  necromancer: "spreading", lich: "spreading", vampire: "spreading", dragon: "spreading", hag: "spreading",
+  rebellion: "spreading",
 };
 
 const isActive = (f) => (f.status || "active") === "active";
@@ -341,7 +401,7 @@ export function factionDescription(faction) {
   const holdings = Array.isArray(faction.holdings) ? faction.holdings.length : 0;
   const clock = faction.clock || {};
   const lines = [
-    `${cap(faction.archetype)} · ${faction.disposition}`,
+    `${cap(faction.archetype)}${faction.kind ? ` (${faction.kind})` : ""} · ${faction.disposition}`,
     `Goal: ${g.kind} (${g.progress ?? 0} / ${g.max ?? 0})`,
     `${holdings} holding${holdings === 1 ? "" : "s"} · strength ${faction.strength}`,
     `Turn ${clock.turns ?? 0} · ${clock.sinceTurn ?? 0}/${TURN_LENGTH_DAYS} d to next`,

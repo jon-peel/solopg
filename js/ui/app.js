@@ -26,7 +26,7 @@ import {
   addFaction,
   getFactions,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -130,8 +130,8 @@ const HOOK_TABLE_IDS = [
   "creatures",
 ];
 
-// Tables the faction generator rolls on (Phase 8.7), loaded on demand.
-const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition"];
+// Tables the faction generator rolls on (Phase 8.7; + monster kind 8.16), loaded on demand.
+const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition", "faction-monster-kind"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -617,6 +617,9 @@ function renderSelection() {
     onTravelToward: hex && hex.placed ? onTravelToward : undefined,
     onGenerateFaction: hex && hex.placed ? onGenerateFaction : undefined,
     onPromotePoi,
+    // Which lair-bound lord(s) this occupied POI could be raised into (8.16), by
+    // its type + the hex terrain, minus a singular lord that already exists.
+    lordOptionsFor: (poi) => (hex ? eligibleLords(poi.type, hex.terrain, getFactions(current)) : []),
     onCenterFaction,
     factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
     factions: hex && hex.placed ? getFactions(current) : [],
@@ -1662,7 +1665,9 @@ async function onGenerateFaction() {
 // Promote an occupied POI into a faction (Phase 8.8) — seeds the archetype from
 // the occupier label so it reads as the same threat, records the POI as origin,
 // and tags the POI's occupant with the new faction id (no double-promote).
-async function onPromotePoi(poiId) {
+// With an explicit `archetype` (8.16), raises a lair-bound LORD of that kind
+// instead (necromancer/lich/vampire/dragon/hag), seeded hostile.
+async function onPromotePoi(poiId, archetype) {
   if (!current || !selected) return;
   try {
     const hex = getHex(current, selected.q, selected.r);
@@ -1673,7 +1678,7 @@ async function onPromotePoi(poiId) {
     const { q, r } = selected;
     const n = nextFactionId(current);
     const rng = subRng(current.seed, "faction", q, r, n);
-    const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant });
+    const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant, archetype });
     addFaction(current, faction);
     poi.occupant.factionId = faction.id; // link the POI to its new faction
     setPanelTab("factions");
