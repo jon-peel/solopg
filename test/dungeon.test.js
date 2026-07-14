@@ -492,3 +492,32 @@ test("ctx.theme is honored for every level", () => {
     assert.ok(d.levels.every((l) => l.theme === "Mausoleum"));
   }
 });
+
+// --- Lord-infused interiors (Phase 8.18) ---------------------------------
+
+test("a lord infuses its dungeon: its family fills every level and it's the deepest boss", () => {
+  const overlord = { family: "Undead", boss: "Lich", id: "faction:0" };
+  const d = generateDungeon(tables(), mulberry32(7), { size: "Sizable", theme: "Ruined fort", overlord });
+  assert.equal(d.overlordId, "faction:0", "interior stamped with its lord");
+  for (const lvl of d.levels) assert.equal(lvl.family, "Undead", `every level is the lord's family (got ${lvl.family})`);
+  const deepest = d.levels[d.levels.length - 1];
+  assert.ok(deepest.encounters.some((e) => e.value === "Lich"), "the Lich waits at the bottom");
+});
+
+test("a dragon's dungeon leans Reptiles with a Dragon boss", () => {
+  const d = generateDungeon(tables(), mulberry32(3), { size: "Sizable", theme: "Cave complex", overlord: { family: "Reptiles", boss: "Dragon", id: "faction:1" } });
+  for (const lvl of d.levels) assert.equal(lvl.family, "Reptiles");
+  assert.ok(d.levels[d.levels.length - 1].encounters.some((e) => e.value === "Dragon"));
+});
+
+test("without a lord the dungeon is unchanged (no overlord stamp)", () => {
+  const d = generateDungeon(tables(), mulberry32(7), { size: "Sizable", theme: "Ruined fort" });
+  assert.ok(!("overlordId" in d));
+});
+
+test("a lord-infused dungeon is deterministic for a seed", () => {
+  const ov = { family: "Undead", boss: "Lich", id: "faction:0" };
+  const a = generateDungeon(tables(), mulberry32(9), { size: "Sizable", theme: "Ruin", overlord: ov });
+  const b = generateDungeon(tables(), mulberry32(9), { size: "Sizable", theme: "Ruin", overlord: ov });
+  assert.deepEqual(a, b);
+});

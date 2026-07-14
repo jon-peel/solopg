@@ -108,8 +108,12 @@ function tierAffinity(tier, target) {
  * interloper and (on the deepest level) the family's elite.
  * @returns {{ family: string, encounters: {weight:number,value:string}[] }}
  */
-function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTier = 1, depth = 1) {
-  const familyName = rollTable(familyTableForTheme(families, theme), rng).value;
+function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTier = 1, depth = 1, overlord = null) {
+  // Roll the theme's family first, then let a lord (8.18) OVERRIDE which family fills
+  // the level — rolling either way keeps that draw consistent, so a lord mostly swaps
+  // the monsters over the same shape rather than reshaping the dungeon wholesale.
+  const themeFamily = rollTable(familyTableForTheme(families, theme), rng).value;
+  const familyName = overlord ? overlord.family : themeFamily;
   const index = familyIndex(families);
   const family = index.get(familyName) || { members: [{ weight: 1, value: "Vermin", tier: 1 }] };
 
@@ -121,9 +125,9 @@ function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTi
 
   // Named-den signature bias: on shallow levels, a den named after a creature
   // skews strongly toward that creature — so "Kobold tunnels" opens with kobolds.
-  // The boost decays with depth, and only applies when the level's family still
-  // contains the signature (deeper levels may escalate to another family).
-  const signature = signatureForTheme(families, theme);
+  // The boost decays with depth. A lord's dungeon ignores the theme's signature —
+  // its own family fills the level.
+  const signature = overlord ? null : signatureForTheme(families, theme);
   const sigBoost = depth === 1 ? 4 : depth === 2 ? 2 : 1;
   if (signature && sigBoost > 1) {
     const m = members.find((x) => x.value === signature);
@@ -149,9 +153,11 @@ function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTi
   }
 
   const encounters = Array.from(seen, ([value, weight]) => ({ weight, value }));
-  // A boss waits at the bottom.
-  if (isDeepest && family.elite && !seen.has(family.elite)) {
-    encounters.push({ weight: 1, value: family.elite });
+  // A boss waits at the bottom — the LORD itself when one holds the dungeon (8.18),
+  // otherwise the family's elite.
+  const boss = overlord ? overlord.boss : family.elite;
+  if (isDeepest && boss && !seen.has(boss)) {
+    encounters.push({ weight: 1, value: boss });
   }
   return { family: familyName, encounters };
 }
@@ -184,6 +190,10 @@ export function generateDungeon(tables, rng, ctx = {}) {
     for (const m of e.value.members) naByName.set(m.value, NA_BY_TIER[m.tier] || "1d6");
     naByName.set(e.value.elite, "1");
   }
+  // A lair-bound lord (8.18): its family fills the interior, and the lord itself is
+  // the singular final boss. { family, boss, id } — supplied by the app from the POI.
+  const overlord = ctx.overlord || null;
+  if (overlord && overlord.boss) naByName.set(overlord.boss, "1");
   const naFor = (name) => naByName.get(name) || "1d6";
 
   // One theme + size per dungeon (from the POI); every level inherits the theme.
@@ -220,7 +230,7 @@ export function generateDungeon(tables, rng, ctx = {}) {
     const monsterTier = Math.max(1, Math.min(4, depth + shift));
     const treasureTier = Math.max(1, Math.min(3, depth + shift)); // tracks monster difficulty
     const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
-    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier, depth);
+    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier, depth, overlord);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
     // Treasure for this level, re-weighted toward its target tier (depth scaling).
     const levelTreasure = {
@@ -303,7 +313,8 @@ export function generateDungeon(tables, rng, ctx = {}) {
   const { entrances, exits } = surfaceConnections(levels, sizeName, ctx.terrain, rng);
   const occupation = assignOccupation(levels, entrances, tables.get("occupiers"), rng, theme);
   assignLighting(levels, stairs, entrances, lightTable, rng);
-  return { build: DUNGEON_BUILD, size: sizeName, theme, difficulty, levels, stairs, entrances, exits, occupation };
+  return { build: DUNGEON_BUILD, size: sizeName, theme, difficulty, levels, stairs, entrances, exits, occupation,
+    ...(overlord ? { overlordId: overlord.id } : {}) };
 }
 
 // Occupied frontier: a chance interlopers hold the rooms by an entrance — lit,
