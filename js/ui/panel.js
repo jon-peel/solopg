@@ -76,6 +76,38 @@ function actionButton(label, onClick) {
   return b;
 }
 
+// Promote / faction controls for one POI, appended under its list row (8.8/8.16).
+// An OCCUPIED, unpromoted POI shows "Promote to faction" + any "Raise a ‹lord›"
+// its site allows; an already-promoted one shows a jump-to-faction link. Lives in
+// the LIST (not the drill-in) so a tower/dungeon — which opens its interior on
+// click — can still be promoted.
+function appendFactionControls(list, poi, model) {
+  const occ = poi.occupant;
+  if (!occ || occ.kind !== "occupied") return;
+  if (occ.factionId) {
+    const info = document.createElement("div");
+    info.className = "hook-legend";
+    const a = document.createElement("button");
+    a.type = "button";
+    a.className = "legend-link";
+    a.textContent = `Faction: ${(model.factionNameById && model.factionNameById(occ.factionId)) || occ.factionId}`;
+    a.title = "Centre the map on this faction's holding";
+    if (model.onCenterFaction) a.addEventListener("click", () => model.onCenterFaction(occ.factionId));
+    info.appendChild(a);
+    list.appendChild(info);
+    return;
+  }
+  if (!model.onPromotePoi) return;
+  const acts = document.createElement("div");
+  acts.className = "tile-actions";
+  acts.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(poi.id)));
+  const lords = model.lordOptionsFor ? model.lordOptionsFor(poi) : [];
+  for (const { archetype, label } of lords) {
+    acts.appendChild(actionButton(label, () => model.onPromotePoi(poi.id, archetype)));
+  }
+  list.appendChild(acts);
+}
+
 // POIs as a read-only/navigable list, or the drill-in detail of one POI.
 // Creating and removing POIs live on the right-click radial menu, so there are
 // no add/remove buttons here — clicking a row just inspects (and, for a
@@ -123,34 +155,9 @@ function renderPoiSection(sel, hex, model) {
         box.appendChild(div);
       }
     }
-    // Promote (Phase 8.8): an occupied POI can be wrapped into a full faction.
-    // Once promoted it shows a link to its faction instead (no double-promote).
-    const occupant = selectedPoi.occupant;
-    if (occupant && occupant.kind === "occupied") {
-      if (occupant.factionId) {
-        const name = model.factionNameById && model.factionNameById(occupant.factionId);
-        const row = document.createElement("div");
-        row.className = "hook-legend";
-        const a = document.createElement("button");
-        a.type = "button";
-        a.className = "legend-link";
-        a.textContent = `Faction: ${name || occupant.factionId}`;
-        a.title = "Centre the map on this faction's holding";
-        if (model.onCenterFaction) a.addEventListener("click", () => model.onCenterFaction(occupant.factionId));
-        row.appendChild(a);
-        box.appendChild(row);
-      } else if (model.onPromotePoi) {
-        const row = document.createElement("div");
-        row.className = "tile-actions";
-        row.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(selectedPoi.id)));
-        // Lair-bound lords (8.16): a matching site can be raised into a boss instead.
-        const lords = model.lordOptionsFor ? model.lordOptionsFor(selectedPoi) : [];
-        for (const { archetype, label } of lords) {
-          row.appendChild(actionButton(label, () => model.onPromotePoi(selectedPoi.id, archetype)));
-        }
-        box.appendChild(row);
-      }
-    }
+    // Promote / faction controls live in the POI LIST (see appendFactionControls),
+    // not here — a dungeon/tower opens its mapped interior on click, so its drill-in
+    // is never shown; the list keeps promote reachable for every POI type (8.16).
 
     const back = document.createElement("button");
     back.className = "link-back";
@@ -173,6 +180,9 @@ function renderPoiSection(sel, hex, model) {
       row.textContent = `${glyphForPoi(poi)} ${poi.name}`;
       row.addEventListener("click", () => model.onSelectPoi(poi.id));
       list.appendChild(row);
+      // Promote / raise-a-lord (8.8/8.16) inline, so an occupied tower/dungeon can
+      // be promoted without opening its mapped interior (which clicking the row does).
+      appendFactionControls(list, poi, model);
     }
     sel.appendChild(list);
   } else {
