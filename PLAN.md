@@ -10,12 +10,15 @@ remembers the evolving map.
 > [`docs/plans/phases-0-3.md`](docs/plans/phases-0-3.md).
 
 **Status (current):** Phases 0–7 complete, plus Phase 3R (world coherence) and **Phase 8 complete
-(8.1–8.15)** — Arc A (Travel & Party Movement, 8.1–8.6) + Arc B (Factions, 8.7–8.10) + the
-**expansion arc (8.13–8.15)**, where faction turns become an **uncapped, contested** spatial engine
-(spread / move / seize / be destroyed) that is **played as subtext, not hooks** — see the Phase 8
-notes near the end of this running log. Every faction-driven hook idea (the 8.11/8.12 faction hooks,
-the 8.15 expansion hooks, and the 8.14 region "stirring" hook) was built and then **removed** in favour
-of that subtext — **factions emit no hooks at all.** Phase 4
+(8.1–8.19)** — Arc A (Travel & Party Movement, 8.1–8.6) + Arc B (Factions, 8.7–8.10) + the
+**expansion arc (8.13–8.19)**, where faction turns are a **contested spatial engine** — every faction
+grows a **sphere of influence** around a **seat** (its HQ), at a **per-archetype expansion chance**,
+seizing rivals' hexes strength-weighted; a fallen seat **relocates or dissolves** — all **played as
+subtext, not hooks**. Lair-bound **lords** (necromancer/lich/vampire/dragon/hag) infuse their own
+dungeon/tower interiors (8.16–8.18). See the Phase 8 notes near the end of this running log. Every
+faction-driven hook idea (the 8.11/8.12 faction hooks, the 8.15 expansion hooks, and the 8.14 region
+"stirring" hook) was built and then **removed** in favour of that subtext — **factions emit no hooks
+at all.** Phase 4
 delivered the full dungeon arc (base interiors +
 Dungeon View; themed/explorable 4.5–4.8 arc; the 4.9.1–4.9.14 depth-&-connectivity sub-project —
 sizes, room-graphs + loops, doors/secret doors, inter-level + vertical stairs, multiple
@@ -592,6 +595,36 @@ next is Phase 9 (small oracles), then Phase 10 (backlog).**
 
 ---
 
+**Phase 8 — content + depth follow-ons (8.16–8.19): more faction types, POI/interior infusion, and a
+seat/SOI expansion model.** Built on the 8.15 engine, driven by play feedback:
+
+- **8.16 — more faction types.** Added **lair-bound lords** (necromancer, lich, vampire, dragon, hag)
+  — **Promote-only** (never in the random archetype roll), boss-tier strength, the **dragon singular**
+  per world; a **rebellion** archetype (rare, rollable); **monster-tribe kinds** (a tribe rolls a
+  goblins/gnolls/… kind that flavours its name + card); and a broader dungeon monster roster carrying
+  both **OSE and D&D names** (`Carcass Crawler (Carrion Crawler)`). `eligibleLords` gates each lord to
+  its site (POI type + terrain).
+- **8.17 — a POI's occupant follows its faction.** Seating on a POI (generate/promote) takes it
+  **deterministically**; a faction **spreading** over a POI has a **25 %** chance to absorb it
+  (`occupyPoiForFaction` / `applyFactionOccupancy`).
+- **8.18 — a lord infuses its interior.** A lord's dungeon/tower is re-stocked with the lord's own
+  monster **family**, the lord waits as the **final boss**, and the entrance garrison stays as
+  holdouts. Keyed off the POI's `factionId` (`overlordFor`); the interior re-forms when the site
+  changes hands (`overlordId` stamp).
+- **8.19 — seats, sphere of influence, probabilistic contested expansion.** Roam/spread is **retired**:
+  every faction grows an **SOI** (`holdings[]`), and archetype only sets a per-turn **expansion chance**
+  (gated in `tickFaction`). A faction now has a formal **seat** (`faction.seat`, or `null` =
+  *seatless*); a seatless faction **seats on the first valid site** its SOI reaches. A seat is **dug
+  in** — contesting it multiplies the defender's strength by `SEAT_DEFENSE` (6). When a seat **falls**
+  the loser **relocates** to the nearest valid holding and **halves** its SOI, or **dissolves** if no
+  site can host one (the single dissolution route, alongside 0 holdings). New event: `relocate`; the
+  `move` kind is retired. A GM can **delete** a faction from its card. `FACTION_BUILD` → 2 (additive
+  `seat`, backfilled lazily on the first turn); schema still **v16**.
+
+Suite green at **420 `node --test`**.
+
+---
+
 ## Foundational decisions (confirmed)
 
 | Decision | Choice |
@@ -783,7 +816,7 @@ graph TD
 | **6 — Hooks** (Type-1 local adventure hooks; sub-steps 6.1–6.6) | ✅ done | [phase-6-hooks.md](docs/plans/phase-6-hooks.md) |
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ✅ **done** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.9 POI dot polish ✅** [phase-7.9-poi-dot-polish.md](docs/plans/phase-7.9-poi-dot-polish.md) · **7.14 radial right-click back ✅** (landed inside the 3R water-polish work). Remaining backlog items moved to **Phase 10**. |
 | **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
-| 8 — Factions (+ Travel & Party Movement) | ✅ **done** (8.1–8.15) | **Arc A** (Travel 8.1–8.6 ✅) + **Arc B** (Factions: **8.7 generate ✅ · 8.8 promote ✅ · 8.9 holdings ✅ · 8.10 turns ✅**) + the **expansion arc 8.13–8.15 ✅**: faction turns are an **uncapped, contested** spatial engine (spread / move / seize a rival's hex strength-weighted / be **destroyed** at 0 holdings), **played as subtext** — every turn narrates what each faction did, on the map + a running log. **Every faction-driven hook (8.11/8.12 faction hooks, 8.15 expansion hooks, 8.14 region "stirring" hook) was built then removed** in favour of that subtext — factions emit no hooks. (Region *naming* stays for map labels.) UI: coloured-ring territory (no flag badge) + a **"Run by"** owner picker. Still schema v16. See [phase-8-factions.md](docs/plans/phase-8-factions.md) + [phase-8.15-faction-expansion.md](docs/plans/phase-8.15-faction-expansion.md) |
+| 8 — Factions (+ Travel & Party Movement) | ✅ **done** (8.1–8.19) | **Arc A** (Travel 8.1–8.6 ✅) + **Arc B** (Factions: **8.7 generate ✅ · 8.8 promote ✅ · 8.9 holdings ✅ · 8.10 turns ✅**) + the **expansion arc 8.13–8.19 ✅**: faction turns are a **contested** spatial engine — every faction grows a **sphere of influence** around a **seat** (its HQ) at a **per-archetype expansion chance**, seizing rivals' hexes strength-weighted; a **seat is dug in** (×`SEAT_DEFENSE`) and a fallen seat **relocates + halves SOI**, else **dissolves**. **Lair-bound lords** (8.16, Promote-only: necromancer/lich/vampire/dragon/hag + a rare **rebellion**) **infuse their own dungeon/tower interiors** (8.18) and take over the POIs they hold (8.17). All **played as subtext** — every turn narrates what each faction did, on the map + a running log. **Every faction-driven hook (8.11/8.12 faction hooks, 8.15 expansion hooks, 8.14 region "stirring" hook) was built then removed** in favour of that subtext — factions emit no hooks. (Region *naming* stays for map labels.) UI: coloured-ring territory + a **"Run by"** owner picker + a per-card **Delete faction**. Still schema v16 (`FACTION_BUILD` 2). See [phase-8-factions.md](docs/plans/phase-8-factions.md) + [phase-8.15-faction-expansion.md](docs/plans/phase-8.15-faction-expansion.md) + [phase-8.19-seats-soi-expansion.md](docs/plans/phase-8.19-seats-soi-expansion.md) |
 | 9 — Additional small oracles | ▶ **queued (2nd)** | see catalog below |
 | 10 — Backlog | ▶ **queued (3rd)** | leftover QoL/UX items + misc ideas — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) and [phase-10-backlog.md](docs/plans/phase-10-backlog.md) |
 

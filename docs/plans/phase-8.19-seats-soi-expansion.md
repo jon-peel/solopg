@@ -1,5 +1,13 @@
 # Phase 8.19 — Seats, Sphere of Influence, and probabilistic contested expansion
 
+> **✅ Built (as-built).** Shipped as designed — all five chunks (A probabilistic expansion, B seatless
+> birth + seating, C seat defence, D relocate-or-dissolve, E delete-faction). `js/gen/factions.js`:
+> `EXPANSION_CHANCE`/`expansionChance`, `SEAT_SITES`/`isValidSeat`, `expand` (replaces `moveOrSpread`;
+> exported for tests), `SEAT_DEFENSE`, `SOI_DISRUPTION`/`relocateSeat`, `dissolve`, seat backfill in
+> `tickFaction`; `FACTION_BUILD` → 2. `js/ui/app.js` seats on a valid birth site, occupies on
+> `seated`/`relocate`, un-tags POIs on `eliminated`/delete; `js/ui/panel.js` gains a two-step
+> **Delete faction**. Schema stays **v16**. Suite green at 420 `node --test`.
+
 > **Self-contained.** Read *Orientation* and *Model* first, then build the chunks in order. Every
 > design choice below is decided; you should not need to invent behaviour. This reworks the faction
 > **turn** and the **holdings model**, building on 8.15 (the expansion engine), 8.17 (a POI's occupant

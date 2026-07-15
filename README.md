@@ -17,11 +17,14 @@ getting lost), **day-at-a-time** travel (toward a hex, or an 8-point compass int
 generates terrain and reveals line-of-sight), and a "Progress N days" control. **Phase 8 Arc B
 (Factions)** is also complete — factions with a **goal doom-clock**, **disposition**, **strength**,
 and **holdings across the map**; **generate** or **promote** an occupied POI into one, set a hex's
-owner from a **"Run by"** picker, and **faction turns** (manual or auto-fired as days pass) that
-advance goals and **move/expand** factions by archetype (a bandit camp roams, a cult's reach spreads).
-The **expansion arc (8.13–8.15)** makes that contest the engine: growth is **uncapped and contested** —
-factions spread into open ground, fight for a rival's hex at the border (strength-weighted), and a
-faction that loses its last holding is **destroyed**. Every turn **narrates what each faction did**
+owner from a **"Run by"** picker, delete a faction from its card, and **faction turns** (manual or
+auto-fired as days pass) that advance goals and **expand** factions across the map. The **expansion
+arc (8.13–8.19)** makes that contest the engine: every faction grows a **sphere of influence** around a
+**seat** (its HQ) at a **per-archetype chance** — it claims open ground, fights for a rival's hex at the
+border (strength-weighted), and a **seat is dug in** (much harder to take); a faction that loses its
+seat **relocates and its reach falters**, or **dissolves** if it has nowhere to regroup. **Lair-bound
+lords** (a lich, necromancer, vampire, dragon, or hag) **infuse their own dungeon/tower** — the lord's
+kin fill the halls and the lord waits as the final boss. Every turn **narrates what each faction did**
 (the map's coloured territory + a running log) — factions are played entirely as **subtext**, and emit
 **no hooks**. See [PLAN.md](./PLAN.md) for what's next (Phase 9 small oracles, Phase 10 backlog).
 
