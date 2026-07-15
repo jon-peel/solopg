@@ -14,12 +14,14 @@
 
 import { rollTable } from "../core/table.js";
 import { subRng } from "../core/rng.js";
-import { neighbors, axialKey } from "../core/hexgeo.js";
+import { neighbors, axialKey, axialDistance } from "../core/hexgeo.js";
 import { TRAVEL_COST } from "./travel.js";
 import { factionName } from "./faction-name.js";
 
 // Faction-shape version, stamped on every generated faction. Bump on shape change.
-export const FACTION_BUILD = 1;
+// v2 (8.19) added `seat` (the HQ; null = seatless). Old factions have no seat field
+// and are backfilled lazily on their first turn (see tickFaction).
+export const FACTION_BUILD = 2;
 
 // TUNING, not content (per the rules-as-JS-consts convention): the goal's
 // doom-clock length and a faction's starting strength are retunable numbers, not
@@ -79,6 +81,11 @@ export function generateFaction(tables, rng, ctx) {
     goal: { kind: goalKind, progress: 0, max },
     strength,
     holdings: [holding],
+    // The faction's HQ (Phase 8.19): one of its holdings, or null = "seatless" (a
+    // young faction with raw influence but no base yet). The caller decides: a
+    // bare-hex birth is seatless; a birth on a valid site passes ctx.seat. A
+    // seatless faction seats itself on the first valid site its SOI reaches.
+    seat: ctx.seat ?? null,
     // turns: total faction turns taken; sinceTurn: days banked toward the next
     // day-driven turn (a RELATIVE accumulator, reload-safe — see 8.10).
     clock: { turns: 0, sinceTurn: 0 },
@@ -125,6 +132,9 @@ export function promoteFaction(tables, rng, ctx) {
   return generateFaction(tables, rng, {
     q: ctx.q, r: ctx.r, poiId: ctx.poiId, index: ctx.index, seed: ctx.seed,
     archetype, disposition,
+    // A promote always happens on the occupied POI, so the faction is SEATED there
+    // from birth (its lair/base is that site) — never seatless (8.19).
+    seat: { q: ctx.q, r: ctx.r, ...(ctx.poiId ? { poiId: ctx.poiId } : {}) },
     origin: { fromPOI: { q: ctx.q, r: ctx.r, ...(ctx.poiId ? { poiId: ctx.poiId } : {}) } },
   });
 }
@@ -193,18 +203,113 @@ const DRIFT_CHANCE = 0.34;
 // Disposition scale — drift steps one place along it (clamped at the ends).
 const DISPOSITIONS = ["hostile", "wary", "neutral", "friendly"];
 
-// Archetype -> how a faction acts on the map each turn (Phase 8.13): a roaming
-// warband MOVES its camp; a rooted power SPREADS its footprint. Every faction
-// archetype now seeks influence one way or the other; unknown archetypes default
-// to static (safe) so nothing crashes if a table adds an unmapped one.
-const ARCHETYPE_MOBILITY = {
-  bandits: "roaming", "monstrous tribe": "roaming", "mercenary company": "roaming",
-  cult: "spreading", "thieves' guild": "spreading", "merchant guild": "spreading", "noble house": "spreading",
-  // 8.16 — lair-bound lords keep their seat (spreaders never move holding #0) while
-  // their influence grows; a rebellion spreads its rising. All spreading.
-  necromancer: "spreading", lich: "spreading", vampire: "spreading", dragon: "spreading", hag: "spreading",
-  rebellion: "spreading",
+// --- Seats & sphere-of-influence expansion (Phase 8.19) ------------------
+// Roam/spread is retired: EVERY faction grows a sphere of influence (SOI =
+// holdings[]); archetype only sets HOW OFTEN it pushes (expansionChance). A
+// faction also has a formal SEAT (its HQ, one of its holdings, or null when
+// "seatless"). Seat vs SOI, the seat's stiffer defence, and relocate-or-dissolve
+// all live below. Numbers are TUNING (retunable consts), not content.
+
+// Per-turn chance a faction expands (draws the expansion gate in tickFaction).
+// Aggressive powers (cults, tribes, bandits) push most turns; lair-bound lords
+// creep. Unlisted archetypes fall back to EXPANSION_FALLBACK.
+const EXPANSION_CHANCE = {
+  cult: 0.7, "monstrous tribe": 0.65, bandits: 0.6, "thieves' guild": 0.55,
+  "mercenary company": 0.55, "merchant guild": 0.5, "noble house": 0.4, rebellion: 0.5,
+  necromancer: 0.3, lich: 0.3, vampire: 0.3, hag: 0.35, dragon: 0.25,
 };
+const EXPANSION_FALLBACK = 0.4;
+const expansionChance = (faction) => EXPANSION_CHANCE[faction.archetype] ?? EXPANSION_FALLBACK;
+
+// A defender's SEAT is much harder to take than a plain SOI hex: its strength is
+// multiplied by this in the contest (still a small, non-zero chance to fall).
+const SEAT_DEFENSE = 6;
+// When a seat falls the faction relocates and its reach falters — it keeps this
+// fraction of its (non-seat) SOI, the nearest half, and loses the rest.
+const SOI_DISRUPTION = 0.5;
+
+// What kind of site an archetype may SEAT on (a rule, so a JS const). "any" =
+// any settlement OR POI (bandits set up in a town or a ruin alike); "poi" = a POI
+// only, never a town (a monstrous tribe lairs, it doesn't hold a settlement).
+// Lair-bound lords are NOT listed here — they seat only on their bound site from
+// LORD_SITES (a lich in its dungeon, a hag in a swamp POI, …).
+const SEAT_SITES = {
+  bandits: "any", cult: "any", "thieves' guild": "any", "merchant guild": "any",
+  "noble house": "any", "mercenary company": "any", rebellion: "any",
+  "monstrous tribe": "poi",
+};
+
+/**
+ * Can `archetype` seat on the hex at (q,r)? True when the hex carries a
+ * settlement/POI of a kind the archetype is allowed to base itself on (Phase
+ * 8.19). A lair-bound lord uses its bound site (LORD_SITES); everyone else uses
+ * SEAT_SITES. Unknown archetypes never seat (safe). Pure.
+ * @param {object} world
+ * @param {string} archetype
+ * @param {number} q @param {number} r
+ * @returns {boolean}
+ */
+export function isValidSeat(world, archetype, q, r) {
+  const hex = world && world.hexes && world.hexes[axialKey(q, r)];
+  if (!hex || !hex.placed) return false;
+  const pois = Array.isArray(hex.pois) ? hex.pois : [];
+  // A lair-bound lord seats only on its bound POI type + terrain (mirrors eligibleLords).
+  const lair = LORD_SITES[archetype];
+  if (lair) {
+    return pois.some((p) => {
+      const poiOk = lair.poi ? lair.poi.includes(p.type) : true;
+      const terrOk = lair.terrain ? lair.terrain.includes(hex.terrain) : true;
+      return poiOk && terrOk;
+    });
+  }
+  const rule = SEAT_SITES[archetype];
+  const hasSettlement = !!(hex.settlement && hex.settlement.present);
+  if (rule === "poi") return pois.length > 0;
+  if (rule === "any") return pois.length > 0 || hasSettlement;
+  return false;
+}
+
+// Is (q,r) this faction's seat hex? A pointer check on faction.seat (independent
+// of isValidSeat — a seat once taken stays the seat even on odd ground).
+const isSeatHex = (faction, q, r) => !!(faction.seat && faction.seat.q === q && faction.seat.r === r);
+
+// Seat a seatless faction on the site it just took, if that site is a valid seat
+// for its archetype (Phase 8.19 — the first base wins). Returns true if it seated.
+function maybeSeat(world, faction, q, r) {
+  if (faction.seat) return false;
+  if (!isValidSeat(world, faction.archetype, q, r)) return false;
+  const h = (faction.holdings || []).find((x) => x.q === q && x.r === r);
+  faction.seat = h ? { ...h } : { q, r };
+  return true;
+}
+
+// Relocate a faction whose SEAT just fell (Phase 8.19): move it to the nearest
+// remaining holding that is a valid seat site, then HALVE the SOI (keep the new
+// seat + the nearest SOI_DISRUPTION of the other holdings). Mutates the faction.
+// Returns the new seat, or null when no holding can host one (→ caller dissolves).
+function relocateSeat(world, faction, lost) {
+  const holdings = faction.holdings || [];
+  const cands = holdings.filter((h) => isValidSeat(world, faction.archetype, h.q, h.r));
+  if (!cands.length) return null;
+  cands.sort((a, b) =>
+    axialDistance(a.q, a.r, lost.q, lost.r) - axialDistance(b.q, b.r, lost.q, lost.r) || a.q - b.q || a.r - b.r);
+  const seat = { ...cands[0] };
+  const others = holdings.filter((h) => !(h.q === seat.q && h.r === seat.r));
+  others.sort((a, b) =>
+    axialDistance(a.q, a.r, seat.q, seat.r) - axialDistance(b.q, b.r, seat.q, seat.r) || a.q - b.q || a.r - b.r);
+  const keep = Math.floor(others.length * SOI_DISRUPTION);
+  faction.holdings = [seat, ...others.slice(0, keep).map((h) => ({ ...h }))];
+  faction.seat = { ...seat };
+  return seat;
+}
+
+// Destroy a faction (Phase 8.19) — the single dissolution route (0 holdings, or a
+// seat that fell with nowhere to relocate). Appends the `eliminated` event.
+function dissolve(faction, events, byFactionId) {
+  faction.status = "destroyed";
+  faction.seat = null;
+  events.push({ kind: "eliminated", factionId: faction.id, ...(byFactionId ? { byFactionId } : {}) });
+}
 
 const isActive = (f) => (f.status || "active") === "active";
 const ensureClock = (f) => (f.clock || (f.clock = { turns: 0, sinceTurn: 0 }));
@@ -225,11 +330,13 @@ function passableNeighborsOf(world, q, r) {
 
 /**
  * @typedef {{
- *   kind: "claim"|"move"|"takeover"|"repelled"|"eliminated",
- *   factionId: string,        // the acting faction (for "eliminated": the faction destroyed)
- *   q?: number, r?: number,   // the hex acted on (absent on "eliminated")
+ *   kind: "claim"|"takeover"|"repelled"|"eliminated"|"relocate",
+ *   factionId: string,        // the acting faction (for "eliminated"/"relocate": the faction itself)
+ *   q?: number, r?: number,   // the hex acted on (absent on "eliminated"; "relocate": the new seat)
  *   fromFactionId?: string,   // "takeover"/"repelled": the rival that held/holds the hex
  *   byFactionId?: string,     // "eliminated": the faction that finished it off
+ *   from?: { q:number, r:number }, // "relocate": the seat hex just lost
+ *   seated?: boolean,         // "claim"/"takeover": this claim became the faction's seat
  * }} FactionEvent
  */
 
@@ -243,30 +350,28 @@ function holderOf(world, q, r, exceptId) {
   return null;
 }
 
-// The faction's spatial act for one turn (Phase 8.15) — now uncapped, contested,
-// and event-emitting. A roaming warband relocates its camp; a spreading power grows
-// into open ground first and only fights a rival at the border. Returns 0–2 events.
-// Deterministic: draws the turn's rng only when there's a candidate hex, and the
-// contest roll (when it happens) is the last draw.
-function moveOrSpread(world, faction, rng) {
-  const mobility = ARCHETYPE_MOBILITY[faction.archetype];
-  if (mobility !== "roaming" && mobility !== "spreading") return []; // unknown → static
+/**
+ * The faction's spatial act for one turn (Phase 8.19) — pure SOI growth. Every
+ * faction spreads (roam/spread retired); the per-turn CHANCE is what varies by
+ * archetype, gated in tickFaction. Grows into open ground first; only contests a
+ * rival at the border, and there prefers the rival's SOI edges over its stiffer
+ * SEAT. A seatless faction seats on the first valid site it takes. A defender who
+ * loses its SEAT relocates-or-dissolves; one reduced to no holdings dissolves.
+ * Returns 0+ events. Exported so a single faction's turn can be unit-tested
+ * directly (the gate + turn loop live in tickFaction / advanceFaction*).
+ * Deterministic: the frontier is q,r-sorted; rng is drawn only to pick a hex and
+ * (when contesting) to resolve the contest, in that fixed order.
+ * @param {object} world
+ * @param {object} faction
+ * @param {() => number} rng
+ * @returns {FactionEvent[]}
+ */
+export function expand(world, faction, rng) {
   const holdings = faction.holdings || (faction.holdings = []);
   const held = new Set(holdings.map((h) => axialKey(h.q, h.r)));
 
-  if (mobility === "roaming") {
-    const primary = holdings[0];
-    if (!primary) return [];
-    const cands = passableNeighborsOf(world, primary.q, primary.r)
-      .filter((n) => !held.has(axialKey(n.q, n.r)) && !holderOf(world, n.q, n.r, faction.id));
-    if (!cands.length) return [];
-    const pick = cands[Math.floor(rng() * cands.length)];
-    holdings[0] = { q: pick.q, r: pick.r }; // camp is now in the field — poiId dropped
-    return [{ kind: "move", factionId: faction.id, q: pick.q, r: pick.r }];
-  }
-
-  // spreading (no cap): the frontier is every passable placed hex adjacent to the
-  // blob that this faction doesn't already hold, deduped and q,r-sorted.
+  // The frontier: every passable placed hex adjacent to the SOI that this faction
+  // doesn't already hold, deduped and q,r-sorted (stable before the rng pick).
   const seen = new Set();
   const frontier = [];
   for (const h of holdings) {
@@ -279,47 +384,69 @@ function moveOrSpread(world, faction, rng) {
   }
   if (!frontier.length) return [];
   frontier.sort((a, b) => a.q - b.q || a.r - b.r);
-  // Prefer empty ground; only contest a rival-held hex when there's no open frontier.
+
   const empty = [], rival = [];
   for (const n of frontier) (holderOf(world, n.q, n.r, faction.id) ? rival : empty).push(n);
 
+  // Open ground first: claim it (and seat on it if seatless + it's a valid site).
   if (empty.length) {
     const pick = empty[Math.floor(rng() * empty.length)];
     holdings.push({ q: pick.q, r: pick.r });
-    return [{ kind: "claim", factionId: faction.id, q: pick.q, r: pick.r }];
+    const seated = maybeSeat(world, faction, pick.q, pick.r);
+    return [{ kind: "claim", factionId: faction.id, q: pick.q, r: pick.r, ...(seated ? { seated: true } : {}) }];
   }
-  if (rival.length) {
-    const pick = rival[Math.floor(rng() * rival.length)];
-    const def = holderOf(world, pick.q, pick.r, faction.id);
-    const atk = faction.strength || 1, dfn = (def && def.strength) || 1;
-    if (rng() < atk / (atk + dfn)) {
-      // win: the hex moves from loser to winner
-      def.holdings = (def.holdings || []).filter((h) => !(h.q === pick.q && h.r === pick.r));
-      holdings.push({ q: pick.q, r: pick.r });
-      const events = [{ kind: "takeover", factionId: faction.id, q: pick.q, r: pick.r, fromFactionId: def.id }];
-      if (def.holdings.length === 0) {
-        def.status = "destroyed";
-        events.push({ kind: "eliminated", factionId: def.id, byFactionId: faction.id });
-      }
-      return events;
+  if (!rival.length) return [];
+
+  // Contest a rival border hex — attack the edges before the capital: prefer the
+  // rival's plain SOI hexes; only strike a seat when nothing else is on the border.
+  const seatRivalOf = (n) => { const d = holderOf(world, n.q, n.r, faction.id); return d && isSeatHex(d, n.q, n.r); };
+  const soi = rival.filter((n) => !seatRivalOf(n));
+  const pool = soi.length ? soi : rival;
+  const pick = pool[Math.floor(rng() * pool.length)];
+  const def = holderOf(world, pick.q, pick.r, faction.id);
+  const atk = faction.strength || 1;
+  const guard = isSeatHex(def, pick.q, pick.r) ? SEAT_DEFENSE : 1; // a seat is dug in
+  const dfn = ((def && def.strength) || 1) * guard;
+
+  if (rng() < atk / (atk + dfn)) {
+    // win: the hex moves from loser to winner.
+    const lostSeat = isSeatHex(def, pick.q, pick.r);
+    def.holdings = (def.holdings || []).filter((h) => !(h.q === pick.q && h.r === pick.r));
+    holdings.push({ q: pick.q, r: pick.r });
+    const events = [{ kind: "takeover", factionId: faction.id, q: pick.q, r: pick.r, fromFactionId: def.id }];
+    if (maybeSeat(world, faction, pick.q, pick.r)) events[0].seated = true;
+    // The loser reacts: a lost SEAT relocates-or-dissolves; a lost SOI hex only
+    // ends the faction when it was its very last holding.
+    if (lostSeat) {
+      const moved = relocateSeat(world, def, { q: pick.q, r: pick.r });
+      if (moved) events.push({ kind: "relocate", factionId: def.id, q: moved.q, r: moved.r, from: { q: pick.q, r: pick.r } });
+      else dissolve(def, events, faction.id);
+    } else if ((def.holdings || []).length === 0) {
+      dissolve(def, events, faction.id);
     }
-    // loss: nothing changes
-    return [{ kind: "repelled", factionId: faction.id, q: pick.q, r: pick.r, fromFactionId: def.id }];
+    return events;
   }
-  return [];
+  // loss: nothing changes.
+  return [{ kind: "repelled", factionId: faction.id, q: pick.q, r: pick.r, fromFactionId: def.id }];
 }
 
 /**
  * Advance ONE turn for one faction (pure; mutates the faction). The goal
- * doom-clock ticks a segment, disposition occasionally drifts, and the faction
- * acts on the map by its archetype (move/spread/contest, 8.15). Strength now also
- * decides contested hexes. rng calls happen in a fixed order (drift, then the
- * spatial pick, then — only when contesting — the contest roll) so the outcome is
- * deterministic for a given stream. Not exported — reached via
- * advanceFactionTurn / advanceFactionDays.
- * @returns {FactionEvent[]} what the faction did on the map this turn (0–2 events)
+ * doom-clock ticks a segment, disposition occasionally drifts, and — GATED on a
+ * per-archetype expansion roll (8.19) — the faction grows its SOI (claim/contest,
+ * with seat rules). rng calls happen in a fixed order (drift → expansion gate →
+ * pick → contest) so the outcome is deterministic for a given stream. Not
+ * exported — reached via advanceFactionTurn / advanceFactionDays.
+ * @returns {FactionEvent[]} what the faction did on the map this turn
  */
 function tickFaction(world, faction, rng) {
+  // Lazy seat backfill (8.19): pre-8.19 factions have no `seat` field. Seat their
+  // first holding if it's a valid site for their archetype, else mark them
+  // seatless. Runs once (rng-free), keyed on `seat === undefined`.
+  if (faction.seat === undefined) {
+    const h0 = (faction.holdings || [])[0];
+    faction.seat = h0 && isValidSeat(world, faction.archetype, h0.q, h0.r) ? { ...h0 } : null;
+  }
   const g = faction.goal || (faction.goal = { progress: 0, max: 0 });
   g.progress = Math.min((g.progress ?? 0) + 1, g.max ?? 0); // doom clock, capped
   if (rng() < DRIFT_CHANCE) {
@@ -329,7 +456,8 @@ function tickFaction(world, faction, rng) {
       faction.disposition = DISPOSITIONS[j];
     }
   }
-  const events = moveOrSpread(world, faction, rng);
+  let events = [];
+  if (rng() < expansionChance(faction)) events = expand(world, faction, rng);
   const clock = ensureClock(faction);
   clock.turns = (clock.turns ?? 0) + 1;
   return events;
@@ -400,9 +528,12 @@ export function factionDescription(faction) {
   const g = faction.goal || {};
   const holdings = Array.isArray(faction.holdings) ? faction.holdings.length : 0;
   const clock = faction.clock || {};
+  // Seat vs SOI (8.19): the HQ, then the reach. A seatless faction shows it plainly.
+  const seat = faction.seat ? `Seat: (${faction.seat.q}, ${faction.seat.r})` : "Seatless (raw influence)";
   const lines = [
     `${cap(faction.archetype)}${faction.kind ? ` (${faction.kind})` : ""} · ${faction.disposition}`,
     `Goal: ${g.kind} (${g.progress ?? 0} / ${g.max ?? 0})`,
+    seat,
     `${holdings} holding${holdings === 1 ? "" : "s"} · strength ${faction.strength}`,
     `Turn ${clock.turns ?? 0} · ${clock.sinceTurn ?? 0}/${TURN_LENGTH_DAYS} d to next`,
   ];

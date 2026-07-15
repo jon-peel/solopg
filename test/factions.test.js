@@ -7,6 +7,8 @@ import {
   addHolding,
   advanceFactionTurn,
   advanceFactionDays,
+  expand,
+  isValidSeat,
   TURN_LENGTH_DAYS,
   factionLabel,
   factionDescription,
@@ -279,18 +281,25 @@ test("a faction created mid-timeline doesn't retroactively catch up", () => {
   assert.equal(late.clock.turns, 1); // only the days since it existed
 });
 
-// --- Movement & expansion (8.13) ------------------------------------------
+// --- SOI expansion (Phase 8.19) -------------------------------------------
+// Roam/spread retired: every faction grows an SOI; the per-turn CHANCE varies by
+// archetype (gated in tickFaction). Expansion stays deterministic for a seed.
 
-// A patch of placed Plains over q,r in [-2,2]; `sea` hexes are impassable, `skip`
-// hexes are left unplaced (a hole in the map).
-function placedWorld({ seed = 1, sea = [], skip = [] } = {}) {
+// A patch of placed Plains over q,r in [-R,R]; `sea` hexes are impassable, `skip`
+// hexes are left unplaced (a hole in the map). `pois`/`towns` mark seat sites.
+function placedWorld({ seed = 1, sea = [], skip = [], pois = [], towns = [], R = 2 } = {}) {
   const seaSet = new Set(sea.map(([q, r]) => axialKey(q, r)));
   const skipSet = new Set(skip.map(([q, r]) => axialKey(q, r)));
+  const poiMap = new Map(pois.map(([q, r, type = "dungeon"]) => [axialKey(q, r), type]));
+  const townSet = new Set(towns.map(([q, r]) => axialKey(q, r)));
   const hexes = {};
-  for (let q = -2; q <= 2; q++) for (let r = -2; r <= 2; r++) {
+  for (let q = -R; q <= R; q++) for (let r = -R; r <= R; r++) {
     const k = axialKey(q, r);
     if (skipSet.has(k)) continue;
-    hexes[k] = { coords: { q, r }, placed: true, terrain: seaSet.has(k) ? "Sea" : "Plains" };
+    const hex = { coords: { q, r }, placed: true, terrain: seaSet.has(k) ? "Sea" : "Plains" };
+    if (poiMap.has(k)) hex.pois = [{ id: `poi:${k}`, type: poiMap.get(k) }];
+    if (townSet.has(k)) hex.settlement = { present: true, kind: "town", size: "Village" };
+    hexes[k] = hex;
   }
   return { seed, hexes, factions: [] };
 }
@@ -300,61 +309,59 @@ function factionAt(seed, q, r, n, archetype) {
   return generateFaction(tables(), rng, { q, r, index: n, seed, archetype });
 }
 
-test("a roaming faction moves its camp to a passable placed neighbour, dropping poiId", () => {
-  const world = placedWorld({ seed: 1 });
-  const f = factionAt(1, 0, 0, 0, "bandits");
-  f.holdings[0].poiId = "poi:0"; // started at a named POI
+test("a lone faction grows its SOI over turns and keeps going (no cap)", () => {
+  const world = placedWorld({ seed: 2, R: 3 });
+  const f = factionAt(2, 0, 0, 0, "cult"); // cult = high expansion chance
   world.factions.push(f);
-  advanceFactionTurn(world, world.seed);
-  const now = f.holdings[0];
-  assert.ok(neighbors(0, 0).some((nb) => nb.q === now.q && nb.r === now.r), "moved to an adjacent hex");
-  assert.equal(world.hexes[axialKey(now.q, now.r)].terrain !== "Sea", true);
-  assert.ok(!("poiId" in now), "poiId dropped now the camp roams in the field");
-});
-
-test("a roaming faction with no passable placed neighbour stays put", () => {
-  // Only (0,0) is placed; all six neighbours are unplaced → nowhere to go.
-  const world = { seed: 1, hexes: { [axialKey(0, 0)]: { coords: { q: 0, r: 0 }, placed: true, terrain: "Plains" } }, factions: [] };
-  const f = factionAt(1, 0, 0, 0, "bandits");
-  world.factions.push(f);
-  advanceFactionTurn(world, world.seed);
-  assert.deepEqual(f.holdings[0], { q: 0, r: 0 });
-});
-
-test("a spreading faction claims one adjacent hex per turn and keeps growing (no cap)", () => {
-  const world = placedWorld({ seed: 2 });
-  const f = factionAt(2, 0, 0, 0, "cult");
-  world.factions.push(f);
-  advanceFactionTurn(world, world.seed);
-  assert.equal(f.holdings.length, 2, "grew by one on the first turn");
-  const nb = neighbors(0, 0).some((n) => n.q === f.holdings[1].q && n.r === f.holdings[1].r);
-  assert.ok(nb, "the new holding is adjacent to the first");
-  // No HOLDING_CAP any more: a lone faction fills the reachable ground unbounded.
-  for (let i = 0; i < 30; i++) advanceFactionTurn(world, world.seed);
+  for (let i = 0; i < 40; i++) advanceFactionTurn(world, world.seed);
   assert.ok(f.holdings.length > 6, `grew to ${f.holdings.length} holdings, past the old cap of 6`);
+  // Every new holding is contiguous with the blob (adjacent to some earlier one).
+  for (let i = 1; i < f.holdings.length; i++) {
+    const h = f.holdings[i];
+    const touches = f.holdings.some((o, j) => j !== i && neighbors(o.q, o.r).some((nb) => nb.q === h.q && nb.r === h.r));
+    assert.ok(touches, `holding (${h.q},${h.r}) is adjacent to the SOI`);
+  }
 });
 
-test("an unmapped-mobility archetype defaults to static (never changes holdings)", () => {
-  const world = placedWorld({ seed: 3 });
-  const f = factionAt(3, 0, 0, 0, "wandering scholars"); // not in ARCHETYPE_MOBILITY → static
-  world.factions.push(f);
-  const before = JSON.stringify(f.holdings);
-  for (let i = 0; i < 10; i++) advanceFactionTurn(world, world.seed);
-  assert.equal(JSON.stringify(f.holdings), before);
+test("a high-chance archetype outgrows a low-chance one over many turns", () => {
+  const grow = (archetype) => {
+    const world = placedWorld({ seed: 9, R: 4 }); // room to grow without saturating
+    const f = factionAt(9, 0, 0, 0, archetype);
+    world.factions.push(f);
+    for (let i = 0; i < 25; i++) advanceFactionTurn(world, world.seed);
+    return f.holdings.length;
+  };
+  assert.ok(grow("cult") > grow("dragon"), "cult (.7) spreads faster than dragon (.25)");
 });
 
-test("movement/expansion never lands on water or an unplaced hex", () => {
+test("a failed expansion gate produces no spatial event but still ticks the goal", () => {
+  // Find a seed whose FIRST turn fails the gate for a low-chance archetype.
+  for (let seed = 0; seed < 100; seed++) {
+    const world = placedWorld({ seed, R: 2 });
+    const f = factionAt(seed, 0, 0, 0, "dragon"); // .25 → often fails
+    world.factions.push(f);
+    const events = advanceFactionTurn(world, seed);
+    if (events.length) continue; // gate passed this seed; try another
+    assert.equal(f.holdings.length, 1, "no hex claimed when the gate fails");
+    assert.equal(f.goal.progress, 1, "but the goal clock still ticked");
+    assert.equal(f.clock.turns, 1, "and the turn counter still advanced");
+    return;
+  }
+  assert.fail("expected a gate failure within 100 seeds");
+});
+
+test("expansion never lands on water or an unplaced hex", () => {
   const world = placedWorld({ seed: 4, sea: [[1, 0], [0, 1], [-1, 1]], skip: [[-1, 0]] });
   const f = factionAt(4, 0, 0, 0, "cult");
   world.factions.push(f);
-  for (let i = 0; i < 30; i++) advanceFactionTurn(world, world.seed);
+  for (let i = 0; i < 40; i++) advanceFactionTurn(world, world.seed);
   for (const h of f.holdings) {
     const hex = world.hexes[axialKey(h.q, h.r)];
     assert.ok(hex && hex.placed && hex.terrain !== "Sea", `holding (${h.q},${h.r}) is placed & passable`);
   }
 });
 
-test("movement/expansion is deterministic for a given world + seed", () => {
+test("expansion is deterministic for a given world + seed", () => {
   const run = () => {
     const world = placedWorld({ seed: 5 });
     const f = factionAt(5, 0, 0, 0, "cult");
@@ -365,12 +372,63 @@ test("movement/expansion is deterministic for a given world + seed", () => {
   assert.deepEqual(run(), run());
 });
 
-test("day-driven turns move/expand too, not just the manual button", () => {
-  const world = placedWorld({ seed: 6 });
+test("day-driven turns expand too, not just the manual button", () => {
+  const world = placedWorld({ seed: 6, R: 3 });
   const f = factionAt(6, 0, 0, 0, "cult");
   world.factions.push(f);
-  advanceFactionDays(world, TURN_LENGTH_DAYS, world.seed);
-  assert.equal(f.holdings.length, 2);
+  advanceFactionDays(world, 10 * TURN_LENGTH_DAYS, world.seed); // 10 turns of a .7 spreader
+  assert.ok(f.holdings.length > 1, `day clock drove expansion (grew to ${f.holdings.length})`);
+});
+
+// --- Seats & sphere of influence (Phase 8.19) -----------------------------
+
+test("isValidSeat respects the archetype rule (settlement vs POI-only vs lair)", () => {
+  const world = placedWorld({ pois: [[1, 0, "dungeon"], [2, 0, "tower"]], towns: [[0, 1]] });
+  // "any" archetypes seat on a settlement OR a POI.
+  assert.ok(isValidSeat(world, "bandits", 0, 1), "bandits seat in a town");
+  assert.ok(isValidSeat(world, "thieves' guild", 0, 1), "thieves seat in a town");
+  assert.ok(isValidSeat(world, "bandits", 1, 0), "bandits seat on a POI");
+  assert.ok(!isValidSeat(world, "bandits", 0, 0), "no site on a bare hex");
+  // A monstrous tribe lairs on a POI, never a settlement.
+  assert.ok(!isValidSeat(world, "monstrous tribe", 0, 1), "a tribe won't seat in a town");
+  assert.ok(isValidSeat(world, "monstrous tribe", 1, 0), "a tribe lairs on a POI");
+  // Lair-bound lords: only their bound POI type.
+  assert.ok(isValidSeat(world, "necromancer", 2, 0), "a necromancer seats on a tower");
+  assert.ok(!isValidSeat(world, "necromancer", 1, 0), "not on a dungeon");
+  assert.ok(isValidSeat(world, "lich", 1, 0), "a lich seats on a dungeon");
+});
+
+test("a faction generated on a bare hex is seatless; a promote is seated at its POI", () => {
+  const bare = factionAt(1, 0, 0, 0, "cult");
+  assert.equal(bare.seat, null, "bare-hex birth → seatless");
+  const promoted = promoteFaction(tables(), subRng(1, "faction", 2, 3, 0), {
+    q: 2, r: 3, poiId: "poi:0", index: 0, seed: 1, occupant: { by: "Bandits" },
+  });
+  assert.deepEqual(promoted.seat, { q: 2, r: 3, poiId: "poi:0" }, "promote seats on its POI");
+});
+
+test("generateFaction seats when the caller supplies a seat (the app's site birth)", () => {
+  const f = generateFaction(tables(), subRng(1, "faction", 0, 0, 0), {
+    q: 0, r: 0, index: 0, seed: 1, archetype: "bandits", poiId: "poi:9",
+    seat: { q: 0, r: 0, poiId: "poi:9" },
+  });
+  assert.deepEqual(f.seat, { q: 0, r: 0, poiId: "poi:9" });
+});
+
+test("a seatless faction seats on the first valid site its SOI reaches", () => {
+  // A cult born on a bare hex, with a dungeon two hexes away → seats when it claims it.
+  const world = placedWorld({ seed: 11, R: 3, pois: [[2, 0, "dungeon"]] });
+  const f = factionAt(11, 0, 0, 0, "cult");
+  world.factions.push(f);
+  assert.equal(f.seat, null, "starts seatless");
+  let seatedEvent = false;
+  for (let i = 0; i < 60 && !f.seat; i++) {
+    const events = advanceFactionTurn(world, world.seed);
+    if (events.some((e) => e.seated)) seatedEvent = true;
+  }
+  assert.ok(f.seat, "gained a seat by spreading onto a site");
+  assert.deepEqual(f.seat, { q: 2, r: 0 }, "the seat is the site it reached");
+  assert.ok(seatedEvent, "a claim/takeover reported it seated");
 });
 
 test("factionLabel / factionDescription are pure functions of the picks", () => {
@@ -385,6 +443,7 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
   assert.deepEqual(lines, [
     "Cult · wary",
     "Goal: spread the faith (2 / 6)",
+    "Seatless (raw influence)", // no seat field → seatless (8.19)
     "1 holding · strength 3",
     `Turn 1 · 3/${TURN_LENGTH_DAYS} d to next`,
   ]);
@@ -393,26 +452,28 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
   const lines2 = factionDescription(f2);
   assert.ok(lines2.includes("2 holdings · strength 3"));
   assert.ok(lines2.includes("Status: dormant"));
+  // A seated faction shows its HQ hex instead of "Seatless" (8.19).
+  const f3 = { ...f, seat: { q: 4, r: -1 } };
+  assert.ok(factionDescription(f3).includes("Seat: (4, -1)"));
 });
 
-// --- Expansion engine: contention, elimination, events (Phase 8.15) ------
-// moveOrSpread is reached through advanceFactionTurn (its per-turn rng is
-// subRng(seed,"factionturn",id,turns)), so these drive the turn and read the
-// returned FactionEvent[] and the mutated holdings.
+// --- Expansion engine: contention, seats, elimination (Phase 8.15 + 8.19) -
+// These drive `expand` DIRECTLY (exported for this) with a controlled rng stream,
+// so the outcome is exact — no gate noise, no rival counter-turn. The gate + turn
+// loop are exercised separately (advanceFactionTurn, above).
 
-// A plain spreading faction with a chosen strength and single holding (full
-// control over the contest, unlike the rolled generateFaction).
-const spreader = (id, q, r, strength) => ({
+// A plain attacker: a chosen strength + single holding, seatless unless told.
+const spreader = (id, q, r, strength, extra = {}) => ({
   id, status: "active", archetype: "cult", strength, disposition: "neutral",
   goal: { kind: "seize the region", progress: 0, max: 8 }, holdings: [{ q, r }],
-  clock: { turns: 0, sinceTurn: 0 },
+  seat: null, clock: { turns: 0, sinceTurn: 0 }, ...extra,
 });
-// An ACTIVE holder that never acts (unmapped archetype → static): a fixed
-// defender that stays put so we can isolate the attacker's contest.
-const staticHolder = (id, q, r, strength) => ({
-  id, status: "active", archetype: "wandering scholars", strength, disposition: "neutral",
-  goal: { kind: "seize the region", progress: 0, max: 8 }, holdings: [{ q, r }],
-  clock: { turns: 0, sinceTurn: 0 },
+// A passive defender: a real holder in world.factions we never tick (only the
+// attacker's expand runs), so it just sits and defends. `seat` marks its HQ hex.
+const holder = (id, holdings, strength, seat = null) => ({
+  id, status: "active", archetype: "bandits", strength, disposition: "neutral",
+  goal: { kind: "hold the ground", progress: 0, max: 8 },
+  holdings: holdings.map((h) => ({ ...h })), seat, clock: { turns: 0, sinceTurn: 0 },
 });
 // A two-hex world: only (0,0) and (1,0) placed, so a faction at (0,0) has exactly
 // one frontier hex — (1,0) — forcing a contest when a rival holds it.
@@ -424,22 +485,22 @@ const contestWorld = () => ({
   },
 });
 
-test("spreading onto empty ground returns a claim event and adds that hex", () => {
+test("expanding onto empty ground returns a claim event and adds that hex", () => {
   const world = placedWorld({ seed: 2 });
-  const f = factionAt(2, 0, 0, 0, "cult");
+  const f = spreader("faction:0", 0, 0, 3);
   world.factions.push(f);
-  const events = advanceFactionTurn(world, world.seed);
+  const events = expand(world, f, subRng(2, "claim"));
   const claim = events.find((e) => e.kind === "claim" && e.factionId === f.id);
   assert.ok(claim, "emitted a claim event");
   assert.ok(f.holdings.some((h) => h.q === claim.q && h.r === claim.r), "the claimed hex was added");
 });
 
 test("a contest is strength-weighted and deterministic", () => {
-  // Attacker at (0,0) has only the rival hex (1,0) to grow into → forced contest.
   const contest = (atkStrength, seed) => {
     const world = contestWorld();
-    world.factions = [spreader("faction:0", 0, 0, atkStrength), staticHolder("faction:1", 1, 0, 1)];
-    return advanceFactionTurn(world, seed).some((e) => e.kind === "takeover");
+    const atk = spreader("faction:0", 0, 0, atkStrength);
+    world.factions = [atk, holder("faction:1", [{ q: 1, r: 0 }], 1)];
+    return expand(world, atk, subRng(seed, "contest")).some((e) => e.kind === "takeover");
   };
   let strongWins = 0, weakWins = 0;
   for (let s = 0; s < 100; s++) {
@@ -448,39 +509,33 @@ test("a contest is strength-weighted and deterministic", () => {
   }
   assert.ok(strongWins > weakWins, `strong ${strongWins} > weak ${weakWins}`);
   assert.ok(strongWins >= 60, `a much stronger attacker wins the majority (${strongWins}/100)`);
-  // Same seed → same outcome.
-  assert.equal(contest(4, 7), contest(4, 7));
+  assert.equal(contest(4, 7), contest(4, 7)); // same seed → same outcome
 });
 
 test("a won contest moves the hex loser→winner; a lost one changes nothing", () => {
-  // Find a 1-v-1 seed that the attacker wins, and one it loses (each ~50%).
-  const won = (seed) => {
+  const run = (seed) => {
     const world = contestWorld();
-    world.factions = [spreader("faction:0", 0, 0, 1), staticHolder("faction:1", 1, 0, 1)];
-    return advanceFactionTurn(world, seed).some((e) => e.kind === "takeover");
+    const atk = spreader("faction:0", 0, 0, 1);
+    const def = holder("faction:1", [{ q: 1, r: 0 }, { q: 1, r: 1 }], 1, { q: 1, r: 1 });
+    world.factions = [atk, def];
+    const events = expand(world, atk, subRng(seed, "wl"));
+    return { atk, def, events, won: events.some((e) => e.kind === "takeover") };
   };
   let winSeed = -1, lossSeed = -1;
   for (let s = 0; s < 500 && (winSeed < 0 || lossSeed < 0); s++) {
-    if (won(s)) { if (winSeed < 0) winSeed = s; } else if (lossSeed < 0) lossSeed = s;
+    if (run(s).won) { if (winSeed < 0) winSeed = s; } else if (lossSeed < 0) lossSeed = s;
   }
   assert.ok(winSeed >= 0 && lossSeed >= 0, "found both a winning and a losing seed");
 
-  // Win: hex moves, event names the loser.
-  {
-    const world = contestWorld();
-    const atk = spreader("faction:0", 0, 0, 1), def = staticHolder("faction:1", 1, 0, 1);
-    world.factions = [atk, def];
-    const events = advanceFactionTurn(world, winSeed);
+  { // Win: the SOI hex (1,0) moves, event names the loser (its seat (1,1) is safe).
+    const { atk, def, events } = run(winSeed);
     assert.ok(events.some((e) => e.kind === "takeover" && e.fromFactionId === "faction:1"));
     assert.ok(atk.holdings.some((h) => h.q === 1 && h.r === 0), "winner now holds it");
     assert.ok(!def.holdings.some((h) => h.q === 1 && h.r === 0), "loser no longer holds it");
+    assert.equal(def.status, "active", "the loser keeps its seat and survives");
   }
-  // Loss: repelled, nothing moves.
-  {
-    const world = contestWorld();
-    const atk = spreader("faction:0", 0, 0, 1), def = staticHolder("faction:1", 1, 0, 1);
-    world.factions = [atk, def];
-    const events = advanceFactionTurn(world, lossSeed);
+  { // Loss: repelled, nothing moves.
+    const { atk, def, events } = run(lossSeed);
     assert.ok(events.some((e) => e.kind === "repelled" && e.fromFactionId === "faction:1"));
     assert.equal(atk.holdings.length, 1, "attacker gained nothing");
     assert.ok(def.holdings.some((h) => h.q === 1 && h.r === 0), "defender kept it");
@@ -488,13 +543,13 @@ test("a won contest moves the hex loser→winner; a lost one changes nothing", (
 });
 
 test("a faction reduced to zero holdings is destroyed, emits eliminated, and stops acting", () => {
-  // An overwhelming attacker (1000 vs 1 → win prob ~0.999) takes the defender's
-  // only hex on the first seed that wins → the defender drops to 0 holdings.
+  // An overwhelming attacker (1000 vs 1) takes the defender's only (seatless) hex.
   for (let seed = 0; seed < 20; seed++) {
     const w = contestWorld();
-    const atk = spreader("faction:0", 0, 0, 1000), def = staticHolder("faction:1", 1, 0, 1);
+    const atk = spreader("faction:0", 0, 0, 1000);
+    const def = holder("faction:1", [{ q: 1, r: 0 }], 1); // seatless, single holding
     w.factions = [atk, def];
-    const events = advanceFactionTurn(w, seed);
+    const events = expand(w, atk, subRng(seed, "elim"));
     if (!events.some((e) => e.kind === "eliminated")) continue;
     assert.equal(def.status, "destroyed", "loser at 0 holdings is destroyed");
     assert.equal(def.holdings.length, 0);
@@ -508,37 +563,99 @@ test("a faction reduced to zero holdings is destroyed, emits eliminated, and sto
   assert.fail("expected an elimination within 20 seeds");
 });
 
-test("a roaming faction emits move (dropping poiId), avoids rival hexes, and stays when boxed in", () => {
-  // Open ground: the roamer relocates and drops its poiId.
-  const world = placedWorld({ seed: 1 });
-  const f = factionAt(1, 0, 0, 0, "bandits");
-  f.holdings[0].poiId = "poi:0"; // started at a named POI
-  world.factions.push(f);
-  const events = advanceFactionTurn(world, world.seed);
-  const mv = events.find((e) => e.kind === "move" && e.factionId === f.id);
-  assert.ok(mv, "emitted a move event");
-  assert.ok(!("poiId" in f.holdings[0]), "poiId dropped now the camp roams the field");
-  assert.deepEqual(f.holdings[0], { q: mv.q, r: mv.r });
+// --- Seat defence, relocation & dissolution (Phase 8.19) ------------------
 
-  // Boxed in by a rival: the only neighbour is rival-held → the roamer stays put.
-  const boxed = contestWorld();
-  const roamer = {
-    id: "faction:0", status: "active", archetype: "bandits", strength: 2, disposition: "hostile",
-    goal: { kind: "raid the frontier", progress: 0, max: 8 }, holdings: [{ q: 0, r: 0 }], clock: { turns: 0, sinceTurn: 0 },
+test("a rival's SEAT falls far less often than an equally-defended SOI hex", () => {
+  // The attacker is forced to strike the one rival hex (1,0). In the seat case it
+  // IS the defender's seat (×SEAT_DEFENSE); in the SOI case it's a plain hex (the
+  // defender's seat is a far, unreachable holding) — same strengths + seeds.
+  const fell = (targetIsSeat, seed) => {
+    const world = contestWorld();
+    const atk = spreader("faction:0", 0, 0, 3);
+    const def = targetIsSeat
+      ? holder("faction:1", [{ q: 1, r: 0 }], 3, { q: 1, r: 0 })
+      : holder("faction:1", [{ q: 1, r: 0 }, { q: 9, r: 9 }], 3, { q: 9, r: 9 });
+    world.factions = [atk, def];
+    return expand(world, atk, subRng(seed, "seat-vs-soi")).some((e) => e.kind === "takeover");
   };
-  boxed.factions = [roamer, staticHolder("faction:1", 1, 0, 2)];
-  const ev2 = advanceFactionTurn(boxed, boxed.seed);
-  assert.ok(!ev2.some((e) => e.factionId === "faction:0"), "a boxed-in roamer emits nothing");
-  assert.deepEqual(roamer.holdings[0], { q: 0, r: 0 }, "and does not move onto the rival hex");
+  let seatFalls = 0, soiFalls = 0;
+  for (let s = 0; s < 300; s++) {
+    if (fell(true, s)) seatFalls++;  // 3 vs 3×6 → ~0.14
+    if (fell(false, s)) soiFalls++;  // 3 vs 3 → ~0.5
+  }
+  assert.ok(soiFalls > seatFalls * 2, `SOI (${soiFalls}) falls far more than the seat (${seatFalls})`);
+  assert.ok(seatFalls > 0, "but a seat still falls occasionally");
+  assert.equal(fell(true, 5), fell(true, 5)); // deterministic for a seed
+});
+
+// A world where (0,0)'s ONLY placed passable neighbour is (1,0), so an attacker at
+// (0,0) is forced to strike (1,0). Extra placed hexes carry POIs (seat sites).
+const seatTakeWorld = (sites = []) => {
+  const hexes = {
+    [axialKey(0, 0)]: { coords: { q: 0, r: 0 }, placed: true, terrain: "Plains" },
+    [axialKey(1, 0)]: { coords: { q: 1, r: 0 }, placed: true, terrain: "Plains", pois: [{ id: "poi:1,0", type: "dungeon" }] },
+  };
+  for (const [q, r] of sites) {
+    hexes[axialKey(q, r)] = { coords: { q, r }, placed: true, terrain: "Plains", pois: [{ id: `poi:${q},${r}`, type: "dungeon" }] };
+  }
+  return { seed: 1, factions: [], hexes };
+};
+
+test("losing a SEAT relocates to the nearest valid site and halves the SOI", () => {
+  const build = () => {
+    const world = seatTakeWorld([[2, 0]]); // (2,0) is a second dungeon = a valid fallback
+    const atk = spreader("faction:0", 0, 0, 1000);
+    const def = holder("faction:1",
+      [{ q: 1, r: 0, poiId: "poi:1,0" }, { q: 2, r: 0, poiId: "poi:2,0" }, { q: 3, r: 0 }, { q: 3, r: 1 }, { q: 3, r: 2 }],
+      2, { q: 1, r: 0, poiId: "poi:1,0" });
+    world.factions = [atk, def];
+    return { world, atk, def };
+  };
+  for (let seed = 0; seed < 20; seed++) {
+    const { world, atk, def } = build();
+    const events = expand(world, atk, subRng(seed, "reloc"));
+    if (!events.some((e) => e.kind === "takeover" && e.q === 1 && e.r === 0)) continue;
+    assert.ok(events.some((e) => e.kind === "relocate" && e.factionId === "faction:1"), "the loser relocated");
+    assert.equal(def.status, "active", "the faction survives the relocation");
+    assert.deepEqual({ q: def.seat.q, r: def.seat.r }, { q: 2, r: 0 }, "regrouped at the nearest valid site");
+    assert.ok(def.holdings.some((h) => h.q === 2 && h.r === 0), "the new seat is a holding");
+    assert.ok(!def.holdings.some((h) => h.q === 1 && h.r === 0), "lost the old seat hex");
+    assert.ok(def.holdings.length < 5 && def.holdings.length >= 2, `SOI roughly halved (${def.holdings.length})`);
+    return;
+  }
+  assert.fail("expected the seat to fall within 20 seeds");
+});
+
+test("losing a SEAT with no valid fallback dissolves the faction", () => {
+  const build = () => {
+    const world = seatTakeWorld(); // no second site → nowhere to relocate
+    const atk = spreader("faction:0", 0, 0, 1000);
+    const def = holder("faction:1",
+      [{ q: 1, r: 0, poiId: "poi:1,0" }, { q: 3, r: 0 }, { q: 3, r: 1 }], // other holdings are bare
+      2, { q: 1, r: 0, poiId: "poi:1,0" });
+    world.factions = [atk, def];
+    return { world, atk, def };
+  };
+  for (let seed = 0; seed < 20; seed++) {
+    const { world, atk, def } = build();
+    const events = expand(world, atk, subRng(seed, "dissolve"));
+    if (!events.some((e) => e.kind === "takeover" && e.q === 1 && e.r === 0)) continue;
+    assert.ok(!events.some((e) => e.kind === "relocate"), "no relocation was possible");
+    assert.ok(events.some((e) => e.kind === "eliminated" && e.factionId === "faction:1" && e.byFactionId === "faction:0"));
+    assert.equal(def.status, "destroyed", "the seatless-again faction dissolves");
+    return;
+  }
+  assert.fail("expected the seat to fall within 20 seeds");
 });
 
 test("advanceFactionTurn / advanceFactionDays return well-formed FactionEvent arrays", () => {
-  const KINDS = new Set(["claim", "move", "takeover", "repelled", "eliminated"]);
-  const world = placedWorld({ seed: 2 });
+  const KINDS = new Set(["claim", "takeover", "repelled", "eliminated", "relocate"]);
+  const world = placedWorld({ seed: 2, R: 3 });
   world.factions.push(factionAt(2, 0, 0, 0, "cult"));
-  const t = advanceFactionTurn(world, world.seed);
-  assert.ok(Array.isArray(t));
-  for (const e of t) { assert.ok(KINDS.has(e.kind)); assert.equal(typeof e.factionId, "string"); }
+  const t = [];
+  for (let i = 0; i < 20; i++) t.push(...advanceFactionTurn(world, world.seed));
+  assert.ok(t.length, "several turns produced some events");
+  for (const e of t) { assert.ok(KINDS.has(e.kind), `kind ${e.kind}`); assert.equal(typeof e.factionId, "string"); }
   const d = advanceFactionDays(world, TURN_LENGTH_DAYS, world.seed);
   assert.ok(Array.isArray(d));
   for (const e of d) { assert.ok(KINDS.has(e.kind)); assert.equal(typeof e.factionId, "string"); }
@@ -608,13 +725,14 @@ test("promoteFaction raises a hostile lord of the chosen archetype", () => {
   assert.deepEqual(f.origin, { fromPOI: { q: 2, r: 3, poiId: "poi:0" } });
 });
 
-test("a lair-bound lord keeps its seat while its influence spreads", () => {
-  const world = placedWorld({ seed: 3 });
+test("a lair-bound lord keeps its lair while its influence spreads", () => {
+  const world = placedWorld({ seed: 3, R: 3 });
   const f = generateFaction(tablesK(), subRng(3, "faction", 0, 0, 0), { q: 0, r: 0, index: 0, seed: 3, archetype: "necromancer" });
   world.factions.push(f);
-  const seat = { ...f.holdings[0] };
-  for (let i = 0; i < 8; i++) advanceFactionTurn(world, world.seed);
-  assert.deepEqual(f.holdings[0], seat, "the lair (holding #0) never moves");
+  const lair = { ...f.holdings[0] };
+  // Necromancer expands at only .3/turn — run plenty of turns so growth is certain.
+  for (let i = 0; i < 40; i++) advanceFactionTurn(world, world.seed);
+  assert.deepEqual(f.holdings[0], lair, "the lair (holding #0) never moves");
   assert.ok(f.holdings.length > 1, "influence spread to new hexes");
 });
 
