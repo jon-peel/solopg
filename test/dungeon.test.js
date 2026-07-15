@@ -521,3 +521,57 @@ test("a lord-infused dungeon is deterministic for a seed", () => {
   const b = generateDungeon(tables(), mulberry32(9), { size: "Sizable", theme: "Ruin", overlord: ov });
   assert.deepEqual(a, b);
 });
+
+// --- Garrisoned interiors: a rank-and-file faction moves in (Phase 8.19) --
+
+test("a garrison holds the frontier AND patrols as wandering monsters", () => {
+  const garrison = { id: "faction:7", label: "Cultists" };
+  const d = generateDungeon(tables(), mulberry32(4), { size: "Sizable", theme: "Ruin", garrison });
+  assert.equal(d.garrisonId, "faction:7", "interior stamped with its garrison");
+  // Occupation is FORCED when a faction holds it (not theme-gated), by its people.
+  assert.ok(d.occupation, "the faction garrisons the frontier");
+  assert.equal(d.occupation.by, "Cultists");
+  const held = new Set(d.occupation.rooms);
+  for (const r of d.levels[0].rooms) {
+    if (held.has(r.n) && r.content === "Monster") assert.equal(r.monster.name, "Cultists", "held rooms are the faction's people");
+  }
+  // They patrol: the label is in the wandering list of EVERY level.
+  for (const lvl of d.levels) assert.ok(lvl.encounters.some((e) => e.value === "Cultists"), `Cultists patrol level ${lvl.depth}`);
+});
+
+test("a garrison keeps the native ecology underneath (unlike a lord, it doesn't re-theme)", () => {
+  const t = tables();
+  // Same seed, with and without the garrison: the per-level FAMILY is unchanged
+  // (a garrison augments, a lord would replace), and native creatures still appear
+  // alongside the garrison in the wandering list.
+  const bare = generateDungeon(t, mulberry32(11), { size: "Sizable", theme: "Goblin warren" });
+  const held = generateDungeon(t, mulberry32(11), { size: "Sizable", theme: "Goblin warren", garrison: { id: "f", label: "Bandits" } });
+  assert.deepEqual(held.levels.map((l) => l.family), bare.levels.map((l) => l.family), "the native families are unchanged");
+  for (const lvl of held.levels) {
+    const nonGarrison = lvl.encounters.filter((e) => e.value !== "Bandits");
+    assert.ok(nonGarrison.length >= 1, `level ${lvl.depth} keeps a mixed roster, not just the garrison`);
+  }
+});
+
+test("without a garrison the dungeon has no garrison stamp", () => {
+  const d = generateDungeon(tables(), mulberry32(7), { size: "Sizable", theme: "Ruined fort" });
+  assert.ok(!("garrisonId" in d));
+});
+
+test("a lord takes precedence over a garrison (a lord fully infuses, not garrisons)", () => {
+  const d = generateDungeon(tables(), mulberry32(5), {
+    size: "Sizable", theme: "Ruin",
+    overlord: { family: "Undead", boss: "Lich", id: "faction:0" },
+    garrison: { id: "faction:0", label: "Cultists" },
+  });
+  assert.equal(d.overlordId, "faction:0");
+  assert.ok(!("garrisonId" in d), "no garrison stamp when a lord holds it");
+  for (const lvl of d.levels) assert.equal(lvl.family, "Undead");
+});
+
+test("a garrisoned dungeon is deterministic for a seed", () => {
+  const g = { id: "faction:2", label: "Lizardfolk" };
+  const a = generateDungeon(tables(), mulberry32(9), { size: "Sizable", theme: "Ruin", garrison: g });
+  const b = generateDungeon(tables(), mulberry32(9), { size: "Sizable", theme: "Ruin", garrison: g });
+  assert.deepEqual(a, b);
+});
