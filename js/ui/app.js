@@ -25,8 +25,9 @@ import {
   setPartyEncumbrance,
   addFaction,
   getFactions,
+  removeFaction,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -349,10 +350,10 @@ function logFactionEvents(events) {
   const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
   const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
   for (const ev of events) {
-    if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} spreads into ${placeOf(ev.q, ev.r)}.`);
-    else if (ev.kind === "move") logLine(`${nameOf(ev.factionId)} moves camp to ${placeOf(ev.q, ev.r)}.`);
+    if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
     else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
     else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
+    else if (ev.kind === "relocate") logLine(`${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`);
     else if (ev.kind === "eliminated") logLine(`${nameOf(ev.factionId)} is destroyed.`);
   }
 }
@@ -370,21 +371,43 @@ function occupyPoiForFaction(poi, faction) {
   return true;
 }
 
-// As factions spread, they gradually absorb the sites they roll over (8.17): for
-// each claim/takeover/move onto a hex that carries a POI, a small chance the POI
-// becomes theirs. (Seating on a POI — generate/promote — is deterministic; that's
-// handled at those call sites.) Seeded per (faction, hex) so it's reproducible.
+// The first POI on the hex at (q,r), or undefined.
+const poiAt = (q, r) => { const hex = getHex(current, q, r); return hex && (hex.pois || [])[0]; };
+
+// Drop a destroyed/deleted faction's grip on every POI it held (8.19): clear the
+// `factionId` tag so the site is no longer run by a faction that's gone. A lord's
+// dungeon/tower then re-forms to its own theme on next open (overlordFor → null).
+function clearFactionPois(factionId) {
+  for (const hex of Object.values((current && current.hexes) || {})) {
+    for (const poi of hex.pois || []) {
+      if (poi.occupant && poi.occupant.factionId === factionId) delete poi.occupant.factionId;
+    }
+  }
+}
+
+// As factions grow they absorb the sites they roll over (8.17/8.19): a claim or
+// takeover onto a POI it SEATS on (ev.seated) takes it deterministically; a plain
+// spread over a POI rolls a small chance. A relocation (8.19) deterministically
+// occupies the new seat's POI; an elimination clears the loser's POI tags. Seeded
+// per (faction, hex) so it's reproducible.
 const OCCUPY_ON_SPREAD_CHANCE = 0.25;
 function applyFactionOccupancy(events) {
   if (!Array.isArray(events)) return;
   for (const ev of events) {
-    if (ev.kind !== "claim" && ev.kind !== "takeover" && ev.kind !== "move") continue;
-    const hex = getHex(current, ev.q, ev.r);
-    const poi = hex && (hex.pois || [])[0];
+    if (ev.kind === "eliminated") { clearFactionPois(ev.factionId); continue; }
+    if (ev.kind === "relocate") {
+      const poi = poiAt(ev.q, ev.r);
+      const faction = getFactions(current).find((f) => f.id === ev.factionId);
+      if (poi && faction) occupyPoiForFaction(poi, faction);
+      continue;
+    }
+    if (ev.kind !== "claim" && ev.kind !== "takeover") continue;
+    const poi = poiAt(ev.q, ev.r);
     if (!poi) continue;
     const faction = getFactions(current).find((f) => f.id === ev.factionId);
     if (!faction) continue;
-    if (subRng(current.seed, "occupy", faction.id, ev.q, ev.r)() < OCCUPY_ON_SPREAD_CHANCE) {
+    // Seating on a site is deterministic; a passing spread rolls OCCUPY_ON_SPREAD_CHANCE.
+    if (ev.seated || subRng(current.seed, "occupy", faction.id, ev.q, ev.r)() < OCCUPY_ON_SPREAD_CHANCE) {
       occupyPoiForFaction(poi, faction);
     }
   }
@@ -1352,6 +1375,7 @@ function refreshFactions() {
     factions,
     onCenterFaction,
     onAdvanceFactionTurn,
+    onDeleteFaction,
     factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
   });
 }
@@ -1718,6 +1742,12 @@ async function onGenerateFaction() {
     const hex = getHex(current, q, r);
     const poi0 = hex && Array.isArray(hex.pois) ? hex.pois[0] : undefined;
     const faction = generateFaction(tables, rng, { q, r, index: n, seed: current.seed, poiId: poi0 && poi0.id });
+    // Seatless unless born on a valid site for its (rolled) archetype (8.19): a
+    // faction on a POI/settlement seats there; on a bare hex it stays seatless
+    // until its SOI reaches one. The archetype is only known after the roll.
+    if (isValidSeat(current, faction.archetype, q, r)) {
+      faction.seat = { q, r, ...(poi0 ? { poiId: poi0.id } : {}) };
+    }
     addFaction(current, faction);
     if (poi0) occupyPoiForFaction(poi0, faction); // seating on a POI takes it over (8.17)
     setPanelTab("factions");
@@ -1783,12 +1813,25 @@ function onCenterHook(id, which) {
 }
 
 // Centre the map on a faction's holding — click-to-jump from the Factions tab
-// (Phase 8.7). `index` selects which holding (8.9); defaults to the first, so
-// the 8.8 POI "Faction:" link (no index) still lands on holding 0.
+// (Phase 8.7). `index` selects which holding (8.9). The default jump (index 0,
+// e.g. the POI "Faction:" link) lands on the SEAT when the faction has one (8.19),
+// else its first holding.
 function onCenterFaction(id, index = 0) {
   const f = getFactions(current).find((x) => x.id === id);
-  const hold = f && (f.holdings || [])[index];
+  if (!f) return;
+  const hold = (index === 0 && f.seat) ? f.seat : (f.holdings || [])[index];
   if (hold) recenterOn(hold.q, hold.r);
+}
+
+// Delete a faction (Phase 8.19) — a GM override, distinct from in-world
+// dissolution: the faction simply vanishes and its held POIs lose the faction tag.
+async function onDeleteFaction(id) {
+  if (!current) return;
+  const f = getFactions(current).find((x) => x.id === id);
+  clearFactionPois(id);
+  removeFaction(current, id);
+  if (f) logLine(`Deleted faction — ${f.name}.`);
+  await persistAndRefresh();
 }
 
 // Set which faction runs the selected placed hex (Phase 8.15) — a single-owner

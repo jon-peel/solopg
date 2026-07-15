@@ -455,6 +455,29 @@ function factionCard(faction, model) {
     });
     box.appendChild(legend);
   }
+
+  // Delete (Phase 8.19) — a GM override, two-step (arm then confirm, no confirm()
+  // dialog — matching the world-delete button). The panel re-renders on delete, so
+  // the armed state resets itself; a timeout disarms if the GM walks away.
+  if (model.onDeleteFaction) {
+    const row = document.createElement("div");
+    row.className = "tile-actions";
+    const del = actionButton("Delete faction", () => {});
+    let armTimer = null;
+    del.addEventListener("click", () => {
+      if (!armTimer) {
+        del.textContent = "Confirm delete";
+        del.classList.add("armed");
+        armTimer = setTimeout(() => { armTimer = null; del.textContent = "Delete faction"; del.classList.remove("armed"); }, 4000);
+        return;
+      }
+      clearTimeout(armTimer);
+      armTimer = null;
+      model.onDeleteFaction(faction.id);
+    });
+    row.appendChild(del);
+    box.appendChild(row);
+  }
   return box;
 }
 
@@ -462,6 +485,7 @@ function factionCard(faction, model) {
  * Render the Factions tab (Phase 8.7) into #factions-panel — one card per
  * faction, with a count badge on the tab. Mirrors the Hooks tab (7.3).
  * @param {{ factions: object[], onCenterFaction?: (id:string)=>void,
+ *   onAdvanceFactionTurn?: ()=>void, onDeleteFaction?: (id:string)=>void,
  *   factionColorFor?: (id:string)=>string }} model
  */
 export function renderFactionsPanel(model) {
