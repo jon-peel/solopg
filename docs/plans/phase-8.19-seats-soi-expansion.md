@@ -209,7 +209,11 @@ relocate-or-dissolve). Order the rng-free so it stays deterministic.
 ## Out of scope (deliberate)
 
 - **Emergent rebellion** (auto-spawn against an oppressor) — still a later idea.
-- **Generalising 8.18 interior infusion to non-lord factions** (a bandit-held dungeon re-stocked with
-  Bandits) — a separate content follow-on.
+- ~~**Generalising 8.18 interior infusion to non-lord factions**~~ — **shipped as a follow-on:** a
+  rank-and-file faction (cult / tribe / bandits / …) that holds a dungeon or tower now **garrisons**
+  it — its people hold the entrance frontier and patrol as wandering monsters, while the native
+  ecology stays underneath (a garrison *augments*; only a lord *re-themes*). `generateDungeon` /
+  `generateTower` take a `garrison` spec; `app.js` `garrisonFor(poi)`. `DUNGEON_BUILD` 21,
+  `TOWER_BUILD` 2.
 - **Diplomacy / alliances** between factions — contention is the only inter-faction resolver here.
 - **Multi-hex sieges** beyond single-hex contest — out of scope, as in 8.15.

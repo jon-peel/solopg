@@ -620,8 +620,14 @@ seat/SOI expansion model.** Built on the 8.15 engine, driven by play feedback:
   site can host one (the single dissolution route, alongside 0 holdings). New event: `relocate`; the
   `move` kind is retired. A GM can **delete** a faction from its card. `FACTION_BUILD` → 2 (additive
   `seat`, backfilled lazily on the first turn); schema still **v16**.
+- **8.19 follow-on — a rank-and-file faction garrisons the interior it holds.** 8.18 only infused
+  *lords*; a cult or tribe that took a POI set the seat but never "moved in". Now any faction-held
+  **dungeon/tower** shows the faction's own people: they **hold the entrance frontier** and **patrol as
+  wandering monsters**, while the native ecology stays underneath (a garrison *augments*; only a lord
+  *re-themes*). `generateDungeon`/`generateTower` take a `garrison` spec; `app.js` `garrisonFor(poi)`.
+  `DUNGEON_BUILD` → 21, `TOWER_BUILD` → 2 (old interiors self-heal on next open).
 
-Suite green at **420 `node --test`**.
+Suite green at **427 `node --test`**.
 
 ---
 
