@@ -9,6 +9,7 @@ import {
   advanceFactionDays,
   expand,
   isValidSeat,
+  reseatFaction,
   TURN_LENGTH_DAYS,
   factionLabel,
   factionDescription,
@@ -621,6 +622,7 @@ test("losing a SEAT relocates to the nearest valid site and halves the SOI", () 
     assert.ok(def.holdings.some((h) => h.q === 2 && h.r === 0), "the new seat is a holding");
     assert.ok(!def.holdings.some((h) => h.q === 1 && h.r === 0), "lost the old seat hex");
     assert.ok(def.holdings.length < 5 && def.holdings.length >= 2, `SOI roughly halved (${def.holdings.length})`);
+    assert.equal(def.strength, 1, "and strength falters too (2 → 1)");
     return;
   }
   assert.fail("expected the seat to fall within 20 seeds");
@@ -646,6 +648,48 @@ test("losing a SEAT with no valid fallback dissolves the faction", () => {
     return;
   }
   assert.fail("expected the seat to fall within 20 seeds");
+});
+
+test("reseatFaction (GM override) moves the seat and applies the same disruption", () => {
+  const world = seatTakeWorld([[2, 0]]); // (1,0) + (2,0) are valid seat sites
+  const f = holder("faction:1",
+    [{ q: 1, r: 0, poiId: "poi:1,0" }, { q: 2, r: 0, poiId: "poi:2,0" }, { q: 3, r: 0 }, { q: 3, r: 1 }, { q: 3, r: 2 }],
+    4, { q: 1, r: 0, poiId: "poi:1,0" });
+  const seat = reseatFaction(world, f, 2, 0);
+  assert.deepEqual(seat, { q: 2, r: 0, poiId: "poi:2,0" }, "seat moved to the chosen site (with its POI)");
+  assert.deepEqual(f.seat, { q: 2, r: 0, poiId: "poi:2,0" });
+  assert.ok(f.holdings.some((h) => h.q === 2 && h.r === 0), "new seat is a holding");
+  assert.ok(f.holdings.length < 5, `SOI halved (${f.holdings.length} < 5)`);
+  assert.equal(f.strength, 2, "strength halved too (4 → 2)");
+});
+
+test("reseatFaction adds the hex as a holding if the faction doesn't hold it yet", () => {
+  const world = seatTakeWorld([[2, 0]]);
+  const f = holder("faction:1", [{ q: 1, r: 0, poiId: "poi:1,0" }], 3, { q: 1, r: 0, poiId: "poi:1,0" });
+  // (2,0) is a valid site the faction does NOT hold — a GM decree seats it there.
+  const seat = reseatFaction(world, f, 2, 0);
+  assert.deepEqual({ q: seat.q, r: seat.r }, { q: 2, r: 0 });
+  assert.ok(f.holdings.some((h) => h.q === 2 && h.r === 0), "the decreed hex is now a holding + the seat");
+});
+
+test("reseatFaction refuses a hex that is not a valid seat site", () => {
+  const world = seatTakeWorld([[2, 0]]);
+  const f = holder("faction:1", [{ q: 1, r: 0, poiId: "poi:1,0" }], 3, { q: 1, r: 0, poiId: "poi:1,0" });
+  assert.equal(reseatFaction(world, f, 3, 0), null, "(3,0) is a bare hex → refused");
+  assert.deepEqual(f.seat, { q: 1, r: 0, poiId: "poi:1,0" }, "seat unchanged on refusal");
+  assert.equal(f.strength, 3, "strength unchanged on refusal");
+});
+
+test("a monstrous tribe can't be reseated into a settlement (archetype seat rule holds)", () => {
+  const world = { seed: 1, factions: [], hexes: {
+    [axialKey(1, 0)]: { coords: { q: 1, r: 0 }, placed: true, terrain: "Plains", pois: [{ id: "poi:a", type: "dungeon" }] },
+    [axialKey(2, 0)]: { coords: { q: 2, r: 0 }, placed: true, terrain: "Plains", settlement: { present: true, kind: "town", size: "Village" } },
+  } };
+  const f = { id: "faction:1", status: "active", archetype: "monstrous tribe", kind: "goblins", strength: 3,
+    disposition: "hostile", goal: { kind: "raid", progress: 0, max: 8 },
+    holdings: [{ q: 1, r: 0, poiId: "poi:a" }, { q: 2, r: 0 }], seat: { q: 1, r: 0, poiId: "poi:a" }, clock: { turns: 0, sinceTurn: 0 } };
+  assert.equal(reseatFaction(world, f, 2, 0), null, "a tribe won't seat in a town");
+  assert.deepEqual(f.seat, { q: 1, r: 0, poiId: "poi:a" }, "seat unchanged; a settlement is not a valid tribe seat");
 });
 
 test("advanceFactionTurn / advanceFactionDays return well-formed FactionEvent arrays", () => {

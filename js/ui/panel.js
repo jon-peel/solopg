@@ -751,6 +751,31 @@ export function renderSelectionPanel(model) {
       crow.appendChild(pick);
       sel.appendChild(crow);
     }
+
+    // Manual reseat (Phase 8.19) — promote a held, seat-worthy hex to the faction's
+    // HQ. A GM override with the SAME disruption as an in-world seat fall (it loses
+    // reach + strength), so it's a two-step confirm.
+    const reseat = model.reseatHere && model.onReseatFaction && model.reseatHere(coord);
+    if (reseat) {
+      const rrow = document.createElement("div");
+      rrow.className = "tile-actions";
+      const label = `Make this ${reseat.name}'s seat`;
+      const btn = actionButton(label, () => {});
+      let armed = null;
+      btn.addEventListener("click", () => {
+        if (!armed) {
+          btn.textContent = "Confirm reseat — costs reach + strength";
+          btn.classList.add("armed");
+          armed = setTimeout(() => { armed = null; btn.textContent = label; btn.classList.remove("armed"); }, 4000);
+          return;
+        }
+        clearTimeout(armed);
+        armed = null;
+        model.onReseatFaction(reseat.id);
+      });
+      rrow.appendChild(btn);
+      sel.appendChild(rrow);
+    }
   }
 
   // Annotations (name + notes) work for any selected cell — even an ungenerated

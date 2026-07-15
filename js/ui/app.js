@@ -27,7 +27,7 @@ import {
   getFactions,
   removeFaction,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -681,6 +681,17 @@ function renderSelection() {
     factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
     factions: hex && hex.placed ? getFactions(current) : [],
     onSetHexFaction: hex && hex.placed ? onSetHexFaction : undefined,
+    // Manual reseat (8.19): offer it for the faction that HOLDS this hex when the
+    // hex is a valid seat site for it and isn't already its seat. Returns { id, name }
+    // or null. The button carries a two-step confirm (it costs reach + strength).
+    reseatHere: (c) => {
+      if (!(hex && hex.placed)) return null;
+      const held = getFactions(current).find((f) => (f.holdings || []).some((h) => h.q === c.q && h.r === c.r));
+      if (!held || !isValidSeat(current, held.archetype, c.q, c.r)) return null;
+      if (held.seat && held.seat.q === c.q && held.seat.r === c.r) return null;
+      return { id: held.id, name: held.name };
+    },
+    onReseatFaction,
   });
 }
 
@@ -1894,6 +1905,24 @@ async function onSetHexFaction(factionId) {
     if (faction && addHolding(faction, { q, r, poiId })) changed = true;
   }
   if (changed) await persistAndRefresh();
+}
+
+// GM manual reseat (Phase 8.19) — move a faction's HQ to the selected hex, which
+// must be a valid seat site for it. Applies the same disruption as an in-world seat
+// fall (halve reach + strength), then occupies the new seat's POI. Distinct from
+// "Run by" (which just reassigns a hex, no disruption).
+async function onReseatFaction(id) {
+  if (!current || !selected) return;
+  const faction = getFactions(current).find((f) => f.id === id);
+  if (!faction) return;
+  const { q, r } = selected;
+  const before = { soi: (faction.holdings || []).length, strength: faction.strength };
+  const seat = reseatFaction(current, faction, q, r);
+  if (!seat) return logLine(`${faction.name} can't seat there — it needs a settlement or POI it can base on.`);
+  const poi = poiAt(q, r);
+  if (poi) occupyPoiForFaction(poi, faction); // the new seat's site becomes theirs
+  logLine(`${faction.name} reseats at ${destinationLabel(getHex(current, q, r), q, r)} — its reach and strength falter (SOI ${before.soi}→${faction.holdings.length}, strength ${before.strength}→${faction.strength}).`);
+  await persistAndRefresh();
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the

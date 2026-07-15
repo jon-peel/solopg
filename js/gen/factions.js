@@ -224,8 +224,9 @@ const expansionChance = (faction) => EXPANSION_CHANCE[faction.archetype] ?? EXPA
 // A defender's SEAT is much harder to take than a plain SOI hex: its strength is
 // multiplied by this in the contest (still a small, non-zero chance to fall).
 const SEAT_DEFENSE = 6;
-// When a seat falls the faction relocates and its reach falters — it keeps this
-// fraction of its (non-seat) SOI, the nearest half, and loses the rest.
+// A seat change is an upheaval — a faction keeps this fraction of its reach (the
+// nearest SOI hexes) AND its strength, losing the rest. One rule, used by both an
+// in-world seat fall (relocateSeat) and a GM manual reseat (reseatFaction).
 const SOI_DISRUPTION = 0.5;
 
 // What kind of site an archetype may SEAT on (a rule, so a JS const). "any" =
@@ -283,24 +284,52 @@ function maybeSeat(world, faction, q, r) {
   return true;
 }
 
-// Relocate a faction whose SEAT just fell (Phase 8.19): move it to the nearest
-// remaining holding that is a valid seat site, then HALVE the SOI (keep the new
-// seat + the nearest SOI_DISRUPTION of the other holdings). Mutates the faction.
-// Returns the new seat, or null when no holding can host one (→ caller dissolves).
-function relocateSeat(world, faction, lost) {
-  const holdings = faction.holdings || [];
-  const cands = holdings.filter((h) => isValidSeat(world, faction.archetype, h.q, h.r));
-  if (!cands.length) return null;
-  cands.sort((a, b) =>
-    axialDistance(a.q, a.r, lost.q, lost.r) - axialDistance(b.q, b.r, lost.q, lost.r) || a.q - b.q || a.r - b.r);
-  const seat = { ...cands[0] };
-  const others = holdings.filter((h) => !(h.q === seat.q && h.r === seat.r));
+// The upheaval of a seat change (Phase 8.19): move the seat to `seat` (which must
+// already be one of the faction's holdings), keep only the nearest SOI_DISRUPTION
+// of the OTHER holdings, and cut strength by the same fraction (min 1). Mutates the
+// faction. Shared by an in-world seat fall and the GM manual reseat, so both cost
+// the same reach + power.
+function disruptSeat(faction, seat) {
+  const others = (faction.holdings || []).filter((h) => !(h.q === seat.q && h.r === seat.r));
   others.sort((a, b) =>
     axialDistance(a.q, a.r, seat.q, seat.r) - axialDistance(b.q, b.r, seat.q, seat.r) || a.q - b.q || a.r - b.r);
   const keep = Math.floor(others.length * SOI_DISRUPTION);
-  faction.holdings = [seat, ...others.slice(0, keep).map((h) => ({ ...h }))];
+  faction.holdings = [{ ...seat }, ...others.slice(0, keep).map((h) => ({ ...h }))];
   faction.seat = { ...seat };
-  return seat;
+  faction.strength = Math.max(1, Math.floor((faction.strength || 1) * SOI_DISRUPTION));
+}
+
+// Relocate a faction whose SEAT just fell (Phase 8.19): move it to the nearest
+// remaining holding that is a valid seat site, then apply the seat-change
+// disruption (halve SOI + strength). Mutates the faction. Returns the new seat, or
+// null when no holding can host one (→ caller dissolves).
+function relocateSeat(world, faction, lost) {
+  const cands = (faction.holdings || []).filter((h) => isValidSeat(world, faction.archetype, h.q, h.r));
+  if (!cands.length) return null;
+  cands.sort((a, b) =>
+    axialDistance(a.q, a.r, lost.q, lost.r) - axialDistance(b.q, b.r, lost.q, lost.r) || a.q - b.q || a.r - b.r);
+  disruptSeat(faction, cands[0]);
+  return faction.seat;
+}
+
+/**
+ * GM manual reseat (Phase 8.19) — move a faction's seat to (q,r). The hex must be
+ * a valid seat SITE for the faction's archetype; if the faction doesn't already
+ * hold it, it's added to the SOI first (a GM decree). Applies the SAME disruption
+ * as an in-world seat fall (halve reach + strength). Mutates the faction. Pure.
+ * @param {object} world @param {object} faction @param {number} q @param {number} r
+ * @returns {{q:number,r:number,poiId?:string}|null} the new seat, or null if (q,r)
+ *   is not a valid seat site for the faction.
+ */
+export function reseatFaction(world, faction, q, r) {
+  if (!faction || !isValidSeat(world, faction.archetype, q, r)) return null;
+  const hex = world && world.hexes && world.hexes[axialKey(q, r)];
+  const poi0 = hex && Array.isArray(hex.pois) ? hex.pois[0] : null;
+  const seat = { q, r, ...(poi0 && poi0.id ? { poiId: poi0.id } : {}) };
+  const holdings = faction.holdings || (faction.holdings = []);
+  if (!holdings.some((h) => h.q === q && h.r === r)) holdings.push({ ...seat });
+  disruptSeat(faction, seat);
+  return faction.seat;
 }
 
 // Destroy a faction (Phase 8.19) — the single dissolution route (0 holdings, or a
