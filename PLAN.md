@@ -626,8 +626,13 @@ seat/SOI expansion model.** Built on the 8.15 engine, driven by play feedback:
   wandering monsters**, while the native ecology stays underneath (a garrison *augments*; only a lord
   *re-themes*). `generateDungeon`/`generateTower` take a `garrison` spec; `app.js` `garrisonFor(poi)`.
   `DUNGEON_BUILD` → 21, `TOWER_BUILD` → 2 (old interiors self-heal on next open).
+- **8.19 follow-on — a seat change costs strength too, and a GM can reseat by hand.** The seat-change
+  upheaval is one shared rule (`disruptSeat`): keep the nearest half of the SOI **and** halve strength
+  (min 1). It fires on an in-world seat fall **and** on a new **GM manual reseat** — the hex Detail tab
+  offers *"Make this ‹faction›'s seat"* for the faction holding a seat-worthy, not-yet-seat hex (a
+  two-step confirm; `reseatFaction`), distinct from the non-destructive **"Run by"** picker.
 
-Suite green at **427 `node --test`**.
+Suite green at **431 `node --test`**.
 
 ---
 

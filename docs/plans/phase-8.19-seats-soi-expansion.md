@@ -6,7 +6,14 @@
 > exported for tests), `SEAT_DEFENSE`, `SOI_DISRUPTION`/`relocateSeat`, `dissolve`, seat backfill in
 > `tickFaction`; `FACTION_BUILD` → 2. `js/ui/app.js` seats on a valid birth site, occupies on
 > `seated`/`relocate`, un-tags POIs on `eliminated`/delete; `js/ui/panel.js` gains a two-step
-> **Delete faction**. Schema stays **v16**. Suite green at 420 `node --test`.
+> **Delete faction**. Schema stays **v16**.
+>
+> **Follow-ons (post-plan, by play feedback):** (1) a rank-and-file faction **garrisons** the
+> dungeon/tower it holds (its people hold the frontier + patrol; native ecology underneath) —
+> `garrison` spec into `generateDungeon`/`generateTower`, `garrisonFor` in `app.js`; `DUNGEON_BUILD` 21,
+> `TOWER_BUILD` 2. (2) A seat change now costs **strength as well as SOI** (`disruptSeat`, one shared
+> rule), and a **GM can reseat by hand** from the hex Detail tab (`reseatFaction`, two-step confirm).
+> Suite green at 431 `node --test`.
 
 > **Self-contained.** Read *Orientation* and *Model* first, then build the chunks in order. Every
 > design choice below is decided; you should not need to invent behaviour. This reworks the faction
@@ -200,8 +207,8 @@ relocate-or-dissolve). Order the rng-free so it stays deterministic.
 1. **Roam/spread is retired** — every faction grows an SOI; archetype only sets the **expansion chance**.
 2. **seat ⊆ holdings**, plus a `seat` pointer; **seatless** is valid (`seat:null`).
 3. **Seat defense** = a strength ×-multiplier in the existing contest (rare but possible to fall).
-4. **Seat falls → relocate to nearest valid site + halve SOI**; **no site / no holdings → dissolve**
-   (the single dissolution path).
+4. **Seat falls → relocate to nearest valid site + halve SOI AND strength**; **no site / no holdings →
+   dissolve** (the single dissolution path). The same disruption applies to a **GM manual reseat**.
 5. **Seatless factions seat on the first valid site** their expansion reaches.
 6. **Delete-faction** is a GM override, separate from in-world dissolution.
 7. Additive `seat` field; **bump `FACTION_BUILD`**, backfill on load; `SCHEMA_VERSION` stays 16.
