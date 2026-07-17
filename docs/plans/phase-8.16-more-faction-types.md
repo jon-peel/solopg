@@ -1,5 +1,13 @@
 # Phase 8.16 — More faction types (lair-bound lords, a dragon, rebellions, monster diversity)
 
+> **✅ Built (as-built).** Shipped as designed: lair-bound lords (necromancer / lich / vampire / dragon
+> / hag, Promote-only, boss-tier strength, dragon singular via `eligibleLords`), a rare rollable
+> **rebellion** archetype, and **monstrous-tribe kinds** (goblins/orcs/…) with dual OSE/D&D monster
+> names. **Note:** the "reuses spreading or roaming" line below is **superseded by 8.19** — roam/spread
+> was retired; every faction now grows an SOI at a per-archetype expansion chance, and lords are seated
+> and never wander. Lords further **infuse their own interiors** (8.18) and their sites are garrisoned
+> (8.17/8.19).
+
 A **content + light-rules** follow-on to the Phase 8 faction engine (see
 [phase-8-factions.md](phase-8-factions.md) and [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md)).
 The engine (uncapped, contested, subtext-only turns) is unchanged; this adds new *kinds* of power and
@@ -102,13 +110,13 @@ a little variety. No new movement behaviour — every new type reuses **spreadin
 ## Manual verification (`./run-local.sh`, browser)
 
 ```
-[ ] Place/occupy a TOWER → Promote → "Necromancer" seats there; advance turns → its influence spreads,
+[x] Place/occupy a TOWER → Promote → "Necromancer" seats there; advance turns → its influence spreads,
     the tower (holding #0) never moves.
-[ ] Occupy a DUNGEON → Promote → offered "Lich" (and "Dragon" if none exists yet); pick each.
-[ ] A second dragon can't be created (option gone / refused) — singular.
-[ ] Generate factions a while → a rebellion shows up occasionally (rare), spreading + hostile.
-[ ] Monstrous tribes now read with a kind ("The Gnolls of the Waste" / card "· gnolls"); kinds vary.
-[ ] Reload + Export→Import unaffected (still v16; faction.kind round-trips).
+[x] Occupy a DUNGEON → Promote → offered "Lich" (and "Dragon" if none exists yet); pick each.
+[x] A second dragon can't be created (option gone / refused) — singular.
+[x] Generate factions a while → a rebellion shows up occasionally (rare), spreading + hostile.
+[x] Monstrous tribes now read with a kind ("The Gnolls of the Waste" / card "· gnolls"); kinds vary.
+[x] Reload + Export→Import unaffected (still v16; faction.kind round-trips).
 ```
 
 ## Decisions locked

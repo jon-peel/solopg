@@ -191,15 +191,19 @@ relocate-or-dissolve). Order the rng-free so it stays deterministic.
 ## Manual verification (`./run-local.sh`, browser)
 
 ```
-[ ] Generate a faction on a BARE hex → card shows "seatless"; advance turns → it seats on the first
+[x] Generate a faction on a BARE hex → card shows "seatless"; advance turns → it seats on the first
     POI/settlement it reaches.
-[ ] Generate two spreading factions apart → they expand at visibly different rates (probabilistic).
-[ ] One faction contests and takes another's SOI hex → the loser's holdings drop by one.
-[ ] Push an attacker into a rival's SEAT repeatedly → it usually holds; occasionally falls. When it
+[x] Generate two spreading factions apart → they expand at visibly different rates (probabilistic).
+[x] One faction contests and takes another's SOI hex → the loser's holdings drop by one.
+[x] Push an attacker into a rival's SEAT repeatedly → it usually holds; occasionally falls. When it
     falls, the loser relocates to a nearby site and its SOI roughly halves (log line prints).
-[ ] Corner a faction with no fallback seat → it dissolves; its POIs lose the faction tag.
-[ ] Delete a faction from its card → it's gone; its POIs are un-tagged; others unaffected.
-[ ] Reload + Export→Import: seats/SOI round-trip (still schema v16; FACTION_BUILD self-heals old saves).
+[x] Corner a faction with no fallback seat → it dissolves; its POIs lose the faction tag.
+[x] Delete a faction from its card → it's gone; its POIs are un-tagged; others unaffected.
+[x] Reload + Export→Import: seats/SOI round-trip (still schema v16; FACTION_BUILD self-heals old saves).
+[x] GM manual reseat: on a held, seat-worthy hex, "Make this ‹faction›'s seat" moves the HQ and its
+    reach + strength both fall (two-step confirm).
+[x] A rank-and-file faction that holds a dungeon/tower garrisons it (its creatures hold the frontier +
+    patrol); a held dungeon keeps native monsters in its depths; a lord fully re-themes instead.
 ```
 
 ## Decisions locked
