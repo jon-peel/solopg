@@ -50,7 +50,10 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 16: wandering-monster list scales with level size (4.9.12 follow-up).
 // 17: depth/difficulty scaling — monster + treasure tier rise with depth (4.9.13).
 // 18: treasure carries rolled gp value + weight (cn) by bulk.
-export const DUNGEON_BUILD = 20;
+// 20: a lair-bound lord infuses the interior (family + boss) (8.18).
+// 21: a rank-and-file faction GARRISONS a held dungeon — its people hold the
+//     entrance frontier and patrol as wandering monsters (8.19 follow-up).
+export const DUNGEON_BUILD = 21;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -108,8 +111,12 @@ function tierAffinity(tier, target) {
  * interloper and (on the deepest level) the family's elite.
  * @returns {{ family: string, encounters: {weight:number,value:string}[] }}
  */
-function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTier = 1, depth = 1) {
-  const familyName = rollTable(familyTableForTheme(families, theme), rng).value;
+function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTier = 1, depth = 1, overlord = null, garrison = null) {
+  // Roll the theme's family first, then let a lord (8.18) OVERRIDE which family fills
+  // the level — rolling either way keeps that draw consistent, so a lord mostly swaps
+  // the monsters over the same shape rather than reshaping the dungeon wholesale.
+  const themeFamily = rollTable(familyTableForTheme(families, theme), rng).value;
+  const familyName = overlord ? overlord.family : themeFamily;
   const index = familyIndex(families);
   const family = index.get(familyName) || { members: [{ weight: 1, value: "Vermin", tier: 1 }] };
 
@@ -121,9 +128,9 @@ function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTi
 
   // Named-den signature bias: on shallow levels, a den named after a creature
   // skews strongly toward that creature — so "Kobold tunnels" opens with kobolds.
-  // The boost decays with depth, and only applies when the level's family still
-  // contains the signature (deeper levels may escalate to another family).
-  const signature = signatureForTheme(families, theme);
+  // The boost decays with depth. A lord's dungeon ignores the theme's signature —
+  // its own family fills the level.
+  const signature = overlord ? null : signatureForTheme(families, theme);
   const sigBoost = depth === 1 ? 4 : depth === 2 ? 2 : 1;
   if (signature && sigBoost > 1) {
     const m = members.find((x) => x.value === signature);
@@ -149,9 +156,18 @@ function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTi
   }
 
   const encounters = Array.from(seen, ([value, weight]) => ({ weight, value }));
-  // A boss waits at the bottom.
-  if (isDeepest && family.elite && !seen.has(family.elite)) {
-    encounters.push({ weight: 1, value: family.elite });
+  // A boss waits at the bottom — the LORD itself when one holds the dungeon (8.18),
+  // otherwise the family's elite.
+  const boss = overlord ? overlord.boss : family.elite;
+  if (isDeepest && boss && !seen.has(boss)) {
+    encounters.push({ weight: 1, value: boss });
+  }
+  // A rank-and-file faction that holds the dungeon (8.19) doesn't re-theme it — its
+  // people PATROL as a strong presence in the wandering list on every level, while
+  // the native ecology stays underneath (some original occupants remain). rng-free
+  // (a fixed push) so it never perturbs the level's other draws.
+  if (garrison && !overlord && !seen.has(garrison.label)) {
+    encounters.push({ weight: 3, value: garrison.label });
   }
   return { family: familyName, encounters };
 }
@@ -184,6 +200,15 @@ export function generateDungeon(tables, rng, ctx = {}) {
     for (const m of e.value.members) naByName.set(m.value, NA_BY_TIER[m.tier] || "1d6");
     naByName.set(e.value.elite, "1");
   }
+  // A lair-bound lord (8.18): its family fills the interior, and the lord itself is
+  // the singular final boss. { family, boss, id } — supplied by the app from the POI.
+  const overlord = ctx.overlord || null;
+  if (overlord && overlord.boss) naByName.set(overlord.boss, "1");
+  // A rank-and-file faction (8.19) GARRISONS the dungeon instead: { id, label } — its
+  // people hold the entrance frontier (assignOccupation) and patrol as wandering
+  // monsters (buildLevelMonsters), a mob 2d6 strong. Ignored when a lord is present.
+  const garrison = !overlord && ctx.garrison ? ctx.garrison : null;
+  if (garrison) naByName.set(garrison.label, "2d6");
   const naFor = (name) => naByName.get(name) || "1d6";
 
   // One theme + size per dungeon (from the POI); every level inherits the theme.
@@ -220,7 +245,7 @@ export function generateDungeon(tables, rng, ctx = {}) {
     const monsterTier = Math.max(1, Math.min(4, depth + shift));
     const treasureTier = Math.max(1, Math.min(3, depth + shift)); // tracks monster difficulty
     const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
-    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier, depth);
+    const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier, depth, overlord, garrison);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
     // Treasure for this level, re-weighted toward its target tier (depth scaling).
     const levelTreasure = {
@@ -301,9 +326,11 @@ export function generateDungeon(tables, rng, ctx = {}) {
   }
 
   const { entrances, exits } = surfaceConnections(levels, sizeName, ctx.terrain, rng);
-  const occupation = assignOccupation(levels, entrances, tables.get("occupiers"), rng, theme);
+  const occupation = assignOccupation(levels, entrances, tables.get("occupiers"), rng, theme, garrison);
   assignLighting(levels, stairs, entrances, lightTable, rng);
-  return { build: DUNGEON_BUILD, size: sizeName, theme, difficulty, levels, stairs, entrances, exits, occupation };
+  return { build: DUNGEON_BUILD, size: sizeName, theme, difficulty, levels, stairs, entrances, exits, occupation,
+    ...(overlord ? { overlordId: overlord.id } : {}),
+    ...(garrison ? { garrisonId: garrison.id } : {}) };
 }
 
 // Occupied frontier: a chance interlopers hold the rooms by an entrance — lit,
@@ -325,8 +352,10 @@ const OCCUPATION_CHANCE = {
   "Beast den": 0.05,
 };
 
-function assignOccupation(levels, entrances, occupiers, rng, theme) {
-  if (rng() >= (OCCUPATION_CHANCE[theme] ?? 0.25)) return null;
+function assignOccupation(levels, entrances, occupiers, rng, theme, garrison = null) {
+  // A faction that holds the POI ALWAYS garrisons the frontier (8.19); otherwise
+  // squatters hold it by theme chance. The chance draw is skipped when forced.
+  if (!garrison && rng() >= (OCCUPATION_CHANCE[theme] ?? 0.25)) return null;
   const ents = entrances.filter((e) => e.level === 0);
   const level0 = levels[0];
   const rooms = level0.layout.rooms;
@@ -354,7 +383,9 @@ function assignOccupation(levels, entrances, occupiers, rng, theme) {
     for (const m of adj.get(n) || []) if (!heldSet.has(m)) queue.push(m);
   }
 
-  const group = rollTable(occupiers, rng).value;
+  // The frontier holders: the POI's faction when it garrisons this dungeon (8.19),
+  // else a rolled squatter group.
+  const group = garrison ? garrison.label : rollTable(occupiers, rng).value;
   for (const room of level0.rooms) {
     if (!heldSet.has(room.n)) continue;
     room.held = group;

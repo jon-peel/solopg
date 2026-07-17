@@ -76,6 +76,38 @@ function actionButton(label, onClick) {
   return b;
 }
 
+// Promote / faction controls for one POI, appended under its list row (8.8/8.16).
+// An OCCUPIED, unpromoted POI shows "Promote to faction" + any "Raise a ‹lord›"
+// its site allows; an already-promoted one shows a jump-to-faction link. Lives in
+// the LIST (not the drill-in) so a tower/dungeon — which opens its interior on
+// click — can still be promoted.
+function appendFactionControls(list, poi, model) {
+  const occ = poi.occupant;
+  if (!occ || occ.kind !== "occupied") return;
+  if (occ.factionId) {
+    const info = document.createElement("div");
+    info.className = "hook-legend";
+    const a = document.createElement("button");
+    a.type = "button";
+    a.className = "legend-link";
+    a.textContent = `Faction: ${(model.factionNameById && model.factionNameById(occ.factionId)) || occ.factionId}`;
+    a.title = "Centre the map on this faction's holding";
+    if (model.onCenterFaction) a.addEventListener("click", () => model.onCenterFaction(occ.factionId));
+    info.appendChild(a);
+    list.appendChild(info);
+    return;
+  }
+  if (!model.onPromotePoi) return;
+  const acts = document.createElement("div");
+  acts.className = "tile-actions";
+  acts.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(poi.id)));
+  const lords = model.lordOptionsFor ? model.lordOptionsFor(poi) : [];
+  for (const { archetype, label } of lords) {
+    acts.appendChild(actionButton(label, () => model.onPromotePoi(poi.id, archetype)));
+  }
+  list.appendChild(acts);
+}
+
 // POIs as a read-only/navigable list, or the drill-in detail of one POI.
 // Creating and removing POIs live on the right-click radial menu, so there are
 // no add/remove buttons here — clicking a row just inspects (and, for a
@@ -123,29 +155,9 @@ function renderPoiSection(sel, hex, model) {
         box.appendChild(div);
       }
     }
-    // Promote (Phase 8.8): an occupied POI can be wrapped into a full faction.
-    // Once promoted it shows a link to its faction instead (no double-promote).
-    const occupant = selectedPoi.occupant;
-    if (occupant && occupant.kind === "occupied") {
-      if (occupant.factionId) {
-        const name = model.factionNameById && model.factionNameById(occupant.factionId);
-        const row = document.createElement("div");
-        row.className = "hook-legend";
-        const a = document.createElement("button");
-        a.type = "button";
-        a.className = "legend-link";
-        a.textContent = `Faction: ${name || occupant.factionId}`;
-        a.title = "Centre the map on this faction's holding";
-        if (model.onCenterFaction) a.addEventListener("click", () => model.onCenterFaction(occupant.factionId));
-        row.appendChild(a);
-        box.appendChild(row);
-      } else if (model.onPromotePoi) {
-        const row = document.createElement("div");
-        row.className = "tile-actions";
-        row.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(selectedPoi.id)));
-        box.appendChild(row);
-      }
-    }
+    // Promote / faction controls live in the POI LIST (see appendFactionControls),
+    // not here — a dungeon/tower opens its mapped interior on click, so its drill-in
+    // is never shown; the list keeps promote reachable for every POI type (8.16).
 
     const back = document.createElement("button");
     back.className = "link-back";
@@ -168,6 +180,9 @@ function renderPoiSection(sel, hex, model) {
       row.textContent = `${glyphForPoi(poi)} ${poi.name}`;
       row.addEventListener("click", () => model.onSelectPoi(poi.id));
       list.appendChild(row);
+      // Promote / raise-a-lord (8.8/8.16) inline, so an occupied tower/dungeon can
+      // be promoted without opening its mapped interior (which clicking the row does).
+      appendFactionControls(list, poi, model);
     }
     sel.appendChild(list);
   } else {
@@ -441,12 +456,26 @@ function factionCard(faction, model) {
     box.appendChild(legend);
   }
 
-  // "Stir up trouble" (8.11) — an active faction with a seat emits a hook (its
-  // archetype/goal colour it), surfaced on the Hooks tab and tagged back here.
-  if (model.onStirTrouble && (faction.status || "active") === "active" && (faction.holdings || []).length) {
+  // Delete (Phase 8.19) — a GM override, two-step (arm then confirm, no confirm()
+  // dialog — matching the world-delete button). The panel re-renders on delete, so
+  // the armed state resets itself; a timeout disarms if the GM walks away.
+  if (model.onDeleteFaction) {
     const row = document.createElement("div");
     row.className = "tile-actions";
-    row.appendChild(actionButton("Stir up trouble", () => model.onStirTrouble(faction.id)));
+    const del = actionButton("Delete faction", () => {});
+    let armTimer = null;
+    del.addEventListener("click", () => {
+      if (!armTimer) {
+        del.textContent = "Confirm delete";
+        del.classList.add("armed");
+        armTimer = setTimeout(() => { armTimer = null; del.textContent = "Delete faction"; del.classList.remove("armed"); }, 4000);
+        return;
+      }
+      clearTimeout(armTimer);
+      armTimer = null;
+      model.onDeleteFaction(faction.id);
+    });
+    row.appendChild(del);
     box.appendChild(row);
   }
   return box;
@@ -456,6 +485,7 @@ function factionCard(faction, model) {
  * Render the Factions tab (Phase 8.7) into #factions-panel — one card per
  * faction, with a count badge on the tab. Mirrors the Hooks tab (7.3).
  * @param {{ factions: object[], onCenterFaction?: (id:string)=>void,
+ *   onAdvanceFactionTurn?: ()=>void, onDeleteFaction?: (id:string)=>void,
  *   factionColorFor?: (id:string)=>string }} model
  */
 export function renderFactionsPanel(model) {
@@ -692,24 +722,59 @@ export function renderSelectionPanel(model) {
       sel.appendChild(frow);
     }
 
-    // Claim for faction (Phase 8.9) — attach this hex to an EXISTING faction's
-    // holdings (a gang with several camps). A picker + button, shown only when a
-    // faction exists to claim for. Same <select>+button idiom as the Travel tab.
-    if (model.onClaimHolding && (model.factions || []).length) {
+    // Which faction runs this hex (Phase 8.15) — a single-owner picker. It shows
+    // the current holder (so the GM can see who runs the tile) and reassigns the
+    // hex on change; "None" clears it. Replaces the old add-only claim button.
+    if (model.onSetHexFaction && (model.factions || []).length) {
       const crow = document.createElement("div");
       crow.className = "tile-actions";
+      const label = document.createElement("span");
+      label.className = "faction-select-label";
+      label.textContent = "Run by:";
       const pick = document.createElement("select");
       pick.className = "faction-select";
-      pick.setAttribute("aria-label", "Faction to claim for");
+      pick.setAttribute("aria-label", "Faction that runs this hex");
+      const held = model.factions.find((f) => (f.holdings || []).some((hd) => hd.q === coord.q && hd.r === coord.r));
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "None";
+      pick.appendChild(none);
       for (const f of model.factions) {
         const opt = document.createElement("option");
         opt.value = f.id;
         opt.textContent = f.name;
+        if (held && held.id === f.id) opt.selected = true;
         pick.appendChild(opt);
       }
+      pick.addEventListener("change", () => model.onSetHexFaction(pick.value || null));
+      crow.appendChild(label);
       crow.appendChild(pick);
-      crow.appendChild(actionButton("Claim for faction", () => model.onClaimHolding(pick.value)));
       sel.appendChild(crow);
+    }
+
+    // Manual reseat (Phase 8.19) — promote a held, seat-worthy hex to the faction's
+    // HQ. A GM override with the SAME disruption as an in-world seat fall (it loses
+    // reach + strength), so it's a two-step confirm.
+    const reseat = model.reseatHere && model.onReseatFaction && model.reseatHere(coord);
+    if (reseat) {
+      const rrow = document.createElement("div");
+      rrow.className = "tile-actions";
+      const label = `Make this ${reseat.name}'s seat`;
+      const btn = actionButton(label, () => {});
+      let armed = null;
+      btn.addEventListener("click", () => {
+        if (!armed) {
+          btn.textContent = "Confirm reseat — costs reach + strength";
+          btn.classList.add("armed");
+          armed = setTimeout(() => { armed = null; btn.textContent = label; btn.classList.remove("armed"); }, 4000);
+          return;
+        }
+        clearTimeout(armed);
+        armed = null;
+        model.onReseatFaction(reseat.id);
+      });
+      rrow.appendChild(btn);
+      sel.appendChild(rrow);
     }
   }
 

@@ -20,7 +20,8 @@ import { layoutLevel } from "./dungeon-layout.js";
 // Interior-shape version for the tower (parallels DUNGEON_BUILD). The UI rebuilds
 // a tower whose interior `build` differs, so old saves self-heal without a
 // world-schema migration. Bump whenever this object's shape changes.
-export const TOWER_BUILD = 1;
+// 2: a rank-and-file faction garrisons a held tower with its own creatures (8.19).
+export const TOWER_BUILD = 2;
 
 const FLOORS_MIN = 2;
 const FLOORS_MAX = 5;
@@ -70,11 +71,26 @@ export function generateTower(tables, rng, ctx = {}) {
   const statusTable = tables.get("dungeon-monster-status");
   const creatures = tables.get("creatures");
 
+  // A lair-bound lord (8.18) fills the tower with its own monster family and sits
+  // as the master on the top floor — the necromancer's tower reads as undead, not
+  // its old garrison. { family, boss, id } is supplied by the app from the POI.
+  const overlord = ctx.overlord || null;
+  // A rank-and-file faction (8.19) instead GARRISONS the tower with its own people
+  // ({ id, label }) — the manned rooms read "Cultists"/"Lizardfolk", not the
+  // faction's proper name. Ignored when a lord holds it.
+  const facGarrison = !overlord && ctx.garrison ? ctx.garrison : null;
+
   const occupant = ctx.occupant || { kind: "none" };
-  const occupied = occupant.kind === "occupied";
-  const garrison = occupied ? occupant.by : null;
+  const occupied = occupant.kind === "occupied" || !!facGarrison;
+  const garrison = facGarrison ? facGarrison.label : (occupied ? occupant.by : null);
   const kind = rollTable(tables.get("tower-kind"), rng).value; // "a watchtower"
   const master = occupied ? rollTable(tables.get("tower-master"), rng).value : null;
+  const mfEntries = tables.get("monster-families");
+  let overlordPool = null;
+  if (overlord && mfEntries) {
+    const fam = (mfEntries.entries.find((e) => e.value.family === overlord.family) || {}).value;
+    if (fam) overlordPool = { id: "op", entries: fam.members.map((m) => ({ weight: "weight" in m ? m.weight : 1, value: m.value })) };
+  }
 
   const floorCount = randInt(rng, FLOORS_MIN, FLOORS_MAX);
   const levels = [];
@@ -90,7 +106,7 @@ export function generateTower(tables, rng, ctx = {}) {
       const { content, treasureChance } = rollTable(roomTable, rng).value;
       let monster = null, trap = null, special = null, dressing = null;
       if (content === "Monster") {
-        const name = garrison || rollTable(creatures, rng).value;
+        const name = overlordPool ? rollTable(overlordPool, rng).value : (garrison || rollTable(creatures, rng).value);
         monster = { name, na: occupied ? GARRISON_NA : "1d4", status: rollTable(statusTable, rng).value };
       } else if (content === "Trap") {
         trap = rollTable(trapTable, rng).value;
@@ -108,11 +124,12 @@ export function generateTower(tables, rng, ctx = {}) {
       rooms.push({ n, content, monster, trap, special, dressing, treasure, light });
     }
 
-    // The climb ends at the master's chamber — the last room of the top floor.
+    // The climb ends at the master's chamber — the last room of the top floor. When
+    // a lord holds the tower, the lord itself waits there (8.18).
     if (isTop) {
       const lord = rooms[rooms.length - 1];
       lord.content = "Monster";
-      lord.monster = { name: master || "a lone watcher", na: "1", status: "alert" };
+      lord.monster = { name: overlord ? overlord.boss : (master || "a lone watcher"), na: "1", status: "alert" };
       lord.trap = lord.special = lord.dressing = null;
       lord.light = { source: "Lit — the master's chamber" };
       if (!lord.treasure) lord.treasure = rollTreasure(treasureTable, guardTable, rng);
@@ -122,7 +139,7 @@ export function generateTower(tables, rng, ctx = {}) {
     const layout = layoutLevel(rooms, rng, {
       pins: incoming.map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h })),
     });
-    levels.push({ depth: f + 1, theme: cap(stripArticle(kind)), family: garrison, encounters: [], rooms, layout });
+    levels.push({ depth: f + 1, theme: cap(stripArticle(kind)), family: overlord ? overlord.family : garrison, encounters: [], rooms, layout });
 
     // Resolve the incoming pin: the pinned room (laid out first) is this floor's
     // UPPER stair end (the higher-index end of the stair from the floor below).
@@ -151,5 +168,7 @@ export function generateTower(tables, rng, ctx = {}) {
     stairs,
     entrances: [{ level: 0, room: levels[0].layout.entrance }],
     exits: [],
+    ...(overlord ? { overlordId: overlord.id } : {}),
+    ...(facGarrison ? { garrisonId: facGarrison.id } : {}),
   };
 }

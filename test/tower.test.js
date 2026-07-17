@@ -80,3 +80,53 @@ test("generateTower is deterministic for a given seed + occupant", () => {
   const b = generateTower(tables(), mulberry32(12), { occupant: occupied });
   assert.deepEqual(a, b);
 });
+
+// --- Lord-infused towers (Phase 8.18) ------------------------------------
+
+test("a lord fills its tower with its family and sits as the master", () => {
+  const t = tables();
+  t.set("monster-families", JSON.parse(readFileSync("./data/monster-families.json", "utf8")));
+  const undead = new Set(
+    t.get("monster-families").entries.find((e) => e.value.family === "Undead").value.members.map((m) => m.value),
+  );
+  const tower = generateTower(t, mulberry32(4), {
+    occupant: { kind: "occupied", by: "Bandits" },
+    overlord: { family: "Undead", boss: "Necromancer", id: "faction:0" },
+  });
+  assert.equal(tower.overlordId, "faction:0", "interior stamped with its lord");
+  for (const lvl of tower.levels) assert.equal(lvl.family, "Undead");
+  const top = tower.levels[tower.levels.length - 1];
+  assert.equal(top.rooms[top.rooms.length - 1].monster.name, "Necromancer", "the lord is the master on top");
+  const names = tower.levels.flatMap((l) => l.rooms.filter((r) => r.monster).map((r) => r.monster.name));
+  assert.ok(names.every((n) => undead.has(n) || n === "Necromancer"), "every manned room is undead (or the lord)");
+  assert.ok(!names.includes("Bandits"), "the old garrison label is gone");
+});
+
+test("without a lord, a tower has no overlord stamp", () => {
+  const tower = generateTower(tables(), mulberry32(4), { occupant: { kind: "occupied", by: "Bandits" } });
+  assert.ok(!("overlordId" in tower));
+});
+
+// --- Garrisoned tower: a rank-and-file faction mans it (Phase 8.19) -------
+
+test("a rank-and-file faction garrisons its tower with its own people, not its name", () => {
+  const tower = generateTower(tables(), mulberry32(4), {
+    // The POI occupant is tagged with the faction's NAME once it's held...
+    occupant: { kind: "occupied", by: "The Ashen Hand", factionId: "faction:3" },
+    garrison: { id: "faction:3", label: "Cultists" }, // ...but the interior reads as its people
+  });
+  assert.equal(tower.garrisonId, "faction:3", "interior stamped with its garrison");
+  const names = tower.levels.flatMap((l) => l.rooms.filter((r) => r.monster).map((r) => r.monster.name));
+  assert.ok(names.includes("Cultists"), "the tower is manned by the faction's creatures");
+  assert.ok(!names.includes("The Ashen Hand"), "the faction's proper name is not used as a creature");
+});
+
+test("a lord takes precedence over a garrison in a tower", () => {
+  const tower = generateTower(tables(), mulberry32(4), {
+    occupant: { kind: "occupied", by: "The Pale King", factionId: "faction:0" },
+    overlord: { family: "Undead", boss: "Necromancer", id: "faction:0" },
+    garrison: { id: "faction:0", label: "Cultists" },
+  });
+  assert.equal(tower.overlordId, "faction:0");
+  assert.ok(!("garrisonId" in tower), "no garrison stamp when a lord holds it");
+});

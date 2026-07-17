@@ -1,5 +1,10 @@
 # Phase 8.9 — Multiple holdings ("Claim for faction")
 
+> **⚠️ UI amended in 8.15.** The holdings model here is unchanged, but the **"Claim for faction"
+> button was replaced** by a single-owner **"Run by"** picker on the hex Detail tab (shows the current
+> holder; reassigns or clears with "None" on change). See
+> [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md).
+
 Third Arc B step — see [`phase-8-factions.md`](phase-8-factions.md). Delivers the **"reuse one
 faction across the map"** requirement: a bandit gang with three camps, a cult with a shrine *and* a
 hidden lair. A **"Claim for faction"** action attaches any placed hex (with its POI, if one is there)

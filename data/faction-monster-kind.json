@@ -1,0 +1,16 @@
+{
+  "id": "faction-monster-kind",
+  "title": "Monstrous tribe kind (what manner of creature the tribe is)",
+  "_note": "Phase 8.16 — flavours a `monstrous tribe` faction's name + card. Vocabulary mirrors the dungeon roster (monster-families.json Goblinoids/Reptiles/Giants) so overworld tribes and dungeon stock stay consistent.",
+  "entries": [
+    { "weight": 3, "value": "goblins" },
+    { "weight": 3, "value": "orcs" },
+    { "weight": 2, "value": "gnolls" },
+    { "weight": 2, "value": "hobgoblins" },
+    { "weight": 2, "value": "kobolds" },
+    { "weight": 2, "value": "lizardfolk" },
+    { "weight": 1, "value": "ogres" },
+    { "weight": 1, "value": "beastmen" },
+    { "weight": 1, "value": "ratfolk" }
+  ]
+}

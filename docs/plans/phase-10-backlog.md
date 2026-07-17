@@ -22,7 +22,7 @@ value for how this tool is used). The generator tables stay JSON-on-disk.
 | 10.4 | **Undo / redo** | M | History for destructive actions (Delete hex, Regenerate, Remove POI/settlement) — the radial put these one click away. Snapshot- or command-history based. |
 | 10.5 | **Print / GM-screen view** | M | A clean read-only / printable layout of the current hex or dungeon for at-the-table use. |
 | 10.6 | **Themes** | M | Light/dark and colour-blind-friendly palettes. Lower urgency since 7.2's content glyphs already helped colour-blind readability. |
-| 10.7 | **Party position marker** | M | A marker for the party's current hex. Needs exploration/travel rules first (blocked). |
+| ~~10.7~~ | ~~**Party position marker**~~ | — | ✅ **Done — shipped in Phase 8.1** (party marker) + **8.4** (travel rules that unblocked it). See [phase-8.1-world-clock-party-marker.md](phase-8.1-world-clock-party-marker.md). |
 | 10.8 | **Art** | L | Pencil sketches for POIs; optional "full painted hex"; eventual "pencil-drawn" refinement of tiles; optional 3rd terrain variant; an `svg-tile` authoring skill for consistency. |
 | 10.9 | **Misc** | S | Allow a manual settlement on Lake/Sea (currently disallowed); more terrain types. |
 
@@ -40,8 +40,8 @@ value for how this tool is used). The generator tables stay JSON-on-disk.
 - **10.6 Themes** — CSS custom-property palette swap; the map canvas reads a handful
   of colours from `terrain-style.js` / dungeon-map constants, so a theme layer needs
   those to become configurable.
-- **10.7 Party position marker** — blocked on travel/exploration rules; revisit once
-  those exist (possibly alongside Phase 8 Factions' roaming-power mechanics).
+- **10.7 Party position marker** — ✅ **done.** Shipped in Phase 8.1 (a single `world.party`
+  marker) and unblocked/extended by Phase 8.4's travel rules — no longer a backlog item.
 
 ## Recommended sequence
 

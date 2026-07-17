@@ -1,5 +1,12 @@
 # Phase 8.14 — Region "something is stirring" hooks
 
+> **⚠️ Superseded — this feature was removed.** The region "something is stirring" hook shipped and
+> was later **removed** (with `regionHeat` / `regionStirChance` / `rollRegionStir`, `buildRegionHook`,
+> the `region` prose branch, and the `region-omen` table): factions are played purely as **subtext**
+> and emit **no hooks at all**. The region *naming* engine (`computeRegions`, `js/gen/regions.js`) is
+> unrelated and stays — it still labels terrain tracts on the map. This doc is kept as the historical
+> plan. See [phase-8.15-faction-expansion.md](phase-8.15-faction-expansion.md) and PLAN.md.
+
 Completes the original 8.13 **"roaming / region"** stretch (movement shipped as 8.13; this is the
 region half). Where 8.11/8.12 hooks are **one faction → its lair**, a region hook is the opposite: a
 **broad, un-pinned escalation signal** for a whole named tract — *"the Blackwood is stirring"* — that

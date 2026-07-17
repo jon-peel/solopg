@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc, neighbors, axialDistance } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -13,7 +13,6 @@ import {
   buildChainStep,
   buildLocalHook,
   buildEscortHook,
-  buildRegionHook,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -26,10 +25,10 @@ import {
   setPartyEncumbrance,
   addFaction,
   getFactions,
+  removeFaction,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, factionHookContext, rollAutoHookCount, rollRegionStir } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
-import { computeRegions } from "../gen/regions.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes } from "../gen/travel.js";
@@ -132,14 +131,8 @@ const HOOK_TABLE_IDS = [
   "creatures",
 ];
 
-// Tables the faction generator rolls on (Phase 8.7), loaded on demand.
-const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition"];
-// Tables a faction hook (8.11/8.12) needs: the deed + witness source (rolled by
-// factionHookContext) and the reward tables (a threat carries a bounty). The claim
-// and source are supplied, so hook-threat/hook-source aren't rolled by the engine.
-const FACTION_HOOK_TABLE_IDS = ["faction-deed", "hook-source", "hook-patron", "hook-reward"];
-// Region "something is stirring" hooks (8.14) just need the omen table.
-const REGION_HOOK_TABLE_IDS = ["region-omen"];
+// Tables the faction generator rolls on (Phase 8.7; + monster kind 8.16), loaded on demand.
+const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition", "faction-monster-kind"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -337,78 +330,94 @@ function renderDayReadout() {
 async function advanceDays(n) {
   if (!Number.isFinite(n) || n < 1) return;
   sessionDay += n;
-  // Fire any faction turns the elapsed days earn (Phase 8.10), then roll auto-hooks
-  // for the elapsed days (Phase 8.12). Both mutate current.factions/current.hooks;
-  // the caller persists once afterward (travel + onProgressDays both do).
+  // Fire the faction turns the elapsed days earn (Phase 8.10); each turn returns
+  // events (8.15) that we LOG as running commentary — expansion is played as
+  // subtext (the map + log), not auto-generated hooks.
   if (current) {
-    const turns = advanceFactionDays(current, n, current.seed);
-    if (turns > 0) logLine(`${turns} faction turn${turns === 1 ? "" : "s"} passed.`);
-    await autoFireFactionHooks(n);
+    const events = advanceFactionDays(current, n, current.seed);
+    logFactionEvents(events);
+    applyFactionOccupancy(events);
   }
   renderDayReadout();
 }
 
-// Phase 8.12 — as days pass, active factions occasionally emit a hook on their own,
-// chance scaled by proximity (party → lair) × strength (rollAutoHookCount). Pushes
-// silently and logs a quiet line; the caller's single persistAndRefresh saves them.
-async function autoFireFactionHooks(days) {
-  const party = current.party ? { q: current.party.q, r: current.party.r } : null;
-  if (!party) return;
-  const factions = getFactions(current).filter((f) => (f.status || "active") === "active");
-  if (!factions.length) return;
-  const dayStart = sessionDay - days; // the day before this advance — a stable per-advance seed
-  let tables = null;
-  for (const f of factions) {
-    const rng = subRng(current.seed, "autohook", f.id, dayStart);
-    const count = rollAutoHookCount(f, party, days, rng);
-    for (let i = 0; i < count; i++) {
-      if (!tables) tables = await loadTables(FACTION_HOOK_TABLE_IDS);
-      if (!Array.isArray(current.hooks)) current.hooks = [];
-      const hook = buildFactionHook(f, tables);
-      if (!hook) break;
-      current.hooks.push(hook);
-      logLine(`Word reaches you — ${hookName(hook)} (${f.name}).`);
-    }
+// Phase 8.15 (B) — narrate every faction event on the turn (both the day-tick and
+// the manual button route through here). One legible line per event; names resolve
+// via getFactions and a place label via destinationLabel.
+function logFactionEvents(events) {
+  if (!Array.isArray(events) || !events.length) return;
+  const factions = getFactions(current);
+  const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
+  const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
+  for (const ev of events) {
+    if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
+    else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
+    else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
+    else if (ev.kind === "relocate") logLine(`${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`);
+    else if (ev.kind === "recede") logLine(`${nameOf(ev.factionId)} loses its grip on ${placeOf(ev.q, ev.r)}.`);
+    // A destruction with a finisher is a conquest; without one it's a natural fade (8.20).
+    else if (ev.kind === "eliminated") logLine(ev.byFactionId ? `${nameOf(ev.factionId)} is destroyed.` : `${nameOf(ev.factionId)} fades into history.`);
   }
-  await autoFireRegionHooks(factions, days, dayStart);
 }
 
-// Phase 8.14 — a whole named tract "stirs" when the factions seated in it escalate
-// (regionHeat: strength × doom-clock progress + contest tension). At most one open
-// region hook per region at a time (dedupe). Pushes silently; the caller persists.
-async function autoFireRegionHooks(factions, days, dayStart) {
-  const regions = computeRegions(current.seed, buildTerrainByKey(current), { minSize: 16 });
-  if (!regions.length) return;
-  // Which named region does each hex fall in? Then bucket factions by their seat.
-  const regionByKey = new Map();
-  for (const reg of regions) for (const k of reg.keys) regionByKey.set(k, reg);
-  const buckets = new Map(); // region.id -> { region, fs:[] }
-  for (const f of factions) {
-    const seat = (f.holdings || [])[0];
-    if (!seat) continue;
-    const reg = regionByKey.get(axialKey(seat.q, seat.r));
-    if (!reg) continue;
-    let b = buckets.get(reg.id);
-    if (!b) buckets.set(reg.id, (b = { region: reg, fs: [] }));
-    b.fs.push(f);
+// A POI's occupant follows faction control (8.17): mark `poi` as held by `faction`
+// (updates the occupant label + the name suffix). Leaves a monster LAIR alone — a
+// passing power doesn't clear a beast's den — and no-ops if the faction already
+// holds it. Returns true if it changed.
+function occupyPoiForFaction(poi, faction) {
+  if (!poi || !poi.occupant || !faction) return false;
+  if (poi.occupant.kind === "lair") return false;
+  if (poi.occupant.factionId === faction.id) return false;
+  poi.occupant = { kind: "occupied", by: faction.name, factionId: faction.id };
+  poi.name = `${poiBaseName(poi)} — ${faction.name}`;
+  return true;
+}
+
+// The first POI on the hex at (q,r), or undefined.
+const poiAt = (q, r) => { const hex = getHex(current, q, r); return hex && (hex.pois || [])[0]; };
+
+// Drop a destroyed/deleted faction's grip on every POI it held (8.19): clear the
+// `factionId` tag so the site is no longer run by a faction that's gone. A lord's
+// dungeon/tower then re-forms to its own theme on next open (overlordFor → null).
+function clearFactionPois(factionId) {
+  for (const hex of Object.values((current && current.hexes) || {})) {
+    for (const poi of hex.pois || []) {
+      if (poi.occupant && poi.occupant.factionId === factionId) delete poi.occupant.factionId;
+    }
   }
-  let tables = null;
-  for (const { region, fs } of buckets.values()) {
-    // One open region hook per region — let it stand until the GM resolves it.
-    const open = (current.hooks || []).some(
-      (h) => h.pattern === "region" && h.region && h.region.id === region.id && (h.status || "open") === "open",
-    );
-    if (open) continue;
-    if (!rollRegionStir(fs, days, subRng(current.seed, "regionstir", region.id, dayStart))) continue;
-    if (!tables) tables = await loadTables(REGION_HOOK_TABLE_IDS);
-    if (!Array.isArray(current.hooks)) current.hooks = [];
-    const dominant = fs.reduce((a, b) => ((b.strength || 0) > (a.strength || 0) ? b : a));
-    const n = nextHookId(current);
-    const hook = buildRegionHook(tables, subRng(current.seed, "regionhook", region.id, n), {
-      region, index: n, sourcePower: dominant.id,
-    });
-    current.hooks.push(hook);
-    logLine(`The ${region.name.replace(/^the /i, "")} is stirring — ${fs.length} faction${fs.length === 1 ? "" : "s"} at work.`);
+}
+
+// As factions grow they absorb the sites they roll over (8.17/8.19): a claim or
+// takeover onto a POI it SEATS on (ev.seated) takes it deterministically; a plain
+// spread over a POI rolls a small chance. A relocation (8.19) deterministically
+// occupies the new seat's POI; an elimination clears the loser's POI tags. Seeded
+// per (faction, hex) so it's reproducible.
+const OCCUPY_ON_SPREAD_CHANCE = 0.25;
+function applyFactionOccupancy(events) {
+  if (!Array.isArray(events)) return;
+  for (const ev of events) {
+    if (ev.kind === "eliminated") { clearFactionPois(ev.factionId); continue; }
+    if (ev.kind === "recede") {
+      // The frontier pulled back off this hex (8.20) — release any POI it held here.
+      const poi = poiAt(ev.q, ev.r);
+      if (poi && poi.occupant && poi.occupant.factionId === ev.factionId) delete poi.occupant.factionId;
+      continue;
+    }
+    if (ev.kind === "relocate") {
+      const poi = poiAt(ev.q, ev.r);
+      const faction = getFactions(current).find((f) => f.id === ev.factionId);
+      if (poi && faction) occupyPoiForFaction(poi, faction);
+      continue;
+    }
+    if (ev.kind !== "claim" && ev.kind !== "takeover") continue;
+    const poi = poiAt(ev.q, ev.r);
+    if (!poi) continue;
+    const faction = getFactions(current).find((f) => f.id === ev.factionId);
+    if (!faction) continue;
+    // Seating on a site is deterministic; a passing spread rolls OCCUPY_ON_SPREAD_CHANCE.
+    if (ev.seated || subRng(current.seed, "occupy", faction.id, ev.q, ev.r)() < OCCUPY_ON_SPREAD_CHANCE) {
+      occupyPoiForFaction(poi, faction);
+    }
   }
 }
 
@@ -424,13 +433,18 @@ async function onProgressDays() {
 }
 
 // Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the day
-// clock: fires exactly one turn for every active faction and persists.
+// clock: fires exactly one turn for every active faction. The turn returns events
+// (8.15) that we log as running commentary (subtext, not hooks), then persist. No
+// day-driven region pass here (that's the day clock's job).
 async function onAdvanceFactionTurn() {
   if (!current) return;
-  const n = advanceFactionTurn(current, current.seed);
-  if (!n) return logLine("No active factions to advance.");
+  const active = getFactions(current).filter((f) => (f.status || "active") === "active").length;
+  if (!active) return logLine("No active factions to advance.");
+  const events = advanceFactionTurn(current, current.seed);
+  logFactionEvents(events);
+  applyFactionOccupancy(events);
+  if (!events.length) logLine("The factions bide their time — no change on the map.");
   await persistAndRefresh();
-  logLine(`Advanced a faction turn for ${n} faction${n === 1 ? "" : "s"}.`);
 }
 
 // Draw the scale bar for the current zoom: a day's march marked at 12/18/24 mi
@@ -668,10 +682,24 @@ function renderSelection() {
     onTravelToward: hex && hex.placed ? onTravelToward : undefined,
     onGenerateFaction: hex && hex.placed ? onGenerateFaction : undefined,
     onPromotePoi,
+    // Which lair-bound lord(s) this occupied POI could be raised into (8.16), by
+    // its type + the hex terrain, minus a singular lord that already exists.
+    lordOptionsFor: (poi) => (hex ? eligibleLords(poi.type, hex.terrain, getFactions(current)) : []),
     onCenterFaction,
     factionNameById: (id) => (getFactions(current).find((f) => f.id === id) || {}).name,
     factions: hex && hex.placed ? getFactions(current) : [],
-    onClaimHolding: hex && hex.placed ? onClaimHolding : undefined,
+    onSetHexFaction: hex && hex.placed ? onSetHexFaction : undefined,
+    // Manual reseat (8.19): offer it for the faction that HOLDS this hex when the
+    // hex is a valid seat site for it and isn't already its seat. Returns { id, name }
+    // or null. The button carries a two-step confirm (it costs reach + strength).
+    reseatHere: (c) => {
+      if (!(hex && hex.placed)) return null;
+      const held = getFactions(current).find((f) => (f.holdings || []).some((h) => h.q === c.q && h.r === c.r));
+      if (!held || !isValidSeat(current, held.archetype, c.q, c.r)) return null;
+      if (held.seat && held.seat.q === c.q && held.seat.r === c.r) return null;
+      return { id: held.id, name: held.name };
+    },
+    onReseatFaction,
   });
 }
 
@@ -926,6 +954,60 @@ const onAddDungeon = (size) => addPoiToSelected("dungeon", { sizeHint: size });
 // interior shape + renderer as dungeons, with orientation:"up".
 const MAPPED_TYPES = new Set(["dungeon", "tower"]);
 
+// A lair-bound lord infuses its mapped interior — DUNGEON depths or TOWER floors
+// (8.18): the lord's monster family fills it and the lord itself is the final boss
+// (a dungeon's entrance garrison stays as the original holdouts). Family + boss by
+// lord archetype; the lich becomes a proper "Lich" boss (the Undead family's own
+// elite is a Vampire).
+const LORD_INTERIOR = {
+  lich:        { family: "Undead", boss: "Lich" },
+  necromancer: { family: "Undead", boss: "Necromancer" },
+  vampire:     { family: "Undead", boss: "Vampire" },
+  dragon:      { family: "Reptiles", boss: "Dragon" },
+  hag:         { family: "Aberrations", boss: "Hag" },
+};
+// The overlord spec for a POI, if a lair-bound lord faction holds it. { family, boss, id }.
+function overlordFor(poi) {
+  const occ = poi && poi.occupant;
+  if (!occ || !occ.factionId) return null;
+  const f = getFactions(current).find((x) => x.id === occ.factionId);
+  const spec = f && LORD_INTERIOR[f.archetype];
+  return spec ? { ...spec, id: f.id } : null;
+}
+
+// What a rank-and-file faction's people READ AS inside a dungeon/tower it holds
+// (8.19 follow-up): a creature/people label the garrison shows as. Lords use
+// overlordFor (a full interior infusion); everyone else garrisons the frontier.
+const FACTION_GARRISON = {
+  cult:                { label: "Cultists" },
+  bandits:             { label: "Bandits" },
+  "thieves' guild":    { label: "Cutthroats" },
+  "mercenary company": { label: "Mercenaries" },
+  "noble house":       { label: "Household guard" },
+  "merchant guild":    { label: "Caravan guards" },
+  rebellion:           { label: "Rebels" },
+};
+// A monstrous tribe garrisons with its KIND's creatures (goblins → "Goblins").
+const TRIBE_KIND_LABEL = {
+  goblins: "Goblins", orcs: "Orcs", gnolls: "Gnolls", hobgoblins: "Hobgoblins",
+  kobolds: "Kobolds", lizardfolk: "Lizardfolk", ogres: "Ogres", beastmen: "Beastmen",
+  ratfolk: "Ratfolk",
+};
+const capWord = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+// The garrison spec for a POI, if a NON-lord faction holds it (8.19). { id, label }.
+// Null for a lord-held POI (that goes through overlordFor) or an unheld one.
+function garrisonFor(poi) {
+  const occ = poi && poi.occupant;
+  if (!occ || !occ.factionId) return null;
+  const f = getFactions(current).find((x) => x.id === occ.factionId);
+  if (!f || LORD_INTERIOR[f.archetype]) return null; // lords infuse via overlordFor
+  let label;
+  if (f.archetype === "monstrous tribe") label = TRIBE_KIND_LABEL[f.kind] || capWord(f.kind) || "Warband";
+  else label = (FACTION_GARRISON[f.archetype] || {}).label || f.name;
+  return { id: f.id, label };
+}
+
 // A mapped interior needs (re)building if it has none yet, or its interior was
 // generated by an older shape. Versioning the interior (DUNGEON_BUILD / TOWER_BUILD)
 // lets old saves self-heal on next open without a world-schema migration.
@@ -933,7 +1015,20 @@ function interiorNeedsBuild(poi) {
   const d = poi.detail && poi.detail.dungeon;
   const wantBuild = poi.type === "tower" ? TOWER_BUILD : DUNGEON_BUILD;
   if (!d || d.build !== wantBuild) return true;
-  return !Array.isArray(d.levels) || d.levels.some((l) => !l || !l.layout);
+  if (!Array.isArray(d.levels) || d.levels.some((l) => !l || !l.layout)) return true;
+  // Re-form a dungeon/tower when its HOLDER changed (8.18 lord / 8.19 garrison): the
+  // interior is stamped with the faction it was built for (a lord fully infuses it;
+  // a rank-and-file faction garrisons the frontier). A mismatch — a takeover, a
+  // hand-off, or a faction gone — means it must reflect the new holder. (This resets
+  // that interior's exploration; it changed hands.)
+  if (poi.type === "dungeon" || poi.type === "tower") {
+    const lord = overlordFor(poi);
+    const gar = garrisonFor(poi);
+    const want = lord ? `lord:${lord.id}` : gar ? `gar:${gar.id}` : "";
+    const have = d.overlordId ? `lord:${d.overlordId}` : d.garrisonId ? `gar:${d.garrisonId}` : "";
+    if (want !== have) return true;
+  }
+  return false;
 }
 
 // A built tower's list name: its kind + any garrison (e.g. "Watchtower — Bandits").
@@ -992,6 +1087,8 @@ async function onSelectPoi(id) {
           poi.detail.dungeon = generateTower(tables, rng, {
             occupant: poi.occupant,
             terrain: hex.terrain,
+            overlord: overlordFor(poi), // 8.18: a lord fills its tower
+            garrison: garrisonFor(poi), // 8.19: a rank-and-file faction garrisons it
           });
           poi.name = towerName(poi); // enrich the list label with the tower's kind
         } else {
@@ -1000,6 +1097,8 @@ async function onSelectPoi(id) {
             theme: poi.detail.theme,
             size: poi.detail.sizeHint,
             terrain: hex.terrain,
+            overlord: overlordFor(poi), // 8.18: a lord infuses its dungeon
+            garrison: garrisonFor(poi), // 8.19: a rank-and-file faction garrisons it
           });
           // Legacy dungeons predate themes — backfill from the generated interior
           // so the map glyph reflects it.
@@ -1335,7 +1434,7 @@ function refreshFactions() {
     factions,
     onCenterFaction,
     onAdvanceFactionTurn,
-    onStirTrouble,
+    onDeleteFaction,
     factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
   });
 }
@@ -1700,9 +1799,16 @@ async function onGenerateFaction() {
     const rng = subRng(current.seed, "faction", q, r, n);
     // Attach the holding to a POI here, if one is placed (a faction holds a site).
     const hex = getHex(current, q, r);
-    const poiId = hex && Array.isArray(hex.pois) && hex.pois[0] ? hex.pois[0].id : undefined;
-    const faction = generateFaction(tables, rng, { q, r, index: n, seed: current.seed, poiId });
+    const poi0 = hex && Array.isArray(hex.pois) ? hex.pois[0] : undefined;
+    const faction = generateFaction(tables, rng, { q, r, index: n, seed: current.seed, poiId: poi0 && poi0.id });
+    // Seatless unless born on a valid site for its (rolled) archetype (8.19): a
+    // faction on a POI/settlement seats there; on a bare hex it stays seatless
+    // until its SOI reaches one. The archetype is only known after the roll.
+    if (isValidSeat(current, faction.archetype, q, r)) {
+      faction.seat = { q, r, ...(poi0 ? { poiId: poi0.id } : {}) };
+    }
     addFaction(current, faction);
+    if (poi0) occupyPoiForFaction(poi0, faction); // seating on a POI takes it over (8.17)
     setPanelTab("factions");
     await persistAndRefresh();
     logLine(`New faction — ${faction.name} (${faction.archetype}).`);
@@ -1714,7 +1820,9 @@ async function onGenerateFaction() {
 // Promote an occupied POI into a faction (Phase 8.8) — seeds the archetype from
 // the occupier label so it reads as the same threat, records the POI as origin,
 // and tags the POI's occupant with the new faction id (no double-promote).
-async function onPromotePoi(poiId) {
+// With an explicit `archetype` (8.16), raises a lair-bound LORD of that kind
+// instead (necromancer/lich/vampire/dragon/hag), seeded hostile.
+async function onPromotePoi(poiId, archetype) {
   if (!current || !selected) return;
   try {
     const hex = getHex(current, selected.q, selected.r);
@@ -1725,9 +1833,9 @@ async function onPromotePoi(poiId) {
     const { q, r } = selected;
     const n = nextFactionId(current);
     const rng = subRng(current.seed, "faction", q, r, n);
-    const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant });
+    const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant, archetype });
     addFaction(current, faction);
-    poi.occupant.factionId = faction.id; // link the POI to its new faction
+    occupyPoiForFaction(poi, faction); // the POI is now held by its new faction (8.17)
     setPanelTab("factions");
     await persistAndRefresh();
     logLine(`Promoted ${poi.occupant.by} → ${faction.name} (${faction.archetype}).`);
@@ -1764,107 +1872,65 @@ function onCenterHook(id, which) {
 }
 
 // Centre the map on a faction's holding — click-to-jump from the Factions tab
-// (Phase 8.7). `index` selects which holding (8.9); defaults to the first, so
-// the 8.8 POI "Faction:" link (no index) still lands on holding 0.
+// (Phase 8.7). `index` selects which holding (8.9). The default jump (index 0,
+// e.g. the POI "Faction:" link) lands on the SEAT when the faction has one (8.19),
+// else its first holding.
 function onCenterFaction(id, index = 0) {
   const f = getFactions(current).find((x) => x.id === id);
-  const hold = f && (f.holdings || [])[index];
+  if (!f) return;
+  const hold = (index === 0 && f.seat) ? f.seat : (f.holdings || [])[index];
   if (hold) recenterOn(hold.q, hold.r);
 }
 
-// Claim the selected placed hex for an existing faction (Phase 8.9) — attaches
-// it (with its primary POI, if any) to that faction's holdings[]. Dedupes: a
-// faction can't hold the same hex twice.
-async function onClaimHolding(factionId) {
+// Delete a faction (Phase 8.19) — a GM override, distinct from in-world
+// dissolution: the faction simply vanishes and its held POIs lose the faction tag.
+async function onDeleteFaction(id) {
+  if (!current) return;
+  const f = getFactions(current).find((x) => x.id === id);
+  clearFactionPois(id);
+  removeFaction(current, id);
+  if (f) logLine(`Deleted faction — ${f.name}.`);
+  await persistAndRefresh();
+}
+
+// Set which faction runs the selected placed hex (Phase 8.15) — a single-owner
+// GM override from the hex detail picker. Clears the hex from any faction that
+// held it, then (for a real faction) attaches it with its primary POI. `null`
+// ("None") just clears ownership. Idempotent; persists only when something moved.
+async function onSetHexFaction(factionId) {
   if (!current || !selected) return;
-  const faction = getFactions(current).find((f) => f.id === factionId);
-  if (!faction) return;
   const { q, r } = selected;
   const hex = getHex(current, q, r);
   const poiId = hex && Array.isArray(hex.pois) && hex.pois[0] ? hex.pois[0].id : undefined;
-  if (!addHolding(faction, { q, r, poiId })) {
-    return logLine(`${faction.name} already holds (${q}, ${r}).`);
+  let changed = false;
+  for (const f of getFactions(current)) {
+    const before = (f.holdings || []).length;
+    f.holdings = (f.holdings || []).filter((h) => !(h.q === q && h.r === r));
+    if (f.holdings.length !== before) changed = true;
   }
-  setPanelTab("factions");
-  await persistAndRefresh();
-  logLine(`${faction.name} claims (${q}, ${r}) — now ${faction.holdings.length} holdings.`);
-}
-
-// The placed settlement nearest a point — where word of a faction's deeds reaches
-// the party (8.11: "word spreads down to town"). null if the map has no settlement.
-function nearestSettlementTo(world, pt) {
-  let best = null, bestD = Infinity;
-  for (const h of placedHexes(world)) {
-    if (!(h.settlement && h.settlement.present)) continue;
-    const d = axialDistance(pt.q, pt.r, h.coords.q, h.coords.r);
-    if (d < bestD) { bestD = d; best = { q: h.coords.q, r: h.coords.r }; }
+  if (factionId) {
+    const faction = getFactions(current).find((f) => f.id === factionId);
+    if (faction && addHolding(faction, { q, r, poiId })) changed = true;
   }
-  return best;
+  if (changed) await persistAndRefresh();
 }
 
-// A readable "lair" name for a holding with no POI of its own: its settlement/GM
-// name, else a camp in the terrain (so the threat prose still reads as a place).
-function lairPlaceName(hex, lair) {
-  if (hex && (hex.name || (hex.settlement && hex.settlement.present))) return destinationLabel(hex, lair.q, lair.r);
-  return hex && hex.terrain ? `a camp in the ${hex.terrain.toLowerCase()}` : "a hidden camp";
-}
-
-// Build ONE faction hook (shared by the manual "Stir up trouble" button, 8.11, and
-// the day-tick auto-fire, 8.12). Returns a fully-formed hook tagged back to the
-// faction, or null if it has no lair. Pushes/persist/UI are the caller's job — so
-// the auto path can emit several silently and persist once. The deed/opening are
-// seeded on the faction + how many hooks it has already emitted (reload-safe), so
-// consecutive hooks never read the same.
-function buildFactionHook(faction, tables) {
-  const lair = (faction.holdings || [])[0];
-  if (!lair) return null;
-  const lairHex = getHex(current, lair.q, lair.r);
-  // Where the party hears it: nearest town, else the party's position, else the
-  // lair itself — so the hook has a real leg to travel.
-  const origin = nearestSettlementTo(current, lair)
-    || (current.party ? { q: current.party.q, r: current.party.r } : null)
-    || { q: lair.q, r: lair.r };
-  const ordinal = (current.hooks || []).filter((h) => h.sourcePower === faction.id).length;
-  const rng = subRng(current.seed, "stir", faction.id, ordinal);
-  const { verb, claim, source } = factionHookContext(faction, rng, tables);
-  // A synthetic subject: the lair place "occupied by" the faction, so the engine's
-  // threat prose prints the FACTION as the menace and the holding as its lair.
-  const lairPoi = lairHex && (lairHex.pois || []).find((p) => p.id === lair.poiId);
-  const subject = {
-    poiId: lair.poiId,
-    name: lairPoi ? poiBaseName(lairPoi) : lairPlaceName(lairHex, lair),
-    type: lairPoi ? lairPoi.type : "lair",
-    q: lair.q, r: lair.r,
-    terrain: lairHex ? lairHex.terrain : null,
-    occupant: { kind: "occupied", by: faction.name },
-  };
-  const n = nextHookId(current);
-  // nonce keeps the engine's reward roll distinct per emission even from one town.
-  const hrng = subRng(current.seed, "hook", origin.q, origin.r, n, `${faction.id}:${ordinal}`);
-  const hook = generateHook(tables, hrng, { subjects: [subject], origin, index: n, verb, claim, source });
-  if (!hook) return null;
-  hook.sourcePower = faction.id; // tag it back to the faction (8.11)
-  return hook;
-}
-
-// "Stir up trouble" (Phase 8.11) — the manual button: build one faction hook, push
-// it, and surface it on the Hooks tab (the auto path, 8.12, reuses buildFactionHook
-// without the tab-jump). The hook NAMES the faction, describes a varied deed, and
-// points the party AT its lair.
-async function onStirTrouble(factionId) {
-  if (!current) return;
-  const faction = getFactions(current).find((f) => f.id === factionId);
-  if (!faction || (faction.status || "active") !== "active") return;
-  if (!(faction.holdings || [])[0]) return logLine(`${faction.name} has no lair to stir from.`);
-  if (!Array.isArray(current.hooks)) current.hooks = [];
-  const tables = await loadTables(FACTION_HOOK_TABLE_IDS);
-  const hook = buildFactionHook(faction, tables);
-  if (!hook) return logLine(`${faction.name} has nowhere to stir from.`);
-  current.hooks.push(hook);
-  selectedHookId = hook.id;
-  setPanelTab("hooks");
+// GM manual reseat (Phase 8.19) — move a faction's HQ to the selected hex, which
+// must be a valid seat site for it. Applies the same disruption as an in-world seat
+// fall (halve reach + strength), then occupies the new seat's POI. Distinct from
+// "Run by" (which just reassigns a hex, no disruption).
+async function onReseatFaction(id) {
+  if (!current || !selected) return;
+  const faction = getFactions(current).find((f) => f.id === id);
+  if (!faction) return;
+  const { q, r } = selected;
+  const before = { soi: (faction.holdings || []).length, strength: faction.strength };
+  const seat = reseatFaction(current, faction, q, r);
+  if (!seat) return logLine(`${faction.name} can't seat there — it needs a settlement or POI it can base on.`);
+  const poi = poiAt(q, r);
+  if (poi) occupyPoiForFaction(poi, faction); // the new seat's site becomes theirs
+  logLine(`${faction.name} reseats at ${destinationLabel(getHex(current, q, r), q, r)} — its reach and strength falter (SOI ${before.soi}→${faction.holdings.length}, strength ${before.strength}→${faction.strength}).`);
   await persistAndRefresh();
-  logLine(`New hook — ${hookName(hook)} (stirred up by ${faction.name}).`);
 }
 
 // Advance a breadcrumb chain: generate the next site (winding on from where the

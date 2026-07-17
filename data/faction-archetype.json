@@ -8,6 +8,7 @@
     { "weight": 2, "value": "noble house" },
     { "weight": 2, "value": "monstrous tribe" },
     { "weight": 1, "value": "mercenary company" },
-    { "weight": 1, "value": "thieves' guild" }
+    { "weight": 1, "value": "thieves' guild" },
+    { "weight": 1, "value": "rebellion" }
   ]
 }
