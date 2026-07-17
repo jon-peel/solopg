@@ -354,7 +354,9 @@ function logFactionEvents(events) {
     else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
     else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
     else if (ev.kind === "relocate") logLine(`${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`);
-    else if (ev.kind === "eliminated") logLine(`${nameOf(ev.factionId)} is destroyed.`);
+    else if (ev.kind === "recede") logLine(`${nameOf(ev.factionId)} loses its grip on ${placeOf(ev.q, ev.r)}.`);
+    // A destruction with a finisher is a conquest; without one it's a natural fade (8.20).
+    else if (ev.kind === "eliminated") logLine(ev.byFactionId ? `${nameOf(ev.factionId)} is destroyed.` : `${nameOf(ev.factionId)} fades into history.`);
   }
 }
 
@@ -395,6 +397,12 @@ function applyFactionOccupancy(events) {
   if (!Array.isArray(events)) return;
   for (const ev of events) {
     if (ev.kind === "eliminated") { clearFactionPois(ev.factionId); continue; }
+    if (ev.kind === "recede") {
+      // The frontier pulled back off this hex (8.20) — release any POI it held here.
+      const poi = poiAt(ev.q, ev.r);
+      if (poi && poi.occupant && poi.occupant.factionId === ev.factionId) delete poi.occupant.factionId;
+      continue;
+    }
     if (ev.kind === "relocate") {
       const poi = poiAt(ev.q, ev.r);
       const faction = getFactions(current).find((f) => f.id === ev.factionId);

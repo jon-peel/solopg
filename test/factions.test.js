@@ -692,8 +692,94 @@ test("a monstrous tribe can't be reseated into a settlement (archetype seat rule
   assert.deepEqual(f.seat, { q: 1, r: 0, poiId: "poi:a" }, "seat unchanged; a settlement is not a valid tribe seat");
 });
 
+// --- Natural decline (Phase 8.20) -----------------------------------------
+// A boxed-in world: the faction wholly owns a small closed strip, so it never has
+// a frontier to grow into — every turn its expansion yields nothing, exposing it to
+// the natural-decline roll (recede → disband).
+const boxedStrip = (seed = 1, len = 3) => {
+  const hexes = {};
+  for (let q = 0; q < len; q++) hexes[axialKey(q, 0)] = { coords: { q, r: 0 }, placed: true, terrain: "Plains" };
+  return { seed, factions: [], hexes };
+};
+
+test("a boxed-in faction's frontier recedes at least once (it can't only grow)", () => {
+  const world = boxedStrip(1, 3);
+  const f = holder("faction:1", [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }], 3, { q: 0, r: 0 }); // archetype "bandits"
+  world.factions.push(f);
+  let receded = false;
+  for (let i = 0; i < 400 && !receded; i++) {
+    const ev = advanceFactionTurn(world, world.seed);
+    if (ev.some((e) => e.kind === "recede" && e.factionId === "faction:1")) receded = true;
+  }
+  assert.ok(receded, "the frontier receded (a wholly-owned strip can't just keep growing)");
+});
+
+test("a stuck single-hex faction disbands on its own (natural death, no finisher)", () => {
+  // One isolated placed hex, no passable neighbours → never any room to grow → the
+  // faction is worn down to nothing over time and fades of its own accord.
+  const world = { seed: 1, factions: [], hexes: {
+    [axialKey(0, 0)]: { coords: { q: 0, r: 0 }, placed: true, terrain: "Plains" },
+  } };
+  const f = holder("faction:1", [{ q: 0, r: 0 }], 3, { q: 0, r: 0 }); // archetype "bandits"
+  world.factions.push(f);
+  let disbanded = false;
+  for (let i = 0; i < 400 && f.status === "active"; i++) {
+    const ev = advanceFactionTurn(world, world.seed);
+    if (ev.some((e) => e.kind === "eliminated" && e.factionId === "faction:1" && !e.byFactionId)) disbanded = true;
+  }
+  assert.ok(disbanded, "it disbanded naturally (eliminated with no byFactionId)");
+  assert.equal(f.status, "destroyed");
+});
+
+test("decline sheds the OUTERMOST hex first and never the seat", () => {
+  const world = boxedStrip(1, 3);
+  const f = holder("faction:1", [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }], 3, { q: 0, r: 0 });
+  world.factions.push(f);
+  // Run until the first recede, then check WHICH hex went.
+  for (let i = 0; i < 400; i++) {
+    const ev = advanceFactionTurn(world, world.seed);
+    const rec = ev.find((e) => e.kind === "recede");
+    if (rec) {
+      assert.deepEqual({ q: rec.q, r: rec.r }, { q: 2, r: 0 }, "the farthest hex from the seat recedes first");
+      assert.ok(f.holdings.some((h) => h.q === 0 && h.r === 0), "the seat is untouched");
+      return;
+    }
+  }
+  assert.fail("expected a recede within 400 turns");
+});
+
+test("a lair-bound lord never recedes or disbands on its own", () => {
+  const world = boxedStrip(1, 2); // fully owned, no room to grow
+  const lord = holder("faction:1", [{ q: 0, r: 0 }, { q: 1, r: 0 }], 5, { q: 0, r: 0 });
+  lord.archetype = "lich"; // a lair-bound lord — exempt from natural decline
+  world.factions.push(lord);
+  for (let i = 0; i < 400; i++) advanceFactionTurn(world, world.seed);
+  assert.equal(lord.status, "active", "the lich endures");
+  assert.equal(lord.holdings.length, 2, "and holds all its ground — no natural decline");
+});
+
+test("with room to grow, a faction trends upward despite natural decline", () => {
+  const world = placedWorld({ seed: 2, R: 4 }); // plenty of open ground
+  const f = factionAt(2, 0, 0, 0, "cult");
+  world.factions.push(f);
+  for (let i = 0; i < 30; i++) advanceFactionTurn(world, world.seed);
+  assert.ok(f.holdings.length > 3, `net growth despite the odd recede (${f.holdings.length})`);
+  assert.equal(f.status, "active");
+});
+
+test("natural decline is deterministic for a seed", () => {
+  const run = () => {
+    const world = boxedStrip(3, 3);
+    const f = holder("faction:1", [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }], 3, { q: 0, r: 0 });
+    world.factions.push(f);
+    for (let i = 0; i < 12; i++) advanceFactionTurn(world, world.seed);
+    return { holdings: f.holdings, status: f.status };
+  };
+  assert.deepEqual(run(), run());
+});
+
 test("advanceFactionTurn / advanceFactionDays return well-formed FactionEvent arrays", () => {
-  const KINDS = new Set(["claim", "takeover", "repelled", "eliminated", "relocate"]);
+  const KINDS = new Set(["claim", "takeover", "repelled", "eliminated", "relocate", "recede"]);
   const world = placedWorld({ seed: 2, R: 3 });
   world.factions.push(factionAt(2, 0, 0, 0, "cult"));
   const t = [];

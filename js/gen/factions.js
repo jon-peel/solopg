@@ -221,6 +221,15 @@ const EXPANSION_CHANCE = {
 const EXPANSION_FALLBACK = 0.4;
 const expansionChance = (faction) => EXPANSION_CHANCE[faction.archetype] ?? EXPANSION_FALLBACK;
 
+// Natural decline (Phase 8.20): a faction that DIDN'T grow this turn has a small
+// chance to recede — shed its outermost SOI hex (the frontier pulling back) — and,
+// when worn down to just its seat, to disband on its own. Growth is checked first
+// and is likelier, so the map trends upward with an organic ebb: thriving factions
+// (still finding room) rarely decline; stagnant/boxed-in ones fade. Lair-bound
+// lords are EXEMPT — a lich or dragon holds its lair until something kills it.
+// Retunable, like every generation const.
+const CONTRACTION_CHANCE = 0.15;
+
 // A defender's SEAT is much harder to take than a plain SOI hex: its strength is
 // multiplied by this in the contest (still a small, non-zero chance to fall).
 const SEAT_DEFENSE = 6;
@@ -332,12 +341,36 @@ export function reseatFaction(world, faction, q, r) {
   return faction.seat;
 }
 
-// Destroy a faction (Phase 8.19) — the single dissolution route (0 holdings, or a
-// seat that fell with nowhere to relocate). Appends the `eliminated` event.
+// Destroy a faction — the single dissolution route: a seat that fell with nowhere
+// to relocate, 0 holdings (8.19), or natural decline (8.20). Appends `eliminated`;
+// `byFactionId` names the finisher, or is absent for a natural death.
 function dissolve(faction, events, byFactionId) {
   faction.status = "destroyed";
   faction.seat = null;
   events.push({ kind: "eliminated", factionId: faction.id, ...(byFactionId ? { byFactionId } : {}) });
+}
+
+// Natural decline for one turn (Phase 8.20) — reached only when the faction didn't
+// grow (its fortunes are ebbing). Sheds the OUTERMOST SOI hex (farthest from the
+// seat, the frontier receding); the seat itself is never lost this way. A faction
+// worn down to just its seat (or a single-hex seatless one) DISBANDS — a natural
+// death (no finisher). Pure, rng-free (a deterministic farthest-hex pick). Returns
+// the events. Lords never reach here (gated out in tickFaction).
+function contract(world, faction) {
+  const holdings = faction.holdings || (faction.holdings = []);
+  if (holdings.length <= 1) {
+    const events = [];
+    dissolve(faction, events); // last hold gone — the faction fades on its own
+    return events;
+  }
+  const seat = faction.seat || null;
+  const anchor = seat || holdings[0];
+  const sheddable = holdings.filter((h) => !(seat && h.q === seat.q && h.r === seat.r));
+  sheddable.sort((a, b) =>
+    axialDistance(b.q, b.r, anchor.q, anchor.r) - axialDistance(a.q, a.r, anchor.q, anchor.r) || a.q - b.q || a.r - b.r);
+  const drop = sheddable[0];
+  faction.holdings = holdings.filter((h) => !(h.q === drop.q && h.r === drop.r));
+  return [{ kind: "recede", factionId: faction.id, q: drop.q, r: drop.r }];
 }
 
 const isActive = (f) => (f.status || "active") === "active";
@@ -359,11 +392,11 @@ function passableNeighborsOf(world, q, r) {
 
 /**
  * @typedef {{
- *   kind: "claim"|"takeover"|"repelled"|"eliminated"|"relocate",
- *   factionId: string,        // the acting faction (for "eliminated"/"relocate": the faction itself)
+ *   kind: "claim"|"takeover"|"repelled"|"eliminated"|"relocate"|"recede",
+ *   factionId: string,        // the acting faction (for "eliminated"/"relocate"/"recede": itself)
  *   q?: number, r?: number,   // the hex acted on (absent on "eliminated"; "relocate": the new seat)
  *   fromFactionId?: string,   // "takeover"/"repelled": the rival that held/holds the hex
- *   byFactionId?: string,     // "eliminated": the faction that finished it off
+ *   byFactionId?: string,     // "eliminated": the faction that finished it off (absent = natural death)
  *   from?: { q:number, r:number }, // "relocate": the seat hex just lost
  *   seated?: boolean,         // "claim"/"takeover": this claim became the faction's seat
  * }} FactionEvent
@@ -487,6 +520,11 @@ function tickFaction(world, faction, rng) {
   }
   let events = [];
   if (rng() < expansionChance(faction)) events = expand(world, faction, rng);
+  // Natural decline (8.20) — only when nothing grew, and never for a lair-bound
+  // lord. Growth is checked first + is likelier, so the map trends up with an ebb.
+  if (!events.length && !LORD_ARCHETYPES.includes(faction.archetype) && rng() < CONTRACTION_CHANCE) {
+    events = contract(world, faction);
+  }
   const clock = ensureClock(faction);
   clock.turns = (clock.turns ?? 0) + 1;
   return events;
