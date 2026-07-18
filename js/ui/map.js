@@ -928,11 +928,11 @@ function rgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-// Mix a hex colour toward black by factor f (0 = unchanged, 1 = black) — used to
-// darken the hatch lines so they read on light terrain.
-function darken(hex, f) {
+// A hex colour mixed toward black by factor f (0 = unchanged, 1 = black), at
+// alpha a — used to darken the hatch lines so they read on light terrain.
+function darkenRgba(hex, f, a) {
   const [r, g, b] = parseHex(hex).map((v) => Math.round(v * (1 - f)));
-  return `rgb(${r},${g},${b})`;
+  return `rgba(${r},${g},${b},${a})`;
 }
 
 function offView(p, minX, minY, maxX, maxY, margin) {
@@ -946,7 +946,7 @@ function hatchHex(cx, cy, deg, color, strong) {
   const nx = -dy, ny = dx; // step direction (perpendicular)
   const R = HEX_SIZE * 1.15;
   const gap = strong ? 5.5 : 6.5;
-  ctx.strokeStyle = rgba(darken(color, 0.35), strong ? 0.85 : 0.6);
+  ctx.strokeStyle = darkenRgba(color, 0.35, strong ? 0.85 : 0.6);
   ctx.lineWidth = (strong ? 1.5 : 1.15) / camera.scale;
   for (let t = -R; t <= R; t += gap) {
     ctx.beginPath();
