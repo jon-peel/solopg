@@ -6,17 +6,16 @@
 const DIR = "assets/terrain";
 
 export const TERRAIN_ART = {
-  Forest: [`${DIR}/forest-1.svg`, `${DIR}/forest-2.svg`],
-  Plains: [`${DIR}/plains-1.svg`, `${DIR}/plains-2.svg`],
-  Hills: [`${DIR}/hills-1.svg`, `${DIR}/hills-2.svg`],
-  Mountains: [`${DIR}/mountains-1.svg`, `${DIR}/mountains-2.svg`],
-  Swamp: [`${DIR}/swamp-1.svg`, `${DIR}/swamp-2.svg`],
-  Desert: [`${DIR}/desert-1.svg`, `${DIR}/desert-2.svg`],
-  // Lake/Sea (Phase 3R.4) share the old Water art as a placeholder — distinct
-  // pencil art per art-review convention (visual changes reviewed as files
-  // first) is a follow-up, not blocking this sub-phase.
-  Lake: [`${DIR}/water-1.svg`, `${DIR}/water-2.svg`],
-  Sea: [`${DIR}/water-1.svg`, `${DIR}/water-2.svg`],
+  Forest: [`${DIR}/forest-1.svg`, `${DIR}/forest-2.svg`, `${DIR}/forest-3.svg`],
+  Plains: [`${DIR}/plains-1.svg`, `${DIR}/plains-2.svg`, `${DIR}/plains-3.svg`],
+  Hills: [`${DIR}/hills-1.svg`, `${DIR}/hills-2.svg`, `${DIR}/hills-3.svg`],
+  Mountains: [`${DIR}/mountains-1.svg`, `${DIR}/mountains-2.svg`, `${DIR}/mountains-3.svg`],
+  Swamp: [`${DIR}/swamp-1.svg`, `${DIR}/swamp-2.svg`, `${DIR}/swamp-3.svg`],
+  Desert: [`${DIR}/desert-1.svg`, `${DIR}/desert-2.svg`, `${DIR}/desert-3.svg`],
+  // Lake/Sea (Phase 3R.4) share the Water art — the fills (theme.js) tell them
+  // apart. Distinct lake/sea motifs are a follow-up, not blocking.
+  Lake: [`${DIR}/water-1.svg`, `${DIR}/water-2.svg`, `${DIR}/water-3.svg`],
+  Sea: [`${DIR}/water-1.svg`, `${DIR}/water-2.svg`, `${DIR}/water-3.svg`],
 };
 
 /** Variant URLs for a terrain (empty array if none). */

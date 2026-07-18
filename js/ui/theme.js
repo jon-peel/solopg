@@ -26,23 +26,33 @@ export const PALETTE = {
 
 // --- Canvas terrain fills -------------------------------------------------
 // Re-homed here from terrain-style.js (which now re-exports these) so the map
-// renderer and the CSS palette share one origin. Terrain hues are unchanged in
-// 11.1 — the parchment re-tune of the map SURFACE lands with the terrain-art
-// step (11.2). Only the "no terrain yet" fill shifts to blank vellum now, so an
-// unknown hex doesn't read as a dark sticker on paper.
+// renderer and the CSS palette share one origin. Phase 11.2 re-tunes these to
+// softer, printed-map tints that sit on the parchment surface as coloured
+// regions; the inked tile motifs (assets/terrain) are the real terrain cue, so
+// hues can stay muted + colour-blind-tolerant.
 export const TERRAIN_COLORS = {
-  Forest: "#2f6b3a",
-  Plains: "#9bbd5a",
-  Hills: "#8c9e71",
-  Mountains: "#7d7f88",
-  Swamp: "#4b5f49",
-  Desert: "#d9c27a",
-  Lake: "#4a8fc2",
-  Sea: "#2c5a8c",
+  Forest: "#6d8a52", // muted sage
+  Plains: "#c6cf92", // pale wheat-olive
+  Hills: "#c2a765", // tan
+  Mountains: "#9b93a2", // grey-mauve
+  Swamp: "#6f7c58", // grey-olive
+  Desert: "#e3cd82", // sand
+  Lake: "#8fb8d6", // soft fresh-water blue
+  Sea: "#6f9ec4", // deeper coastal blue
 };
 
 export const UNKNOWN_COLOR = "#cdba8c"; // blank vellum (a placed hex with no terrain)
-export const SELECTED_STROKE = "#ffd166"; // selection ring (re-tuned with the map surface in 11.2)
+export const SELECTED_STROKE = "#8a2418"; // oxblood selection ring — reads on every tint + parchment
+
+// Canvas-only ink tokens (the map's drawn lines + label pill) — kept here with
+// the rest of the palette so the painted map and the DOM chrome stay in step.
+export const MAP = {
+  hexBorder: "rgba(74,58,31,0.5)", // inked hex grid line
+  hoverStroke: "rgba(60,44,18,0.6)", // hover outline
+  labelBg: "rgba(240,229,203,0.92)", // parchment label pill
+  labelInk: "#33291a",
+  labelEdge: "rgba(138,112,67,0.7)",
+};
 
 // --- WCAG contrast (pure; node-tested) ------------------------------------
 

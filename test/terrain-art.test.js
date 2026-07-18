@@ -4,10 +4,10 @@ import { readFileSync, existsSync } from "node:fs";
 import { TERRAIN_ART, artFor } from "../js/ui/terrain-art.js";
 import { TERRAIN_COLORS } from "../js/ui/terrain-style.js";
 
-test("every styled terrain has 2+ art variants", () => {
+test("every styled terrain has 3+ art variants", () => {
   for (const terrain of Object.keys(TERRAIN_COLORS)) {
     const variants = artFor(terrain);
-    assert.ok(Array.isArray(variants) && variants.length >= 2, terrain);
+    assert.ok(Array.isArray(variants) && variants.length >= 3, terrain);
   }
 });
 

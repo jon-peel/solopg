@@ -20,6 +20,7 @@ import {
 } from "./terrain-style.js";
 import { glyphForPoi, poiDotColor, factionColor } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
+import { MAP } from "./theme.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
@@ -31,7 +32,7 @@ const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
 const DETAIL_PX = 26; // at/above: pencil sketches + corner markers (drop to small view sooner)
 const MARK_MIN_PX = 7; // below: nothing; between: simplified dots
-const TERRAIN_ICON_ALPHA = 0.45; // terrain motifs recede into the background; settlements stay opaque
+const TERRAIN_ICON_ALPHA = 0.7; // inked map motifs read as drawn symbols; settlements stay opaque
 
 let canvas = null;
 let ctx = null;
@@ -252,7 +253,7 @@ export function render() {
   // Hover outline (under the selection ring; skipped on the selected cell).
   if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
-    strokeHex(c.x, c.y, "rgba(230,232,238,0.35)", 2);
+    strokeHex(c.x, c.y, MAP.hoverStroke, 2);
     // Reveal a name on hover (names are hidden by default): a GM's own hex name
     // wins, then a settlement's name, else the region this tract belongs to.
     const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
@@ -816,9 +817,13 @@ function drawHexLabel(cx, cy, name) {
   const w = ctx.measureText(text).width;
   const padX = fs * 0.4;
   const y = cy + HEX_SIZE * 0.66;
-  ctx.fillStyle = "rgba(13,15,21,0.72)";
-  ctx.fillRect(cx - w / 2 - padX, y - fs * 0.7, w + padX * 2, fs * 1.4);
-  ctx.fillStyle = "#e6e8ee";
+  const bx = cx - w / 2 - padX, by = y - fs * 0.7, bw = w + padX * 2, bh = fs * 1.4;
+  ctx.fillStyle = MAP.labelBg;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.lineWidth = 1 / camera.scale;
+  ctx.strokeStyle = MAP.labelEdge;
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = MAP.labelInk;
   ctx.fillText(text, cx, y);
 }
 
@@ -954,7 +959,7 @@ function drawHexFill(cx, cy, fill) {
   ctx.fillStyle = fill;
   ctx.fill();
   ctx.lineWidth = 1 / camera.scale;
-  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.strokeStyle = MAP.hexBorder;
   ctx.stroke();
 }
 
