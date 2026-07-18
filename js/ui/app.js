@@ -69,7 +69,7 @@ import {
   pixelsPerMile,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
-import { POI_GLYPHS, POI_DOT_COLORS, factionColor } from "./poi-style.js";
+import { POI_GLYPHS, POI_DOT_COLORS, factionColor, factionHatchDeg } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
 import { openRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
@@ -1438,6 +1438,41 @@ function refreshFactions() {
     onAdvanceFactionTurn,
     onDeleteFaction,
     factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
+  });
+  renderFactionLegend(factions);
+}
+
+// The map-legend faction key (Phase 11.4): a clickable row per power — a colour
+// swatch hatched at the faction's angle + its name. Clicking opens its detail
+// (the Factions tab) and centres the map on its seat/first holding.
+function renderFactionLegend(factions) {
+  const host = $("legend-factions");
+  if (!host) return;
+  host.hidden = !factions.length;
+  host.innerHTML = "";
+  if (!factions.length) return;
+  const sub = document.createElement("div");
+  sub.className = "legend-sub";
+  sub.textContent = "Powers";
+  host.appendChild(sub);
+  factions.forEach((f, i) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "legend-row faction-row";
+    row.title = "Show this faction's detail";
+    const sw = document.createElement("span");
+    sw.className = "lg-swatch faction-swatch";
+    sw.style.backgroundColor = factionColor(i);
+    sw.style.setProperty("--hatch-deg", `${factionHatchDeg(i)}deg`);
+    const name = document.createElement("span");
+    name.className = "faction-row-name";
+    name.textContent = f.name || "Faction";
+    row.append(sw, name);
+    row.addEventListener("click", () => {
+      setPanelTab("factions");
+      onCenterFaction(f.id, 0);
+    });
+    host.appendChild(row);
   });
 }
 

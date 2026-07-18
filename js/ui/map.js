@@ -10,6 +10,7 @@ import {
   pixelToAxialFractional,
   hexCorners,
   axialKey,
+  NEIGHBOR_DIRS,
 } from "../core/hexgeo.js";
 import { hashString } from "../core/rng.js";
 import { placedHexes } from "../world/world.js";
@@ -18,9 +19,9 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
-import { glyphForPoi, poiDotColor, factionColor } from "./poi-style.js";
+import { glyphForPoi, poiDotColor, factionColor, factionHatchDeg } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
-import { MAP } from "./theme.js";
+import { MAP, parseHex } from "./theme.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
@@ -218,6 +219,11 @@ export function render() {
     visible.push({ hex, c });
   }
 
+  // 2a⁰. Faction territory FILL + hatch (Phase 11.4) — a translucent colour wash
+  //      per power, UNDER the roads/markers so those stay crisp on top. The
+  //      inked border + seat marker come later (over everything).
+  drawFactionFill(minX, minY, maxX, maxY, margin, onScreen);
+
   // 2a. Roads + rivers, UNDER the markers below. Draw order IS the bridge/ford:
   //     dashed tracks/spurs go UNDER the river (a ford — water runs over them),
   //     then the river, then solid roads OVER it (a bridge). Roads are nudged
@@ -297,20 +303,10 @@ export function render() {
     if (t) drawHookFocus(t, FOCUS_TARGET);
   }
 
-  // 4b. Faction holdings (Phase 8.7) — a per-faction coloured hex ring, UNDER the
-  //     party marker. Every holding of a faction shares its colour so a power reads
-  //     as one across the map. Like the party/hook markers, drawn at every zoom
-  //     regardless of whether a hex is placed there.
-  if (world && Array.isArray(world.factions)) {
-    world.factions.forEach((f, i) => {
-      const color = factionColor(i);
-      for (const hold of f.holdings || []) {
-        const hc = axialToPixel(hold.q, hold.r, HEX_SIZE);
-        if (hc.x < minX - margin || hc.x > maxX + margin || hc.y < minY - margin || hc.y > maxY + margin) continue;
-        drawFactionMark(hc.x, hc.y, color);
-      }
-    });
-  }
+  // 4b. Faction territory OUTLINE + seat (Phase 11.4) — the inked sphere-of-
+  //     influence border around each power's holdings, plus a star on its seat,
+  //     drawn over roads/markers (UNDER the party marker) so it reads crisply.
+  drawFactionOutline(minX, minY, maxX, maxY, margin);
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
   //    TOP of everything else and visible at every zoom, regardless of whether
@@ -906,8 +902,115 @@ function drawPinnedMark(cx, cy, detail) {
 // Faction holding (Phase 8.7): just a hex ring in the faction's colour. The old
 // banner badge was dropped (8.15) — it hid the POI glyph on a held hex, and the
 // coloured border alone reads clearly enough as "this faction runs it".
-function drawFactionMark(cx, cy, color) {
-  strokeHex(cx, cy, color, 2.5);
+// --- Faction territory (Phase 11.4) -------------------------------------
+// A power's holdings render as a translucent colour wash + a per-faction hatch
+// (the colour-blind-safe differentiator), an inked border around the territory's
+// outer edge, and a star on the seat. Fill/hatch are drawn early (under the
+// network + markers); the border/seat late (over them).
+
+const FACTION_FILL_ALPHA = 0.2;
+const HATCH_MIN_ONSCREEN = 16; // px/hex below which the fine hatch is skipped
+
+function rgba(hex, a) {
+  const [r, g, b] = parseHex(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function offView(p, minX, minY, maxX, maxY, margin) {
+  return p.x < minX - margin || p.x > maxX + margin || p.y < minY - margin || p.y > maxY + margin;
+}
+
+// Parallel hatch lines filling the current hex (call inside a hex clip).
+function hatchHex(cx, cy, deg, color) {
+  const rad = (deg * Math.PI) / 180;
+  const dx = Math.cos(rad), dy = Math.sin(rad); // line direction
+  const nx = -dy, ny = dx; // step direction (perpendicular)
+  const R = HEX_SIZE * 1.15;
+  const gap = 6.5;
+  ctx.strokeStyle = rgba(color, 0.5);
+  ctx.lineWidth = 1.1 / camera.scale;
+  for (let t = -R; t <= R; t += gap) {
+    ctx.beginPath();
+    ctx.moveTo(cx + nx * t - dx * R, cy + ny * t - dy * R);
+    ctx.lineTo(cx + nx * t + dx * R, cy + ny * t + dy * R);
+    ctx.stroke();
+  }
+}
+
+function drawFactionFill(minX, minY, maxX, maxY, margin, onScreen) {
+  if (!world || !Array.isArray(world.factions)) return;
+  const withHatch = onScreen >= HATCH_MIN_ONSCREEN;
+  world.factions.forEach((f, i) => {
+    const color = factionColor(i);
+    const deg = factionHatchDeg(i);
+    for (const hold of f.holdings || []) {
+      const c = axialToPixel(hold.q, hold.r, HEX_SIZE);
+      if (offView(c, minX, minY, maxX, maxY, margin)) continue;
+      hexPath(c.x, c.y);
+      ctx.fillStyle = rgba(color, FACTION_FILL_ALPHA);
+      ctx.fill();
+      if (withHatch) {
+        ctx.save();
+        hexPath(c.x, c.y);
+        ctx.clip();
+        hatchHex(c.x, c.y, deg, color);
+        ctx.restore();
+      }
+    }
+  });
+}
+
+function drawFactionOutline(minX, minY, maxX, maxY, margin) {
+  if (!world || !Array.isArray(world.factions)) return;
+  world.factions.forEach((f, i) => {
+    const holdings = f.holdings || [];
+    if (!holdings.length) return;
+    const color = factionColor(i);
+    const owned = new Set(holdings.map((h) => axialKey(h.q, h.r)));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.4 / camera.scale;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    for (const h of holdings) {
+      const c = axialToPixel(h.q, h.r, HEX_SIZE);
+      if (offView(c, minX, minY, maxX, maxY, margin)) continue;
+      const corners = hexCorners(c.x, c.y, HEX_SIZE);
+      for (let dir = 0; dir < 6; dir++) {
+        const [dq, dr] = NEIGHBOR_DIRS[dir];
+        if (owned.has(axialKey(h.q + dq, h.r + dr))) continue; // shared edge — interior
+        const e = (6 - dir) % 6; // neighbour dir -> the hex edge it shares
+        const a = corners[e], b = corners[(e + 1) % 6];
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+    if (f.seat) {
+      const sc = axialToPixel(f.seat.q, f.seat.r, HEX_SIZE);
+      if (!offView(sc, minX, minY, maxX, maxY, margin)) drawSeatMark(sc.x, sc.y, color);
+    }
+  });
+}
+
+// The seat (HQ): a small coin with a star, in the top-right corner of the hex so
+// it doesn't cover a settlement/POI icon in the centre.
+function drawSeatMark(cx, cy, color) {
+  const off = HEX_SIZE * 0.5;
+  const x = cx + off, y = cy - off;
+  const r = HEX_SIZE * 0.24;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 1.4 / camera.scale;
+  ctx.strokeStyle = "rgba(40,28,10,0.65)";
+  ctx.stroke();
+  ctx.fillStyle = "#f4ead2";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${r * 1.6}px serif`;
+  ctx.fillText("★", x, y + r * 0.08);
 }
 
 // Party position (Phase 8.1): a bold magenta ring — a colour not already used

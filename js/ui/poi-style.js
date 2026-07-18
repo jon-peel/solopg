@@ -48,22 +48,35 @@ export const POI_DOT_COLORS = {
   tower: "#8a5a3c",
 };
 
-// Per-faction map colour (Phase 8.7) — cycled by faction order so each power
-// reads as one across all its holdings. Kept clear of the party marker (magenta
-// #ff4fd8) and the hook rings (amber / violet) so the map layers stay legible.
+// Per-faction map colour (Phase 8.7; re-tuned 11.4) — cycled by faction order so
+// each power reads as one across all its holdings. A colour-blind-tolerant set
+// that stays clear of the RED family (reserved for the selection ring + hook
+// marks) and the party marker (magenta #ff4fd8), so the map layers stay legible
+// on parchment. The per-faction HATCH angle (below) is the real differentiator —
+// two neighbouring territories never rely on hue alone.
 export const FACTION_COLORS = [
-  "#2f8fd0", // blue
-  "#e0663c", // burnt orange
-  "#4bbf87", // emerald
-  "#c9a13b", // ochre
-  "#8a6bd6", // indigo
-  "#3fb0b0", // teal-cyan
+  "#2f6f9e", // blue
+  "#c1762a", // burnt orange
+  "#2f8f7a", // bluish-green
+  "#8a5fa6", // violet
+  "#b79a2e", // ochre
+  "#8a5a3c", // brown
 ];
+
+// Hatch-line angles (degrees), a coprime-length list so (colour, hatch) pairs
+// stay distinct well past the point either list alone would repeat.
+export const FACTION_HATCH_DEG = [0, 90, 45, 135, 22.5];
 
 /** Map colour for the Nth faction (cycles the palette; safe for negatives). */
 export function factionColor(index) {
   const n = FACTION_COLORS.length;
   return FACTION_COLORS[((index % n) + n) % n];
+}
+
+/** Hatch angle (deg) for the Nth faction — the colour-blind-safe differentiator. */
+export function factionHatchDeg(index) {
+  const n = FACTION_HATCH_DEG.length;
+  return FACTION_HATCH_DEG[((index % n) + n) % n];
 }
 
 export function glyphForPoiType(type) {

@@ -711,6 +711,39 @@ button:hover {
   border-radius: 3px;
   border: 1px solid rgba(0, 0, 0, 0.35);
 }
+
+/* Faction key rows (Phase 11.4): a clickable legend entry per power. The swatch
+   overlays the faction's hatch angle so the key matches the map territory. */
+.faction-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 0.1rem 0.25rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+.faction-row:hover {
+  background: rgba(255, 250, 236, 0.55);
+  border-color: var(--edge);
+}
+.faction-swatch {
+  --hatch-deg: 0deg;
+  background-image: repeating-linear-gradient(
+    var(--hatch-deg),
+    rgba(40, 28, 10, 0.5) 0,
+    rgba(40, 28, 10, 0.5) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  background-blend-mode: normal;
+}
+.faction-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .lg-line {
   width: 1.6rem;
   flex: 0 0 auto;
