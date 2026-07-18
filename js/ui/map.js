@@ -131,8 +131,10 @@ export function getZoom() {
   return { scale: camera.scale, min: MIN_SCALE, max: MAX_SCALE };
 }
 
-/** Recenter on placed content (its centroid), or the origin if the map is empty. */
+/** Recenter on the party marker if there is one; else on placed content (its
+ *  centroid); else the origin when the map is empty. */
 export function recenter() {
+  if (world && world.party) return recenterOn(world.party.q, world.party.r);
   const hexes = world ? placedHexes(world) : [];
   if (!hexes.length) return recenterOn(0, 0);
   let sq = 0, sr = 0;

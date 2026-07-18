@@ -17,7 +17,7 @@
       <!-- World cluster: create / save / delete the current world. -->
       <div class="bar-group" role="group" aria-label="World">
         <span class="menu-wrap">
-          <button id="btn-new" aria-haspopup="true" aria-expanded="false">New World ▾</button>
+          <button id="btn-new" aria-haspopup="true" aria-expanded="false" data-tip="Start a new world">New World ▾</button>
           <div id="new-world-menu" class="dropdown-menu" hidden>
             <button type="button" data-radius="">Empty</button>
             <button type="button" data-radius="1">Small</button>
@@ -26,13 +26,13 @@
             <button type="button" data-radius="15">Huge</button>
           </div>
         </span>
-        <button id="btn-save" title="Save the world to this browser">Save</button>
-        <button id="btn-delete" title="Delete the current world">Delete</button>
+        <button id="btn-save" data-tip="Save the world to this browser">Save</button>
+        <button id="btn-delete" data-tip="Delete the current world">Delete</button>
       </div>
       <!-- Backup cluster: JSON export / import. -->
       <div class="bar-group" role="group" aria-label="Backup">
-        <button id="btn-export" title="Download a JSON backup of this world">Export</button>
-        <button id="btn-import" title="Load a world from a JSON backup">Import</button>
+        <button id="btn-export" data-tip="Download a JSON backup of this world">Export</button>
+        <button id="btn-import" data-tip="Load a world from a JSON backup">Import</button>
       </div>
       <!-- Session cluster: the world clock + stationary "progress days" control. -->
       <div class="bar-group" role="group" aria-label="Session">
@@ -43,13 +43,13 @@
         <span class="progress-ctl">
           <input id="progress-days" class="progress-days" type="number" min="1" max="365" value="1"
                  aria-label="Days to progress" title="Days to advance while stationary" />
-          <button id="btn-progress" title="Advance the clock without moving (rest / wait)">Progress</button>
+          <button id="btn-progress" data-tip="Advance the clock without moving (rest / wait)">Progress</button>
         </span>
       </div>
       <!-- View cluster: map display toggles. -->
       <div class="bar-group" role="group" aria-label="View">
-        <button id="btn-icons">Icons: on</button>
-        <button id="btn-labels">Labels: on</button>
+        <button id="btn-icons" data-tip="Show / hide terrain + settlement art">Icons: on</button>
+        <button id="btn-labels" data-tip="Show / hide hex name labels">Labels: on</button>
       </div>
       <input id="import-file" type="file" accept="application/json,.json" hidden />
     </header>
@@ -102,7 +102,7 @@
           <input id="zoom-slider" type="range" min="0" max="1000" value="500"
                  aria-label="Zoom level" title="Zoom" />
           <button id="btn-zoom-out" title="Zoom out">−</button>
-          <button id="btn-home" title="Recenter on the map">⌂</button>
+          <button id="btn-home" title="Recenter on the party (or the map)">⌂</button>
           <button id="btn-help" title="Shortcuts (?)">?</button>
         </div>
         <section id="dungeon-view" hidden>

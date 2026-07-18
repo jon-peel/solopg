@@ -126,6 +126,48 @@ button:hover {
   border-radius: var(--radius);
 }
 
+/* Styled tooltips for the command bar (Phase 11.3): a parchment-era ink bubble
+   below the control, on hover AND keyboard focus. Native title tooltips weren't
+   surfacing, so we render our own from data-tip. */
+#command-bar [data-tip] {
+  position: relative;
+}
+#command-bar [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-3px);
+  white-space: nowrap;
+  background: var(--ink);
+  color: #f4ead2;
+  font-size: 0.72rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition-delay: 0.25s;
+  z-index: 60;
+}
+#command-bar [data-tip]:hover::after,
+#command-bar [data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Rightmost group: anchor the bubble to the button's right edge so it can't run
+   off the viewport. */
+#command-bar .bar-group:last-of-type [data-tip]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-3px);
+}
+#command-bar .bar-group:last-of-type [data-tip]:hover::after,
+#command-bar .bar-group:last-of-type [data-tip]:focus-visible::after {
+  transform: translateY(0);
+}
+
 /* Command-bar clusters (Phase 11.3): each labelled group reads as one segmented
    unit framed on the parchment, replacing the old flat run of buttons. */
 .bar-group {
