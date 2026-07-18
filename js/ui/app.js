@@ -65,6 +65,7 @@ import {
   zoomStep,
   setZoom,
   getZoom,
+  setFactionHighlight,
   recenter,
   pixelsPerMile,
 } from "./map.js";
@@ -1472,6 +1473,13 @@ function renderFactionLegend(factions) {
       setPanelTab("factions");
       onCenterFaction(f.id, 0);
     });
+    // Hover / keyboard-focus a row → brighten that faction's territory on the map.
+    const on = () => setFactionHighlight(i);
+    const off = () => setFactionHighlight(null);
+    row.addEventListener("mouseenter", on);
+    row.addEventListener("mouseleave", off);
+    row.addEventListener("focus", on);
+    row.addEventListener("blur", off);
     host.appendChild(row);
   });
 }

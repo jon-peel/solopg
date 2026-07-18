@@ -77,6 +77,7 @@ export function attachMap(canvasEl, cbs = {}) {
 
 export function setWorld(w) {
   world = w;
+  highlightFaction = null; // a highlight from the old world's legend no longer applies
   regionCache = { seed: null, count: -1, byHex: new Map() }; // invalidate named regions for the new world
   render();
 }
@@ -908,12 +909,30 @@ function drawPinnedMark(cx, cy, detail) {
 // outer edge, and a star on the seat. Fill/hatch are drawn early (under the
 // network + markers); the border/seat late (over them).
 
-const FACTION_FILL_ALPHA = 0.2;
+const FACTION_FILL_ALPHA = 0.3; // base wash; the highlighted faction goes bolder
 const HATCH_MIN_ONSCREEN = 16; // px/hex below which the fine hatch is skipped
+const FACTION_INK = "rgba(40,28,10,0.55)"; // dark casing so a border reads on any terrain
+
+let highlightFaction = null; // index of the faction to emphasise on hover (or null)
+
+/** Emphasise one faction's territory on the map (by roster index; null clears). */
+export function setFactionHighlight(index) {
+  const next = index == null ? null : index;
+  if (next === highlightFaction) return;
+  highlightFaction = next;
+  render();
+}
 
 function rgba(hex, a) {
   const [r, g, b] = parseHex(hex);
   return `rgba(${r},${g},${b},${a})`;
+}
+
+// Mix a hex colour toward black by factor f (0 = unchanged, 1 = black) — used to
+// darken the hatch lines so they read on light terrain.
+function darken(hex, f) {
+  const [r, g, b] = parseHex(hex).map((v) => Math.round(v * (1 - f)));
+  return `rgb(${r},${g},${b})`;
 }
 
 function offView(p, minX, minY, maxX, maxY, margin) {
@@ -921,14 +940,14 @@ function offView(p, minX, minY, maxX, maxY, margin) {
 }
 
 // Parallel hatch lines filling the current hex (call inside a hex clip).
-function hatchHex(cx, cy, deg, color) {
+function hatchHex(cx, cy, deg, color, strong) {
   const rad = (deg * Math.PI) / 180;
   const dx = Math.cos(rad), dy = Math.sin(rad); // line direction
   const nx = -dy, ny = dx; // step direction (perpendicular)
   const R = HEX_SIZE * 1.15;
-  const gap = 6.5;
-  ctx.strokeStyle = rgba(color, 0.5);
-  ctx.lineWidth = 1.1 / camera.scale;
+  const gap = strong ? 5.5 : 6.5;
+  ctx.strokeStyle = rgba(darken(color, 0.35), strong ? 0.85 : 0.6);
+  ctx.lineWidth = (strong ? 1.5 : 1.15) / camera.scale;
   for (let t = -R; t <= R; t += gap) {
     ctx.beginPath();
     ctx.moveTo(cx + nx * t - dx * R, cy + ny * t - dy * R);
@@ -943,21 +962,47 @@ function drawFactionFill(minX, minY, maxX, maxY, margin, onScreen) {
   world.factions.forEach((f, i) => {
     const color = factionColor(i);
     const deg = factionHatchDeg(i);
+    const hi = i === highlightFaction;
+    const fillA = hi ? 0.46 : FACTION_FILL_ALPHA;
     for (const hold of f.holdings || []) {
       const c = axialToPixel(hold.q, hold.r, HEX_SIZE);
       if (offView(c, minX, minY, maxX, maxY, margin)) continue;
       hexPath(c.x, c.y);
-      ctx.fillStyle = rgba(color, FACTION_FILL_ALPHA);
+      ctx.fillStyle = rgba(color, fillA);
       ctx.fill();
       if (withHatch) {
         ctx.save();
         hexPath(c.x, c.y);
         ctx.clip();
-        hatchHex(c.x, c.y, deg, color);
+        hatchHex(c.x, c.y, deg, color, hi);
         ctx.restore();
       }
     }
   });
+}
+
+// Stroke every outer edge of a faction's territory (edges bordering a hex the
+// faction doesn't own). Called twice per faction: a dark casing, then the colour.
+function strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, style, width) {
+  ctx.strokeStyle = style;
+  ctx.lineWidth = width / camera.scale;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const h of holdings) {
+    const c = axialToPixel(h.q, h.r, HEX_SIZE);
+    if (offView(c, minX, minY, maxX, maxY, margin)) continue;
+    const corners = hexCorners(c.x, c.y, HEX_SIZE);
+    for (let dir = 0; dir < 6; dir++) {
+      const [dq, dr] = NEIGHBOR_DIRS[dir];
+      if (owned.has(axialKey(h.q + dq, h.r + dr))) continue; // shared edge — interior
+      const e = (6 - dir) % 6; // neighbour dir -> the hex edge it shares
+      const a = corners[e], b = corners[(e + 1) % 6];
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
 }
 
 function drawFactionOutline(minX, minY, maxX, maxY, margin) {
@@ -966,26 +1011,14 @@ function drawFactionOutline(minX, minY, maxX, maxY, margin) {
     const holdings = f.holdings || [];
     if (!holdings.length) return;
     const color = factionColor(i);
+    const hi = i === highlightFaction;
     const owned = new Set(holdings.map((h) => axialKey(h.q, h.r)));
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2.4 / camera.scale;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    for (const h of holdings) {
-      const c = axialToPixel(h.q, h.r, HEX_SIZE);
-      if (offView(c, minX, minY, maxX, maxY, margin)) continue;
-      const corners = hexCorners(c.x, c.y, HEX_SIZE);
-      for (let dir = 0; dir < 6; dir++) {
-        const [dq, dr] = NEIGHBOR_DIRS[dir];
-        if (owned.has(axialKey(h.q + dq, h.r + dr))) continue; // shared edge — interior
-        const e = (6 - dir) % 6; // neighbour dir -> the hex edge it shares
-        const a = corners[e], b = corners[(e + 1) % 6];
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-      }
-    }
+    const w = hi ? 4 : 2.8;
+    // Highlighted faction blooms first (a wide, soft colour glow under the line).
+    if (hi) strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, rgba(color, 0.35), w + 6);
+    // Dark casing so the border reads on light AND dark terrain, then the colour.
+    strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, FACTION_INK, w + 2);
+    strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, color, w);
     if (f.seat) {
       const sc = axialToPixel(f.seat.q, f.seat.r, HEX_SIZE);
       if (!offView(sc, minX, minY, maxX, maxY, margin)) drawSeatMark(sc.x, sc.y, color);

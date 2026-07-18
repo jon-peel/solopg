@@ -55,12 +55,12 @@ export const POI_DOT_COLORS = {
 // on parchment. The per-faction HATCH angle (below) is the real differentiator —
 // two neighbouring territories never rely on hue alone.
 export const FACTION_COLORS = [
-  "#2f6f9e", // blue
-  "#c1762a", // burnt orange
-  "#2f8f7a", // bluish-green
-  "#8a5fa6", // violet
-  "#b79a2e", // ochre
-  "#8a5a3c", // brown
+  "#2a6693", // blue
+  "#b3641c", // burnt orange
+  "#268572", // bluish-green
+  "#7c53a0", // violet
+  "#9c8020", // ochre
+  "#7d5236", // brown
 ];
 
 // Hatch-line angles (degrees), a coprime-length list so (colour, hatch) pairs
