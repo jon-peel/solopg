@@ -63,6 +63,8 @@ import {
   setRiverDraft,
   setRoadDraft,
   zoomStep,
+  setZoom,
+  getZoom,
   recenter,
   pixelsPerMile,
 } from "./map.js";
@@ -2330,6 +2332,10 @@ function wire() {
   $("btn-dungeon-legend").addEventListener("click", onToggleLegend);
   $("btn-zoom-in").addEventListener("click", () => zoomStep(1));
   $("btn-zoom-out").addEventListener("click", () => zoomStep(-1));
+  $("zoom-slider").addEventListener("input", (e) => {
+    const { min, max } = getZoom();
+    setZoom(sliderToZoom(Number(e.target.value), min, max));
+  });
   $("btn-home").addEventListener("click", () => recenter());
   $("btn-help").addEventListener("click", () => toggleHelp());
   $("btn-help-close").addEventListener("click", () => toggleHelp(false));
@@ -2345,6 +2351,23 @@ function wire() {
   window.addEventListener("keydown", onHelpKey); // Esc closes help before other handlers
   window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
   window.addEventListener("keydown", onDungeonKey);
+}
+
+// Zoom slider <-> camera scale, mapped on a log axis so each slider step is a
+// constant zoom ratio (matches how ＋/− and the wheel feel). The slider drives
+// the camera on input; drawScaleBar (onView) drives the slider back on any zoom
+// change from ＋/−/wheel, so the two never fall out of sync.
+function sliderToZoom(v, min, max) {
+  return min * Math.pow(max / min, v / 1000);
+}
+function zoomToSlider(scale, min, max) {
+  return Math.round((1000 * Math.log(scale / min)) / Math.log(max / min));
+}
+function syncZoomSlider() {
+  const s = $("zoom-slider");
+  if (!s) return;
+  const { scale, min, max } = getZoom();
+  s.value = String(zoomToSlider(scale, min, max));
 }
 
 let iconsOn = true;
@@ -2363,7 +2386,17 @@ function onToggleLabels() {
 
 async function init() {
   wire();
-  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu, onHover, onView: drawScaleBar });
+  attachMap($("map"), {
+    onHexClick,
+    onEmptyCellClick,
+    onContextMenu,
+    onHover,
+    onView: (ppm) => {
+      drawScaleBar(ppm);
+      syncZoomSlider();
+    },
+  });
+  syncZoomSlider(); // reflect the initial zoom on the slider
   attachDungeon($("dungeon-canvas"), { onRoomClick, onRoomContextMenu: onRoomContextMenu });
   // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {

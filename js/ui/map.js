@@ -103,18 +103,32 @@ export function pixelsPerMile() {
 }
 
 /** Zoom a step in (dir>0) or out (dir<0), keeping the canvas center fixed. */
-export function zoomStep(dir) {
+// Zoom to an absolute scale, anchored on the viewport centre (clamped).
+function zoomToScale(scale) {
   if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const px = rect.left + rect.width / 2;
   const py = rect.top + rect.height / 2;
   const before = clientToWorld(px, py);
-  const factor = dir > 0 ? 1.2 : 1 / 1.2;
-  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * factor));
+  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
   const after = clientToWorld(px, py);
   camera.offsetX += (after.x - before.x) * camera.scale;
   camera.offsetY += (after.y - before.y) * camera.scale;
   render();
+}
+
+export function zoomStep(dir) {
+  zoomToScale(camera.scale * (dir > 0 ? 1.2 : 1 / 1.2));
+}
+
+/** Set an absolute zoom (for the zoom slider). */
+export function setZoom(scale) {
+  zoomToScale(scale);
+}
+
+/** Current zoom + its clamp range (for the zoom slider to reflect/drive). */
+export function getZoom() {
+  return { scale: camera.scale, min: MIN_SCALE, max: MAX_SCALE };
 }
 
 /** Recenter on placed content (its centroid), or the origin if the map is empty. */

@@ -14,33 +14,43 @@
         <select id="world-select"></select>
       </label>
       <span class="spacer"></span>
-      <span class="menu-wrap">
-        <button id="btn-new" aria-haspopup="true" aria-expanded="false">New World ▾</button>
-        <div id="new-world-menu" class="dropdown-menu" hidden>
-          <button type="button" data-radius="">Empty</button>
-          <button type="button" data-radius="1">Small</button>
-          <button type="button" data-radius="2">Medium</button>
-          <button type="button" data-radius="3">Large</button>
-          <button type="button" data-radius="15">Huge</button>
-        </div>
-      </span>
-      <button id="btn-save">Save</button>
-      <button id="btn-delete">Delete</button>
-      <button id="btn-export">Export</button>
-      <button id="btn-import">Import</button>
-      <span class="bar-divider"></span>
-      <!-- Session day readout (Phase 8.1) — in-memory only, always starts at 0,
-           never persisted; see js/ui/app.js sessionDay. -->
-      <span id="day-readout" class="day-readout" title="World clock (session-only, resets on reload)">Day 0</span>
-      <!-- Progress N days without moving (Phase 8.6) — advances the same clock. -->
-      <span class="progress-ctl">
-        <input id="progress-days" class="progress-days" type="number" min="1" max="365" value="1"
-               aria-label="Days to progress" title="Days to advance while stationary" />
-        <button id="btn-progress" title="Advance the clock without moving (rest / wait)">Progress</button>
-      </span>
-      <span class="bar-divider"></span>
-      <button id="btn-icons">Icons: on</button>
-      <button id="btn-labels">Labels: on</button>
+      <!-- World cluster: create / save / delete the current world. -->
+      <div class="bar-group" role="group" aria-label="World">
+        <span class="menu-wrap">
+          <button id="btn-new" aria-haspopup="true" aria-expanded="false">New World ▾</button>
+          <div id="new-world-menu" class="dropdown-menu" hidden>
+            <button type="button" data-radius="">Empty</button>
+            <button type="button" data-radius="1">Small</button>
+            <button type="button" data-radius="2">Medium</button>
+            <button type="button" data-radius="3">Large</button>
+            <button type="button" data-radius="15">Huge</button>
+          </div>
+        </span>
+        <button id="btn-save" title="Save the world to this browser">Save</button>
+        <button id="btn-delete" title="Delete the current world">Delete</button>
+      </div>
+      <!-- Backup cluster: JSON export / import. -->
+      <div class="bar-group" role="group" aria-label="Backup">
+        <button id="btn-export" title="Download a JSON backup of this world">Export</button>
+        <button id="btn-import" title="Load a world from a JSON backup">Import</button>
+      </div>
+      <!-- Session cluster: the world clock + stationary "progress days" control. -->
+      <div class="bar-group" role="group" aria-label="Session">
+        <!-- Session day readout (Phase 8.1) — in-memory only, always starts at 0,
+             never persisted; see js/ui/app.js sessionDay. -->
+        <span id="day-readout" class="day-readout" title="World clock (session-only, resets on reload)">Day 0</span>
+        <!-- Progress N days without moving (Phase 8.6) — advances the same clock. -->
+        <span class="progress-ctl">
+          <input id="progress-days" class="progress-days" type="number" min="1" max="365" value="1"
+                 aria-label="Days to progress" title="Days to advance while stationary" />
+          <button id="btn-progress" title="Advance the clock without moving (rest / wait)">Progress</button>
+        </span>
+      </div>
+      <!-- View cluster: map display toggles. -->
+      <div class="bar-group" role="group" aria-label="View">
+        <button id="btn-icons">Icons: on</button>
+        <button id="btn-labels">Labels: on</button>
+      </div>
       <input id="import-file" type="file" accept="application/json,.json" hidden />
     </header>
 
@@ -86,9 +96,11 @@
             <div class="legend-note">Hover a hex for its name · region.</div>
           </div>
         </div>
-        <!-- Bottom-right map controls. -->
+        <!-- Bottom-right map controls: zoom (＋ / slider / −), recenter, help. -->
         <div id="map-controls">
           <button id="btn-zoom-in" title="Zoom in">＋</button>
+          <input id="zoom-slider" type="range" min="0" max="1000" value="500"
+                 aria-label="Zoom level" title="Zoom" />
           <button id="btn-zoom-out" title="Zoom out">−</button>
           <button id="btn-home" title="Recenter on the map">⌂</button>
           <button id="btn-help" title="Shortcuts (?)">?</button>

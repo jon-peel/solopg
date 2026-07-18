@@ -126,6 +126,19 @@ button:hover {
   border-radius: var(--radius);
 }
 
+/* Command-bar clusters (Phase 11.3): each labelled group reads as one segmented
+   unit framed on the parchment, replacing the old flat run of buttons. */
+.bar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 250, 236, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 250, 236, 0.6);
+}
+
 #workspace {
   flex: 1;
   display: grid;
@@ -325,7 +338,32 @@ button:hover {
   bottom: 0.6rem;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.3rem;
+  padding: 0.3rem;
+  background: rgba(239, 227, 200, 0.85);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+}
+/* Buttons inside the framed cluster sit as a segmented stack — the frame
+   already carries the elevation, so drop their individual shadow. */
+#map-controls button {
+  box-shadow: none;
+  background: rgba(255, 250, 236, 0.55);
+}
+#map-controls button:hover {
+  background: #f3e8cf;
+}
+/* Vertical zoom slider between ＋ and − (top = max zoom). */
+#zoom-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 1.4rem;
+  height: 4.5rem;
+  margin: 0.1rem 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 /* Legend toggle: a lone icon button mirroring the zoom controls, bottom-left. */
 #map-controls-left {
