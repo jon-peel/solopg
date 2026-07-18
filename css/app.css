@@ -1,11 +1,61 @@
+/* Parchment / "cartographer" palette (Phase 11.1). Mirrored in js/ui/theme.js —
+   keep the two in sync. Legacy names (--bg/--panel-bg/…) are re-pointed at the
+   parchment tokens so every existing var() reference re-colours for free. */
 :root {
-  --bg: #1c1f26;
-  --panel-bg: #232732;
-  --bar-bg: #14161c;
-  --fg: #e6e8ee;
-  --muted: #9aa3b2;
-  --accent: #6ea8fe;
-  --border: #343a47;
+  color-scheme: light;
+
+  /* Parchment surfaces (warm, aged) */
+  --paper: #e8dabb;
+  --paper-panel: #e4d4b0;
+  --paper-bar: #dcc9a0;
+  --paper-raised: #efe3c8;
+  --paper-sunk: #d3bd90;
+
+  /* Ink */
+  --ink: #33291a;
+  --ink-soft: #6d5c3e;
+  --ink-faint: #937d55;
+
+  /* Drawn lines */
+  --edge: #b39a67;
+  --edge-strong: #8a7043;
+
+  /* Accents */
+  --accent: #8a3324; /* oxblood / wax-seal red */
+  --accent-2: #2f6a63; /* verdigris teal */
+  --gold: #b0842b;
+  --danger: #9c2b1e;
+  --accent-wash: rgba(138, 51, 36, 0.14);
+  --gold-wash: rgba(176, 132, 43, 0.18);
+
+  /* Elevation (warm shadows) */
+  --shadow-1: 0 1px 2px rgba(60, 44, 18, 0.2);
+  --shadow-2: 0 8px 24px rgba(60, 44, 18, 0.3);
+
+  /* Geometry */
+  --radius: 5px;
+  --radius-lg: 8px;
+
+  /* Focus ring (a11y seed for 11.8) */
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--gold);
+
+  /* Overlay scrim */
+  --scrim: rgba(40, 28, 10, 0.4);
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino,
+    "Hoefler Text", Georgia, "Times New Roman", serif;
+  --font-display: "Hoefler Text", "Baskerville Old Face", "Palatino Linotype",
+    Georgia, serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, monospace;
+
+  /* Legacy aliases (existing rules reference these) */
+  --bg: var(--paper);
+  --panel-bg: var(--paper-panel);
+  --bar-bg: var(--paper-bar);
+  --fg: var(--ink);
+  --muted: var(--ink-soft);
+  --border: var(--edge);
 }
 
 * {
@@ -21,9 +71,9 @@ body {
 body {
   display: flex;
   flex-direction: column;
-  font: 14px/1.5 system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--fg);
+  font: 15px/1.55 var(--font-body);
+  background: var(--paper);
+  color: var(--ink);
 }
 
 #command-bar {
@@ -31,16 +81,22 @@ body {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: var(--bar-bg);
-  border-bottom: 1px solid var(--border);
+  background: linear-gradient(var(--paper-bar), #d3bf94);
+  border-bottom: 1px solid var(--edge-strong);
+  box-shadow: var(--shadow-1);
 }
 
 .brand {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--accent);
 }
 
 .world-picker {
-  color: var(--muted);
+  color: var(--ink-soft);
 }
 
 .spacer {
@@ -50,16 +106,24 @@ body {
 button,
 select {
   font: inherit;
-  color: var(--fg);
-  background: #2b3140;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: linear-gradient(var(--paper-raised), var(--paper-panel));
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
   padding: 0.35rem 0.65rem;
   cursor: pointer;
 }
 
 button:hover {
   border-color: var(--accent);
+  background: linear-gradient(#f3e8cf, var(--paper-raised));
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius);
 }
 
 #workspace {
@@ -81,7 +145,13 @@ button:hover {
   width: 100%;
   height: 100%;
   display: block;
-  background: #11131a;
+  /* Aged-vellum surface (the map is painted over this; bare void shows through). */
+  background: radial-gradient(
+    130% 130% at 50% 28%,
+    #efe3c8 0%,
+    #e4d3ac 55%,
+    #d3bd90 100%
+  );
   cursor: grab;
 }
 
@@ -110,10 +180,11 @@ button:hover {
   left: 3rem;
   bottom: 0.6rem;
   font-size: 0.75rem;
-  color: var(--fg);
-  background: rgba(13, 15, 21, 0.65);
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.82);
+  border: 1px solid var(--edge);
   padding: 0.15rem 0.45rem;
-  border-radius: 6px;
+  border-radius: var(--radius);
   pointer-events: none;
 }
 #map-readout[hidden] {
@@ -129,34 +200,35 @@ button:hover {
   gap: 0.4rem;
   align-items: center;
   font-size: 0.78rem;
-  color: var(--fg);
-  background: rgba(13, 15, 21, 0.9);
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.94);
   padding: 0.35rem 0.55rem;
-  border-radius: 8px;
-  border: 1px solid rgba(111, 208, 240, 0.55);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--accent-2);
+  box-shadow: var(--shadow-2);
   z-index: 6;
 }
 #draw-bar[hidden] {
   display: none;
 }
 #draw-bar #draw-hint {
-  color: #6fd0f0;
+  color: var(--accent-2);
   margin-right: 0.2rem;
 }
 #draw-bar button {
   font: inherit;
-  color: var(--fg);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
   padding: 0.12rem 0.5rem;
   cursor: pointer;
 }
 #draw-bar button:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: #f3e8cf;
 }
 #draw-bar #btn-draw-finish {
-  border-color: rgba(111, 208, 240, 0.6);
+  border-color: var(--accent-2);
 }
 /* Scale bar (top-left): a day's march at the current zoom. Hover for rules. */
 #map-scale {
@@ -166,10 +238,11 @@ button:hover {
   max-width: 45%;
   overflow: hidden;
   font-size: 0.65rem;
-  color: var(--fg);
-  background: rgba(13, 15, 21, 0.7);
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.82);
+  border: 1px solid var(--edge);
   padding: 0.3rem 0.4rem 0.15rem;
-  border-radius: 6px;
+  border-radius: var(--radius);
   cursor: help;
 }
 #map-scale[hidden] {
@@ -268,10 +341,11 @@ button:hover {
   padding: 0;
   font-size: 1rem;
   line-height: 1;
-  color: var(--fg);
-  background: rgba(35, 39, 50, 0.92);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.94);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
   cursor: pointer;
 }
 #map-controls button:hover,
@@ -281,7 +355,7 @@ button:hover {
 /* Pressed (legend open): tint the toggle so it reads as active. */
 #map-controls-left button[aria-pressed="true"] {
   border-color: var(--accent);
-  background: rgba(46, 54, 72, 0.95);
+  background: var(--accent-wash);
 }
 
 #help-overlay {
@@ -319,10 +393,10 @@ button:hover {
 }
 .help-card button {
   font: inherit;
-  color: var(--fg);
-  background: #2b3140;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
   padding: 0.3rem 0.7rem;
   cursor: pointer;
 }
@@ -444,7 +518,8 @@ button:hover {
 
 #selection h3 {
   margin: 0.25rem 0;
-  font-size: 0.95rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
   color: var(--accent);
 }
 
@@ -511,10 +586,11 @@ button:hover {
   max-height: 70%;
   overflow-y: auto;
   font-size: 0.74rem;
-  color: var(--fg);
-  background: rgba(13, 15, 21, 0.92);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.96);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
   padding: 0.5rem 0.6rem;
 }
 #legend[hidden] {
@@ -792,15 +868,18 @@ button:hover {
 }
 
 #panel {
-  background: var(--panel-bg);
-  border-left: 1px solid var(--border);
+  background: var(--paper-panel);
+  border-left: 1px solid var(--edge-strong);
+  box-shadow: inset 2px 0 0 rgba(138, 112, 67, 0.25);
   padding: 0.75rem;
   overflow-y: auto;
 }
 
 #panel h2 {
   margin: 0 0 0.5rem;
-  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: var(--accent);
 }
 
 /* Side-panel tabs: Detail | Hooks (Phase 7). */
@@ -832,11 +911,11 @@ button:hover {
   min-width: 1.1rem;
   text-align: center;
   font-size: 0.7rem;
-  background: #2b3140;
-  border: 1px solid var(--border);
+  background: var(--accent);
+  border: 1px solid var(--edge-strong);
   border-radius: 999px;
   padding: 0 0.25rem;
-  color: var(--fg);
+  color: #f7ecd4;
 }
 /* Respect the `hidden` attribute (our display rule above would override it). */
 .panel-tabs .badge[hidden] {
@@ -851,7 +930,7 @@ button:hover {
 }
 .hook.selected {
   border-color: var(--accent);
-  background: #1b2433;
+  background: var(--accent-wash);
 }
 .hook .tile-actions {
   cursor: default;
@@ -918,26 +997,27 @@ button:hover {
   padding: 0.15rem 0.3rem;
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--text, #e6e8ee);
+  color: var(--ink);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
 }
 
 .world-name:hover {
-  border-color: var(--border, #2b3140);
+  border-color: var(--edge);
 }
 
 .world-name:focus {
   outline: none;
   border-color: var(--accent);
-  background: #11131a;
+  background: var(--paper-raised);
 }
 
 /* Armed state for the two-step Delete button. */
 #btn-delete.armed {
-  border-color: #c0524a;
-  color: #ffb4ad;
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--accent-wash);
 }
 
 .log-line {
@@ -1032,15 +1112,15 @@ button:hover {
   justify-content: center;
   gap: 1px;
   text-align: center;
-  background: #2b3140;
-  color: var(--fg);
-  border: 1px solid var(--border);
+  background: linear-gradient(var(--paper-raised), var(--paper-panel));
+  color: var(--ink);
+  border: 1px solid var(--edge-strong);
   border-radius: 999px;
   cursor: pointer;
   user-select: none;
   transition: transform 0.09s ease, opacity 0.12s ease, border-color 0.09s ease,
     background 0.09s ease;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-2);
 }
 .ring-node .glyph {
   font-size: 1.15rem;
@@ -1053,7 +1133,7 @@ button:hover {
 }
 .ring-node:hover {
   border-color: var(--accent);
-  background: #344056;
+  background: linear-gradient(#f4e9d0, var(--paper-raised));
   transform: translate(-50%, -50%) scale(1.08);
   z-index: 2;
 }
@@ -1062,8 +1142,8 @@ button:hover {
   color: var(--accent);
 }
 .ring-node.danger:hover {
-  border-color: #c0524a;
-  background: #3a2622;
+  border-color: var(--danger);
+  background: var(--accent-wash);
 }
 /* Open-submenu state: base ring dims, the chosen parent stays lit. */
 .ring-node.dim {
@@ -1073,13 +1153,13 @@ button:hover {
 .ring-node.parent {
   opacity: 1;
   border-color: var(--accent);
-  background: #1b2433;
+  background: var(--accent-wash);
 }
 /* Active toggle (e.g. an already-Explored/Cleared/Looted room). */
 .ring-node.on {
   border-color: var(--accent);
   color: var(--accent);
-  background: #1b2433;
+  background: var(--gold-wash);
 }
 /* Disabled slot: shown (never hidden) but greyed and inert; reason via title. */
 .ring-node.disabled {
@@ -1088,8 +1168,8 @@ button:hover {
   box-shadow: none;
 }
 .ring-node.disabled:hover {
-  border-color: var(--border);
-  background: #2b3140;
+  border-color: var(--edge-strong);
+  background: linear-gradient(var(--paper-raised), var(--paper-panel));
   transform: translate(-50%, -50%);
 }
 .ring-hub {
@@ -1102,8 +1182,9 @@ button:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 15, 21, 0.95);
-  border: 1px solid var(--border);
+  background: radial-gradient(circle at 50% 38%, var(--paper-raised), #d8c39a);
+  border: 1px solid var(--edge-strong);
+  box-shadow: var(--shadow-2);
   cursor: pointer;
   user-select: none;
   z-index: 3;
@@ -1124,6 +1205,6 @@ button:hover {
   position: absolute;
   transform: translate(-50%, -50%);
   border-radius: 999px;
-  border: 1px dashed rgba(110, 168, 254, 0.22);
+  border: 1px dashed rgba(138, 112, 67, 0.35);
   pointer-events: none;
 }
