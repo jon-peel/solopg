@@ -149,6 +149,17 @@ let draftKind = null;   // "river" | "road" — what the active draft builds
 // ONE per travelled day; 8.6 adds a manual "Progress N days" while stationary.
 let sessionDay = 0;
 
+// Within-day time (Phase 11 travel model): fraction 0..1 of the current marching
+// day already spent. A marching day is DAY_HOURS long (retunable — like every
+// other travel constant). Travel spends `daysToCross` per hex against it; whole-
+// day boundaries fire faction turns. Session-only, like sessionDay.
+let dayUsed = 0;
+const DAY_HOURS = 8;
+
+// Persistent travel unit for the compass ring (double-click the party): one hex,
+// half a day, or a full day. Set from the travel HUD; each direction travels in it.
+let travelUnit = "full";
+
 // Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
 // sessionDay: replaced by each travel press, reset on world switch.
 let lastDay = null;
@@ -320,28 +331,75 @@ function refreshMapChrome() {
   renderDayReadout();
 }
 
-// Session-only world clock readout (Phase 8.1) — see `sessionDay`.
-function renderDayReadout() {
-  const el = $("day-readout");
-  if (el) el.textContent = `Day ${sessionDay}`;
+// Hours left in the current marching day (for the readout + HUD).
+function hoursLeft() {
+  return Math.max(0, Math.round((1 - dayUsed) * DAY_HOURS * 10) / 10);
 }
 
-// The single day-advance chokepoint (Phase 8.6). Every place a day passes —
-// travelling (8.4) and the stationary "Progress" control — goes through here,
-// so Arc B/C have ONE seam to hook: 8.10 faction turns and 8.12 auto-hooks will
-// fire as days pass. For now it only bumps the (session-only) clock.
-async function advanceDays(n) {
-  if (!Number.isFinite(n) || n < 1) return;
-  sessionDay += n;
-  // Fire the faction turns the elapsed days earn (Phase 8.10); each turn returns
-  // events (8.15) that we LOG as running commentary — expansion is played as
-  // subtext (the map + log), not auto-generated hooks.
-  if (current) {
-    const events = advanceFactionDays(current, n, current.seed);
+// Session-only world clock readout (Phase 8.1; fractional since the 11 travel
+// model) — the whole day plus how much of it is left.
+function renderDayReadout() {
+  const el = $("day-readout");
+  if (el) el.textContent = `Day ${sessionDay} · ${hoursLeft()}h left`;
+  renderTravelHud();
+}
+
+// The on-map travel HUD (Phase 11): day + hours-left + a day-progress bar, the
+// persistent travel-unit toggle (1 hex / ½ day / full day), and the hour / next-
+// dawn controls. Shown whenever a world is loaded.
+function renderTravelHud() {
+  const hud = $("travel-hud");
+  if (!hud) return;
+  hud.hidden = !current;
+  if (!current) return;
+  const clock = hud.querySelector(".thud-clock");
+  if (clock) clock.textContent = `Day ${sessionDay} · ${hoursLeft()}h left`;
+  const bar = hud.querySelector(".thud-fill");
+  if (bar) bar.style.width = `${Math.round(dayUsed * 100)}%`;
+  for (const btn of hud.querySelectorAll(".thud-units button")) {
+    btn.classList.toggle("active", btn.dataset.unit === travelUnit);
+  }
+}
+
+function setTravelUnit(u) {
+  if (!["hex", "half", "full"].includes(u)) return;
+  travelUnit = u;
+  renderTravelHud();
+}
+
+async function advanceHour() {
+  await advanceTime(1 / DAY_HOURS);
+}
+
+// Skip to the next dawn: finish the current day (or a whole day if already at dawn).
+async function advanceToNextDawn() {
+  await advanceTime(dayUsed > 0.001 ? 1 - dayUsed : 1);
+}
+
+// The single time-advance chokepoint (Phase 8.6, fractional since 11). Every
+// place time passes — travelling (fractional) and the stationary Progress
+// controls — goes through here. Whole-day BOUNDARIES crossed fire that many
+// faction turns (Phase 8.10); their events are logged as running commentary.
+async function advanceTime(days) {
+  if (!Number.isFinite(days) || days <= 0) return;
+  const before = sessionDay + dayUsed;
+  const after = before + days;
+  const wholeCrossed = Math.floor(after) - Math.floor(before);
+  sessionDay = Math.floor(after);
+  dayUsed = after - sessionDay;
+  if (current && wholeCrossed > 0) {
+    const events = advanceFactionDays(current, wholeCrossed, current.seed);
     logFactionEvents(events);
     applyFactionOccupancy(events);
   }
   renderDayReadout();
+}
+
+// Whole-day advance (the stationary "Progress N days" control) — keeps the
+// time-of-day, fires N faction turns.
+async function advanceDays(n) {
+  if (!Number.isFinite(n) || n < 1) return;
+  await advanceTime(n);
 }
 
 // Phase 8.15 (B) — narrate every faction event on the turn (both the day-tick and
@@ -732,7 +790,8 @@ async function onTravelToward() {
   const { q: aq, r: ar } = current.party;
   const encumbrance = current.party.encumbrance || "unencumbered";
   const originTerrain = (getHex(current, aq, ar) || {}).terrain;
-  const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance });
+  const { budget, maxHexes } = travelBudget();
+  const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance, budget, maxHexes });
   const tables = await loadTables(HEX_TABLE_IDS);
   revealSightAlong(originTerrain, aq, ar, result, tables);
   const destHex = getHex(current, selected.q, selected.r);
@@ -757,9 +816,21 @@ async function onTravelDirection(bearing) {
     addHex(current, hex);
     return hex.terrain;
   };
-  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt });
+  const { budget, maxHexes } = travelBudget();
+  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt, budget, maxHexes });
   revealSightAlong(originTerrain, aq, ar, result, tables);
   applyTravel(result, bearingWord(bearing), "bearing");
+}
+
+// The engine budget (in marching-days) + hex cap for the current travel unit,
+// measured against the time left in today. One hex = exactly one hex (its real
+// cost, may spill into tomorrow); half = ≤ half a day; full = the rest of today
+// (a fresh full day if today is already spent).
+function travelBudget() {
+  const remaining = 1 - dayUsed;
+  if (travelUnit === "hex") return { budget: Infinity, maxHexes: 1 };
+  if (travelUnit === "half") return { budget: remaining > 0.001 ? Math.min(remaining, 0.5) : 0.5 };
+  return { budget: remaining > 0.001 ? remaining : 1 }; // full
 }
 
 // Reveal the swath of country the party could SEE this day (Phase 8.4 follow-up):
@@ -779,7 +850,7 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 // tab (same "jump to the tab" convention as a new hook).
 async function applyTravel(result, aimLabel, aimKind) {
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
-  if (result.daySpent) await advanceDays(1); // one press = one day, through the shared clock
+  if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
   lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
   setPanelTab("travel");
   await persistAndRefresh();
@@ -2419,6 +2490,11 @@ function wire() {
   $("btn-legend").addEventListener("click", () => toggleLegend());
   $("btn-progress").addEventListener("click", onProgressDays);
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
+  $("btn-adv-hour").addEventListener("click", () => advanceHour());
+  $("btn-next-dawn").addEventListener("click", () => advanceToNextDawn());
+  for (const btn of document.querySelectorAll("#travel-hud .thud-units button")) {
+    btn.addEventListener("click", () => setTravelUnit(btn.dataset.unit));
+  }
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);

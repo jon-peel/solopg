@@ -236,7 +236,7 @@ test("planRoute prefers a road even via a longer (more-hexes) detour, when it's 
 test("travelDayToward: already at the target arrives immediately, no day spent", () => {
   const terr = boardRect(0, 2, 0, 0);
   const r = travelDayToward("seed", 0, 1, 0, 1, 0, terr, new Set());
-  assert.deepEqual(r, { finalPos: { q: 1, r: 0 }, hexesCrossed: 0, daySpent: false, arrived: true, log: [] });
+  assert.deepEqual(r, { finalPos: { q: 1, r: 0 }, hexesCrossed: 0, daySpent: false, daysUsed: 0, arrived: true, log: [] });
 });
 
 test("travelDayToward: one day of open Plains covers several hexes (pace 4/day)", () => {
@@ -451,4 +451,25 @@ test("sightHexes: overlapping discs along a path are deduped", () => {
 test("sightHexes: empty/absent path yields nothing", () => {
   assert.deepEqual(sightHexes([]), []);
   assert.deepEqual(sightHexes(undefined), []);
+});
+
+// --- Fractional day travel (Phase 11 travel model) -----------------------
+// Plains pace 4/day => 0.25 day per hex, so hex counts + daysUsed are exact and
+// independent of getting lost (every hex costs the same on all-Plains).
+
+test("travelDayBearing: maxHexes caps a move to one hex, reporting its fractional cost", () => {
+  const terrainAt = () => "Plains";
+  const r = travelDayBearing("seed", 0, 0, 0, 0, { terrainAt, maxHexes: 1 });
+  assert.equal(r.hexesCrossed, 1);
+  assert.ok(Math.abs(r.daysUsed - 0.25) < 1e-9, `daysUsed=${r.daysUsed}`);
+});
+
+test("travelDayBearing: a fractional budget stops the day early; default budget is a full day", () => {
+  const terrainAt = () => "Plains";
+  const half = travelDayBearing("seed", 0, 0, 0, 0, { terrainAt, budget: 0.5 });
+  assert.equal(half.hexesCrossed, 2); // 2 x 0.25 = 0.5
+  assert.ok(Math.abs(half.daysUsed - 0.5) < 1e-9);
+  const full = travelDayBearing("seed", 0, 0, 0, 0, { terrainAt }); // budget defaults to 1
+  assert.equal(full.hexesCrossed, 4); // 4 x 0.25 = 1.0
+  assert.ok(Math.abs(full.daysUsed - 1) < 1e-9);
 });

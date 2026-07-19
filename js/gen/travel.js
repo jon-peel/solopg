@@ -264,19 +264,21 @@ export function travelDay(seed, day, from, {
   nextIntended,
   terrainAt,
   roadAt = () => false,
+  budget = 1,
+  maxHexes = MAX_HEXES_PER_DAY,
 } = {}) {
   let cur = { q: from.q, r: from.r };
   const log = [];
   let daysUsed = 0;
   let crossed = 0;
 
-  if (atGoal(cur)) return { finalPos: cur, hexesCrossed: 0, daySpent: false, arrived: true, log };
+  if (atGoal(cur)) return { finalPos: cur, hexesCrossed: 0, daySpent: false, daysUsed: 0, arrived: true, log };
 
-  for (let guard = 0; guard < MAX_HEXES_PER_DAY; guard++) {
+  for (let guard = 0; guard < maxHexes; guard++) {
     const intended = nextIntended(cur);
     if (!intended) {
       // No onward route (toward, after drifting) — the day ends here.
-      return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, arrived: false, reason: "stranded", log };
+      return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, daysUsed, arrived: false, reason: "stranded", log };
     }
     const intendedDir = directionBetween(cur.q, cur.r, intended.q, intended.r);
     const passable = (dir) => {
@@ -295,7 +297,7 @@ export function travelDay(seed, day, from, {
     const nextTerrain = terrainAt(next.q, next.r);
     if (nextTerrain == null || paceFor(nextTerrain) <= 0) {
       // Water / edge blocks the step — the day ends at the water's edge.
-      return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, arrived: false, reason: "blocked", log };
+      return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, daysUsed, arrived: false, reason: "blocked", log };
     }
     const onRoad = roadAt(next.q, next.r);
     daysUsed += daysToCross(nextTerrain, { road: onRoad, encumbrance });
@@ -303,10 +305,10 @@ export function travelDay(seed, day, from, {
     log.push({ q: next.q, r: next.r, terrain: nextTerrain, road: onRoad, lost: deviated, dir: actualDir });
     cur = next;
 
-    if (atGoal(cur)) return { finalPos: cur, hexesCrossed: crossed, daySpent: true, arrived: true, log };
-    if (daysUsed >= 1) break; // the day's budget is spent (≥1 hex guaranteed above)
+    if (atGoal(cur)) return { finalPos: cur, hexesCrossed: crossed, daySpent: true, daysUsed, arrived: true, log };
+    if (daysUsed >= budget) break; // the budget is spent (≥1 hex guaranteed above)
   }
-  return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, arrived: false, log };
+  return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, daysUsed, arrived: false, log };
 }
 
 /**
@@ -320,7 +322,7 @@ export function travelDay(seed, day, from, {
  * @param {Set<string>} roadKeys
  * @param {{encumbrance?: string}} [opts]
  */
-export function travelDayToward(seed, day, aq, ar, bq, br, terrainByKey, roadKeys, { encumbrance = "unencumbered" } = {}) {
+export function travelDayToward(seed, day, aq, ar, bq, br, terrainByKey, roadKeys, { encumbrance = "unencumbered", budget = 1, maxHexes } = {}) {
   const target = { q: bq, r: br };
   return travelDay(seed, day, { q: aq, r: ar }, {
     encumbrance,
@@ -331,6 +333,8 @@ export function travelDayToward(seed, day, aq, ar, bq, br, terrainByKey, roadKey
     },
     terrainAt: (q, r) => terrainByKey.get(axialKey(q, r)) ?? null,
     roadAt: (q, r) => roadKeys.has(axialKey(q, r)),
+    budget,
+    maxHexes,
   });
 }
 
@@ -355,13 +359,15 @@ export function travelDayToward(seed, day, aq, ar, bq, br, terrainByKey, roadKey
  * @param {number|"N"|"S"} bearing  a hex direction 0-5, or "N"/"S"
  * @param {{encumbrance?: string, terrainAt: (q,r)=>string|null, roadAt?: (q,r)=>boolean}} opts
  */
-export function travelDayBearing(seed, day, aq, ar, bearing, { encumbrance = "unencumbered", terrainAt, roadAt } = {}) {
+export function travelDayBearing(seed, day, aq, ar, bearing, { encumbrance = "unencumbered", terrainAt, roadAt, budget = 1, maxHexes } = {}) {
   return travelDay(seed, day, { q: aq, r: ar }, {
     encumbrance,
     atGoal: () => false,
     nextIntended: bearingNextIntended(bearing),
     terrainAt,
     roadAt,
+    budget,
+    maxHexes,
   });
 }
 
