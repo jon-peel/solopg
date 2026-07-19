@@ -504,6 +504,34 @@ button:hover {
   text-align: center;
   margin-top: 0.25rem;
 }
+/* Pace tooltips: styled ink bubble to the LEFT (the panel hugs the right edge). */
+#pace-panel [data-tip] {
+  position: relative;
+}
+#pace-panel [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) translateX(3px);
+  white-space: nowrap;
+  background: var(--ink);
+  color: #f4ead2;
+  font-size: 0.72rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition-delay: 0.2s;
+  z-index: 60;
+}
+#pace-panel [data-tip]:hover::after,
+#pace-panel [data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
 
 #map-controls {
   position: absolute;

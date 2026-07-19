@@ -2344,12 +2344,29 @@ const TRAVEL_DIRS = [
   { bearing: 2, label: "NW", glyph: "↖" },
 ];
 
-// Double-click the party's hex → the 3-ring travel compass (inner = one hex,
-// middle = half day, outer = full day). Each pick travels that way in that unit.
+// Double-click is the travel/move gesture. On the party's OWN hex it opens the
+// 3-ring directional compass (inner = one hex, middle = half day, outer = full
+// day). On ANY OTHER hex it opens a small confirm menu to move there — so a move
+// always takes a deliberate second pick, never a stray double-click.
 function onMapDblClick({ q, r, clientX, clientY }) {
   if (!current || !current.party) return;
-  if (current.party.q !== q || current.party.r !== r) return; // party-hex gesture only
-  openTravelRadial({ clientX, clientY, dirs: TRAVEL_DIRS, dispatch: (bearing, unit) => onTravelDirection(bearing, unit) });
+  if (current.party.q === q && current.party.r === r) {
+    openTravelRadial({ clientX, clientY, dirs: TRAVEL_DIRS, dispatch: (bearing, unit) => onTravelDirection(bearing, unit) });
+    return;
+  }
+  selectCell(q, r); // the toward/teleport handlers act on the selected hex
+  const hex = getHex(current, q, r);
+  const placed = !!(hex && hex.placed);
+  const model = [
+    { kind: "leaf", id: "travelHere", glyph: "🥾", label: "Travel here", enabled: placed, reason: placed ? undefined : "Only toward a generated hex" },
+    { kind: "leaf", id: "placeHere", glyph: "🚩", label: "Place here" },
+  ];
+  openRadial({ clientX, clientY, model, dispatch: dblTravelDispatch });
+}
+
+function dblTravelDispatch(id) {
+  if (id === "travelHere") return onTravelToward();
+  if (id === "placeHere") return onPlaceParty();
 }
 
 async function onGenerateRandom() {
