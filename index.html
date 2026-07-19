@@ -69,7 +69,12 @@
              the persistent travel-unit toggle, and hour / next-dawn controls. -->
         <div id="travel-hud" hidden>
           <div class="thud-clock">Day 0 · 8h left</div>
-          <div class="thud-bar"><i class="thud-fill"></i></div>
+          <!-- Day-progress line with the hour / next-dawn controls to its right. -->
+          <div class="thud-timerow">
+            <div class="thud-bar"><i class="thud-fill"></i></div>
+            <button id="btn-adv-hour" title="Rest / wait one hour">+1h</button>
+            <button id="btn-next-dawn" title="Skip to the next dawn" aria-label="Skip to next dawn">🌅</button>
+          </div>
           <!-- Pace scale: base speed (fast) → heavily loaded (slow). Click to set. -->
           <div class="thud-pace">
             <span class="thud-axis">Base</span>
@@ -82,16 +87,7 @@
             <span class="thud-axis">Heavy</span>
           </div>
           <div class="thud-pace-cap">Unencumbered · ≈4 hex/day open</div>
-          <div class="thud-units" role="group" aria-label="Travel distance">
-            <button type="button" data-unit="hex" title="Each compass step moves one hex">1 hex</button>
-            <button type="button" data-unit="half" title="Each compass step travels up to half a day">½ day</button>
-            <button type="button" data-unit="full" title="Each compass step finishes the current day">Full day</button>
-          </div>
-          <div class="thud-controls">
-            <button id="btn-adv-hour" title="Rest / wait one hour">+1h</button>
-            <button id="btn-next-dawn" title="Skip to the next dawn">Next dawn</button>
-          </div>
-          <div class="thud-hint">Double-click the party to travel ↑↗→↘↓↙←↖</div>
+          <div class="thud-hint">Double-click the party to travel (inner = 1 hex · outer = 1 day)</div>
         </div>
         <!-- River/road drawing toolbar (top-center); shown only while drawing. -->
         <div id="draw-bar" hidden>

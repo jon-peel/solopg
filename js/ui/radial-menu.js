@@ -66,6 +66,54 @@ export function openRadial({ clientX, clientY, model, dispatch: onPick }) {
   draw();
 }
 
+// Concentric rings for the directional travel compass (Phase 11): distance is
+// the radius — inner = one hex, middle = half a day, outer = a full day.
+const TRAVEL_RINGS = [
+  { unit: "hex", suffix: "hex", r: 70, size: 38 },
+  { unit: "half", suffix: "½ day", r: 114, size: 44 },
+  { unit: "full", suffix: "day", r: 158, size: 48 },
+];
+const TRAVEL_PAD = 158 + 48; // outer radius + node, kept on-screen
+
+const unitWord = (u) => (u === "hex" ? "One hex" : u === "half" ? "Half day" : "Full day");
+
+/**
+ * A 3-ring compass for directional travel (double-click the party). `dirs` is
+ * the 8 compass points in ring order (N at top, clockwise), each
+ * { bearing, glyph, label }. A pick fires onPick(bearing, unit).
+ */
+export function openTravelRadial({ clientX, clientY, dirs, dispatch: onPick }) {
+  if (!el()) return;
+  wireOnce();
+  ringEl.classList.add("open");
+  const host = ringEl.parentElement || ringEl;
+  const { x, y } = ringCenter(clientX, clientY, host.getBoundingClientRect(), TRAVEL_PAD);
+  state = { x, y, stack: [{ items: [] }] }; // depth 1 → Esc / right-click just close
+  clearNodes();
+  for (const ring of TRAVEL_RINGS) {
+    ringEl.appendChild(guide(x, y, ring.r));
+    dirs.forEach((d, i) => {
+      const ang = -Math.PI / 2 + (Math.PI * 2 * i) / dirs.length; // N at top, clockwise
+      const n = document.createElement("div");
+      n.className = "ring-node travel";
+      n.style.left = x + ring.r * Math.cos(ang) + "px";
+      n.style.top = y + ring.r * Math.sin(ang) + "px";
+      n.style.width = n.style.height = ring.size + "px";
+      n.title = `${unitWord(ring.unit)} — ${d.label}`;
+      n.innerHTML = `<span class="glyph">${d.glyph}</span><span class="label">${ring.suffix}</span>`;
+      n.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); onPick(d.bearing, ring.unit); });
+      ringEl.appendChild(n);
+    });
+  }
+  const hub = document.createElement("div");
+  hub.className = "ring-hub";
+  hub.style.left = x + "px";
+  hub.style.top = y + "px";
+  hub.innerHTML = `<span class="hub-top">✕</span><span class="hub-sub">Close</span>`;
+  hub.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); });
+  ringEl.appendChild(hub);
+}
+
 export function closeRadial() {
   if (!ringEl) return;
   state = null;

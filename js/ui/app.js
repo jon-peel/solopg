@@ -73,7 +73,7 @@ import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
 import { POI_GLYPHS, POI_DOT_COLORS, factionColor, factionHatchDeg } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
-import { openRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
+import { openRadial, openTravelRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
 
 // Tables the hex generator rolls on. Settlement/POI presence are now driven by
 // the terrain profile (not tables); settlement-size is still rolled (capped).
@@ -155,10 +155,6 @@ let sessionDay = 0;
 // day boundaries fire faction turns. Session-only, like sessionDay.
 let dayUsed = 0;
 const DAY_HOURS = 8;
-
-// Persistent travel unit for the compass ring (double-click the party): one hex,
-// half a day, or a full day. Set from the travel HUD; each direction travels in it.
-let travelUnit = "full";
 
 // Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
 // sessionDay: replaced by each travel press, reset on world switch.
@@ -356,9 +352,6 @@ function renderTravelHud() {
   if (clock) clock.textContent = `Day ${sessionDay} · ${hoursLeft()}h left`;
   const bar = hud.querySelector(".thud-fill");
   if (bar) bar.style.width = `${Math.round(dayUsed * 100)}%`;
-  for (const btn of hud.querySelectorAll(".thud-units button")) {
-    btn.classList.toggle("active", btn.dataset.unit === travelUnit);
-  }
   // Pace scale: mark the active tier + caption it with the open-ground pace.
   const enc = (current.party && current.party.encumbrance) || "unencumbered";
   for (const btn of hud.querySelectorAll(".thud-scale button")) {
@@ -377,12 +370,6 @@ const ENC_LABEL = {
   encumbered: "Encumbered",
   heavy: "Heavily loaded",
 };
-
-function setTravelUnit(u) {
-  if (!["hex", "half", "full"].includes(u)) return;
-  travelUnit = u;
-  renderTravelHud();
-}
 
 async function advanceHour() {
   await advanceTime(1 / DAY_HOURS);
@@ -807,7 +794,7 @@ async function onTravelToward() {
   const { q: aq, r: ar } = current.party;
   const encumbrance = current.party.encumbrance || "unencumbered";
   const originTerrain = (getHex(current, aq, ar) || {}).terrain;
-  const { budget, maxHexes } = travelBudget();
+  const { budget, maxHexes } = travelBudget("full"); // "Travel toward" heads a full day at a time
   const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance, budget, maxHexes });
   const tables = await loadTables(HEX_TABLE_IDS);
   revealSightAlong(originTerrain, aq, ar, result, tables);
@@ -818,7 +805,7 @@ async function onTravelToward() {
 // Travel ONE day in a hex direction (Phase 8.4) — pushes into the unknown,
 // lazily generating each frontier hex the party steps into (same seam as
 // area/hook generation). Off-road (cross-country in a compass line).
-async function onTravelDirection(bearing) {
+async function onTravelDirection(bearing, unit = "full") {
   if (!current || !current.party) return;
   const tables = await loadTables(HEX_TABLE_IDS);
   const { q: aq, r: ar } = current.party;
@@ -833,20 +820,20 @@ async function onTravelDirection(bearing) {
     addHex(current, hex);
     return hex.terrain;
   };
-  const { budget, maxHexes } = travelBudget();
+  const { budget, maxHexes } = travelBudget(unit);
   const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt, budget, maxHexes });
   revealSightAlong(originTerrain, aq, ar, result, tables);
   applyTravel(result, bearingWord(bearing), "bearing");
 }
 
-// The engine budget (in marching-days) + hex cap for the current travel unit,
-// measured against the time left in today. One hex = exactly one hex (its real
-// cost, may spill into tomorrow); half = ≤ half a day; full = the rest of today
-// (a fresh full day if today is already spent).
-function travelBudget() {
+// The engine budget (in marching-days) + hex cap for a travel unit, measured
+// against the time left today. One hex = exactly one hex (its real cost, may
+// spill into tomorrow); half = ≤ half a day; full = the rest of today (a fresh
+// full day if today is already spent).
+function travelBudget(unit) {
   const remaining = 1 - dayUsed;
-  if (travelUnit === "hex") return { budget: Infinity, maxHexes: 1 };
-  if (travelUnit === "half") return { budget: remaining > 0.001 ? Math.min(remaining, 0.5) : 0.5 };
+  if (unit === "hex") return { budget: Infinity, maxHexes: 1 };
+  if (unit === "half") return { budget: remaining > 0.001 ? Math.min(remaining, 0.5) : 0.5 };
   return { budget: remaining > 0.001 ? remaining : 1 }; // full
 }
 
@@ -2348,32 +2335,28 @@ function radialDispatch(id, value) {
     case "setOwner": return onSetHexFaction(value); // value = faction id, or null for None
     case "reseat": return onReseatFaction(value); // value = faction id to seat here
     case "promote": return onPromotePoi(value.poiId, value.archetype);
-    case "travelDir": return onTravelDirection(value); // value = ROSE bearing id
   }
 }
 
-// Travel radial (Phase 11.5): double-click the party's hex to open a compass
-// ring — one leaf per heading, laid out N-at-top / clockwise to match the ring's
-// slot order. `value` is the bearing id onTravelDirection expects.
+// The 8 compass headings for the travel ring, in ring order (N at top, clockwise).
+// `bearing` is what onTravelDirection / the engine expect (ROSE ids).
 const TRAVEL_DIRS = [
-  { id: "N", label: "N", glyph: "↑" },
-  { id: 1, label: "NE", glyph: "↗" },
-  { id: 0, label: "E", glyph: "→" },
-  { id: 5, label: "SE", glyph: "↘" },
-  { id: "S", label: "S", glyph: "↓" },
-  { id: 4, label: "SW", glyph: "↙" },
-  { id: 3, label: "W", glyph: "←" },
-  { id: 2, label: "NW", glyph: "↖" },
+  { bearing: "N", label: "N", glyph: "↑" },
+  { bearing: 1, label: "NE", glyph: "↗" },
+  { bearing: 0, label: "E", glyph: "→" },
+  { bearing: 5, label: "SE", glyph: "↘" },
+  { bearing: "S", label: "S", glyph: "↓" },
+  { bearing: 4, label: "SW", glyph: "↙" },
+  { bearing: 3, label: "W", glyph: "←" },
+  { bearing: 2, label: "NW", glyph: "↖" },
 ];
 
+// Double-click the party's hex → the 3-ring travel compass (inner = one hex,
+// middle = half day, outer = full day). Each pick travels that way in that unit.
 function onMapDblClick({ q, r, clientX, clientY }) {
   if (!current || !current.party) return;
-  // Only the party's own hex opens the travel ring (that's the gesture).
-  if (current.party.q !== q || current.party.r !== r) return;
-  const model = TRAVEL_DIRS.map((d) => ({
-    kind: "leaf", id: "travelDir", glyph: d.glyph, label: d.label, value: d.id, enabled: true,
-  }));
-  openRadial({ clientX, clientY, model, dispatch: radialDispatch });
+  if (current.party.q !== q || current.party.r !== r) return; // party-hex gesture only
+  openTravelRadial({ clientX, clientY, dirs: TRAVEL_DIRS, dispatch: (bearing, unit) => onTravelDirection(bearing, unit) });
 }
 
 async function onGenerateRandom() {
@@ -2509,9 +2492,6 @@ function wire() {
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
   $("btn-adv-hour").addEventListener("click", () => advanceHour());
   $("btn-next-dawn").addEventListener("click", () => advanceToNextDawn());
-  for (const btn of document.querySelectorAll("#travel-hud .thud-units button")) {
-    btn.addEventListener("click", () => setTravelUnit(btn.dataset.unit));
-  }
   for (const btn of document.querySelectorAll("#travel-hud .thud-scale button")) {
     btn.addEventListener("click", () => onSetEncumbrance(btn.dataset.enc));
   }
