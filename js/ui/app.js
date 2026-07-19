@@ -62,6 +62,7 @@ import {
   setHookFocus,
   setRiverDraft,
   setRoadDraft,
+  setTravelPath,
   zoomStep,
   setZoom,
   getZoom,
@@ -219,6 +220,7 @@ async function setCurrent(world) {
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
   lastDay = null; // the last day's travel report is ephemeral, per-world (Phase 8.4)
+  setTravelPath(null); // clear the previous world's movement trail
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
@@ -846,11 +848,13 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 // if a day was actually spent), stash the report, and surface it on the Travel
 // tab (same "jump to the tab" convention as a new hook).
 async function applyTravel(result, aimLabel, aimKind) {
+  const origin = { q: current.party.q, r: current.party.r }; // before the move
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
   if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
   lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
   setPanelTab("travel");
   await persistAndRefresh();
+  setTravelPath([origin, ...result.log.map((l) => ({ q: l.q, r: l.r }))]); // draw the trail (after the refresh's setWorld)
 }
 
 // One-line summary of a day's travel, composed here (app knows the day, the
@@ -2355,9 +2359,12 @@ function currentHexCost() {
   return daysToCross(terrain, { road: onRoad, encumbrance: p.encumbrance || "unencumbered" });
 }
 
-// Enough of today left to enter at least one hex? If not, travel is disabled and
-// the party must rest to dawn — no more spilling a half-started hex into tomorrow.
+// Can the party set out at all? A FRESH day can always commit to at least one
+// hex (a full day's march is ≥1 hex even where a hex costs more than a day). Once
+// the day is partly spent, travel needs enough left for a hex — else it greys out
+// and the party rests to dawn (no half-started hex spilling into tomorrow).
 function canTravelNow() {
+  if (dayUsed < 1e-9) return true;
   return 1 - dayUsed >= currentHexCost() - 1e-9;
 }
 

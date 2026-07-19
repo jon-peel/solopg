@@ -83,6 +83,14 @@ export function setWorld(w) {
   render();
 }
 
+let travelPath = null; // the last move's path [{q,r}, …] (origin + each hex entered)
+
+/** Show the trail of the party's last move (null clears it). */
+export function setTravelPath(path) {
+  travelPath = path && path.length > 1 ? path : null;
+  render();
+}
+
 export function setSelected(coordOrNull) {
   selected = coordOrNull;
   render();
@@ -317,6 +325,8 @@ export function render() {
     if (t) drawHookFocus(t, FOCUS_TARGET);
   }
 
+  // 4c. The last move's trail (Phase 11) — under the party marker.
+  drawTravelPath();
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
   //    TOP of everything else and visible at every zoom, regardless of whether
@@ -1075,6 +1085,41 @@ function drawSeatMark(cx, cy, color) {
   ctx.textBaseline = "middle";
   ctx.font = `${r * 1.6}px serif`;
   ctx.fillText("★", x, y + r * 0.08);
+}
+
+// The last move's trail: a dark-cased gold dashed line through the hex centres
+// the party crossed, with a dot at each hex entered — so a multi-hex day reads.
+function drawTravelPath() {
+  if (!travelPath || travelPath.length < 2) return;
+  const pts = travelPath.map((c) => axialToPixel(c.q, c.r, HEX_SIZE));
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  };
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(40,28,10,0.5)"; // dark casing
+  ctx.lineWidth = 4.5 / camera.scale;
+  trace();
+  ctx.stroke();
+  ctx.strokeStyle = "#c8892b"; // gold trail
+  ctx.lineWidth = 2.2 / camera.scale;
+  ctx.setLineDash([6 / camera.scale, 5 / camera.scale]);
+  trace();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (let i = 1; i < pts.length; i++) {
+    ctx.beginPath();
+    ctx.arc(pts[i].x, pts[i].y, 3.5 / camera.scale, 0, Math.PI * 2);
+    ctx.fillStyle = "#c8892b";
+    ctx.fill();
+    ctx.lineWidth = 1.2 / camera.scale;
+    ctx.strokeStyle = "rgba(40,28,10,0.6)";
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // Party position (Phase 8.1): a bold magenta ring — a colour not already used

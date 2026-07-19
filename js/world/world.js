@@ -158,7 +158,8 @@ export function removeHex(world, q, r) {
 
 /** Move the party marker to axial (q,r). Mutates and returns the world. */
 export function setPartyPosition(world, q, r) {
-  world.party = { q, r };
+  // Preserve the rest of the party state (encumbrance, …) — only the position moves.
+  world.party = { ...world.party, q, r };
   return world;
 }
 
