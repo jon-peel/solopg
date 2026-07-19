@@ -360,7 +360,7 @@ function renderTravelHud() {
   const cap = stack.querySelector(".pace-cap");
   if (cap) {
     const hpd = Math.round(TRAVEL_COST.Plains * (ENCUMBRANCE_FACTOR[enc] ?? 1));
-    cap.textContent = `≈${hpd} hex/day open`;
+    cap.textContent = `≈${hpd}/d`;
   }
 }
 

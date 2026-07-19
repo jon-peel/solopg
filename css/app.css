@@ -382,10 +382,13 @@ button:hover {
   z-index: 6;
   display: flex;
   flex-direction: column;
+  align-items: flex-end; /* narrow pace panel right-aligns under the time card */
   gap: 0.4rem;
-  width: 12.5rem;
   font-size: 0.75rem;
   color: var(--ink);
+}
+#travel-hud {
+  width: 12.5rem;
 }
 #hud-stack[hidden] {
   display: none;
@@ -446,60 +449,60 @@ button:hover {
 #btn-next-dawn {
   font-size: 0.95rem;
 }
-/* Pace panel: a vertical scale of tiers, base speed (full) → heavy (short). */
+/* Pace panel: a narrow vertical speed scale (matches the zoom-HUD width). Each
+   tier is a thin bar whose fill encodes pace (base = full, heavy = short); the
+   tier name lives in the tooltip. */
+#pace-panel {
+  width: 2.75rem;
+}
 .pace-title {
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
+  font-size: 0.55rem;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin-bottom: 0.25rem;
+  text-align: center;
+  margin-bottom: 0.2rem;
 }
 .pace-scale-v {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .pace-scale-v button {
   position: relative;
   display: block;
   width: 100%;
-  text-align: left;
-  padding: 0.12rem 0.4rem;
-  font-size: 0.72rem;
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  height: 0.6rem;
+  padding: 0;
+  background: var(--paper-sunk);
+  border: 1px solid var(--edge);
+  border-radius: 2px;
   cursor: pointer;
   overflow: hidden;
 }
-/* A speed bar behind the label: width encodes pace (fast = full). */
 .pace-scale-v button::before {
   content: "";
   position: absolute;
   inset: 0;
   width: var(--speed, 100%);
   background: linear-gradient(90deg, var(--accent-2), var(--gold));
-  opacity: 0.28;
-}
-.pace-scale-v button span {
-  position: relative;
+  opacity: 0.65;
 }
 .pace-scale-v button:hover {
-  border-color: var(--edge);
+  border-color: var(--accent);
 }
 .pace-scale-v button.active {
   border-color: var(--accent);
-  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .pace-scale-v button.active::before {
-  opacity: 0.5;
+  opacity: 1;
 }
 .pace-cap {
-  font-size: 0.66rem;
+  font-size: 0.6rem;
   color: var(--ink-soft);
   text-align: center;
-  margin-top: 0.3rem;
+  margin-top: 0.25rem;
 }
 
 #map-controls {
