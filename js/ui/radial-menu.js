@@ -81,8 +81,11 @@ const unitWord = (u) => (u === "hex" ? "One hex" : u === "half" ? "Half day" : "
  * A 3-ring compass for directional travel (double-click the party). `dirs` is
  * the 8 compass points in ring order (N at top, clockwise), each
  * { bearing, glyph, label }. A pick fires onPick(bearing, unit).
+ *
+ * When `disabled` (no daylight left to cross even one hex), the direction nodes
+ * grey out and the hub becomes a "Rest to dawn" action (calls `onRest`).
  */
-export function openTravelRadial({ clientX, clientY, dirs, dispatch: onPick }) {
+export function openTravelRadial({ clientX, clientY, dirs, dispatch: onPick, disabled = false, onRest }) {
   if (!el()) return;
   wireOnce();
   ringEl.classList.add("open");
@@ -95,13 +98,13 @@ export function openTravelRadial({ clientX, clientY, dirs, dispatch: onPick }) {
     dirs.forEach((d, i) => {
       const ang = -Math.PI / 2 + (Math.PI * 2 * i) / dirs.length; // N at top, clockwise
       const n = document.createElement("div");
-      n.className = "ring-node travel";
+      n.className = "ring-node travel" + (disabled ? " disabled" : "");
       n.style.left = x + ring.r * Math.cos(ang) + "px";
       n.style.top = y + ring.r * Math.sin(ang) + "px";
       n.style.width = n.style.height = ring.size + "px";
-      n.title = `${unitWord(ring.unit)} — ${d.label}`;
+      n.title = disabled ? "Not enough daylight — rest to dawn" : `${unitWord(ring.unit)} — ${d.label}`;
       n.innerHTML = `<span class="glyph">${d.glyph}</span><span class="label">${ring.suffix}</span>`;
-      n.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); onPick(d.bearing, ring.unit); });
+      if (!disabled) n.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); onPick(d.bearing, ring.unit); });
       ringEl.appendChild(n);
     });
   }
@@ -109,8 +112,13 @@ export function openTravelRadial({ clientX, clientY, dirs, dispatch: onPick }) {
   hub.className = "ring-hub";
   hub.style.left = x + "px";
   hub.style.top = y + "px";
-  hub.innerHTML = `<span class="hub-top">✕</span><span class="hub-sub">Close</span>`;
-  hub.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); });
+  if (disabled && onRest) {
+    hub.innerHTML = `<span class="hub-top">🌅</span><span class="hub-sub">Rest to dawn</span>`;
+    hub.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); onRest(); });
+  } else {
+    hub.innerHTML = `<span class="hub-top">✕</span><span class="hub-sub">Close</span>`;
+    hub.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); });
+  }
   ringEl.appendChild(hub);
 }
 

@@ -31,7 +31,7 @@ import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanc
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
-import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR } from "../gen/travel.js";
+import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -2344,21 +2344,50 @@ const TRAVEL_DIRS = [
   { bearing: 2, label: "NW", glyph: "↖" },
 ];
 
+// The time (marching-days) to cross one hex of the party's CURRENT terrain at
+// its pace — the reference for "is there daylight left to move at all today".
+function currentHexCost() {
+  const p = current && current.party;
+  if (!p) return Infinity;
+  const hex = getHex(current, p.q, p.r);
+  const terrain = (hex && hex.terrain) || "Plains";
+  const onRoad = roadHexKeySet(current.roads || []).has(axialKey(p.q, p.r));
+  return daysToCross(terrain, { road: onRoad, encumbrance: p.encumbrance || "unencumbered" });
+}
+
+// Enough of today left to enter at least one hex? If not, travel is disabled and
+// the party must rest to dawn — no more spilling a half-started hex into tomorrow.
+function canTravelNow() {
+  return 1 - dayUsed >= currentHexCost() - 1e-9;
+}
+
 // Double-click is the travel/move gesture. On the party's OWN hex it opens the
 // 3-ring directional compass (inner = one hex, middle = half day, outer = full
 // day). On ANY OTHER hex it opens a small confirm menu to move there — so a move
-// always takes a deliberate second pick, never a stray double-click.
+// always takes a deliberate second pick, never a stray double-click. When there
+// isn't daylight for even one hex, movement greys out and the compass offers
+// "Rest to dawn" instead.
 function onMapDblClick({ q, r, clientX, clientY }) {
   if (!current || !current.party) return;
   if (current.party.q === q && current.party.r === r) {
-    openTravelRadial({ clientX, clientY, dirs: TRAVEL_DIRS, dispatch: (bearing, unit) => onTravelDirection(bearing, unit) });
+    openTravelRadial({
+      clientX, clientY, dirs: TRAVEL_DIRS,
+      dispatch: (bearing, unit) => onTravelDirection(bearing, unit),
+      disabled: !canTravelNow(),
+      onRest: advanceToNextDawn,
+    });
     return;
   }
   selectCell(q, r); // the toward/teleport handlers act on the selected hex
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
+  const canMove = canTravelNow();
   const model = [
-    { kind: "leaf", id: "travelHere", glyph: "🥾", label: "Travel here", enabled: placed, reason: placed ? undefined : "Only toward a generated hex" },
+    {
+      kind: "leaf", id: "travelHere", glyph: "🥾", label: "Travel here",
+      enabled: placed && canMove,
+      reason: !placed ? "Only toward a generated hex" : !canMove ? "Not enough daylight — rest to dawn" : undefined,
+    },
     { kind: "leaf", id: "placeHere", glyph: "🚩", label: "Place here" },
   ];
   openRadial({ clientX, clientY, model, dispatch: dblTravelDispatch });
