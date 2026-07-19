@@ -67,27 +67,27 @@
         <div id="travel-tip" hidden></div>
         <!-- Travel HUD (Phase 11): day clock + hours left, a day-progress bar,
              the persistent travel-unit toggle, and hour / next-dawn controls. -->
-        <div id="travel-hud" hidden>
-          <div class="thud-clock">Day 0 · 8h left</div>
-          <!-- Day-progress line with the hour / next-dawn controls to its right. -->
-          <div class="thud-timerow">
-            <div class="thud-bar"><i class="thud-fill"></i></div>
-            <button id="btn-adv-hour" title="Rest / wait one hour">+1h</button>
-            <button id="btn-next-dawn" title="Skip to the next dawn" aria-label="Skip to next dawn">🌅</button>
-          </div>
-          <!-- Pace scale: base speed (fast) → heavily loaded (slow). Click to set. -->
-          <div class="thud-pace">
-            <span class="thud-axis">Base</span>
-            <div class="thud-scale" role="group" aria-label="Party pace">
-              <button type="button" data-enc="unencumbered" title="Unencumbered — full base speed"><i style="height:100%"></i></button>
-              <button type="button" data-enc="light" title="Lightly loaded — ¾ speed"><i style="height:72%"></i></button>
-              <button type="button" data-enc="encumbered" title="Encumbered — ½ speed"><i style="height:50%"></i></button>
-              <button type="button" data-enc="heavy" title="Heavily loaded — ¼ speed"><i style="height:28%"></i></button>
+        <div id="hud-stack" hidden>
+          <!-- Slim time card: clock + day-progress bar with hour / next-dawn. -->
+          <div id="travel-hud">
+            <div class="thud-clock">Day 0 · 8h left</div>
+            <div class="thud-timerow">
+              <div class="thud-bar"><i class="thud-fill"></i></div>
+              <button id="btn-adv-hour" title="Rest / wait one hour">+1h</button>
+              <button id="btn-next-dawn" title="Skip to the next dawn" aria-label="Skip to next dawn">🌅</button>
             </div>
-            <span class="thud-axis">Heavy</span>
           </div>
-          <div class="thud-pace-cap">Unencumbered · ≈4 hex/day open</div>
-          <div class="thud-hint">Double-click the party to travel (inner = 1 hex · outer = 1 day)</div>
+          <!-- Pace panel: a vertical speed scale, base (fast) → heavy (slow). -->
+          <div id="pace-panel">
+            <div class="pace-title">Pace</div>
+            <div class="pace-scale-v" role="group" aria-label="Party pace">
+              <button type="button" data-enc="unencumbered" style="--speed:100%" title="Unencumbered — full base speed"><span>Unencumbered</span></button>
+              <button type="button" data-enc="light" style="--speed:75%" title="Lightly loaded — ¾ speed"><span>Lightly loaded</span></button>
+              <button type="button" data-enc="encumbered" style="--speed:50%" title="Encumbered — ½ speed"><span>Encumbered</span></button>
+              <button type="button" data-enc="heavy" style="--speed:25%" title="Heavily loaded — ¼ speed"><span>Heavily loaded</span></button>
+            </div>
+            <div class="pace-cap">≈4 hex/day open</div>
+          </div>
         </div>
         <!-- River/road drawing toolbar (top-center); shown only while drawing. -->
         <div id="draw-bar" hidden>

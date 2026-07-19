@@ -344,32 +344,25 @@ function renderDayReadout() {
 // persistent travel-unit toggle (1 hex / ½ day / full day), and the hour / next-
 // dawn controls. Shown whenever a world is loaded.
 function renderTravelHud() {
-  const hud = $("travel-hud");
-  if (!hud) return;
-  hud.hidden = !current;
+  const stack = $("hud-stack");
+  if (!stack) return;
+  stack.hidden = !current;
   if (!current) return;
-  const clock = hud.querySelector(".thud-clock");
+  const clock = stack.querySelector(".thud-clock");
   if (clock) clock.textContent = `Day ${sessionDay} · ${hoursLeft()}h left`;
-  const bar = hud.querySelector(".thud-fill");
+  const bar = stack.querySelector(".thud-fill");
   if (bar) bar.style.width = `${Math.round(dayUsed * 100)}%`;
-  // Pace scale: mark the active tier + caption it with the open-ground pace.
+  // Pace panel: mark the active tier + caption with the open-ground pace.
   const enc = (current.party && current.party.encumbrance) || "unencumbered";
-  for (const btn of hud.querySelectorAll(".thud-scale button")) {
+  for (const btn of stack.querySelectorAll(".pace-scale-v button")) {
     btn.classList.toggle("active", btn.dataset.enc === enc);
   }
-  const cap = hud.querySelector(".thud-pace-cap");
+  const cap = stack.querySelector(".pace-cap");
   if (cap) {
     const hpd = Math.round(TRAVEL_COST.Plains * (ENCUMBRANCE_FACTOR[enc] ?? 1));
-    cap.textContent = `${ENC_LABEL[enc]} · ≈${hpd} hex/day open`;
+    cap.textContent = `≈${hpd} hex/day open`;
   }
 }
-
-const ENC_LABEL = {
-  unencumbered: "Unencumbered",
-  light: "Lightly loaded",
-  encumbered: "Encumbered",
-  heavy: "Heavily loaded",
-};
 
 async function advanceHour() {
   await advanceTime(1 / DAY_HOURS);
@@ -2492,7 +2485,7 @@ function wire() {
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
   $("btn-adv-hour").addEventListener("click", () => advanceHour());
   $("btn-next-dawn").addEventListener("click", () => advanceToNextDawn());
-  for (const btn of document.querySelectorAll("#travel-hud .thud-scale button")) {
+  for (const btn of document.querySelectorAll("#pace-panel .pace-scale-v button")) {
     btn.addEventListener("click", () => onSetEncumbrance(btn.dataset.enc));
   }
   $("world-select").addEventListener("change", onSelectWorld);
