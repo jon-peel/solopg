@@ -254,6 +254,11 @@ export function render() {
     }
   }
 
+  // 2a‴. Faction territory OUTLINE + seat (Phase 11.4) — the inked sphere-of-
+  //      influence border, over the roads/markers but UNDER the labels, hover
+  //      readout, selection, hooks and party so those all stay legible on top.
+  drawFactionOutline(minX, minY, maxX, maxY, margin);
+
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
   if (detail) {
@@ -277,15 +282,22 @@ export function render() {
   if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
     strokeHex(c.x, c.y, MAP.hoverStroke, 2);
-    // Reveal a name on hover (names are hidden by default): a GM's own hex name
-    // wins, then a settlement's name, else the region this tract belongs to.
+    // Reveal names on hover (hidden by default): the GM's own hex name (or a
+    // settlement's name) on top, then the region, then — coloured to match its
+    // territory — the faction that runs the hex. Multi-line when several apply.
     const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
     if (detail && hh && hh.placed) {
-      const label = hh.name
+      const primary = hh.name
         || (hh.settlement && hh.settlement.present
           ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain })
-          : regionNameAt(hovered.q, hovered.r));
-      if (label) drawHexLabel(c.x, c.y, label);
+          : null);
+      const region = regionNameAt(hovered.q, hovered.r);
+      const fac = factionAt(hovered.q, hovered.r);
+      const lines = [];
+      if (primary) lines.push(primary);
+      if (region && region !== primary) lines.push(region);
+      if (fac) lines.push({ text: `⚑ ${fac.name}`, color: darkenRgba(fac.color, 0.25, 1) });
+      if (lines.length) drawHexLabel(c.x, c.y, lines);
     }
   }
 
@@ -304,10 +316,6 @@ export function render() {
     if (t) drawHookFocus(t, FOCUS_TARGET);
   }
 
-  // 4b. Faction territory OUTLINE + seat (Phase 11.4) — the inked sphere-of-
-  //     influence border around each power's holdings, plus a star on its seat,
-  //     drawn over roads/markers (UNDER the party marker) so it reads crisply.
-  drawFactionOutline(minX, minY, maxX, maxY, margin);
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
   //    TOP of everything else and visible at every zoom, regardless of whether
@@ -820,24 +828,46 @@ function drawDetailMarkers(cx, cy, hex) {
   if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
 }
 
-// A user's hex name, as a small pill below the hex (legible over terrain art).
-function drawHexLabel(cx, cy, name) {
+// The faction (if any) that runs hex (q, r), with its map colour — for the
+// hover readout. Returns null when the hex is unowned.
+function factionAt(q, r) {
+  if (!world || !Array.isArray(world.factions)) return null;
+  const key = axialKey(q, r);
+  for (let i = 0; i < world.factions.length; i++) {
+    const f = world.factions[i];
+    if ((f.holdings || []).some((h) => axialKey(h.q, h.r) === key)) {
+      return { name: f.name || "Faction", color: factionColor(i) };
+    }
+  }
+  return null;
+}
+
+// A small pill below the hex (legible over terrain art). `label` is a string or
+// an array of lines, each a string or a { text, color } for a coloured line.
+function drawHexLabel(cx, cy, label) {
+  const lines = (Array.isArray(label) ? label : [label])
+    .map((l) => (typeof l === "string" ? { text: l, color: MAP.labelInk } : l))
+    .map((l) => ({ color: l.color || MAP.labelInk, text: l.text.length > 20 ? l.text.slice(0, 19) + "…" : l.text }));
+  if (!lines.length) return;
   const fs = Math.max(8, HEX_SIZE * 0.34);
   ctx.font = `${fs}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const text = name.length > 18 ? name.slice(0, 17) + "…" : name;
-  const w = ctx.measureText(text).width;
-  const padX = fs * 0.4;
-  const y = cy + HEX_SIZE * 0.66;
-  const bx = cx - w / 2 - padX, by = y - fs * 0.7, bw = w + padX * 2, bh = fs * 1.4;
+  let maxW = 0;
+  for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l.text).width);
+  const padX = fs * 0.45, padY = fs * 0.3, lineH = fs * 1.25;
+  const bw = maxW + padX * 2;
+  const bh = lineH * lines.length + padY * 2 - (lineH - fs);
+  const bx = cx - bw / 2, by = cy + HEX_SIZE * 0.6;
   ctx.fillStyle = MAP.labelBg;
   ctx.fillRect(bx, by, bw, bh);
   ctx.lineWidth = 1 / camera.scale;
   ctx.strokeStyle = MAP.labelEdge;
   ctx.strokeRect(bx, by, bw, bh);
-  ctx.fillStyle = MAP.labelInk;
-  ctx.fillText(text, cx, y);
+  lines.forEach((l, i) => {
+    ctx.fillStyle = l.color;
+    ctx.fillText(l.text, cx, by + padY + lineH * i + fs * 0.5);
+  });
 }
 
 // Simplified tier (zoomed out): settlement size-marker centered on the tile +
