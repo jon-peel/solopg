@@ -473,3 +473,12 @@ test("travelDayBearing: a fractional budget stops the day early; default budget 
   assert.equal(full.hexesCrossed, 4); // 4 x 0.25 = 1.0
   assert.ok(Math.abs(full.daysUsed - 1) < 1e-9);
 });
+
+test("travelDayBearing: a partial budget fills the day without overshooting into the next", () => {
+  const terrainAt = () => "Plains"; // 0.25 day/hex
+  // 0.6 left in the day: 2 hexes (0.5) fit, a 3rd (0.75) would spill — so stop at 2.
+  const r = travelDayBearing("seed", 0, 0, 0, 0, { terrainAt, budget: 0.6 });
+  assert.equal(r.hexesCrossed, 2);
+  assert.ok(Math.abs(r.daysUsed - 0.5) < 1e-9, `daysUsed=${r.daysUsed} should be 0.5, not >0.6`);
+  assert.ok(r.daysUsed <= 0.6, "must never exceed the budget past the first hex");
+});

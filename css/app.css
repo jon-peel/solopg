@@ -478,14 +478,16 @@ button:hover {
   border: 1px solid var(--edge);
   border-radius: 2px;
   cursor: pointer;
-  overflow: hidden;
 }
+/* No overflow:hidden on the button (it would clip the tooltip) — the fill just
+   rounds its own corners instead. */
 .pace-scale-v button::before {
   content: "";
   position: absolute;
   inset: 0;
   width: var(--speed, 100%);
   background: linear-gradient(90deg, var(--accent-2), var(--gold));
+  border-radius: 2px;
   opacity: 0.65;
 }
 .pace-scale-v button:hover {

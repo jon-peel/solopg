@@ -300,13 +300,17 @@ export function travelDay(seed, day, from, {
       return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, daysUsed, arrived: false, reason: "blocked", log };
     }
     const onRoad = roadAt(next.q, next.r);
-    daysUsed += daysToCross(nextTerrain, { road: onRoad, encumbrance });
+    const cost = daysToCross(nextTerrain, { road: onRoad, encumbrance });
+    // Don't overshoot the budget: after the first (guaranteed) hex, stop BEFORE
+    // entering a hex that wouldn't fit — so a day's travel fills the time left
+    // today without spilling into the next day.
+    if (crossed >= 1 && daysUsed + cost > budget) break;
+    daysUsed += cost;
     crossed++;
     log.push({ q: next.q, r: next.r, terrain: nextTerrain, road: onRoad, lost: deviated, dir: actualDir });
     cur = next;
 
     if (atGoal(cur)) return { finalPos: cur, hexesCrossed: crossed, daySpent: true, daysUsed, arrived: true, log };
-    if (daysUsed >= budget) break; // the budget is spent (≥1 hex guaranteed above)
   }
   return { finalPos: cur, hexesCrossed: crossed, daySpent: crossed > 0, daysUsed, arrived: false, log };
 }
