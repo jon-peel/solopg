@@ -70,6 +70,7 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas.addEventListener("pointerleave", onPointerLeave);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", onContextMenu);
+  canvas.addEventListener("dblclick", onDblClick);
 
   preloadTileArt(); // warm terrain/settlement art so tiles never start as emoji
   resize();
@@ -1174,6 +1175,14 @@ function onContextMenu(e) {
   const { x, y } = clientToWorld(e.clientX, e.clientY);
   const { q, r } = pixelToAxial(x, y, HEX_SIZE);
   handlers.onContextMenu?.({ q, r, clientX: e.clientX, clientY: e.clientY });
+}
+
+// Double-click resolves the cell and reports it (with the screen position) so
+// app.js can open the travel radial when it's the party's hex (Phase 11.5).
+function onDblClick(e) {
+  const { x, y } = clientToWorld(e.clientX, e.clientY);
+  const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+  handlers.onDblClick?.({ q, r, clientX: e.clientX, clientY: e.clientY });
 }
 
 function onPointerMove(e) {

@@ -2260,7 +2260,32 @@ function radialDispatch(id, value) {
     case "setOwner": return onSetHexFaction(value); // value = faction id, or null for None
     case "reseat": return onReseatFaction(value); // value = faction id to seat here
     case "promote": return onPromotePoi(value.poiId, value.archetype);
+    case "travelDir": return onTravelDirection(value); // value = ROSE bearing id
   }
+}
+
+// Travel radial (Phase 11.5): double-click the party's hex to open a compass
+// ring — one leaf per heading, laid out N-at-top / clockwise to match the ring's
+// slot order. `value` is the bearing id onTravelDirection expects.
+const TRAVEL_DIRS = [
+  { id: "N", label: "N", glyph: "↑" },
+  { id: 1, label: "NE", glyph: "↗" },
+  { id: 0, label: "E", glyph: "→" },
+  { id: 5, label: "SE", glyph: "↘" },
+  { id: "S", label: "S", glyph: "↓" },
+  { id: 4, label: "SW", glyph: "↙" },
+  { id: 3, label: "W", glyph: "←" },
+  { id: 2, label: "NW", glyph: "↖" },
+];
+
+function onMapDblClick({ q, r, clientX, clientY }) {
+  if (!current || !current.party) return;
+  // Only the party's own hex opens the travel ring (that's the gesture).
+  if (current.party.q !== q || current.party.r !== r) return;
+  const model = TRAVEL_DIRS.map((d) => ({
+    kind: "leaf", id: "travelDir", glyph: d.glyph, label: d.label, value: d.id, enabled: true,
+  }));
+  openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
 
 async function onGenerateRandom() {
@@ -2458,6 +2483,7 @@ async function init() {
     onHexClick,
     onEmptyCellClick,
     onContextMenu,
+    onDblClick: onMapDblClick,
     onHover,
     onView: (ppm) => {
       drawScaleBar(ppm);
