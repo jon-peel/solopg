@@ -2219,7 +2219,7 @@ function onContextMenu({ q, r, clientX, clientY }) {
     manualRoadHere: manualRoadIdAt(q, r),
     locked: !!(placed && hex.locked),
     partyHere,
-    factions: factions.map((f) => ({ id: f.id, name: f.name })),
+    factions: factions.map((f, i) => ({ id: f.id, name: f.name, color: factionColor(i) })),
     ownerId: owner ? owner.id : null,
     canReseat,
     promotable,

@@ -173,7 +173,7 @@ test("Faction submenu: Generate always present; Run by lists None + factions wit
   assert.equal(plain.children[0].id, "genFaction");
   assert.ok(!plain.children.some((c) => c.id === "runBy"), "no Run by without factions");
 
-  const factions = [{ id: "faction:0", name: "The Grey Blade" }, { id: "faction:1", name: "Ashen Covenant" }];
+  const factions = [{ id: "faction:0", name: "The Grey Blade", color: "#2a6693" }, { id: "faction:1", name: "Ashen Covenant", color: "#b3641c" }];
   const owned = byId(buildRadialModel(base({ placed: true, terrain: "Plains", factions, ownerId: "faction:1" })), "faction");
   const runBy = owned.children.find((c) => c.id === "runBy");
   assert.equal(runBy.kind, "submenu");
@@ -181,6 +181,8 @@ test("Faction submenu: Generate always present; Run by lists None + factions wit
   assert.equal(runBy.children[0].value, null); // None
   assert.match(runBy.children.find((c) => c.value === "faction:1").label, /^✓ /); // owner ticked
   assert.equal(runBy.children.find((c) => c.value === "faction:0").label, "The Grey Blade");
+  assert.equal(runBy.children.find((c) => c.value === "faction:0").swatch, "#2a6693"); // colour chip
+  assert.equal(runBy.children[0].swatch, undefined); // None has no colour
 });
 
 test("Faction submenu: reseat + promote (with lord options nesting a sub-ring)", () => {

@@ -1238,6 +1238,14 @@ button:hover {
   font-size: 1.15rem;
   line-height: 1;
 }
+/* Faction colour chip inside a radial node (e.g. "Run by" owner picks). */
+.ring-swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 3px;
+  border: 1px solid rgba(40, 28, 10, 0.5);
+}
 .ring-node .label {
   font-size: 0.62rem;
   letter-spacing: 0.02em;

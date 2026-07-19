@@ -104,7 +104,13 @@ function nodeEl(item, x, y, size, cls) {
   n.style.width = n.style.height = size + "px";
   if (item.enabled === false && item.reason) n.title = item.reason;
   else if (item.title) n.title = item.title;
-  n.innerHTML = `<span class="glyph">${item.glyph}</span><span class="label">${item.label}</span>`;
+  // A `swatch` colour (e.g. the faction in a "Run by" pick) shows as a colour
+  // chip in place of the glyph, and tints the node's border.
+  const glyph = item.swatch
+    ? `<span class="glyph"><span class="ring-swatch" style="background:${item.swatch}"></span></span>`
+    : `<span class="glyph">${item.glyph}</span>`;
+  n.innerHTML = glyph + `<span class="label">${item.label}</span>`;
+  if (item.swatch) n.style.borderColor = item.swatch;
   return n;
 }
 

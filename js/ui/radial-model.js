@@ -23,8 +23,8 @@ export const POI_GLYPH = {
 
 const RANDOM = "__random__";
 
-const leaf = (id, glyph, label, { enabled = true, reason, value, anchor, title, danger } = {}) =>
-  ({ kind: "leaf", id, glyph, label, enabled, reason, value, anchor, title, danger });
+const leaf = (id, glyph, label, { enabled = true, reason, value, anchor, title, danger, swatch } = {}) =>
+  ({ kind: "leaf", id, glyph, label, enabled, reason, value, anchor, title, danger, swatch });
 
 const submenu = (id, glyph, label, { enabled = true, reason } = {}, children = []) =>
   ({ kind: "submenu", id, glyph, label, enabled, reason, children });
@@ -150,7 +150,7 @@ function factionChildren({ placed, factions, ownerId, canReseat, promotable }) {
       submenu("runBy", "⚑", "Run by", {}, [
         leaf("setOwner", "🚫", ownerId == null ? "✓ None" : "None", { value: null }),
         ...factions.map((f) =>
-          leaf("setOwner", "⚑", (ownerId === f.id ? "✓ " : "") + shorten(f.name), { value: f.id }),
+          leaf("setOwner", "⚑", (ownerId === f.id ? "✓ " : "") + shorten(f.name), { value: f.id, swatch: f.color }),
         ),
       ]),
     );
