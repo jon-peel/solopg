@@ -17,7 +17,7 @@ const base = (over = {}) => ({
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "draw"];
+const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "draw", "party", "faction"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -155,6 +155,49 @@ test("POI's dungeon stays a leaf (random size) when no sizes are supplied", () =
   assert.equal(dungeon.kind, "leaf");
   assert.equal(dungeon.id, "addPoi");
   assert.equal(dungeon.value, "dungeon");
+});
+
+test("Party submenu: Travel/Place need a placed hex; disabled once the party is here", () => {
+  const empty = byId(buildRadialModel(base()), "party");
+  assert.deepEqual(empty.children.map((c) => c.id), ["travelToward", "placeParty"]);
+  assert.ok(empty.children.every((c) => c.enabled === false)); // no placed hex yet
+  const placed = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "party");
+  assert.ok(placed.children.every((c) => c.enabled === true));
+  const here = byId(buildRadialModel(base({ placed: true, terrain: "Plains", partyHere: true })), "party");
+  assert.deepEqual(here.children.map((c) => c.id), ["partyHere"]);
+  assert.equal(here.children[0].enabled, false);
+});
+
+test("Faction submenu: Generate always present; Run by lists None + factions with a ✓ on the owner", () => {
+  const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "faction");
+  assert.equal(plain.children[0].id, "genFaction");
+  assert.ok(!plain.children.some((c) => c.id === "runBy"), "no Run by without factions");
+
+  const factions = [{ id: "faction:0", name: "The Grey Blade" }, { id: "faction:1", name: "Ashen Covenant" }];
+  const owned = byId(buildRadialModel(base({ placed: true, terrain: "Plains", factions, ownerId: "faction:1" })), "faction");
+  const runBy = owned.children.find((c) => c.id === "runBy");
+  assert.equal(runBy.kind, "submenu");
+  assert.deepEqual(runBy.children.map((c) => c.id), ["setOwner", "setOwner", "setOwner"]);
+  assert.equal(runBy.children[0].value, null); // None
+  assert.match(runBy.children.find((c) => c.value === "faction:1").label, /^✓ /); // owner ticked
+  assert.equal(runBy.children.find((c) => c.value === "faction:0").label, "The Grey Blade");
+});
+
+test("Faction submenu: reseat + promote (with lord options nesting a sub-ring)", () => {
+  const canReseat = { id: "faction:0", name: "The Grey Blade" };
+  const promotable = [{ poiId: "poi:2", name: "Old Keep", lords: [{ archetype: "lich", label: "Raise a lich" }] }];
+  const fac = byId(buildRadialModel(base({ placed: true, terrain: "Hills", canReseat, promotable })), "faction");
+  const reseat = fac.children.find((c) => c.id === "reseat");
+  assert.equal(reseat.value, "faction:0");
+  const promo = fac.children.find((c) => c.id === "promoteMenu");
+  assert.equal(promo.kind, "submenu");
+  assert.equal(promo.children[0].value.poiId, "poi:2"); // Ordinary faction
+  assert.deepEqual(promo.children[1].value, { poiId: "poi:2", archetype: "lich" }); // lord variant
+  // A promotable POI with no lord options is a plain Promote leaf.
+  const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains", promotable: [{ poiId: "poi:3", name: "Camp", lords: [] }] })), "faction");
+  const leafPromo = plain.children.find((c) => c.id === "promote");
+  assert.equal(leafPromo.kind, "leaf");
+  assert.deepEqual(leafPromo.value, { poiId: "poi:3" });
 });
 
 // Regression: the ring must center on the clicked point, translated into the

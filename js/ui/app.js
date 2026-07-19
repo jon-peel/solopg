@@ -2192,6 +2192,19 @@ function onContextMenu({ q, r, clientX, clientY }) {
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
   const hasSettlement = !!(placed && hex.settlement && hex.settlement.present);
+  // Party + Faction state (Phase 11.5) — the last actions folded off the panel.
+  const factions = getFactions(current);
+  const owner = factions.find((f) => (f.holdings || []).some((h) => h.q === q && h.r === r));
+  const partyHere = !!(current.party && current.party.q === q && current.party.r === r);
+  let canReseat = null;
+  if (placed && owner && isValidSeat(current, owner.archetype, q, r) && !(owner.seat && owner.seat.q === q && owner.seat.r === r)) {
+    canReseat = { id: owner.id, name: owner.name };
+  }
+  const promotable = placed
+    ? (hex.pois || [])
+        .filter((p) => p.occupant && p.occupant.kind === "occupied" && !p.occupant.factionId)
+        .map((p) => ({ poiId: p.id, name: p.name, lords: eligibleLords(p.type, hex.terrain, factions) }))
+    : [];
   const model = buildRadialModel({
     placed,
     terrain: placed ? hex.terrain : null,
@@ -2205,6 +2218,11 @@ function onContextMenu({ q, r, clientX, clientY }) {
     manualRiverHere: manualRiverIdAt(q, r),
     manualRoadHere: manualRoadIdAt(q, r),
     locked: !!(placed && hex.locked),
+    partyHere,
+    factions: factions.map((f) => ({ id: f.id, name: f.name })),
+    ownerId: owner ? owner.id : null,
+    canReseat,
+    promotable,
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -2235,6 +2253,13 @@ function radialDispatch(id, value) {
     case "removeRiver": return onRemoveRiver(value);
     case "drawRoad": return onStartDrawRoad();
     case "removeRoad": return onRemoveRoad(value);
+    // Party + Faction (Phase 11.5) — folded off the panel onto the ring.
+    case "travelToward": return onTravelToward();
+    case "placeParty": return onPlaceParty();
+    case "genFaction": return onGenerateFaction();
+    case "setOwner": return onSetHexFaction(value); // value = faction id, or null for None
+    case "reseat": return onReseatFaction(value); // value = faction id to seat here
+    case "promote": return onPromotePoi(value.poiId, value.archetype);
   }
 }
 
