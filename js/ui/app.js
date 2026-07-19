@@ -727,6 +727,7 @@ function renderSelection() {
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
+    onOpenActions, // "⋯ Actions" → open the radial on this hex (11.5b)
     seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
     selectedPoiId,
@@ -2265,6 +2266,21 @@ function onContextMenu({ q, r, clientX, clientY }) {
   if (!current) return;
   if (draftClicks) return; // ignore right-click while tracing a river/road
   selectCell(q, r);
+  openHexRadial(q, r, clientX, clientY);
+}
+
+// Open the actions ring on the selected hex from the panel's "⋯ Actions" button
+// (11.5b) — same ring as a right-click, centred on the map so it's reachable
+// without a mouse right-click.
+function onOpenActions() {
+  if (!current || !selected) return;
+  const stage = $("stage").getBoundingClientRect();
+  openHexRadial(selected.q, selected.r, stage.left + stage.width / 2, stage.top + stage.height / 2);
+}
+
+// Build + open the radial for cell (q,r) at a screen position. Shared by the
+// right-click handler and the panel's "⋯ Actions" button.
+function openHexRadial(q, r, clientX, clientY) {
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
   const hasSettlement = !!(placed && hex.settlement && hex.settlement.present);

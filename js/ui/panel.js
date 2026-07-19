@@ -68,6 +68,20 @@ export function describeHex(hex) {
   return [`Hex ${hex.key}`, coords, `  Terrain: ${terrain}`].filter(Boolean);
 }
 
+// At-a-glance counts of the world's contents for the overview header (11.5b).
+function worldStats(world) {
+  let hexes = 0, settlements = 0, pois = 0, dungeons = 0;
+  for (const h of Object.values(world.hexes || {})) {
+    if (!h.placed) continue;
+    hexes++;
+    if (h.settlement && h.settlement.present) settlements++;
+    const ps = Array.isArray(h.pois) ? h.pois : [];
+    pois += ps.length;
+    dungeons += ps.filter((p) => p.type === "dungeon").length;
+  }
+  return { hexes, settlements, pois, dungeons };
+}
+
 function actionButton(label, onClick) {
   const b = document.createElement("button");
   b.className = "tile-action";
@@ -657,9 +671,23 @@ export function renderSelectionPanel(model) {
   if (!model || !model.coord) return;
 
   const { coord, hex } = model;
+  // Title row: the selection heading + a "⋯ Actions" button that opens the
+  // radial on this cell (Phase 11.5b) — so every hex action is reachable without
+  // a right-click (touch / keyboard friendly).
+  const head = document.createElement("div");
+  head.className = "selection-head";
   const h = document.createElement("h3");
   h.textContent = hex ? "Selected hex" : `Empty (${coord.q}, ${coord.r})`;
-  sel.appendChild(h);
+  head.appendChild(h);
+  if (model.onOpenActions) {
+    const act = document.createElement("button");
+    act.className = "sel-actions";
+    act.textContent = "⋯ Actions";
+    act.title = "Open the actions ring for this hex";
+    act.addEventListener("click", () => model.onOpenActions());
+    head.appendChild(act);
+  }
+  sel.appendChild(head);
 
   if (hex) {
     for (const line of describeHex(hex)) {
@@ -860,8 +888,21 @@ export function showWorld(world, opts = {}) {
     });
   }
   el.appendChild(name);
-  // Tab bar: Detail (selected hex/room) | Hooks (world hook list, with an
-  // open-count badge). Switching just toggles which region shows.
+  // Overview stats (Phase 11.5b): an at-a-glance count of the world's contents.
+  const stats = worldStats(world);
+  const chips = document.createElement("div");
+  chips.className = "world-stats";
+  for (const [label, n] of [["hexes", stats.hexes], ["towns", stats.settlements], ["POIs", stats.pois], ["dungeons", stats.dungeons]]) {
+    const chip = document.createElement("span");
+    chip.className = "wchip";
+    const b = document.createElement("b");
+    b.textContent = String(n);
+    chip.append(b, ` ${label}`);
+    chips.appendChild(chip);
+  }
+  el.appendChild(chips);
+  // Tab bar: Selection (selected hex/room) | Hooks | Pinned | Travel | Factions.
+  // Switching just toggles which region shows.
   const tabs = document.createElement("div");
   tabs.className = "panel-tabs";
   const mkTab = (key, label, badgeId) => {
@@ -879,7 +920,7 @@ export function showWorld(world, opts = {}) {
     return b;
   };
   tabs.append(
-    mkTab("detail", "Detail"),
+    mkTab("detail", "Selection"),
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
     mkTab("travel", "Travel"),

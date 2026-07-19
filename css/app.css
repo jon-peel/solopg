@@ -750,10 +750,48 @@ button:hover {
   display: inline-block;
 }
 
+/* Overview stat chips at the top of the panel (Phase 11.5b). */
+.world-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.55rem;
+}
+.wchip {
+  background: var(--paper-raised);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+.wchip b {
+  color: var(--accent-2);
+}
+
 #selection {
   margin-bottom: 0.5rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
+}
+
+/* Selection title row: heading + the "⋯ Actions" button (Phase 11.5b). */
+.selection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.sel-actions {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+  color: #f4ead2;
+  background: var(--accent);
+  border-color: var(--edge-strong);
+  white-space: nowrap;
+}
+.sel-actions:hover {
+  background: #7a2c1f;
 }
 
 #selection h3 {
