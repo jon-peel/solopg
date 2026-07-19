@@ -287,9 +287,12 @@ export function travelDay(seed, day, from, {
       return t != null && paceFor(t) > 0;
     };
     // Terrain of the hex being ENTERED drives both the lost roll and the cost.
+    // Following a road means no getting lost — true if EITHER the hex we stand on
+    // or the one we're entering is on a road (so you can't get lost while on a road).
     const intendedTerrain = terrainAt(intended.q, intended.r);
+    const onRoadStep = roadAt(cur.q, cur.r) || roadAt(intended.q, intended.r);
     const gotLost = intendedTerrain != null
-      && rollGetLost(seed, day, cur.q, cur.r, intendedTerrain, { road: roadAt(intended.q, intended.r) });
+      && rollGetLost(seed, day, cur.q, cur.r, intendedTerrain, { road: onRoadStep });
     const actualDir = gotLost ? deviateDirection(seed, day, cur.q, cur.r, intendedDir, passable) : intendedDir;
     const deviated = actualDir !== intendedDir;
     const [dq, dr] = NEIGHBOR_DIRS[actualDir];

@@ -815,8 +815,12 @@ async function onTravelDirection(bearing, unit = "full") {
     addHex(current, hex);
     return hex.terrain;
   };
+  // Roads were never passed to bearing travel, so the party ignored them (could
+  // get lost on a road, no road speed). Feed the road network in.
+  const roadKeys = roadHexKeySet(current.roads);
+  const roadAt = (q, r) => roadKeys.has(axialKey(q, r));
   const { budget, maxHexes } = travelBudget(unit);
-  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt, budget, maxHexes });
+  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt, roadAt, budget, maxHexes });
   revealSightAlong(originTerrain, aq, ar, result, tables);
   applyTravel(result, bearingWord(bearing), "bearing");
 }
