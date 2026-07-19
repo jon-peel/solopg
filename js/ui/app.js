@@ -31,7 +31,7 @@ import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanc
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
-import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes } from "../gen/travel.js";
+import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -359,7 +359,24 @@ function renderTravelHud() {
   for (const btn of hud.querySelectorAll(".thud-units button")) {
     btn.classList.toggle("active", btn.dataset.unit === travelUnit);
   }
+  // Pace scale: mark the active tier + caption it with the open-ground pace.
+  const enc = (current.party && current.party.encumbrance) || "unencumbered";
+  for (const btn of hud.querySelectorAll(".thud-scale button")) {
+    btn.classList.toggle("active", btn.dataset.enc === enc);
+  }
+  const cap = hud.querySelector(".thud-pace-cap");
+  if (cap) {
+    const hpd = Math.round(TRAVEL_COST.Plains * (ENCUMBRANCE_FACTOR[enc] ?? 1));
+    cap.textContent = `${ENC_LABEL[enc]} · ≈${hpd} hex/day open`;
+  }
 }
+
+const ENC_LABEL = {
+  unencumbered: "Unencumbered",
+  light: "Lightly loaded",
+  encumbered: "Encumbered",
+  heavy: "Heavily loaded",
+};
 
 function setTravelUnit(u) {
   if (!["hex", "half", "full"].includes(u)) return;
@@ -2494,6 +2511,9 @@ function wire() {
   $("btn-next-dawn").addEventListener("click", () => advanceToNextDawn());
   for (const btn of document.querySelectorAll("#travel-hud .thud-units button")) {
     btn.addEventListener("click", () => setTravelUnit(btn.dataset.unit));
+  }
+  for (const btn of document.querySelectorAll("#travel-hud .thud-scale button")) {
+    btn.addEventListener("click", () => onSetEncumbrance(btn.dataset.enc));
   }
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);

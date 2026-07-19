@@ -434,6 +434,58 @@ button:hover {
   background: var(--accent-wash);
   font-weight: 600;
 }
+/* Pace scale: descending bars from base speed (fast) to heavily loaded (slow). */
+.thud-pace {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.thud-axis {
+  font-size: 0.6rem;
+  color: var(--ink-faint);
+  padding-bottom: 0.2rem;
+}
+.thud-scale {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 1.7rem;
+}
+.thud-scale button {
+  width: 1.2rem;
+  height: 100%;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.thud-scale button > i {
+  display: block;
+  width: 72%;
+  background: linear-gradient(var(--accent-2), var(--gold));
+  border-radius: 2px 2px 0 0;
+  opacity: 0.5;
+}
+.thud-scale button:hover {
+  border-color: var(--edge);
+}
+.thud-scale button.active {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+.thud-scale button.active > i {
+  opacity: 1;
+}
+.thud-pace-cap {
+  font-size: 0.66rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
 .thud-hint {
   color: var(--ink-faint);
   font-size: 0.65rem;

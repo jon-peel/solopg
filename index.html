@@ -70,6 +70,18 @@
         <div id="travel-hud" hidden>
           <div class="thud-clock">Day 0 · 8h left</div>
           <div class="thud-bar"><i class="thud-fill"></i></div>
+          <!-- Pace scale: base speed (fast) → heavily loaded (slow). Click to set. -->
+          <div class="thud-pace">
+            <span class="thud-axis">Base</span>
+            <div class="thud-scale" role="group" aria-label="Party pace">
+              <button type="button" data-enc="unencumbered" title="Unencumbered — full base speed"><i style="height:100%"></i></button>
+              <button type="button" data-enc="light" title="Lightly loaded — ¾ speed"><i style="height:72%"></i></button>
+              <button type="button" data-enc="encumbered" title="Encumbered — ½ speed"><i style="height:50%"></i></button>
+              <button type="button" data-enc="heavy" title="Heavily loaded — ¼ speed"><i style="height:28%"></i></button>
+            </div>
+            <span class="thud-axis">Heavy</span>
+          </div>
+          <div class="thud-pace-cap">Unencumbered · ≈4 hex/day open</div>
           <div class="thud-units" role="group" aria-label="Travel distance">
             <button type="button" data-unit="hex" title="Each compass step moves one hex">1 hex</button>
             <button type="button" data-unit="half" title="Each compass step travels up to half a day">½ day</button>
