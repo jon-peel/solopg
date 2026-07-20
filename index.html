@@ -127,12 +127,12 @@
         </div>
         <!-- Bottom-right map controls: zoom (＋ / slider / −), recenter, help. -->
         <div id="map-controls">
-          <button id="btn-zoom-in" title="Zoom in">＋</button>
+          <button id="btn-zoom-in" title="Zoom in" aria-label="Zoom in">＋</button>
           <input id="zoom-slider" type="range" min="0" max="1000" value="500"
                  aria-label="Zoom level" title="Zoom" />
-          <button id="btn-zoom-out" title="Zoom out">−</button>
-          <button id="btn-home" title="Recenter on the party (or the map)">⌂</button>
-          <button id="btn-help" title="Shortcuts (?)">?</button>
+          <button id="btn-zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button id="btn-home" title="Recenter on the party (or the map)" aria-label="Recenter on the party">⌂</button>
+          <button id="btn-help" title="Shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
         </div>
         <section id="dungeon-view" hidden>
           <div id="dungeon-toolbar">
@@ -180,7 +180,7 @@
         <div id="ring"><div class="scrim"></div></div>
         <!-- Keyboard/interaction cheat-sheet (toggle with ?). -->
         <div id="help-overlay" hidden>
-          <div class="help-card">
+          <div class="help-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
             <strong>Shortcuts</strong>
             <ul>
               <li><b>Right-click</b> a hex or room — actions menu</li>

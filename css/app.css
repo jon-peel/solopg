@@ -1476,11 +1476,15 @@ button:hover {
   font-size: 0.5rem;
   color: var(--ink-soft);
 }
-.ring-node:hover {
+.ring-node:hover,
+.ring-node.kbd {
   border-color: var(--accent);
   background: linear-gradient(#f4e9d0, var(--paper-raised));
   transform: translate(-50%, -50%) scale(1.08);
   z-index: 2;
+}
+.ring-node.kbd {
+  box-shadow: var(--focus-ring), var(--shadow-2);
 }
 .ring-node.submenu .label::after {
   content: " ▸";
@@ -1609,5 +1613,18 @@ button:hover {
   }
   body.panel-open #workspace::before {
     opacity: 1;
+  }
+}
+
+/* Respect reduced-motion preferences (Phase 11.8): near-instant transitions,
+   no animation, for users who ask for it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

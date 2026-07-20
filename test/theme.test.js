@@ -75,3 +75,18 @@ test("muted ink and accent stay legible on the panel surface", () => {
   assert.ok(meetsAA(PALETTE.inkSoft, PALETTE.paperPanel, true));
   assert.ok(meetsAA(PALETTE.accent, PALETTE.paperPanel, true));
 });
+
+test("finished-skin contrast: key text/surface pairs meet WCAG AA", () => {
+  // Body-size text (4.5:1) on each parchment surface.
+  for (const bg of [PALETTE.paper, PALETTE.paperPanel, PALETTE.paperRaised, PALETTE.paperBar]) {
+    assert.ok(meetsAA(PALETTE.ink, bg), `ink on ${bg} = ${contrastRatio(PALETTE.ink, bg).toFixed(2)}`);
+  }
+  // Secondary text + accents at large/UI size (3:1).
+  for (const bg of [PALETTE.paper, PALETTE.paperPanel]) {
+    assert.ok(meetsAA(PALETTE.inkSoft, bg, true), `inkSoft on ${bg}`);
+    assert.ok(meetsAA(PALETTE.accent, bg, true), `accent on ${bg}`);
+    assert.ok(meetsAA(PALETTE.accent2, bg, true), `accent2 on ${bg}`);
+  }
+  // The pale text used on accent-filled controls (buttons, tabs badge, tooltips).
+  assert.ok(meetsAA("#f4ead2", PALETTE.accent), `parchment text on accent = ${contrastRatio("#f4ead2", PALETTE.accent).toFixed(2)}`);
+});

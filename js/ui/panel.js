@@ -24,7 +24,9 @@ function applyPanelTab() {
   const tabs = el.querySelector(".panel-tabs");
   if (tabs) {
     for (const b of tabs.querySelectorAll("button")) {
-      b.classList.toggle("active", b.dataset.tab === activeTab);
+      const on = b.dataset.tab === activeTab;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
     }
   }
 }
@@ -905,9 +907,13 @@ export function showWorld(world, opts = {}) {
   // Switching just toggles which region shows.
   const tabs = document.createElement("div");
   tabs.className = "panel-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Panel sections");
   const mkTab = (key, label, badgeId) => {
     const b = document.createElement("button");
     b.dataset.tab = key;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-controls", TAB_REGIONS[key]);
     b.append(label);
     if (badgeId) {
       const badge = document.createElement("span");
@@ -927,31 +933,19 @@ export function showWorld(world, opts = {}) {
     mkTab("factions", "Factions", "factions-tab-badge"),
   );
   el.appendChild(tabs);
-  // Detail region: the selected hex (or dungeon room) details.
-  const sel = document.createElement("div");
-  sel.id = "selection";
-  el.appendChild(sel);
-  // Hooks region: unpinned world hooks (filled by renderGlobalHooks).
-  const gh = document.createElement("div");
-  gh.id = "global-hooks";
-  gh.hidden = true;
-  el.appendChild(gh);
-  // Pinned region: the party's chosen leads (filled by renderGlobalHooks).
-  const pinned = document.createElement("div");
-  pinned.id = "pinned-hooks";
-  pinned.hidden = true;
-  el.appendChild(pinned);
-  // Travel region (Phase 8.4): encumbrance setting + the last trip's report
-  // (filled by renderTravelPanel).
-  const travel = document.createElement("div");
-  travel.id = "travel-panel";
-  travel.hidden = true;
-  el.appendChild(travel);
-  // Factions region (Phase 8.7): the world's factions (filled by renderFactionsPanel).
-  const factions = document.createElement("div");
-  factions.id = "factions-panel";
-  factions.hidden = true;
-  el.appendChild(factions);
+  const region = (id, hidden) => {
+    const d = document.createElement("div");
+    d.id = id;
+    d.setAttribute("role", "tabpanel");
+    if (hidden) d.hidden = true;
+    el.appendChild(d);
+    return d;
+  };
+  region("selection"); // selected hex / dungeon room details
+  region("global-hooks", true); // unpinned world hooks (renderGlobalHooks)
+  region("pinned-hooks", true); // the party's pinned leads
+  region("travel-panel", true); // encumbrance + last trip report (renderTravelPanel)
+  region("factions-panel", true); // the world's factions (renderFactionsPanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.
