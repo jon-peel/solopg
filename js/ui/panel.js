@@ -551,26 +551,35 @@ export function renderOraclePanel(model) {
   head.textContent = "Oracle";
   host.appendChild(head);
 
+  const roll = model && model.onRoll;
+
   // Yes/No fate oracle (9.2): pick the odds → roll. Each button both sets the
-  // likelihood and rolls, so it's one click. (9.3-9.6 add more oracle sections.)
+  // likelihood and rolls, so it's one click. (9.4-9.6 add more oracle sections.)
   host.appendChild(sectionLabel(ORACLE_LABELS.yesno));
   const odds = document.createElement("div");
   odds.className = "oracle-odds tile-actions";
-  if (model && model.onRoll) {
+  if (roll) {
     for (const o of ORACLE_ODDS) {
-      const b = actionButton(o.label, () => model.onRoll("yesno", o.key));
+      const b = actionButton(o.label, () => roll("yesno", o.key));
       b.title = `Roll Yes / No at ${o.label.toLowerCase()} odds`;
       odds.appendChild(b);
     }
   }
   host.appendChild(odds);
 
-  const hint = document.createElement("div");
-  hint.className = "panel-hint";
-  hint.textContent = "Pick the odds to roll — the answer can be an emphatic “…and” or a marginal “…but”.";
-  host.appendChild(hint);
+  // Meaning oracle (9.3): an action × subject pair to interpret an open question
+  // or a Yes/No's random-event flag.
+  host.appendChild(sectionLabel(ORACLE_LABELS.meaning));
+  const meaning = document.createElement("div");
+  meaning.className = "oracle-meaning tile-actions";
+  if (roll) {
+    const b = actionButton("Roll meaning", () => roll("meaning"));
+    b.title = "Roll an action + subject pair to read into the scene";
+    meaning.appendChild(b);
+  }
+  host.appendChild(meaning);
 
-  // The single latest result.
+  // The single latest result (shared across oracle kinds — the tag says which).
   if (!last) {
     const empty = document.createElement("div");
     empty.className = "panel-hint";

@@ -1,7 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { askYesNo, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS } from "../js/gen/oracle.js";
+import { readFileSync } from "node:fs";
+import { askYesNo, rollMeaning, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
+import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
+
+// Load the real Meaning tables the way the app does, validated on arrival.
+function meaningTables() {
+  const map = new Map();
+  for (const id of ORACLE_TABLE_IDS) {
+    const t = validateTable(JSON.parse(readFileSync(new URL(`../data/${id}.json`, import.meta.url))));
+    map.set(id, t);
+  }
+  return map;
+}
 
 // A constant-value rng for pinning exact zones (askYesNo draws rng() exactly once).
 const at = (v) => () => v;
@@ -94,4 +106,37 @@ test("likely odds skews Yes; unlikely skews No", () => {
 test("ORACLE_ODDS is an ordered ladder with the expected keys", () => {
   assert.deepEqual(ORACLE_ODDS.map((o) => o.key), ["certain", "likely", "even", "unlikely", "impossible"]);
   assert.equal(ORACLE_LABELS.yesno, "Yes / No");
+});
+
+// --- Meaning oracle (9.3) ---
+
+test("Meaning tables are valid and non-trivial", () => {
+  const t = meaningTables();
+  for (const id of ORACLE_TABLE_IDS) {
+    const table = t.get(id);
+    assert.ok(table, `${id} loaded`);
+    assert.ok(table.entries.length >= 20, `${id} has a decent spread`);
+  }
+});
+
+test("rollMeaning draws an action + subject from the tables", () => {
+  const t = meaningTables();
+  const actions = new Set(t.get("oracle-action").entries.map((e) => e.value));
+  const subjects = new Set(t.get("oracle-subject").entries.map((e) => e.value));
+  const p = rollMeaning(t, mulberry32(1));
+  assert.equal(p.kind, "meaning");
+  assert.ok(actions.has(p.action), `action "${p.action}" is from the table`);
+  assert.ok(subjects.has(p.subject), `subject "${p.subject}" is from the table`);
+});
+
+test("rollMeaning is deterministic for a given stream", () => {
+  const t = meaningTables();
+  const a = rollMeaning(t, mulberry32(1234));
+  const b = rollMeaning(t, mulberry32(1234));
+  assert.deepEqual(a, b);
+});
+
+test("oracleLine composes a Meaning pair", () => {
+  assert.equal(oracleLine({ kind: "meaning", action: "Pursue", subject: "Secrets" }), "Pursue · Secrets");
+  assert.equal(ORACLE_LABELS.meaning, "Meaning");
 });

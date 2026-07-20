@@ -10,6 +10,8 @@
 // elsewhere as trigger-and-prompt — the app says WHEN and WHAT, the GM rolls their
 // own tables. See docs/plans/phase-9-oracles.md.
 
+import { rollTable } from "../core/table.js";
+
 // --- Yes/No fate oracle (Phase 9.2) ---------------------------------------
 //
 // One roll yields a SIX-POINT answer — "Yes, and" · "Yes" · "Yes, but" ·
@@ -70,21 +72,46 @@ export function askYesNo(rng, opts = {}) {
   return { kind: "yesno", odds: odds.key, oddsLabel: odds.label, answer: yes ? "Yes" : "No", tone, emphatic, event };
 }
 
+// --- Meaning / inspiration (Phase 9.3) ------------------------------------
+//
+// When a result is open-ended (or a Yes/No flagged a random event), roll an
+// evocative ACTION × SUBJECT pair to interpret — "Pursue · Secrets". Deliberately
+// abstract so it reads onto any scene. Two flat JSON tables (oracle-action /
+// oracle-subject); prose composed at render like everything else.
+
+/**
+ * Roll a Meaning pair (Phase 9.3). Draws an action then a subject, in that fixed
+ * order (deterministic for a given rng stream).
+ * @param {Map<string,object>} tables incl. oracle-action / oracle-subject
+ * @param {() => number} rng
+ * @returns {{ kind:"meaning", action:string, subject:string }}
+ */
+export function rollMeaning(tables, rng) {
+  const action = rollTable(tables.get("oracle-action"), rng).value;
+  const subject = rollTable(tables.get("oracle-subject"), rng).value;
+  return { kind: "meaning", action, subject };
+}
+
 /**
  * Compose the one-line display string for an oracle pick (compose-at-render).
  * Each oracle kind knows how to phrase its own pick; unknown kinds fall back to
  * the raw answer so a new kind can't crash the log before its prose lands. The
  * random-event flag is NOT folded in here — the UI shows it as its own note.
- * @param {{ kind:string, answer?:string, tone?:string|null }} pick
+ * @param {{ kind:string, answer?:string, tone?:string|null, action?:string, subject?:string }} pick
  * @returns {string}
  */
 export function oracleLine(pick) {
   if (!pick) return "";
   if (pick.kind === "yesno") return pick.tone ? `${pick.answer}, ${pick.tone}` : pick.answer;
+  if (pick.kind === "meaning") return `${pick.action} · ${pick.subject}`;
   return String(pick.answer ?? "");
 }
 
 /** Human labels for each oracle kind — a section heading in the tab. */
 export const ORACLE_LABELS = {
   yesno: "Yes / No",
+  meaning: "Meaning",
 };
+
+/** Table ids the Meaning oracle (9.3) needs loaded. */
+export const ORACLE_TABLE_IDS = ["oracle-action", "oracle-subject"];

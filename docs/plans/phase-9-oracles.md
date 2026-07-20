@@ -130,11 +130,30 @@ Impossible → yes-probabilities 0.9 / 0.7 / 0.5 / 0.3 / 0.1) and rolls.
 [ ] Reload → tab blank (still not persisted); export JSON → still no oracle data.
 ```
 
-### 9.3 Meaning / inspiration tables
-The oracle's companion — when a result is open-ended, roll an evocative pair to interpret. Two
-tables: **`oracle-action` (a verb)** × **`oracle-subject` (a noun/theme)** → *"Pursue · Secrets"*,
-*"Abandon · The border"*. Deliberately abstract so it reads onto any situation. Optionally a third
-**focus** table (who/what it points at: the party, an NPC, the current thread) if it earns its keep.
+### 9.3 Meaning / inspiration tables — ✅ **built**
+The oracle's companion — when a result is open-ended (or a Yes/No flags a random event), roll an
+evocative pair to interpret. Two flat JSON tables: **`oracle-action` (a verb, 52 entries)** ×
+**`oracle-subject` (a noun/theme, 50 entries)** → *"Pursue · Secrets"*, *"Defy · A rising tide"* —
+~2,600 combos. Deliberately abstract so it reads onto any situation.
+
+- **Engine:** `rollMeaning(tables, rng)` → `{ kind:"meaning", action, subject }`; `oracleLine`
+  composes `"Action · Subject"`. `ORACLE_TABLE_IDS` names the two tables; the app `loadTables`-es
+  them on demand (cached after the first roll). Pure, node-tested (tables valid + non-trivial,
+  draws are in-table, deterministic, prose).
+- **UI:** a "Meaning" section with a single **"Roll meaning"** button, sharing the same result box
+  as Yes/No (the tag reads "Meaning"), with the 9.1 flash.
+- *(The optional third "focus" table was **not** built — the action×subject pair reads richly enough
+  on its own; can be added later if it earns its keep.)*
+
+**Manual test — 9.3 (run `./run-local.sh`):**
+```
+[ ] Oracle tab → below Yes/No, a "Meaning" section with a "Roll meaning" button.
+[ ] Press it a few times → the result shows an "Action · Subject" pair (tag "Meaning"),
+    different most presses, flashing each time.
+[ ] Roll Yes/No until a "⚡ random event" note appears → press "Roll meaning" to
+    interpret it → a fresh pair replaces the result.
+[ ] Console → each meaning roll logs "🎲 Oracle (meaning): Action · Subject".
+```
 
 ### 9.4 Complication / twist
 A setback oracle for "yes, but…" / "no, and…" moments and for spicing a quiet scene: a single
@@ -249,7 +268,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 |---|---|---|---|
 | **9.1** | Oracle tab + `oracle.js` + on-screen results | plumbing | ✅ **done** — unblocks 9.2–9.6 |
 | **9.2** | Yes/No fate oracle | generative | ✅ **done** — odds ladder + six-outcome (…and/…but) + event flag |
-| **9.3** | Meaning / inspiration | generative | action × subject |
+| **9.3** | Meaning / inspiration | generative | ✅ **done** — action × subject (52 × 50) |
 | **9.4** | Complication / twist | generative | single table |
 | **9.5** | Settlement situation | generative | terrain- & faction-aware; **no NPC** |
 | **9.6** | Tavern / shop | generative | sign × specialty × quirk; **no NPC** |
