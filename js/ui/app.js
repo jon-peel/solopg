@@ -50,7 +50,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -1541,7 +1541,10 @@ async function onOracleRoll(kind, odds) {
   } else if (kind === "meaning") {
     const tables = await loadTables(ORACLE_TABLE_IDS);
     pick = rollMeaning(tables, rng); // no tag — its section heading already names it
-  } else return; // unknown kind — 9.4+ register more
+  } else if (kind === "complication") {
+    const tables = await loadTables(ORACLE_TABLE_IDS);
+    pick = rollComplication(tables, rng);
+  } else return; // unknown kind — 9.5+ register more
   oracleResults[kind] = { tag, line: oracleLine(pick), note };
   logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${oracleResults[kind].line}${note ? " · random event" : ""}`);
   refreshOracle(kind); // flash only this oracle's block so a repeated answer still reads as "rolled"

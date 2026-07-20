@@ -156,10 +156,27 @@ evocative pair to interpret. Two flat JSON tables: **`oracle-action` (a verb, 52
 [ ] Console → each meaning roll logs "🎲 Oracle (meaning): Action · Subject".
 ```
 
-### 9.4 Complication / twist
+### 9.4 Complication / twist — ✅ **built** (Group A complete)
 A setback oracle for "yes, but…" / "no, and…" moments and for spicing a quiet scene: a single
-`oracle-complication` table of terse, system-agnostic twists (a betrayal, a shortage, the ground
-gives way, reinforcements arrive). Reads as a prompt, never a stat.
+`oracle-complication` table of **48** terse, system-agnostic twists (an ally's own agenda, a
+shortage, the ground gives way, reinforcements for the other side). Reads as a GM prompt, never a
+stat.
+
+- **Engine:** `rollComplication(tables, rng)` → `{ kind:"complication", text }`; `oracleLine`
+  returns the sentence. The table id joins `ORACLE_TABLE_IDS` (loaded with Meaning's two; cached).
+  Pure, node-tested (in-table draw, deterministic, prose).
+- **UI:** a "Complication" section with a **"Roll complication"** button and its own result block +
+  9.1 flash, like the others.
+
+**Manual test — 9.4 (run `./run-local.sh`):**
+```
+[ ] Oracle tab → below Meaning, a "Complication" section with a "Roll complication" button.
+[ ] Press it a few times → its own result block shows a terse twist sentence, different
+    most presses, flashing each time; the Yes/No and Meaning blocks stay put.
+[ ] Console → each roll logs "🎲 Oracle (complication): <twist>".
+```
+
+**Group A (solo keystones) is now complete** — Yes/No · Meaning · Complication.
 
 ---
 
@@ -270,7 +287,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 | **9.1** | Oracle tab + `oracle.js` + on-screen results | plumbing | ✅ **done** — unblocks 9.2–9.6 |
 | **9.2** | Yes/No fate oracle | generative | ✅ **done** — odds ladder + six-outcome (…and/…but) + event flag |
 | **9.3** | Meaning / inspiration | generative | ✅ **done** — action × subject (52 × 50) |
-| **9.4** | Complication / twist | generative | single table |
+| **9.4** | Complication / twist | generative | ✅ **done** — single table (48) · Group A complete |
 | **9.5** | Settlement situation | generative | terrain- & faction-aware; **no NPC** |
 | **9.6** | Tavern / shop | generative | sign × specialty × quirk; **no NPC** |
 | **9.7** | Wilderness-encounter **check + prompt** | trigger | per-travel-day + manual; GM rolls the table |

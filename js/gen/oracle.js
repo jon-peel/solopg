@@ -92,18 +92,34 @@ export function rollMeaning(tables, rng) {
   return { kind: "meaning", action, subject };
 }
 
+// --- Complication / twist (Phase 9.4) -------------------------------------
+//
+// A terse setback to drop into a "yes, but…" / "no, and…" beat or to spice a
+// quiet scene. A single flat table; reads as a GM prompt, never a stat.
+
+/**
+ * Roll a Complication (Phase 9.4).
+ * @param {Map<string,object>} tables incl. oracle-complication
+ * @param {() => number} rng
+ * @returns {{ kind:"complication", text:string }}
+ */
+export function rollComplication(tables, rng) {
+  return { kind: "complication", text: rollTable(tables.get("oracle-complication"), rng).value };
+}
+
 /**
  * Compose the one-line display string for an oracle pick (compose-at-render).
  * Each oracle kind knows how to phrase its own pick; unknown kinds fall back to
  * the raw answer so a new kind can't crash the log before its prose lands. The
  * random-event flag is NOT folded in here — the UI shows it as its own note.
- * @param {{ kind:string, answer?:string, tone?:string|null, action?:string, subject?:string }} pick
+ * @param {{ kind:string, answer?:string, tone?:string|null, action?:string, subject?:string, text?:string }} pick
  * @returns {string}
  */
 export function oracleLine(pick) {
   if (!pick) return "";
   if (pick.kind === "yesno") return pick.tone ? `${pick.answer}, ${pick.tone}` : pick.answer;
   if (pick.kind === "meaning") return `${pick.action} · ${pick.subject}`;
+  if (pick.kind === "complication") return pick.text;
   return String(pick.answer ?? "");
 }
 
@@ -111,7 +127,8 @@ export function oracleLine(pick) {
 export const ORACLE_LABELS = {
   yesno: "Yes / No",
   meaning: "Meaning",
+  complication: "Complication",
 };
 
-/** Table ids the Meaning oracle (9.3) needs loaded. */
-export const ORACLE_TABLE_IDS = ["oracle-action", "oracle-subject"];
+/** Table ids the table-backed oracles (9.3 Meaning, 9.4 Complication) need. */
+export const ORACLE_TABLE_IDS = ["oracle-action", "oracle-subject", "oracle-complication"];

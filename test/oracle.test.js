@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { askYesNo, rollMeaning, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
-// Load the real Meaning tables the way the app does, validated on arrival.
-function meaningTables() {
+// Load the real oracle tables the way the app does, validated on arrival.
+function oracleTables() {
   const map = new Map();
   for (const id of ORACLE_TABLE_IDS) {
     const t = validateTable(JSON.parse(readFileSync(new URL(`../data/${id}.json`, import.meta.url))));
@@ -111,7 +111,7 @@ test("ORACLE_ODDS is an ordered ladder with the expected keys", () => {
 // --- Meaning oracle (9.3) ---
 
 test("Meaning tables are valid and non-trivial", () => {
-  const t = meaningTables();
+  const t = oracleTables();
   for (const id of ORACLE_TABLE_IDS) {
     const table = t.get(id);
     assert.ok(table, `${id} loaded`);
@@ -120,7 +120,7 @@ test("Meaning tables are valid and non-trivial", () => {
 });
 
 test("rollMeaning draws an action + subject from the tables", () => {
-  const t = meaningTables();
+  const t = oracleTables();
   const actions = new Set(t.get("oracle-action").entries.map((e) => e.value));
   const subjects = new Set(t.get("oracle-subject").entries.map((e) => e.value));
   const p = rollMeaning(t, mulberry32(1));
@@ -130,7 +130,7 @@ test("rollMeaning draws an action + subject from the tables", () => {
 });
 
 test("rollMeaning is deterministic for a given stream", () => {
-  const t = meaningTables();
+  const t = oracleTables();
   const a = rollMeaning(t, mulberry32(1234));
   const b = rollMeaning(t, mulberry32(1234));
   assert.deepEqual(a, b);
@@ -139,4 +139,24 @@ test("rollMeaning is deterministic for a given stream", () => {
 test("oracleLine composes a Meaning pair", () => {
   assert.equal(oracleLine({ kind: "meaning", action: "Pursue", subject: "Secrets" }), "Pursue · Secrets");
   assert.equal(ORACLE_LABELS.meaning, "Meaning");
+});
+
+// --- Complication oracle (9.4) ---
+
+test("rollComplication draws a twist from the table", () => {
+  const t = oracleTables();
+  const twists = new Set(t.get("oracle-complication").entries.map((e) => e.value));
+  const p = rollComplication(t, mulberry32(3));
+  assert.equal(p.kind, "complication");
+  assert.ok(twists.has(p.text), `text "${p.text}" is from the table`);
+});
+
+test("rollComplication is deterministic for a given stream", () => {
+  const t = oracleTables();
+  assert.deepEqual(rollComplication(t, mulberry32(99)), rollComplication(t, mulberry32(99)));
+});
+
+test("oracleLine composes a Complication; label present", () => {
+  assert.equal(oracleLine({ kind: "complication", text: "The door locks behind you." }), "The door locks behind you.");
+  assert.equal(ORACLE_LABELS.complication, "Complication");
 });

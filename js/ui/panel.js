@@ -580,6 +580,19 @@ export function renderOraclePanel(model) {
   }
   host.appendChild(meaning);
   appendOracleResult(host, results.meaning, flashKind === "meaning");
+
+  // Complication oracle (9.4): a terse setback for a "yes, but…" / "no, and…"
+  // beat, or to spice a quiet scene.
+  host.appendChild(sectionLabel(ORACLE_LABELS.complication));
+  const complication = document.createElement("div");
+  complication.className = "oracle-complication tile-actions";
+  if (roll) {
+    const b = actionButton("Roll complication", () => roll("complication"));
+    b.title = "Roll a terse twist to drop into the scene";
+    complication.appendChild(b);
+  }
+  host.appendChild(complication);
+  appendOracleResult(host, results.complication, flashKind === "complication");
 }
 
 // One oracle kind's latest result block (or an empty hint), appended to `host`.
