@@ -1,5 +1,10 @@
 # Phase 11 — Visual & UX Overhaul (master plan overview)
 
+> **Status: ✅ complete** — all steps 11.1–11.8 shipped, plus an interleaved travel-mechanic
+> overhaul (see [Travel-mechanic overhaul](#travel-mechanic-overhaul-interleaved)). Presentation-only,
+> **no schema bump**. One follow-up is deferred to its own step: **travel modes** (mount/vehicle pace
+> above base speed; boats over water).
+
 A deliberate re-skin + IA (information-architecture) pass to move the app from a functional
 "dev-tool" look to a cohesive **cartographer's** identity, and to settle the action model
 (radial = the single hex-action surface) and the sidebar's role (a read/navigate **overview**,
@@ -153,6 +158,33 @@ Dependency- and risk-driven, not by picked-list number:
 **Phase 11 complete** — 11.1–11.8 all shipped. Follow-up queued separately: travel modes
 (mount/vehicle pace above base speed; boat over water).
 
+## Travel-mechanic overhaul (interleaved) ✅
+
+Requested mid-phase and shipped alongside the re-skin — a functional upgrade to how the party moves,
+not just how it looks. Presentation + engine, still **no schema bump**.
+
+- **Directional travel compass** — double-clicking the party opens a **3-ring radial compass** where
+  the *radius is the distance*: inner ring = **one hex**, middle = **half a day**, outer = a **full
+  day**. Eight compass points (N at top, clockwise). Double-clicking a *different* hex opens a
+  confirm menu instead (always a confirmation step before moving). Lives in
+  `js/ui/radial-menu.js` (`openTravelRadial`).
+- **Fractional within-day clock** — the day is `DAY_HOURS = 8` and the party tracks `dayUsed`
+  (0..1). Movement and rests advance it fractionally; `+1h` and a **"next dawn"** (🌅) control sit on
+  the day-progress bar. When there isn't enough daylight left to cross even one hex the direction
+  nodes grey out and the hub becomes **"Rest to dawn."** (`js/ui/app.js`.)
+- **Budget-correct crossing** — `travelDay`/`travelDayBearing`/`travelDayToward` take a `budget` and
+  check it **before** stepping, so a full-day move never overshoots into the next day; a ≥1-hex
+  guarantee still applies when the day starts fresh. (`js/gen/travel.js`, node-tested.)
+- **Roads** — a road doubles pace **and suppresses getting lost**: the lost roll is skipped when the
+  current *or* intended hex carries a road, so a party on a road can't be knocked onto the wrong hex.
+- **Movement path trail** — after each move the map draws the **gold dashed trail** the party took
+  (`setTravelPath`/`drawTravelPath` in `js/ui/map.js`).
+- **Pace / encumbrance scale** — a narrow vertical speed scale (base → heavy, 44px touch targets,
+  tooltips) sits under the time card; the setting **persists** across moves (encumbrance is preserved
+  on `setPartyPosition`).
+- **Deferred:** **travel modes** — mount/vehicle pace *above* base speed, and boats that cross water.
+  Its own step: it touches `paceFor` passability, a per-mode multiplier, and the pace UI.
+
 ## Sidebar overview — proposals (+D)
 
 Once every per-hex action moves to the radial, the sidebar stops being an editor and becomes a
@@ -190,7 +222,7 @@ detail is contextual. Most "app-like," biggest change.
 
 ## How this threads into `PLAN.md`
 
-Added to the roadmap as **Phase 11 — Visual & UX Overhaul (▶ in planning, pulled ahead of 9–10)**.
+Landed on the roadmap as **Phase 11 — Visual & UX Overhaul (✅ done, pulled ahead of 9–10)**.
 It supersedes Phase 10's **10.6 (themes)** and **10.8 (art)** and the touch half of **10.2**; those rows
-in `phase-10-backlog.md` should be marked "folded into Phase 11" when this starts. Each step still ends
-with the standard manual-verification checklist handed to the user before moving on.
+in `phase-10-backlog.md` are marked "folded into Phase 11." Each step ended with the standard
+manual-verification checklist handed to the user before moving on.
