@@ -13,7 +13,7 @@ const panel = () => document.getElementById("panel");
 // The panel shows one tab at a time; each region is built once (in showWorld)
 // and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", travel: "travel-panel", factions: "factions-panel", oracle: "oracle-panel" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", factions: "factions-panel", oracle: "oracle-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -32,7 +32,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "travel" | "factions" | "oracle"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "factions" | "oracle"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -596,113 +596,6 @@ export function renderOraclePanel(model) {
   host.appendChild(results);
 }
 
-// Encumbrance tier labels (Phase 8.4), matching ENCUMBRANCE_FACTOR's keys
-// (js/gen/travel.js) and the existing B/X travel-tip tooltip's phrasing.
-const ENCUMBRANCE_LABELS = {
-  unencumbered: "Unencumbered",
-  light: "Lightly loaded",
-  encumbered: "Encumbered",
-  heavy: "Heavily loaded",
-};
-
-// The 6 hex neighbour directions as compass labels (indexes match core
-// hexgeo.js NEIGHBOR_DIRS; derived from each delta's pixel bearing on a
-// pointy-top grid: E / NE / NW / W / SW / SE). Used to name a step in the log.
-export const DIR_LABELS = ["E", "NE", "NW", "W", "SW", "SE"];
-
-// The compass rose, laid out as a 3×3 grid (center empty). Each cell's `id` is
-// the bearing passed to onTravelDirection: a hex-direction index (0-5) for the
-// 6 true neighbours, or "N"/"S" for the pseudo-cardinals (which alternate their
-// two flanking directions hex-by-hex — see travel.js travelDayBearing).
-const ROSE_CELLS = [
-  { id: 2, label: "NW", arrow: "↖" }, { id: "N", label: "N", arrow: "↑" }, { id: 1, label: "NE", arrow: "↗" },
-  { id: 3, label: "W", arrow: "←" }, null, { id: 0, label: "E", arrow: "→" },
-  { id: 4, label: "SW", arrow: "↙" }, { id: "S", label: "S", arrow: "↓" }, { id: 5, label: "SE", arrow: "↘" },
-];
-
-/**
- * Render the Travel tab: the party's pace (encumbrance) setting, a 6-direction
- * compass rose (each button travels ONE day that way), and the LAST DAY's
- * report. Everything here is app.js-only ephemeral state (not persisted); the
- * report is replaced on every travel press.
- * @param {{ encumbrance?: string, onSetEncumbrance?: (tier:string)=>void,
- *   onTravelDirection?: (bearing:number|"N"|"S")=>void,
- *   lastDay: {headline:string, finalPos:{q:number,r:number},
- *     log:{terrain:string,road:boolean,lost:boolean,dir:number}[]}|null }} model
- */
-export function renderTravelPanel(model) {
-  const host = document.getElementById("travel-panel");
-  if (!host) return;
-  host.innerHTML = "";
-
-  host.appendChild(sectionLabel("Party pace"));
-  const select = document.createElement("select");
-  select.className = "encumbrance-select";
-  select.setAttribute("aria-label", "Party encumbrance");
-  for (const [value, label] of Object.entries(ENCUMBRANCE_LABELS)) {
-    const opt = document.createElement("option");
-    opt.value = value;
-    opt.textContent = label;
-    if (value === (model.encumbrance || "unencumbered")) opt.selected = true;
-    select.appendChild(opt);
-  }
-  if (model.onSetEncumbrance) {
-    select.addEventListener("change", () => model.onSetEncumbrance(select.value));
-  }
-  host.appendChild(select);
-
-  // Compass rose — travel a day in a direction (into the unknown, generating
-  // terrain as the party goes). 8 points: the 6 hex neighbours + N/S (which
-  // zig-zag their flanking hexes).
-  host.appendChild(sectionLabel("Travel a day"));
-  const rose = document.createElement("div");
-  rose.className = "dir-rose";
-  for (const cell of ROSE_CELLS) {
-    if (!cell) {
-      const spacer = document.createElement("div");
-      spacer.className = "dir-spacer";
-      rose.appendChild(spacer);
-      continue;
-    }
-    const b = document.createElement("button");
-    b.className = "dir-btn";
-    b.textContent = `${cell.arrow} ${cell.label}`;
-    b.title = `Travel one day ${cell.label}`;
-    if (model.onTravelDirection) b.addEventListener("click", () => model.onTravelDirection(cell.id));
-    rose.appendChild(b);
-  }
-  host.appendChild(rose);
-
-  host.appendChild(sectionLabel("Last day"));
-  const last = model.lastDay;
-  if (!last) {
-    const empty = document.createElement("div");
-    empty.className = "panel-hint";
-    empty.textContent = 'No travel yet — press a direction above, or "Travel toward this hex" on a selected hex.';
-    host.appendChild(empty);
-    return;
-  }
-
-  const summary = document.createElement("div");
-  summary.className = "log-line trip-summary";
-  summary.textContent = last.headline;
-  host.appendChild(summary);
-
-  for (const entry of last.log) {
-    const div = document.createElement("div");
-    div.className = "log-line trip-day" + (entry.lost ? " trip-lost" : "");
-    const road = entry.road ? " (road)" : "";
-    const bend = entry.lost ? `, drifted ${DIR_LABELS[entry.dir]}` : "";
-    div.textContent = `${entry.terrain}${road}${bend}`;
-    host.appendChild(div);
-  }
-
-  const where = document.createElement("div");
-  where.className = "log-line";
-  where.textContent = `Now at (${last.finalPos.q}, ${last.finalPos.r}).`;
-  host.appendChild(where);
-}
-
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
 // notes. Both commit on blur/Enter (change event) — the only editable bits left
 // in the otherwise read-only Detail tab.
@@ -996,7 +889,6 @@ export function showWorld(world, opts = {}) {
     mkTab("detail", "Selection"),
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
-    mkTab("travel", "Travel"),
     mkTab("factions", "Factions", "factions-tab-badge"),
     mkTab("oracle", "Oracle"),
   );
@@ -1012,7 +904,6 @@ export function showWorld(world, opts = {}) {
   region("selection"); // selected hex / dungeon room details
   region("global-hooks", true); // unpinned world hooks (renderGlobalHooks)
   region("pinned-hooks", true); // the party's pinned leads
-  region("travel-panel", true); // encumbrance + last trip report (renderTravelPanel)
   region("factions-panel", true); // the world's factions (renderFactionsPanel)
   region("oracle-panel", true); // on-demand GM oracle rolls (renderOraclePanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail

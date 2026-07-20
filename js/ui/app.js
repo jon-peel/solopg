@@ -48,7 +48,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { askYesNo, oracleLine } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
@@ -162,10 +162,6 @@ const DAY_HOURS = 8;
 // with the world. Retunable; the log is a play aid, not a record to preserve.
 const ORACLE_LOG_CAP = 50;
 
-// Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
-// sessionDay: replaced by each travel press, reset on world switch.
-let lastDay = null;
-
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
 let dungeonLevelIndex = 0;
@@ -224,7 +220,6 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
-  lastDay = null; // the last day's travel report is ephemeral, per-world (Phase 8.4)
   setTravelPath(null); // clear the previous world's movement trail
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
@@ -241,7 +236,6 @@ async function setCurrent(world) {
   refreshGlobalHooks();
   refreshFactions();
   refreshOracle();
-  refreshTravelPanel();
   refreshHookMarks();
   refreshHookFocus();
   refreshMapChrome();
@@ -856,14 +850,14 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 }
 
 // Apply a resolved travel day: move the party, advance the clock by one (only
-// if a day was actually spent), stash the report, and surface it on the Travel
-// tab (same "jump to the tab" convention as a new hook).
+// if a day was actually spent), and log the day's recap to the console. The
+// on-map movement trail is the visible record; the Travel tab was removed (its
+// pace control lives on the on-map HUD, its compass on the party's radial).
 async function applyTravel(result, aimLabel, aimKind) {
   const origin = { q: current.party.q, r: current.party.r }; // before the move
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
   if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
-  lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
-  setPanelTab("travel");
+  logLine(travelHeadline(result, aimLabel, aimKind));
   await persistAndRefresh();
   setTravelPath([origin, ...result.log.map((l) => ({ q: l.q, r: l.r }))]); // draw the trail (after the refresh's setWorld)
 }
@@ -912,16 +906,6 @@ function buildTerrainByKey(world) {
   const terrainByKey = new Map();
   for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
   return terrainByKey;
-}
-
-// Travel tab (Phase 8.4): pace setting, the direction rose, and the last day's report.
-function refreshTravelPanel() {
-  renderTravelPanel({
-    encumbrance: (current && current.party && current.party.encumbrance) || "unencumbered",
-    onSetEncumbrance,
-    onTravelDirection,
-    lastDay,
-  });
 }
 
 // GM annotations work on any selected cell. An empty cell is annotated by
@@ -2143,7 +2127,6 @@ async function persistAndRefresh() {
   refreshGlobalHooks();
   refreshFactions();
   refreshOracle();
-  refreshTravelPanel();
   refreshHookFocus();
   refreshMapChrome();
 }
