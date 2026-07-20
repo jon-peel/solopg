@@ -50,7 +50,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, oracleLine } from "../gen/oracle.js";
+import { askYesNo, oracleLine, ORACLE_LABELS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -1524,18 +1524,23 @@ function refreshOracle(flash = false) {
   renderOraclePanel({ last: oracleLast, onRoll: onOracleRoll, flash });
 }
 
-// Roll one oracle (Phase 9.1). A transient GM aid: draw a fresh seeded stream off
+// Roll one oracle (Phase 9.2). A transient GM aid: draw a fresh seeded stream off
 // the in-memory cursor, keep only the latest result (in memory — never saved or
 // exported), mirror it to the console, and re-render the tab. No persistence.
-// The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN.
-function onOracleRoll(kind) {
+// The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN. `odds` is the
+// GM's picked likelihood for the Yes/No oracle.
+function onOracleRoll(kind, odds) {
   if (!current) return;
   const rng = subRng(current.seed, "oracle", kind, oracleSeq++);
   let pick;
-  if (kind === "yesno") pick = askYesNo(rng);
-  else return; // unknown kind — 9.2+ register more
-  oracleLast = { kind, line: oracleLine(pick) };
-  logLine(`🎲 Oracle (${kind}): ${oracleLast.line}`);
+  if (kind === "yesno") pick = askYesNo(rng, { odds });
+  else return; // unknown kind — 9.3+ register more
+  oracleLast = {
+    tag: pick.oddsLabel || ORACLE_LABELS[kind] || null,
+    line: oracleLine(pick),
+    note: pick.event ? "⚡ A random event intrudes — read it into the scene." : null,
+  };
+  logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${oracleLast.line}${pick.event ? " · random event" : ""}`);
   refreshOracle(true); // flash the result so a repeated answer still reads as "rolled"
 }
 

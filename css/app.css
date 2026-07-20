@@ -1427,6 +1427,28 @@ button:hover {
     color: var(--ink);
   }
 }
+/* The odds ladder — a compact wrapping row of one-click roll buttons. */
+.oracle-odds {
+  margin-top: 0.2rem;
+}
+/* Random-event nudge under the answer; fades in with the result on a roll. */
+.oracle-note {
+  margin-top: 0.35rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.oracle-note.oracle-flash-note {
+  animation: oracle-note-in 0.6s ease-out;
+}
+@keyframes oracle-note-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
 
 /* Text-link "Back" out of a POI's detail (navigation, not an action button). */
 .link-back {

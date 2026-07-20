@@ -94,19 +94,41 @@ is UI (manual checklist).
 
 ## Group A — solo-play keystones (generative)
 
-### 9.2 Yes/No fate oracle
-The single most-used solo tool. A weighted **odds** axis the GM picks before rolling
-(Certain · Likely · Even · Unlikely · Impossible — mapped to yes-probabilities), returning
-**Yes / No** with two refinements layered on:
-- **Exceptional** results (an "exceptional yes" / "exceptional no") on the tails of the roll — a
-  stronger, more emphatic answer.
-- An optional **"and / but"** modifier (a small independent roll) — *yes, but…* / *no, and…* — for
-  shading the answer without a separate oracle.
-- A **random-event flag**: on a doubles-style trigger, the line notes *"(a random event intrudes)"*
-  and nudges the GM to roll **9.3 Meaning**. (No auto-chaining — the GM chooses to follow it.)
+### 9.2 Yes/No fate oracle — ✅ **built**
+The single most-used solo tool. The GM picks the **odds** (Certain · Likely · Even · Unlikely ·
+Impossible → yes-probabilities 0.9 / 0.7 / 0.5 / 0.3 / 0.1) and rolls.
 
-Data: `data/oracle-odds.json` (odds → yes-threshold) — or odds-as-consts if it reads cleaner as
-tuning. Engine: `askOracle(odds, rng)`.
+> **As built — the two refinements collapsed into one roll.** The plan listed "exceptional" and the
+> "and/but" modifier as two separate layers; in practice they're the same axis (how far into the
+> yes/no zone the roll landed), so one roll yields the standard **six-outcome spectrum**:
+> **Yes, and · Yes · Yes, but · No, but · No · No, and**. The emphatic **"…and"** sits at the far
+> end of each zone — that *is* the exceptional result — and the marginal **"…but"** sits next to the
+> 50/50 boundary (outer/inner fifths, `EMPHATIC`/`MARGINAL` = 0.2). Cleaner and it's the modern
+> solo-oracle convention.
+
+- **Random-event flag:** a **doubles** roll (d100 00/11/…/99 ≈ 10%) sets `event`, shown as a
+  separate note — *"⚡ A random event intrudes"* — a nudge to roll **9.3 Meaning** (no auto-chaining;
+  the GM chooses to follow it).
+- **UI:** a one-click **odds button row** (each button both sets the likelihood and rolls) under a
+  "Yes / No" section; the result shows the odds as a tag + the six-outcome answer, with the flash
+  from 9.1 replaying each press.
+- **Data as consts, not a table:** the odds ladder is `ORACLE_ODDS` in `js/gen/oracle.js` — you
+  *pick* from it, you don't *roll* on it, so it isn't a weighted JSON table. Engine:
+  `askYesNo(rng, { odds })` (pure, node-tested: thresholds, the six zones, the event flag,
+  distributions).
+
+**Manual test — 9.2 (run `./run-local.sh`):**
+```
+[ ] Oracle tab → a "Yes / No" section with five odds buttons:
+    Certain · Likely · Even · Unlikely · Impossible.
+[ ] Press "Even" ~20× → answers span Yes, and / Yes / Yes, but / No, but / No, No, and;
+    the tag reads "Even"; each press flashes.
+[ ] Press "Certain" several times → almost always Yes (rarely a surprise No).
+[ ] Press "Impossible" several times → almost always No (rarely a surprise Yes).
+[ ] Keep rolling → occasionally a "⚡ A random event intrudes" note appears under the answer.
+[ ] Browser console → each roll logs the odds + answer (+ "random event" when flagged).
+[ ] Reload → tab blank (still not persisted); export JSON → still no oracle data.
+```
 
 ### 9.3 Meaning / inspiration tables
 The oracle's companion — when a result is open-ended, roll an evocative pair to interpret. Two
@@ -226,7 +248,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 | Step | Item | Class | Notes |
 |---|---|---|---|
 | **9.1** | Oracle tab + `oracle.js` + on-screen results | plumbing | ✅ **done** — unblocks 9.2–9.6 |
-| **9.2** | Yes/No fate oracle | generative | odds + exceptional + and/but + event flag |
+| **9.2** | Yes/No fate oracle | generative | ✅ **done** — odds ladder + six-outcome (…and/…but) + event flag |
 | **9.3** | Meaning / inspiration | generative | action × subject |
 | **9.4** | Complication / twist | generative | single table |
 | **9.5** | Settlement situation | generative | terrain- & faction-aware; **no NPC** |
