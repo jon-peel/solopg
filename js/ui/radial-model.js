@@ -23,8 +23,8 @@ export const POI_GLYPH = {
 
 const RANDOM = "__random__";
 
-const leaf = (id, glyph, label, { enabled = true, reason, value, anchor, title, danger } = {}) =>
-  ({ kind: "leaf", id, glyph, label, enabled, reason, value, anchor, title, danger });
+const leaf = (id, glyph, label, { enabled = true, reason, value, anchor, title, danger, swatch } = {}) =>
+  ({ kind: "leaf", id, glyph, label, enabled, reason, value, anchor, title, danger, swatch });
 
 const submenu = (id, glyph, label, { enabled = true, reason } = {}, children = []) =>
   ({ kind: "submenu", id, glyph, label, enabled, reason, children });
@@ -124,6 +124,55 @@ function regenChildren(locked) {
   ];
 }
 
+// Party submenu (Phase 11.5, moved off the panel): march the party toward this
+// hex (one day per press) or drop it here (GM teleport). Both need a placed hex
+// and are inert once the party already stands here.
+function partyChildren(placed, partyHere) {
+  if (partyHere) {
+    return [leaf("partyHere", "🚩", "Party is here", { enabled: false, reason: "The party already stands on this hex" })];
+  }
+  const need = placed ? {} : { enabled: false, reason: "Place terrain on this hex first" };
+  return [
+    leaf("travelToward", "🥾", "Travel toward", need),
+    leaf("placeParty", "🚩", "Place here", need),
+  ];
+}
+
+// Faction submenu (Phase 11.5, moved off the panel): birth a power here, set who
+// runs the hex (single-owner picker), make it a held faction's seat, or promote
+// an occupied POI into a power (optionally as a lair-bound lord). The current
+// owner is marked with a ✓.
+function factionChildren({ placed, factions, ownerId, canReseat, promotable }) {
+  const need = placed ? {} : { enabled: false, reason: "Place terrain on this hex first" };
+  const kids = [leaf("genFaction", "🎲", "Generate here", need)];
+  if (placed && factions.length) {
+    kids.push(
+      submenu("runBy", "⚑", "Run by", {}, [
+        leaf("setOwner", "🚫", ownerId == null ? "✓ None" : "None", { value: null }),
+        ...factions.map((f) =>
+          leaf("setOwner", "⚑", (ownerId === f.id ? "✓ " : "") + shorten(f.name), { value: f.id, swatch: f.color }),
+        ),
+      ]),
+    );
+  }
+  if (placed && canReseat) {
+    kids.push(leaf("reseat", "★", `Seat ${shorten(canReseat.name)}`, { value: canReseat.id, title: `Make this ${canReseat.name}'s seat — costs reach + strength` }));
+  }
+  for (const p of promotable) {
+    if (p.lords && p.lords.length) {
+      kids.push(
+        submenu("promoteMenu", "👑", `Promote ${shorten(p.name)}`, {}, [
+          leaf("promote", "⚑", "Ordinary faction", { value: { poiId: p.poiId } }),
+          ...p.lords.map((l) => leaf("promote", "👑", shorten(l.label), { value: { poiId: p.poiId, archetype: l.archetype } })),
+        ]),
+      );
+    } else {
+      kids.push(leaf("promote", "⚑", `Promote ${shorten(p.name)}`, { value: { poiId: p.poiId } }));
+    }
+  }
+  return kids;
+}
+
 /**
  * Build the fixed-slot radial model for the cell under the cursor.
  * @param {object} state
@@ -144,6 +193,7 @@ export function buildRadialModel(state) {
     allowedSizes = [], canGossip = false,
     poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
     manualRiverHere = null, manualRoadHere = null, locked = false,
+    partyHere = false, factions = [], ownerId = null, canReseat = null, promotable = [],
   } = state || {};
 
   const needHex = { enabled: false, reason: "Place terrain on this hex first" };
@@ -175,6 +225,11 @@ export function buildRadialModel(state) {
     // or a manual road (kept verbatim, joins the auto network) from this hex, and
     // Remove one that already passes through this hex.
     submenu("draw", ACTION_GLYPH.draw, "Draw", {}, drawChildren(manualRiverHere, manualRoadHere)),
+    // Party + Faction (Phase 11.5): the last panel actions, folded onto the ring
+    // so it's the single action surface. Both submenus are always enabled; their
+    // children carry the gating.
+    submenu("party", "🚩", "Party", {}, partyChildren(placed, partyHere)),
+    submenu("faction", "⚑", "Faction", {}, factionChildren({ placed, factions, ownerId, canReseat, promotable })),
   ];
 }
 

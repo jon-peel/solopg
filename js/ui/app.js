@@ -31,7 +31,7 @@ import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanc
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
-import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes } from "../gen/travel.js";
+import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
 import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
@@ -62,15 +62,19 @@ import {
   setHookFocus,
   setRiverDraft,
   setRoadDraft,
+  setTravelPath,
   zoomStep,
+  setZoom,
+  getZoom,
+  setFactionHighlight,
   recenter,
   pixelsPerMile,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
-import { POI_GLYPHS, POI_DOT_COLORS, factionColor } from "./poi-style.js";
+import { POI_GLYPHS, POI_DOT_COLORS, factionColor, factionHatchDeg } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
-import { openRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
+import { openRadial, openTravelRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
 
 // Tables the hex generator rolls on. Settlement/POI presence are now driven by
 // the terrain profile (not tables); settlement-size is still rolled (capped).
@@ -146,6 +150,13 @@ let draftKind = null;   // "river" | "road" — what the active draft builds
 // ONE per travelled day; 8.6 adds a manual "Progress N days" while stationary.
 let sessionDay = 0;
 
+// Within-day time (Phase 11 travel model): fraction 0..1 of the current marching
+// day already spent. A marching day is DAY_HOURS long (retunable — like every
+// other travel constant). Travel spends `daysToCross` per hex against it; whole-
+// day boundaries fire faction turns. Session-only, like sessionDay.
+let dayUsed = 0;
+const DAY_HOURS = 8;
+
 // Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
 // sessionDay: replaced by each travel press, reset on world switch.
 let lastDay = null;
@@ -209,6 +220,7 @@ async function setCurrent(world) {
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
   lastDay = null; // the last day's travel report is ephemeral, per-world (Phase 8.4)
+  setTravelPath(null); // clear the previous world's movement trail
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
@@ -317,28 +329,76 @@ function refreshMapChrome() {
   renderDayReadout();
 }
 
-// Session-only world clock readout (Phase 8.1) — see `sessionDay`.
-function renderDayReadout() {
-  const el = $("day-readout");
-  if (el) el.textContent = `Day ${sessionDay}`;
+// Hours left in the current marching day (for the readout + HUD).
+function hoursLeft() {
+  return Math.max(0, Math.round((1 - dayUsed) * DAY_HOURS * 10) / 10);
 }
 
-// The single day-advance chokepoint (Phase 8.6). Every place a day passes —
-// travelling (8.4) and the stationary "Progress" control — goes through here,
-// so Arc B/C have ONE seam to hook: 8.10 faction turns and 8.12 auto-hooks will
-// fire as days pass. For now it only bumps the (session-only) clock.
-async function advanceDays(n) {
-  if (!Number.isFinite(n) || n < 1) return;
-  sessionDay += n;
-  // Fire the faction turns the elapsed days earn (Phase 8.10); each turn returns
-  // events (8.15) that we LOG as running commentary — expansion is played as
-  // subtext (the map + log), not auto-generated hooks.
-  if (current) {
-    const events = advanceFactionDays(current, n, current.seed);
+// Session-only world clock readout (Phase 8.1; fractional since the 11 travel
+// model) — the whole day plus how much of it is left.
+function renderDayReadout() {
+  const el = $("day-readout");
+  if (el) el.textContent = `Day ${sessionDay} · ${hoursLeft()}h left`;
+  renderTravelHud();
+}
+
+// The on-map travel HUD (Phase 11): day + hours-left + a day-progress bar, the
+// persistent travel-unit toggle (1 hex / ½ day / full day), and the hour / next-
+// dawn controls. Shown whenever a world is loaded.
+function renderTravelHud() {
+  const stack = $("hud-stack");
+  if (!stack) return;
+  stack.hidden = !current;
+  if (!current) return;
+  const clock = stack.querySelector(".thud-clock");
+  if (clock) clock.textContent = `Day ${sessionDay} · ${hoursLeft()}h left`;
+  const bar = stack.querySelector(".thud-fill");
+  if (bar) bar.style.width = `${Math.round(dayUsed * 100)}%`;
+  // Pace panel: mark the active tier + caption with the open-ground pace.
+  const enc = (current.party && current.party.encumbrance) || "unencumbered";
+  for (const btn of stack.querySelectorAll(".pace-scale-v button")) {
+    btn.classList.toggle("active", btn.dataset.enc === enc);
+  }
+  const cap = stack.querySelector(".pace-cap");
+  if (cap) {
+    const hpd = Math.round(TRAVEL_COST.Plains * (ENCUMBRANCE_FACTOR[enc] ?? 1));
+    cap.textContent = `≈${hpd}/d`;
+  }
+}
+
+async function advanceHour() {
+  await advanceTime(1 / DAY_HOURS);
+}
+
+// Skip to the next dawn: finish the current day (or a whole day if already at dawn).
+async function advanceToNextDawn() {
+  await advanceTime(dayUsed > 0.001 ? 1 - dayUsed : 1);
+}
+
+// The single time-advance chokepoint (Phase 8.6, fractional since 11). Every
+// place time passes — travelling (fractional) and the stationary Progress
+// controls — goes through here. Whole-day BOUNDARIES crossed fire that many
+// faction turns (Phase 8.10); their events are logged as running commentary.
+async function advanceTime(days) {
+  if (!Number.isFinite(days) || days <= 0) return;
+  const before = sessionDay + dayUsed;
+  const after = before + days;
+  const wholeCrossed = Math.floor(after) - Math.floor(before);
+  sessionDay = Math.floor(after);
+  dayUsed = after - sessionDay;
+  if (current && wholeCrossed > 0) {
+    const events = advanceFactionDays(current, wholeCrossed, current.seed);
     logFactionEvents(events);
     applyFactionOccupancy(events);
   }
   renderDayReadout();
+}
+
+// Whole-day advance (the stationary "Progress N days" control) — keeps the
+// time-of-day, fires N faction turns.
+async function advanceDays(n) {
+  if (!Number.isFinite(n) || n < 1) return;
+  await advanceTime(n);
 }
 
 // Phase 8.15 (B) — narrate every faction event on the turn (both the day-tick and
@@ -667,6 +727,7 @@ function renderSelection() {
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
+    onOpenActions, // "⋯ Actions" → open the radial on this hex (11.5b)
     seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
     selectedPoiId,
@@ -729,7 +790,8 @@ async function onTravelToward() {
   const { q: aq, r: ar } = current.party;
   const encumbrance = current.party.encumbrance || "unencumbered";
   const originTerrain = (getHex(current, aq, ar) || {}).terrain;
-  const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance });
+  const { budget, maxHexes } = travelBudget("full"); // "Travel toward" heads a full day at a time
+  const result = travelDayToward(current.seed, sessionDay, aq, ar, selected.q, selected.r, terrainByKey, roadKeys, { encumbrance, budget, maxHexes });
   const tables = await loadTables(HEX_TABLE_IDS);
   revealSightAlong(originTerrain, aq, ar, result, tables);
   const destHex = getHex(current, selected.q, selected.r);
@@ -739,7 +801,7 @@ async function onTravelToward() {
 // Travel ONE day in a hex direction (Phase 8.4) — pushes into the unknown,
 // lazily generating each frontier hex the party steps into (same seam as
 // area/hook generation). Off-road (cross-country in a compass line).
-async function onTravelDirection(bearing) {
+async function onTravelDirection(bearing, unit = "full") {
   if (!current || !current.party) return;
   const tables = await loadTables(HEX_TABLE_IDS);
   const { q: aq, r: ar } = current.party;
@@ -754,9 +816,25 @@ async function onTravelDirection(bearing) {
     addHex(current, hex);
     return hex.terrain;
   };
-  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt });
+  // Roads were never passed to bearing travel, so the party ignored them (could
+  // get lost on a road, no road speed). Feed the road network in.
+  const roadKeys = roadHexKeySet(current.roads);
+  const roadAt = (q, r) => roadKeys.has(axialKey(q, r));
+  const { budget, maxHexes } = travelBudget(unit);
+  const result = travelDayBearing(current.seed, sessionDay, aq, ar, bearing, { encumbrance, terrainAt, roadAt, budget, maxHexes });
   revealSightAlong(originTerrain, aq, ar, result, tables);
   applyTravel(result, bearingWord(bearing), "bearing");
+}
+
+// The engine budget (in marching-days) + hex cap for a travel unit, measured
+// against the time left today. One hex = exactly one hex (its real cost, may
+// spill into tomorrow); half = ≤ half a day; full = the rest of today (a fresh
+// full day if today is already spent).
+function travelBudget(unit) {
+  const remaining = 1 - dayUsed;
+  if (unit === "hex") return { budget: Infinity, maxHexes: 1 };
+  if (unit === "half") return { budget: remaining > 0.001 ? Math.min(remaining, 0.5) : 0.5 };
+  return { budget: remaining > 0.001 ? remaining : 1 }; // full
 }
 
 // Reveal the swath of country the party could SEE this day (Phase 8.4 follow-up):
@@ -775,11 +853,13 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 // if a day was actually spent), stash the report, and surface it on the Travel
 // tab (same "jump to the tab" convention as a new hook).
 async function applyTravel(result, aimLabel, aimKind) {
+  const origin = { q: current.party.q, r: current.party.r }; // before the move
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
-  if (result.daySpent) await advanceDays(1); // one press = one day, through the shared clock
+  if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
   lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
   setPanelTab("travel");
   await persistAndRefresh();
+  setTravelPath([origin, ...result.log.map((l) => ({ q: l.q, r: l.r }))]); // draw the trail (after the refresh's setWorld)
 }
 
 // One-line summary of a day's travel, composed here (app knows the day, the
@@ -1436,6 +1516,48 @@ function refreshFactions() {
     onAdvanceFactionTurn,
     onDeleteFaction,
     factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
+  });
+  renderFactionLegend(factions);
+}
+
+// The map-legend faction key (Phase 11.4): a clickable row per power — a colour
+// swatch hatched at the faction's angle + its name. Clicking opens its detail
+// (the Factions tab) and centres the map on its seat/first holding.
+function renderFactionLegend(factions) {
+  const host = $("legend-factions");
+  if (!host) return;
+  host.hidden = !factions.length;
+  host.innerHTML = "";
+  if (!factions.length) return;
+  const sub = document.createElement("div");
+  sub.className = "legend-sub";
+  sub.textContent = "Powers";
+  host.appendChild(sub);
+  factions.forEach((f, i) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "legend-row faction-row";
+    row.title = "Show this faction's detail";
+    const sw = document.createElement("span");
+    sw.className = "lg-swatch faction-swatch";
+    sw.style.backgroundColor = factionColor(i);
+    sw.style.setProperty("--hatch-deg", `${factionHatchDeg(i)}deg`);
+    const name = document.createElement("span");
+    name.className = "faction-row-name";
+    name.textContent = f.name || "Faction";
+    row.append(sw, name);
+    row.addEventListener("click", () => {
+      setPanelTab("factions");
+      onCenterFaction(f.id, 0);
+    });
+    // Hover / keyboard-focus a row → brighten that faction's territory on the map.
+    const on = () => setFactionHighlight(i);
+    const off = () => setFactionHighlight(null);
+    row.addEventListener("mouseenter", on);
+    row.addEventListener("mouseleave", off);
+    row.addEventListener("focus", on);
+    row.addEventListener("blur", off);
+    host.appendChild(row);
   });
 }
 
@@ -2144,9 +2266,37 @@ function onContextMenu({ q, r, clientX, clientY }) {
   if (!current) return;
   if (draftClicks) return; // ignore right-click while tracing a river/road
   selectCell(q, r);
+  openHexRadial(q, r, clientX, clientY);
+}
+
+// Open the actions ring on the selected hex from the panel's "⋯ Actions" button
+// (11.5b) — same ring as a right-click, centred on the map so it's reachable
+// without a mouse right-click.
+function onOpenActions() {
+  if (!current || !selected) return;
+  const stage = $("stage").getBoundingClientRect();
+  openHexRadial(selected.q, selected.r, stage.left + stage.width / 2, stage.top + stage.height / 2);
+}
+
+// Build + open the radial for cell (q,r) at a screen position. Shared by the
+// right-click handler and the panel's "⋯ Actions" button.
+function openHexRadial(q, r, clientX, clientY) {
   const hex = getHex(current, q, r);
   const placed = !!(hex && hex.placed);
   const hasSettlement = !!(placed && hex.settlement && hex.settlement.present);
+  // Party + Faction state (Phase 11.5) — the last actions folded off the panel.
+  const factions = getFactions(current);
+  const owner = factions.find((f) => (f.holdings || []).some((h) => h.q === q && h.r === r));
+  const partyHere = !!(current.party && current.party.q === q && current.party.r === r);
+  let canReseat = null;
+  if (placed && owner && isValidSeat(current, owner.archetype, q, r) && !(owner.seat && owner.seat.q === q && owner.seat.r === r)) {
+    canReseat = { id: owner.id, name: owner.name };
+  }
+  const promotable = placed
+    ? (hex.pois || [])
+        .filter((p) => p.occupant && p.occupant.kind === "occupied" && !p.occupant.factionId)
+        .map((p) => ({ poiId: p.id, name: p.name, lords: eligibleLords(p.type, hex.terrain, factions) }))
+    : [];
   const model = buildRadialModel({
     placed,
     terrain: placed ? hex.terrain : null,
@@ -2160,6 +2310,11 @@ function onContextMenu({ q, r, clientX, clientY }) {
     manualRiverHere: manualRiverIdAt(q, r),
     manualRoadHere: manualRoadIdAt(q, r),
     locked: !!(placed && hex.locked),
+    partyHere,
+    factions: factions.map((f, i) => ({ id: f.id, name: f.name, color: factionColor(i) })),
+    ownerId: owner ? owner.id : null,
+    canReseat,
+    promotable,
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -2190,7 +2345,84 @@ function radialDispatch(id, value) {
     case "removeRiver": return onRemoveRiver(value);
     case "drawRoad": return onStartDrawRoad();
     case "removeRoad": return onRemoveRoad(value);
+    // Party + Faction (Phase 11.5) — folded off the panel onto the ring.
+    case "travelToward": return onTravelToward();
+    case "placeParty": return onPlaceParty();
+    case "genFaction": return onGenerateFaction();
+    case "setOwner": return onSetHexFaction(value); // value = faction id, or null for None
+    case "reseat": return onReseatFaction(value); // value = faction id to seat here
+    case "promote": return onPromotePoi(value.poiId, value.archetype);
   }
+}
+
+// The 8 compass headings for the travel ring, in ring order (N at top, clockwise).
+// `bearing` is what onTravelDirection / the engine expect (ROSE ids).
+const TRAVEL_DIRS = [
+  { bearing: "N", label: "N", glyph: "↑" },
+  { bearing: 1, label: "NE", glyph: "↗" },
+  { bearing: 0, label: "E", glyph: "→" },
+  { bearing: 5, label: "SE", glyph: "↘" },
+  { bearing: "S", label: "S", glyph: "↓" },
+  { bearing: 4, label: "SW", glyph: "↙" },
+  { bearing: 3, label: "W", glyph: "←" },
+  { bearing: 2, label: "NW", glyph: "↖" },
+];
+
+// The time (marching-days) to cross one hex of the party's CURRENT terrain at
+// its pace — the reference for "is there daylight left to move at all today".
+function currentHexCost() {
+  const p = current && current.party;
+  if (!p) return Infinity;
+  const hex = getHex(current, p.q, p.r);
+  const terrain = (hex && hex.terrain) || "Plains";
+  const onRoad = roadHexKeySet(current.roads || []).has(axialKey(p.q, p.r));
+  return daysToCross(terrain, { road: onRoad, encumbrance: p.encumbrance || "unencumbered" });
+}
+
+// Can the party set out at all? A FRESH day can always commit to at least one
+// hex (a full day's march is ≥1 hex even where a hex costs more than a day). Once
+// the day is partly spent, travel needs enough left for a hex — else it greys out
+// and the party rests to dawn (no half-started hex spilling into tomorrow).
+function canTravelNow() {
+  if (dayUsed < 1e-9) return true;
+  return 1 - dayUsed >= currentHexCost() - 1e-9;
+}
+
+// Double-click is the travel/move gesture. On the party's OWN hex it opens the
+// 3-ring directional compass (inner = one hex, middle = half day, outer = full
+// day). On ANY OTHER hex it opens a small confirm menu to move there — so a move
+// always takes a deliberate second pick, never a stray double-click. When there
+// isn't daylight for even one hex, movement greys out and the compass offers
+// "Rest to dawn" instead.
+function onMapDblClick({ q, r, clientX, clientY }) {
+  if (!current || !current.party) return;
+  if (current.party.q === q && current.party.r === r) {
+    openTravelRadial({
+      clientX, clientY, dirs: TRAVEL_DIRS,
+      dispatch: (bearing, unit) => onTravelDirection(bearing, unit),
+      disabled: !canTravelNow(),
+      onRest: advanceToNextDawn,
+    });
+    return;
+  }
+  selectCell(q, r); // the toward/teleport handlers act on the selected hex
+  const hex = getHex(current, q, r);
+  const placed = !!(hex && hex.placed);
+  const canMove = canTravelNow();
+  const model = [
+    {
+      kind: "leaf", id: "travelHere", glyph: "🥾", label: "Travel here",
+      enabled: placed && canMove,
+      reason: !placed ? "Only toward a generated hex" : !canMove ? "Not enough daylight — rest to dawn" : undefined,
+    },
+    { kind: "leaf", id: "placeHere", glyph: "🚩", label: "Place here" },
+  ];
+  openRadial({ clientX, clientY, model, dispatch: dblTravelDispatch });
+}
+
+function dblTravelDispatch(id) {
+  if (id === "travelHere") return onTravelToward();
+  if (id === "placeHere") return onPlaceParty();
 }
 
 async function onGenerateRandom() {
@@ -2324,12 +2556,22 @@ function wire() {
   $("btn-legend").addEventListener("click", () => toggleLegend());
   $("btn-progress").addEventListener("click", onProgressDays);
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
+  $("btn-adv-hour").addEventListener("click", () => advanceHour());
+  $("btn-next-dawn").addEventListener("click", () => advanceToNextDawn());
+  $("btn-panel").addEventListener("click", () => document.body.classList.toggle("panel-open"));
+  for (const btn of document.querySelectorAll("#pace-panel .pace-scale-v button")) {
+    btn.addEventListener("click", () => onSetEncumbrance(btn.dataset.enc));
+  }
   $("world-select").addEventListener("change", onSelectWorld);
   $("btn-dungeon-back").addEventListener("click", closeDungeonView);
   $("btn-dungeon-fit").addEventListener("click", fitView);
   $("btn-dungeon-legend").addEventListener("click", onToggleLegend);
   $("btn-zoom-in").addEventListener("click", () => zoomStep(1));
   $("btn-zoom-out").addEventListener("click", () => zoomStep(-1));
+  $("zoom-slider").addEventListener("input", (e) => {
+    const { min, max } = getZoom();
+    setZoom(sliderToZoom(Number(e.target.value), min, max));
+  });
   $("btn-home").addEventListener("click", () => recenter());
   $("btn-help").addEventListener("click", () => toggleHelp());
   $("btn-help-close").addEventListener("click", () => toggleHelp(false));
@@ -2345,6 +2587,23 @@ function wire() {
   window.addEventListener("keydown", onHelpKey); // Esc closes help before other handlers
   window.addEventListener("keydown", onWorldKey); // before onDungeonKey: hook-clear wins Esc
   window.addEventListener("keydown", onDungeonKey);
+}
+
+// Zoom slider <-> camera scale, mapped on a log axis so each slider step is a
+// constant zoom ratio (matches how ＋/− and the wheel feel). The slider drives
+// the camera on input; drawScaleBar (onView) drives the slider back on any zoom
+// change from ＋/−/wheel, so the two never fall out of sync.
+function sliderToZoom(v, min, max) {
+  return min * Math.pow(max / min, v / 1000);
+}
+function zoomToSlider(scale, min, max) {
+  return Math.round((1000 * Math.log(scale / min)) / Math.log(max / min));
+}
+function syncZoomSlider() {
+  const s = $("zoom-slider");
+  if (!s) return;
+  const { scale, min, max } = getZoom();
+  s.value = String(zoomToSlider(scale, min, max));
 }
 
 let iconsOn = true;
@@ -2363,7 +2622,18 @@ function onToggleLabels() {
 
 async function init() {
   wire();
-  attachMap($("map"), { onHexClick, onEmptyCellClick, onContextMenu, onHover, onView: drawScaleBar });
+  attachMap($("map"), {
+    onHexClick,
+    onEmptyCellClick,
+    onContextMenu,
+    onDblClick: onMapDblClick,
+    onHover,
+    onView: (ppm) => {
+      drawScaleBar(ppm);
+      syncZoomSlider();
+    },
+  });
+  syncZoomSlider(); // reflect the initial zoom on the slider
   attachDungeon($("dungeon-canvas"), { onRoomClick, onRoomContextMenu: onRoomContextMenu });
   // Size info for the "Add dungeon" menu (single source of truth: the table).
   try {

@@ -24,6 +24,11 @@ let scrim = null;
 let dispatch = null;
 let state = null; // { x, y, model, stack:[{items}, {items,parentIndex,parentAngle}?] }
 let wired = false;
+// Keyboard navigation (Phase 11.8): the active ring's items + their DOM nodes,
+// and which one has keyboard focus (-1 = none yet).
+let activeItems = [];
+let activeNodes = [];
+let focusIndex = -1;
 
 function el() {
   if (!ringEl) {
@@ -36,6 +41,8 @@ function el() {
 function wireOnce() {
   if (wired || !el()) return;
   wired = true;
+  ringEl.setAttribute("role", "menu");
+  ringEl.setAttribute("aria-label", "Actions");
   scrim.addEventListener("pointerdown", () => closeRadial());
   // Right-clicking while open steps back one level (or closes at the top),
   // never the OS menu — the same gesture that opened the ring now navigates it.
@@ -43,9 +50,34 @@ function wireOnce() {
     e.preventDefault();
     if (state) (state.stack.length > 1 ? back() : closeRadial());
   });
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && state) (state.stack.length > 1 ? back() : closeRadial());
-  });
+  window.addEventListener("keydown", onRingKey);
+}
+
+// Keyboard: arrows move focus round the active ring, Enter/Space activates, Esc
+// steps back / closes. Disabled slots are skipped.
+function onRingKey(e) {
+  if (!state) return;
+  if (e.key === "Escape") { e.preventDefault(); state.stack.length > 1 ? back() : closeRadial(); return; }
+  if (!activeNodes.length) return;
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); moveFocus(1); }
+  else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); moveFocus(-1); }
+  else if (e.key === "Enter" || e.key === " ") {
+    if (focusIndex >= 0) { e.preventDefault(); pick(activeItems[focusIndex], focusIndex); }
+  }
+}
+
+function moveFocus(dir) {
+  const n = activeNodes.length;
+  if (!n) return;
+  let idx = focusIndex < 0 ? (dir > 0 ? -1 : 0) : focusIndex;
+  for (let s = 0; s < n; s++) {
+    idx = (idx + dir + n) % n;
+    if (activeItems[idx].enabled !== false) break; // skip disabled slots
+  }
+  if (focusIndex >= 0 && activeNodes[focusIndex]) activeNodes[focusIndex].classList.remove("kbd");
+  focusIndex = idx;
+  const node = activeNodes[idx];
+  if (node) { node.classList.add("kbd"); node.focus(); }
 }
 
 /**
@@ -64,6 +96,63 @@ export function openRadial({ clientX, clientY, model, dispatch: onPick }) {
   const { x, y } = ringCenter(clientX, clientY, host.getBoundingClientRect(), EDGE_PAD);
   state = { x, y, model, stack: [{ items: model }] };
   draw();
+}
+
+// Concentric rings for the directional travel compass (Phase 11): distance is
+// the radius — inner = one hex, middle = half a day, outer = a full day.
+const TRAVEL_RINGS = [
+  { unit: "hex", suffix: "hex", r: 70, size: 38 },
+  { unit: "half", suffix: "½ day", r: 114, size: 44 },
+  { unit: "full", suffix: "day", r: 158, size: 48 },
+];
+const TRAVEL_PAD = 158 + 48; // outer radius + node, kept on-screen
+
+const unitWord = (u) => (u === "hex" ? "One hex" : u === "half" ? "Half day" : "Full day");
+
+/**
+ * A 3-ring compass for directional travel (double-click the party). `dirs` is
+ * the 8 compass points in ring order (N at top, clockwise), each
+ * { bearing, glyph, label }. A pick fires onPick(bearing, unit).
+ *
+ * When `disabled` (no daylight left to cross even one hex), the direction nodes
+ * grey out and the hub becomes a "Rest to dawn" action (calls `onRest`).
+ */
+export function openTravelRadial({ clientX, clientY, dirs, dispatch: onPick, disabled = false, onRest }) {
+  if (!el()) return;
+  wireOnce();
+  ringEl.classList.add("open");
+  const host = ringEl.parentElement || ringEl;
+  const { x, y } = ringCenter(clientX, clientY, host.getBoundingClientRect(), TRAVEL_PAD);
+  state = { x, y, stack: [{ items: [] }] }; // depth 1 → Esc / right-click just close
+  clearNodes();
+  activeItems = []; activeNodes = []; focusIndex = -1; // travel ring isn't arrow-navigated
+  for (const ring of TRAVEL_RINGS) {
+    ringEl.appendChild(guide(x, y, ring.r));
+    dirs.forEach((d, i) => {
+      const ang = -Math.PI / 2 + (Math.PI * 2 * i) / dirs.length; // N at top, clockwise
+      const n = document.createElement("div");
+      n.className = "ring-node travel" + (disabled ? " disabled" : "");
+      n.style.left = x + ring.r * Math.cos(ang) + "px";
+      n.style.top = y + ring.r * Math.sin(ang) + "px";
+      n.style.width = n.style.height = ring.size + "px";
+      n.title = disabled ? "Not enough daylight — rest to dawn" : `${unitWord(ring.unit)} — ${d.label}`;
+      n.innerHTML = `<span class="glyph">${d.glyph}</span><span class="label">${ring.suffix}</span>`;
+      if (!disabled) n.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); onPick(d.bearing, ring.unit); });
+      ringEl.appendChild(n);
+    });
+  }
+  const hub = document.createElement("div");
+  hub.className = "ring-hub";
+  hub.style.left = x + "px";
+  hub.style.top = y + "px";
+  if (disabled && onRest) {
+    hub.innerHTML = `<span class="hub-top">🌅</span><span class="hub-sub">Rest to dawn</span>`;
+    hub.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); onRest(); });
+  } else {
+    hub.innerHTML = `<span class="hub-top">✕</span><span class="hub-sub">Close</span>`;
+    hub.addEventListener("click", (e) => { e.stopPropagation(); closeRadial(); });
+  }
+  ringEl.appendChild(hub);
 }
 
 export function closeRadial() {
@@ -99,12 +188,23 @@ function nodeEl(item, x, y, size, cls) {
     (item.danger ? " danger" : "") +
     (item.on ? " on" : "") +
     (item.enabled === false ? " disabled" : "");
+  n.setAttribute("role", "menuitem");
+  n.setAttribute("aria-label", item.label);
+  if (item.kind === "submenu") n.setAttribute("aria-haspopup", "menu");
+  n.tabIndex = -1;
+  if (item.enabled === false) n.setAttribute("aria-disabled", "true");
   n.style.left = x + "px";
   n.style.top = y + "px";
   n.style.width = n.style.height = size + "px";
   if (item.enabled === false && item.reason) n.title = item.reason;
   else if (item.title) n.title = item.title;
-  n.innerHTML = `<span class="glyph">${item.glyph}</span><span class="label">${item.label}</span>`;
+  // A `swatch` colour (e.g. the faction in a "Run by" pick) shows as a colour
+  // chip in place of the glyph, and tints the node's border.
+  const glyph = item.swatch
+    ? `<span class="glyph"><span class="ring-swatch" style="background:${item.swatch}"></span></span>`
+    : `<span class="glyph">${item.glyph}</span>`;
+  n.innerHTML = glyph + `<span class="label">${item.label}</span>`;
+  if (item.swatch) n.style.borderColor = item.swatch;
   return n;
 }
 
@@ -117,13 +217,17 @@ function drawRing(items, radius, nodeSize, { active, parentIndex, anchorAngle })
   const anchorIdx = active && anchorAngle != null ? items.findIndex((it) => it.anchor) : -1;
   const baseAng = anchorIdx >= 0 ? anchorAngle : -Math.PI / 2;
   const aIdx = anchorIdx >= 0 ? anchorIdx : 0;
+  if (active) activeItems = items;
   items.forEach((item, i) => {
     const ang = baseAng + (Math.PI * 2 * (i - aIdx)) / items.length;
     const nx = x + radius * Math.cos(ang);
     const ny = y + radius * Math.sin(ang);
     const cls = active ? "" : i === parentIndex ? "parent" : "dim";
     const n = nodeEl(item, nx, ny, nodeSize, cls);
-    if (active) n.addEventListener("click", (e) => { e.stopPropagation(); pick(item, i); });
+    if (active) {
+      n.addEventListener("click", (e) => { e.stopPropagation(); pick(item, i); });
+      activeNodes[i] = n; // for keyboard navigation
+    }
     ringEl.appendChild(n);
   });
 }
@@ -133,6 +237,9 @@ function drawRing(items, radius, nodeSize, { active, parentIndex, anchorAngle })
 // size), always as two concentric rings.
 function draw() {
   clearNodes();
+  activeItems = [];
+  activeNodes = [];
+  focusIndex = -1;
   const { x, y, stack } = state;
   const depth = stack.length - 1;
 

@@ -24,7 +24,9 @@ function applyPanelTab() {
   const tabs = el.querySelector(".panel-tabs");
   if (tabs) {
     for (const b of tabs.querySelectorAll("button")) {
-      b.classList.toggle("active", b.dataset.tab === activeTab);
+      const on = b.dataset.tab === activeTab;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
     }
   }
 }
@@ -68,6 +70,20 @@ export function describeHex(hex) {
   return [`Hex ${hex.key}`, coords, `  Terrain: ${terrain}`].filter(Boolean);
 }
 
+// At-a-glance counts of the world's contents for the overview header (11.5b).
+function worldStats(world) {
+  let hexes = 0, settlements = 0, pois = 0, dungeons = 0;
+  for (const h of Object.values(world.hexes || {})) {
+    if (!h.placed) continue;
+    hexes++;
+    if (h.settlement && h.settlement.present) settlements++;
+    const ps = Array.isArray(h.pois) ? h.pois : [];
+    pois += ps.length;
+    dungeons += ps.filter((p) => p.type === "dungeon").length;
+  }
+  return { hexes, settlements, pois, dungeons };
+}
+
 function actionButton(label, onClick) {
   const b = document.createElement("button");
   b.className = "tile-action";
@@ -97,15 +113,8 @@ function appendFactionControls(list, poi, model) {
     list.appendChild(info);
     return;
   }
-  if (!model.onPromotePoi) return;
-  const acts = document.createElement("div");
-  acts.className = "tile-actions";
-  acts.appendChild(actionButton("Promote to faction", () => model.onPromotePoi(poi.id)));
-  const lords = model.lordOptionsFor ? model.lordOptionsFor(poi) : [];
-  for (const { archetype, label } of lords) {
-    acts.appendChild(actionButton(label, () => model.onPromotePoi(poi.id, archetype)));
-  }
-  list.appendChild(acts);
+  // Promoting an occupied POI into a power lives on the radial (Faction →
+  // Promote) now (Phase 11.5); the panel just shows the occupant read-only.
 }
 
 // POIs as a read-only/navigable list, or the drill-in detail of one POI.
@@ -498,7 +507,7 @@ export function renderFactionsPanel(model) {
   if (!factions.length) {
     const empty = document.createElement("div");
     empty.className = "panel-hint";
-    empty.textContent = 'No factions yet — select a placed hex and press "Generate faction here" on the Detail tab.';
+    empty.textContent = "No factions yet — right-click a placed hex → Faction → Generate here.";
     host.appendChild(empty);
     return;
   }
@@ -664,9 +673,23 @@ export function renderSelectionPanel(model) {
   if (!model || !model.coord) return;
 
   const { coord, hex } = model;
+  // Title row: the selection heading + a "⋯ Actions" button that opens the
+  // radial on this cell (Phase 11.5b) — so every hex action is reachable without
+  // a right-click (touch / keyboard friendly).
+  const head = document.createElement("div");
+  head.className = "selection-head";
   const h = document.createElement("h3");
   h.textContent = hex ? "Selected hex" : `Empty (${coord.q}, ${coord.r})`;
-  sel.appendChild(h);
+  head.appendChild(h);
+  if (model.onOpenActions) {
+    const act = document.createElement("button");
+    act.className = "sel-actions";
+    act.textContent = "⋯ Actions";
+    act.title = "Open the actions ring for this hex";
+    act.addEventListener("click", () => model.onOpenActions());
+    head.appendChild(act);
+  }
+  sel.appendChild(head);
 
   if (hex) {
     for (const line of describeHex(hex)) {
@@ -692,89 +715,14 @@ export function renderSelectionPanel(model) {
     }
     renderPoiSection(sel, hex, model);
 
-    // Party actions: panel, not the radial ring — the ring's 8 slots are all
-    // spoken for. "Place party here" (8.1) is an instant GM-override teleport;
-    // "Travel toward this hex" (8.4) heads that way ONE day per press (pace,
-    // getting lost) — kept alongside each other on purpose. Both hidden once
-    // the party is already here.
-    if (model.onPlaceParty || model.onTravelToward) {
-      if (model.partyHere) {
-        const div = document.createElement("div");
-        div.className = "log-line";
-        div.textContent = "The party is here.";
-        sel.appendChild(div);
-      } else {
-        const row = document.createElement("div");
-        row.className = "tile-actions";
-        if (model.onTravelToward) row.appendChild(actionButton("Travel toward this hex", model.onTravelToward));
-        if (model.onPlaceParty) row.appendChild(actionButton("Place party here", model.onPlaceParty));
-        sel.appendChild(row);
-      }
-    }
-
-    // Generate faction (Phase 8.7) — a panel action (the ring is full), mirroring
-    // "Generate hook": the selected placed hex becomes the new faction's one
-    // starting holding. A radial slot can come later (parent plan defers it).
-    if (model.onGenerateFaction) {
-      const frow = document.createElement("div");
-      frow.className = "tile-actions";
-      frow.appendChild(actionButton("Generate faction here", model.onGenerateFaction));
-      sel.appendChild(frow);
-    }
-
-    // Which faction runs this hex (Phase 8.15) — a single-owner picker. It shows
-    // the current holder (so the GM can see who runs the tile) and reassigns the
-    // hex on change; "None" clears it. Replaces the old add-only claim button.
-    if (model.onSetHexFaction && (model.factions || []).length) {
-      const crow = document.createElement("div");
-      crow.className = "tile-actions";
-      const label = document.createElement("span");
-      label.className = "faction-select-label";
-      label.textContent = "Run by:";
-      const pick = document.createElement("select");
-      pick.className = "faction-select";
-      pick.setAttribute("aria-label", "Faction that runs this hex");
-      const held = model.factions.find((f) => (f.holdings || []).some((hd) => hd.q === coord.q && hd.r === coord.r));
-      const none = document.createElement("option");
-      none.value = "";
-      none.textContent = "None";
-      pick.appendChild(none);
-      for (const f of model.factions) {
-        const opt = document.createElement("option");
-        opt.value = f.id;
-        opt.textContent = f.name;
-        if (held && held.id === f.id) opt.selected = true;
-        pick.appendChild(opt);
-      }
-      pick.addEventListener("change", () => model.onSetHexFaction(pick.value || null));
-      crow.appendChild(label);
-      crow.appendChild(pick);
-      sel.appendChild(crow);
-    }
-
-    // Manual reseat (Phase 8.19) — promote a held, seat-worthy hex to the faction's
-    // HQ. A GM override with the SAME disruption as an in-world seat fall (it loses
-    // reach + strength), so it's a two-step confirm.
-    const reseat = model.reseatHere && model.onReseatFaction && model.reseatHere(coord);
-    if (reseat) {
-      const rrow = document.createElement("div");
-      rrow.className = "tile-actions";
-      const label = `Make this ${reseat.name}'s seat`;
-      const btn = actionButton(label, () => {});
-      let armed = null;
-      btn.addEventListener("click", () => {
-        if (!armed) {
-          btn.textContent = "Confirm reseat — costs reach + strength";
-          btn.classList.add("armed");
-          armed = setTimeout(() => { armed = null; btn.textContent = label; btn.classList.remove("armed"); }, 4000);
-          return;
-        }
-        clearTimeout(armed);
-        armed = null;
-        model.onReseatFaction(reseat.id);
-      });
-      rrow.appendChild(btn);
-      sel.appendChild(rrow);
+    // Hex/POI actions (party, faction, reseat, promote) all live on the
+    // right-click radial now (Phase 11.5) — the panel is read-only. A quiet
+    // status line notes when the party stands here.
+    if (model.partyHere) {
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.textContent = "🚩 The party is here.";
+      sel.appendChild(div);
     }
   }
 
@@ -942,13 +890,30 @@ export function showWorld(world, opts = {}) {
     });
   }
   el.appendChild(name);
-  // Tab bar: Detail (selected hex/room) | Hooks (world hook list, with an
-  // open-count badge). Switching just toggles which region shows.
+  // Overview stats (Phase 11.5b): an at-a-glance count of the world's contents.
+  const stats = worldStats(world);
+  const chips = document.createElement("div");
+  chips.className = "world-stats";
+  for (const [label, n] of [["hexes", stats.hexes], ["towns", stats.settlements], ["POIs", stats.pois], ["dungeons", stats.dungeons]]) {
+    const chip = document.createElement("span");
+    chip.className = "wchip";
+    const b = document.createElement("b");
+    b.textContent = String(n);
+    chip.append(b, ` ${label}`);
+    chips.appendChild(chip);
+  }
+  el.appendChild(chips);
+  // Tab bar: Selection (selected hex/room) | Hooks | Pinned | Travel | Factions.
+  // Switching just toggles which region shows.
   const tabs = document.createElement("div");
   tabs.className = "panel-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Panel sections");
   const mkTab = (key, label, badgeId) => {
     const b = document.createElement("button");
     b.dataset.tab = key;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-controls", TAB_REGIONS[key]);
     b.append(label);
     if (badgeId) {
       const badge = document.createElement("span");
@@ -961,38 +926,26 @@ export function showWorld(world, opts = {}) {
     return b;
   };
   tabs.append(
-    mkTab("detail", "Detail"),
+    mkTab("detail", "Selection"),
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
     mkTab("travel", "Travel"),
     mkTab("factions", "Factions", "factions-tab-badge"),
   );
   el.appendChild(tabs);
-  // Detail region: the selected hex (or dungeon room) details.
-  const sel = document.createElement("div");
-  sel.id = "selection";
-  el.appendChild(sel);
-  // Hooks region: unpinned world hooks (filled by renderGlobalHooks).
-  const gh = document.createElement("div");
-  gh.id = "global-hooks";
-  gh.hidden = true;
-  el.appendChild(gh);
-  // Pinned region: the party's chosen leads (filled by renderGlobalHooks).
-  const pinned = document.createElement("div");
-  pinned.id = "pinned-hooks";
-  pinned.hidden = true;
-  el.appendChild(pinned);
-  // Travel region (Phase 8.4): encumbrance setting + the last trip's report
-  // (filled by renderTravelPanel).
-  const travel = document.createElement("div");
-  travel.id = "travel-panel";
-  travel.hidden = true;
-  el.appendChild(travel);
-  // Factions region (Phase 8.7): the world's factions (filled by renderFactionsPanel).
-  const factions = document.createElement("div");
-  factions.id = "factions-panel";
-  factions.hidden = true;
-  el.appendChild(factions);
+  const region = (id, hidden) => {
+    const d = document.createElement("div");
+    d.id = id;
+    d.setAttribute("role", "tabpanel");
+    if (hidden) d.hidden = true;
+    el.appendChild(d);
+    return d;
+  };
+  region("selection"); // selected hex / dungeon room details
+  region("global-hooks", true); // unpinned world hooks (renderGlobalHooks)
+  region("pinned-hooks", true); // the party's pinned leads
+  region("travel-panel", true); // encumbrance + last trip report (renderTravelPanel)
+  region("factions-panel", true); // the world's factions (renderFactionsPanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.

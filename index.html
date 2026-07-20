@@ -14,33 +14,45 @@
         <select id="world-select"></select>
       </label>
       <span class="spacer"></span>
-      <span class="menu-wrap">
-        <button id="btn-new" aria-haspopup="true" aria-expanded="false">New World ▾</button>
-        <div id="new-world-menu" class="dropdown-menu" hidden>
-          <button type="button" data-radius="">Empty</button>
-          <button type="button" data-radius="1">Small</button>
-          <button type="button" data-radius="2">Medium</button>
-          <button type="button" data-radius="3">Large</button>
-          <button type="button" data-radius="15">Huge</button>
-        </div>
-      </span>
-      <button id="btn-save">Save</button>
-      <button id="btn-delete">Delete</button>
-      <button id="btn-export">Export</button>
-      <button id="btn-import">Import</button>
-      <span class="bar-divider"></span>
-      <!-- Session day readout (Phase 8.1) — in-memory only, always starts at 0,
-           never persisted; see js/ui/app.js sessionDay. -->
-      <span id="day-readout" class="day-readout" title="World clock (session-only, resets on reload)">Day 0</span>
-      <!-- Progress N days without moving (Phase 8.6) — advances the same clock. -->
-      <span class="progress-ctl">
-        <input id="progress-days" class="progress-days" type="number" min="1" max="365" value="1"
-               aria-label="Days to progress" title="Days to advance while stationary" />
-        <button id="btn-progress" title="Advance the clock without moving (rest / wait)">Progress</button>
-      </span>
-      <span class="bar-divider"></span>
-      <button id="btn-icons">Icons: on</button>
-      <button id="btn-labels">Labels: on</button>
+      <!-- World cluster: create / save / delete the current world. -->
+      <div class="bar-group" role="group" aria-label="World">
+        <span class="menu-wrap">
+          <button id="btn-new" aria-haspopup="true" aria-expanded="false" data-tip="Start a new world">New World ▾</button>
+          <div id="new-world-menu" class="dropdown-menu" hidden>
+            <button type="button" data-radius="">Empty</button>
+            <button type="button" data-radius="1">Small</button>
+            <button type="button" data-radius="2">Medium</button>
+            <button type="button" data-radius="3">Large</button>
+            <button type="button" data-radius="15">Huge</button>
+          </div>
+        </span>
+        <button id="btn-save" data-tip="Save the world to this browser">Save</button>
+        <button id="btn-delete" data-tip="Delete the current world">Delete</button>
+      </div>
+      <!-- Backup cluster: JSON export / import. -->
+      <div class="bar-group" role="group" aria-label="Backup">
+        <button id="btn-export" data-tip="Download a JSON backup of this world">Export</button>
+        <button id="btn-import" data-tip="Load a world from a JSON backup">Import</button>
+      </div>
+      <!-- Session cluster: the world clock + stationary "progress days" control. -->
+      <div class="bar-group" role="group" aria-label="Session">
+        <!-- Session day readout (Phase 8.1) — in-memory only, always starts at 0,
+             never persisted; see js/ui/app.js sessionDay. -->
+        <span id="day-readout" class="day-readout" title="World clock (session-only, resets on reload)">Day 0</span>
+        <!-- Progress N days without moving (Phase 8.6) — advances the same clock. -->
+        <span class="progress-ctl">
+          <input id="progress-days" class="progress-days" type="number" min="1" max="365" value="1"
+                 aria-label="Days to progress" title="Days to advance while stationary" />
+          <button id="btn-progress" data-tip="Advance the clock without moving (rest / wait)">Progress</button>
+        </span>
+      </div>
+      <!-- View cluster: map display toggles. -->
+      <div class="bar-group" role="group" aria-label="View">
+        <button id="btn-icons" data-tip="Show / hide terrain + settlement art">Icons: on</button>
+        <button id="btn-labels" data-tip="Show / hide hex name labels">Labels: on</button>
+      </div>
+      <!-- Panel drawer toggle — only visible on narrow screens (Phase 11.7). -->
+      <button id="btn-panel" class="panel-toggle" aria-label="Toggle info panel" title="Panel">☰</button>
       <input id="import-file" type="file" accept="application/json,.json" hidden />
     </header>
 
@@ -55,6 +67,30 @@
         <!-- Top-left: scale bar (a day's march, 12/18/24 mi); hover for rules. -->
         <div id="map-scale" hidden></div>
         <div id="travel-tip" hidden></div>
+        <!-- Travel HUD (Phase 11): day clock + hours left, a day-progress bar,
+             the persistent travel-unit toggle, and hour / next-dawn controls. -->
+        <div id="hud-stack" hidden>
+          <!-- Slim time card: clock + day-progress bar with hour / next-dawn. -->
+          <div id="travel-hud">
+            <div class="thud-clock">Day 0 · 8h left</div>
+            <div class="thud-timerow">
+              <div class="thud-bar"><i class="thud-fill"></i></div>
+              <button id="btn-adv-hour" title="Rest / wait one hour">+1h</button>
+              <button id="btn-next-dawn" title="Skip to the next dawn" aria-label="Skip to next dawn">🌅</button>
+            </div>
+          </div>
+          <!-- Pace panel: narrow vertical speed scale, base (fast) → heavy (slow). -->
+          <div id="pace-panel">
+            <div class="pace-title">Pace</div>
+            <div class="pace-scale-v" role="group" aria-label="Party pace">
+              <button type="button" data-enc="unencumbered" style="--speed:100%" aria-label="Unencumbered" data-tip="Unencumbered — full base speed"></button>
+              <button type="button" data-enc="light" style="--speed:75%" aria-label="Lightly loaded" data-tip="Lightly loaded — ¾ speed"></button>
+              <button type="button" data-enc="encumbered" style="--speed:50%" aria-label="Encumbered" data-tip="Encumbered — ½ speed"></button>
+              <button type="button" data-enc="heavy" style="--speed:25%" aria-label="Heavily loaded" data-tip="Heavily loaded — ¼ speed"></button>
+            </div>
+            <div class="pace-cap">≈4/d</div>
+          </div>
+        </div>
         <!-- River/road drawing toolbar (top-center); shown only while drawing. -->
         <div id="draw-bar" hidden>
           <span id="draw-hint">Click hexes to trace a river</span>
@@ -71,6 +107,9 @@
           <div class="legend-head">Legend</div>
           <div class="legend-section" id="legend-terrain"></div>
           <div class="legend-section" id="legend-poi"></div>
+          <!-- Faction key (Phase 11.4): one clickable row per power (colour +
+               hatch swatch + name) → opens its detail. Hidden when none. -->
+          <div class="legend-section" id="legend-factions" hidden></div>
           <div class="legend-section">
             <div class="legend-sub">Routes</div>
             <div class="legend-row"><span class="lg-line lg-highway"></span>Highway</div>
@@ -86,12 +125,14 @@
             <div class="legend-note">Hover a hex for its name · region.</div>
           </div>
         </div>
-        <!-- Bottom-right map controls. -->
+        <!-- Bottom-right map controls: zoom (＋ / slider / −), recenter, help. -->
         <div id="map-controls">
-          <button id="btn-zoom-in" title="Zoom in">＋</button>
-          <button id="btn-zoom-out" title="Zoom out">−</button>
-          <button id="btn-home" title="Recenter on the map">⌂</button>
-          <button id="btn-help" title="Shortcuts (?)">?</button>
+          <button id="btn-zoom-in" title="Zoom in" aria-label="Zoom in">＋</button>
+          <input id="zoom-slider" type="range" min="0" max="1000" value="500"
+                 aria-label="Zoom level" title="Zoom" />
+          <button id="btn-zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button id="btn-home" title="Recenter on the party (or the map)" aria-label="Recenter on the party">⌂</button>
+          <button id="btn-help" title="Shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
         </div>
         <section id="dungeon-view" hidden>
           <div id="dungeon-toolbar">
@@ -107,31 +148,31 @@
           <div id="dungeon-legend" hidden>
             <strong>Legend</strong>
             <div class="legend-group">
-              <span><i class="sw" style="background:#7c3b32"></i>👹 Monster</span>
-              <span><i class="sw" style="background:#7c6b32"></i>⚠️ Trap</span>
-              <span><i class="sw" style="background:#2f3542"></i>Empty</span>
-              <span><i class="sw" style="background:#3b4b7c"></i>✨ Special</span>
+              <span><i class="sw" style="background:#e4c1a9"></i>👹 Monster</span>
+              <span><i class="sw" style="background:#e8d59e"></i>⚠️ Trap</span>
+              <span><i class="sw" style="background:#efe4c6"></i>Empty</span>
+              <span><i class="sw" style="background:#d2cadf"></i>✨ Special</span>
             </div>
             <div class="legend-group">
-              <span><i class="sw" style="background:#caa46a"></i>Door</span>
-              <span><i class="sw" style="background:#c0524a"></i>L locked</span>
-              <span><i class="sw" style="background:#c98a3a"></i>J stuck</span>
-              <span><i class="sw" style="background:#9a6fd0"></i>S secret</span>
+              <span><i class="sw" style="background:#c9a45f"></i>Door</span>
+              <span><i class="sw" style="background:#b3402f"></i>L locked</span>
+              <span><i class="sw" style="background:#c07a2a"></i>J stuck</span>
+              <span><i class="sw" style="background:#7a5aa6"></i>S secret</span>
             </div>
             <div class="legend-group">
-              <span><b style="color:#5fbf77">E</b> entrance</span>
-              <span><b style="color:#5fbf77">X</b> exit</span>
-              <span><b style="color:#6ec6d6">▲▼</b> stairs (shaft = panel)</span>
+              <span><b style="color:#2f8f5a">E</b> entrance</span>
+              <span><b style="color:#2f8f5a">X</b> exit</span>
+              <span><b style="color:#2f7f92">▲▼</b> stairs (shaft = panel)</span>
             </div>
             <div class="legend-group">
-              <span><b style="color:#6ec6d6">•</b> explored</span>
-              <span><b style="color:#5fbf77">✓</b> cleared</span>
-              <span><b style="color:#d8b24a">$</b> looted</span>
+              <span><b style="color:#2f7f92">•</b> explored</span>
+              <span><b style="color:#2f8f5a">✓</b> cleared</span>
+              <span><b style="color:#a8791f">$</b> looted</span>
               <span>💰 treasure here</span>
             </div>
             <div class="legend-group">
               <span>▦ grid square = 10 ft</span>
-              <span><i class="sw" style="background:rgba(255,176,64,0.5)"></i>lit room (else dark)</span>
+              <span><i class="sw" style="background:rgba(255,190,90,0.6)"></i>lit room (else dark)</span>
             </div>
           </div>
         </section>
@@ -139,7 +180,7 @@
         <div id="ring"><div class="scrim"></div></div>
         <!-- Keyboard/interaction cheat-sheet (toggle with ?). -->
         <div id="help-overlay" hidden>
-          <div class="help-card">
+          <div class="help-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
             <strong>Shortcuts</strong>
             <ul>
               <li><b>Right-click</b> a hex or room — actions menu</li>

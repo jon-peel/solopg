@@ -10,6 +10,7 @@ import {
   pixelToAxialFractional,
   hexCorners,
   axialKey,
+  NEIGHBOR_DIRS,
 } from "../core/hexgeo.js";
 import { hashString } from "../core/rng.js";
 import { placedHexes } from "../world/world.js";
@@ -18,8 +19,9 @@ import {
   iconForTerrain,
   SELECTED_STROKE,
 } from "./terrain-style.js";
-import { glyphForPoi, poiDotColor, factionColor } from "./poi-style.js";
+import { glyphForPoi, poiDotColor, factionColor, factionHatchDeg } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
+import { MAP, parseHex } from "./theme.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
@@ -31,7 +33,7 @@ const DRAG_THRESHOLD = 4; // px before a press counts as a drag (not a click)
 const MAX_GRID_CELLS = 4000; // skip empty-cell outlines when zoomed way out
 const DETAIL_PX = 26; // at/above: pencil sketches + corner markers (drop to small view sooner)
 const MARK_MIN_PX = 7; // below: nothing; between: simplified dots
-const TERRAIN_ICON_ALPHA = 0.45; // terrain motifs recede into the background; settlements stay opaque
+const TERRAIN_ICON_ALPHA = 0.7; // inked map motifs read as drawn symbols; settlements stay opaque
 
 let canvas = null;
 let ctx = null;
@@ -40,6 +42,11 @@ let world = null;
 let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
+// Touch (Phase 11.7): active pointers for pinch-zoom + a long-press timer that
+// stands in for right-click (opens the radial) on touch devices.
+const pointers = new Map(); // pointerId -> { x, y }
+let pinchPrev = null; // previous 2-finger distance, or null
+let longPressTimer = null;
 let iconsEnabled = true;
 let labelsEnabled = true; // show hex name labels on the map
 let hovered = null; // { q, r } under the cursor | null
@@ -64,10 +71,11 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
-  canvas.addEventListener("pointercancel", () => (drag = null));
+  canvas.addEventListener("pointercancel", onPointerCancel);
   canvas.addEventListener("pointerleave", onPointerLeave);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", onContextMenu);
+  canvas.addEventListener("dblclick", onDblClick);
 
   preloadTileArt(); // warm terrain/settlement art so tiles never start as emoji
   resize();
@@ -75,7 +83,16 @@ export function attachMap(canvasEl, cbs = {}) {
 
 export function setWorld(w) {
   world = w;
+  highlightFaction = null; // a highlight from the old world's legend no longer applies
   regionCache = { seed: null, count: -1, byHex: new Map() }; // invalidate named regions for the new world
+  render();
+}
+
+let travelPath = null; // the last move's path [{q,r}, …] (origin + each hex entered)
+
+/** Show the trail of the party's last move (null clears it). */
+export function setTravelPath(path) {
+  travelPath = path && path.length > 1 ? path : null;
   render();
 }
 
@@ -102,22 +119,43 @@ export function pixelsPerMile() {
 }
 
 /** Zoom a step in (dir>0) or out (dir<0), keeping the canvas center fixed. */
-export function zoomStep(dir) {
+// Zoom to an absolute scale, anchored on a client point (clamped). The point
+// stays put under the cursor/fingers — used by the wheel, +/−, and pinch.
+function zoomAt(scale, clientX, clientY) {
   if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const px = rect.left + rect.width / 2;
-  const py = rect.top + rect.height / 2;
-  const before = clientToWorld(px, py);
-  const factor = dir > 0 ? 1.2 : 1 / 1.2;
-  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * factor));
-  const after = clientToWorld(px, py);
+  const before = clientToWorld(clientX, clientY);
+  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+  const after = clientToWorld(clientX, clientY);
   camera.offsetX += (after.x - before.x) * camera.scale;
   camera.offsetY += (after.y - before.y) * camera.scale;
   render();
 }
 
-/** Recenter on placed content (its centroid), or the origin if the map is empty. */
+// Absolute zoom anchored on the viewport centre (the +/−/slider path).
+function zoomToScale(scale) {
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  zoomAt(scale, rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
+
+export function zoomStep(dir) {
+  zoomToScale(camera.scale * (dir > 0 ? 1.2 : 1 / 1.2));
+}
+
+/** Set an absolute zoom (for the zoom slider). */
+export function setZoom(scale) {
+  zoomToScale(scale);
+}
+
+/** Current zoom + its clamp range (for the zoom slider to reflect/drive). */
+export function getZoom() {
+  return { scale: camera.scale, min: MIN_SCALE, max: MAX_SCALE };
+}
+
+/** Recenter on the party marker if there is one; else on placed content (its
+ *  centroid); else the origin when the map is empty. */
 export function recenter() {
+  if (world && world.party) return recenterOn(world.party.q, world.party.r);
   const hexes = world ? placedHexes(world) : [];
   if (!hexes.length) return recenterOn(0, 0);
   let sq = 0, sr = 0;
@@ -201,6 +239,11 @@ export function render() {
     visible.push({ hex, c });
   }
 
+  // 2a⁰. Faction territory FILL + hatch (Phase 11.4) — a translucent colour wash
+  //      per power, UNDER the roads/markers so those stay crisp on top. The
+  //      inked border + seat marker come later (over everything).
+  drawFactionFill(minX, minY, maxX, maxY, margin, onScreen);
+
   // 2a. Roads + rivers, UNDER the markers below. Draw order IS the bridge/ford:
   //     dashed tracks/spurs go UNDER the river (a ford — water runs over them),
   //     then the river, then solid roads OVER it (a bridge). Roads are nudged
@@ -230,6 +273,11 @@ export function render() {
     }
   }
 
+  // 2a‴. Faction territory OUTLINE + seat (Phase 11.4) — the inked sphere-of-
+  //      influence border, over the roads/markers but UNDER the labels, hover
+  //      readout, selection, hooks and party so those all stay legible on top.
+  drawFactionOutline(minX, minY, maxX, maxY, margin);
+
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
   if (detail) {
@@ -252,16 +300,23 @@ export function render() {
   // Hover outline (under the selection ring; skipped on the selected cell).
   if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
-    strokeHex(c.x, c.y, "rgba(230,232,238,0.35)", 2);
-    // Reveal a name on hover (names are hidden by default): a GM's own hex name
-    // wins, then a settlement's name, else the region this tract belongs to.
+    strokeHex(c.x, c.y, MAP.hoverStroke, 2);
+    // Reveal names on hover (hidden by default): the GM's own hex name (or a
+    // settlement's name) on top, then the region, then — coloured to match its
+    // territory — the faction that runs the hex. Multi-line when several apply.
     const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
     if (detail && hh && hh.placed) {
-      const label = hh.name
+      const primary = hh.name
         || (hh.settlement && hh.settlement.present
           ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain })
-          : regionNameAt(hovered.q, hovered.r));
-      if (label) drawHexLabel(c.x, c.y, label);
+          : null);
+      const region = regionNameAt(hovered.q, hovered.r);
+      const fac = factionAt(hovered.q, hovered.r);
+      const lines = [];
+      if (primary) lines.push(primary);
+      if (region && region !== primary) lines.push(region);
+      if (fac) lines.push({ text: `⚑ ${fac.name}`, color: darkenRgba(fac.color, 0.25, 1) });
+      if (lines.length) drawHexLabel(c.x, c.y, lines);
     }
   }
 
@@ -280,20 +335,8 @@ export function render() {
     if (t) drawHookFocus(t, FOCUS_TARGET);
   }
 
-  // 4b. Faction holdings (Phase 8.7) — a per-faction coloured hex ring, UNDER the
-  //     party marker. Every holding of a faction shares its colour so a power reads
-  //     as one across the map. Like the party/hook markers, drawn at every zoom
-  //     regardless of whether a hex is placed there.
-  if (world && Array.isArray(world.factions)) {
-    world.factions.forEach((f, i) => {
-      const color = factionColor(i);
-      for (const hold of f.holdings || []) {
-        const hc = axialToPixel(hold.q, hold.r, HEX_SIZE);
-        if (hc.x < minX - margin || hc.x > maxX + margin || hc.y < minY - margin || hc.y > maxY + margin) continue;
-        drawFactionMark(hc.x, hc.y, color);
-      }
-    });
-  }
+  // 4c. The last move's trail (Phase 11) — under the party marker.
+  drawTravelPath();
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
   //    TOP of everything else and visible at every zoom, regardless of whether
@@ -806,20 +849,46 @@ function drawDetailMarkers(cx, cy, hex) {
   if (hex.name && labelsEnabled) drawHexLabel(cx, cy, hex.name);
 }
 
-// A user's hex name, as a small pill below the hex (legible over terrain art).
-function drawHexLabel(cx, cy, name) {
+// The faction (if any) that runs hex (q, r), with its map colour — for the
+// hover readout. Returns null when the hex is unowned.
+function factionAt(q, r) {
+  if (!world || !Array.isArray(world.factions)) return null;
+  const key = axialKey(q, r);
+  for (let i = 0; i < world.factions.length; i++) {
+    const f = world.factions[i];
+    if ((f.holdings || []).some((h) => axialKey(h.q, h.r) === key)) {
+      return { name: f.name || "Faction", color: factionColor(i) };
+    }
+  }
+  return null;
+}
+
+// A small pill below the hex (legible over terrain art). `label` is a string or
+// an array of lines, each a string or a { text, color } for a coloured line.
+function drawHexLabel(cx, cy, label) {
+  const lines = (Array.isArray(label) ? label : [label])
+    .map((l) => (typeof l === "string" ? { text: l, color: MAP.labelInk } : l))
+    .map((l) => ({ color: l.color || MAP.labelInk, text: l.text.length > 20 ? l.text.slice(0, 19) + "…" : l.text }));
+  if (!lines.length) return;
   const fs = Math.max(8, HEX_SIZE * 0.34);
   ctx.font = `${fs}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const text = name.length > 18 ? name.slice(0, 17) + "…" : name;
-  const w = ctx.measureText(text).width;
-  const padX = fs * 0.4;
-  const y = cy + HEX_SIZE * 0.66;
-  ctx.fillStyle = "rgba(13,15,21,0.72)";
-  ctx.fillRect(cx - w / 2 - padX, y - fs * 0.7, w + padX * 2, fs * 1.4);
-  ctx.fillStyle = "#e6e8ee";
-  ctx.fillText(text, cx, y);
+  let maxW = 0;
+  for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l.text).width);
+  const padX = fs * 0.45, padY = fs * 0.3, lineH = fs * 1.25;
+  const bw = maxW + padX * 2;
+  const bh = lineH * lines.length + padY * 2 - (lineH - fs);
+  const bx = cx - bw / 2, by = cy + HEX_SIZE * 0.6;
+  ctx.fillStyle = MAP.labelBg;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.lineWidth = 1 / camera.scale;
+  ctx.strokeStyle = MAP.labelEdge;
+  ctx.strokeRect(bx, by, bw, bh);
+  lines.forEach((l, i) => {
+    ctx.fillStyle = l.color;
+    ctx.fillText(l.text, cx, by + padY + lineH * i + fs * 0.5);
+  });
 }
 
 // Simplified tier (zoomed out): settlement size-marker centered on the tile +
@@ -885,8 +954,182 @@ function drawPinnedMark(cx, cy, detail) {
 // Faction holding (Phase 8.7): just a hex ring in the faction's colour. The old
 // banner badge was dropped (8.15) — it hid the POI glyph on a held hex, and the
 // coloured border alone reads clearly enough as "this faction runs it".
-function drawFactionMark(cx, cy, color) {
-  strokeHex(cx, cy, color, 2.5);
+// --- Faction territory (Phase 11.4) -------------------------------------
+// A power's holdings render as a translucent colour wash + a per-faction hatch
+// (the colour-blind-safe differentiator), an inked border around the territory's
+// outer edge, and a star on the seat. Fill/hatch are drawn early (under the
+// network + markers); the border/seat late (over them).
+
+const FACTION_FILL_ALPHA = 0.3; // base wash; the highlighted faction goes bolder
+const HATCH_MIN_ONSCREEN = 16; // px/hex below which the fine hatch is skipped
+const FACTION_INK = "rgba(40,28,10,0.55)"; // dark casing so a border reads on any terrain
+
+let highlightFaction = null; // index of the faction to emphasise on hover (or null)
+
+/** Emphasise one faction's territory on the map (by roster index; null clears). */
+export function setFactionHighlight(index) {
+  const next = index == null ? null : index;
+  if (next === highlightFaction) return;
+  highlightFaction = next;
+  render();
+}
+
+function rgba(hex, a) {
+  const [r, g, b] = parseHex(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// A hex colour mixed toward black by factor f (0 = unchanged, 1 = black), at
+// alpha a — used to darken the hatch lines so they read on light terrain.
+function darkenRgba(hex, f, a) {
+  const [r, g, b] = parseHex(hex).map((v) => Math.round(v * (1 - f)));
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function offView(p, minX, minY, maxX, maxY, margin) {
+  return p.x < minX - margin || p.x > maxX + margin || p.y < minY - margin || p.y > maxY + margin;
+}
+
+// Parallel hatch lines filling the current hex (call inside a hex clip).
+function hatchHex(cx, cy, deg, color, strong) {
+  const rad = (deg * Math.PI) / 180;
+  const dx = Math.cos(rad), dy = Math.sin(rad); // line direction
+  const nx = -dy, ny = dx; // step direction (perpendicular)
+  const R = HEX_SIZE * 1.15;
+  const gap = strong ? 5.5 : 6.5;
+  ctx.strokeStyle = darkenRgba(color, 0.35, strong ? 0.85 : 0.6);
+  ctx.lineWidth = (strong ? 1.5 : 1.15) / camera.scale;
+  for (let t = -R; t <= R; t += gap) {
+    ctx.beginPath();
+    ctx.moveTo(cx + nx * t - dx * R, cy + ny * t - dy * R);
+    ctx.lineTo(cx + nx * t + dx * R, cy + ny * t + dy * R);
+    ctx.stroke();
+  }
+}
+
+function drawFactionFill(minX, minY, maxX, maxY, margin, onScreen) {
+  if (!world || !Array.isArray(world.factions)) return;
+  const withHatch = onScreen >= HATCH_MIN_ONSCREEN;
+  world.factions.forEach((f, i) => {
+    const color = factionColor(i);
+    const deg = factionHatchDeg(i);
+    const hi = i === highlightFaction;
+    const fillA = hi ? 0.46 : FACTION_FILL_ALPHA;
+    for (const hold of f.holdings || []) {
+      const c = axialToPixel(hold.q, hold.r, HEX_SIZE);
+      if (offView(c, minX, minY, maxX, maxY, margin)) continue;
+      hexPath(c.x, c.y);
+      ctx.fillStyle = rgba(color, fillA);
+      ctx.fill();
+      if (withHatch) {
+        ctx.save();
+        hexPath(c.x, c.y);
+        ctx.clip();
+        hatchHex(c.x, c.y, deg, color, hi);
+        ctx.restore();
+      }
+    }
+  });
+}
+
+// Stroke every outer edge of a faction's territory (edges bordering a hex the
+// faction doesn't own). Called twice per faction: a dark casing, then the colour.
+function strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, style, width) {
+  ctx.strokeStyle = style;
+  ctx.lineWidth = width / camera.scale;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const h of holdings) {
+    const c = axialToPixel(h.q, h.r, HEX_SIZE);
+    if (offView(c, minX, minY, maxX, maxY, margin)) continue;
+    const corners = hexCorners(c.x, c.y, HEX_SIZE);
+    for (let dir = 0; dir < 6; dir++) {
+      const [dq, dr] = NEIGHBOR_DIRS[dir];
+      if (owned.has(axialKey(h.q + dq, h.r + dr))) continue; // shared edge — interior
+      const e = (6 - dir) % 6; // neighbour dir -> the hex edge it shares
+      const a = corners[e], b = corners[(e + 1) % 6];
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawFactionOutline(minX, minY, maxX, maxY, margin) {
+  if (!world || !Array.isArray(world.factions)) return;
+  world.factions.forEach((f, i) => {
+    const holdings = f.holdings || [];
+    if (!holdings.length) return;
+    const color = factionColor(i);
+    const hi = i === highlightFaction;
+    const owned = new Set(holdings.map((h) => axialKey(h.q, h.r)));
+    const w = hi ? 4 : 2.8;
+    // Highlighted faction blooms first (a wide, soft colour glow under the line).
+    if (hi) strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, rgba(color, 0.35), w + 6);
+    // Dark casing so the border reads on light AND dark terrain, then the colour.
+    strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, FACTION_INK, w + 2);
+    strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, color, w);
+    if (f.seat) {
+      const sc = axialToPixel(f.seat.q, f.seat.r, HEX_SIZE);
+      if (!offView(sc, minX, minY, maxX, maxY, margin)) drawSeatMark(sc.x, sc.y, color);
+    }
+  });
+}
+
+// The seat (HQ): a small coin with a star, in the top-right corner of the hex so
+// it doesn't cover a settlement/POI icon in the centre.
+function drawSeatMark(cx, cy, color) {
+  const off = HEX_SIZE * 0.5;
+  const x = cx + off, y = cy - off;
+  const r = HEX_SIZE * 0.24;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 1.4 / camera.scale;
+  ctx.strokeStyle = "rgba(40,28,10,0.65)";
+  ctx.stroke();
+  ctx.fillStyle = "#f4ead2";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${r * 1.6}px serif`;
+  ctx.fillText("★", x, y + r * 0.08);
+}
+
+// The last move's trail: a dark-cased gold dashed line through the hex centres
+// the party crossed, with a dot at each hex entered — so a multi-hex day reads.
+function drawTravelPath() {
+  if (!travelPath || travelPath.length < 2) return;
+  const pts = travelPath.map((c) => axialToPixel(c.q, c.r, HEX_SIZE));
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  };
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(40,28,10,0.5)"; // dark casing
+  ctx.lineWidth = 4.5 / camera.scale;
+  trace();
+  ctx.stroke();
+  ctx.strokeStyle = "#c8892b"; // gold trail
+  ctx.lineWidth = 2.2 / camera.scale;
+  ctx.setLineDash([6 / camera.scale, 5 / camera.scale]);
+  trace();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (let i = 1; i < pts.length; i++) {
+    ctx.beginPath();
+    ctx.arc(pts[i].x, pts[i].y, 3.5 / camera.scale, 0, Math.PI * 2);
+    ctx.fillStyle = "#c8892b";
+    ctx.fill();
+    ctx.lineWidth = 1.2 / camera.scale;
+    ctx.strokeStyle = "rgba(40,28,10,0.6)";
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // Party position (Phase 8.1): a bold magenta ring — a colour not already used
@@ -954,7 +1197,7 @@ function drawHexFill(cx, cy, fill) {
   ctx.fillStyle = fill;
   ctx.fill();
   ctx.lineWidth = 1 / camera.scale;
-  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.strokeStyle = MAP.hexBorder;
   ctx.stroke();
 }
 
@@ -968,16 +1211,34 @@ function strokeHex(cx, cy, color, widthPx) {
 // --- input ---------------------------------------------------------------
 
 function onPointerDown(e) {
-  if (e.button !== 0) return; // primary button pans; the right button opens the ring
-  drag = {
-    startX: e.clientX,
-    startY: e.clientY,
-    startOffsetX: camera.offsetX,
-    startOffsetY: camera.offsetY,
-    moved: false,
-  };
-  canvas.setPointerCapture?.(e.pointerId);
+  if (e.pointerType !== "touch" && e.button !== 0) return; // mouse: only the primary button pans
+  try { canvas.setPointerCapture?.(e.pointerId); } catch { /* stray/synthetic pointer id */ }
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointers.size === 2) {
+    // Second finger down → pinch-zoom; abandon any pan / long-press.
+    drag = null;
+    clearTimeout(longPressTimer);
+    pinchPrev = null;
+    canvas.classList.remove("dragging");
+    return;
+  }
+
+  drag = { startX: e.clientX, startY: e.clientY, startOffsetX: camera.offsetX, startOffsetY: camera.offsetY, moved: false };
   canvas.classList.add("dragging");
+  // Touch has no right-click: a stationary long-press opens the radial instead.
+  if (e.pointerType === "touch") {
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      if (drag && !drag.moved && pointers.size === 1) {
+        const { x, y } = clientToWorld(e.clientX, e.clientY);
+        const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+        drag = null; // consume — no tap-select on release
+        canvas.classList.remove("dragging");
+        handlers.onContextMenu?.({ q, r, clientX: e.clientX, clientY: e.clientY });
+      }
+    }, 500);
+  }
 }
 
 // Right-click resolves the cell under the cursor and reports it (with the screen
@@ -989,12 +1250,32 @@ function onContextMenu(e) {
   handlers.onContextMenu?.({ q, r, clientX: e.clientX, clientY: e.clientY });
 }
 
+// Double-click resolves the cell and reports it (with the screen position) so
+// app.js can open the travel radial when it's the party's hex (Phase 11.5).
+function onDblClick(e) {
+  const { x, y } = clientToWorld(e.clientX, e.clientY);
+  const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+  handlers.onDblClick?.({ q, r, clientX: e.clientX, clientY: e.clientY });
+}
+
 function onPointerMove(e) {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // Two fingers → pinch-zoom around their midpoint.
+  if (pointers.size === 2) {
+    const [p1, p2] = [...pointers.values()];
+    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (pinchPrev && dist > 0) zoomAt(camera.scale * (dist / pinchPrev), (p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+    pinchPrev = dist;
+    return;
+  }
+
   if (drag) {
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
     if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
       drag.moved = true;
+      clearTimeout(longPressTimer); // a drag isn't a long-press
     }
     camera.offsetX = drag.startOffsetX + dx;
     camera.offsetY = drag.startOffsetY + dy;
@@ -1025,8 +1306,12 @@ function onPointerLeave() {
 }
 
 function onPointerUp(e) {
+  clearTimeout(longPressTimer);
   canvas.classList.remove("dragging");
-  if (drag && !drag.moved) {
+  const wasPinch = pointers.size >= 2;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchPrev = null;
+  if (!wasPinch && drag && !drag.moved) {
     const { x, y } = clientToWorld(e.clientX, e.clientY);
     const { q, r } = pixelToAxial(x, y, HEX_SIZE);
     const hex = world && world.hexes[`${q},${r}`];
@@ -1036,13 +1321,15 @@ function onPointerUp(e) {
   drag = null;
 }
 
+function onPointerCancel(e) {
+  clearTimeout(longPressTimer);
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchPrev = null;
+  drag = null;
+  canvas.classList.remove("dragging");
+}
+
 function onWheel(e) {
   e.preventDefault();
-  const before = clientToWorld(e.clientX, e.clientY);
-  const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * factor));
-  const after = clientToWorld(e.clientX, e.clientY);
-  camera.offsetX += (after.x - before.x) * camera.scale;
-  camera.offsetY += (after.y - before.y) * camera.scale;
-  render();
+  zoomAt(camera.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY);
 }

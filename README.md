@@ -6,7 +6,7 @@ generation + record-keeping tool for hex-crawl worlds.
 See **[PLAN.md](./PLAN.md)** for the master plan: architecture, phased build order, the data
 model, and the per-step sub-plans in [`docs/plans/`](./docs/plans).
 
-**Status:** Phases 0–7 complete — seeded hex map with terrain/settlements/POIs, multi-level
+**Status:** Phases 0–8 + 11 complete. Seeded hex map with terrain/settlements/POIs, multi-level
 **dungeons** (+ towers), terrain-aware **shrine/camp/landmark** detail, **adventure hooks**
 (known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return), and full **QoL & UX**
 polish (right-click radial menu, dungeon-view UX, panel tabs, pinned hooks, map notes/labels, map
@@ -26,7 +26,14 @@ seat **relocates and its reach falters**, or **dissolves** if it has nowhere to 
 lords** (a lich, necromancer, vampire, dragon, or hag) **infuse their own dungeon/tower** — the lord's
 kin fill the halls and the lord waits as the final boss. Every turn **narrates what each faction did**
 (the map's coloured territory + a running log) — factions are played entirely as **subtext**, and emit
-**no hooks**. See [PLAN.md](./PLAN.md) for what's next (Phase 9 small oracles, Phase 10 backlog).
+**no hooks**. **Phase 11 (Visual & UX Overhaul)** is also complete — a cohesive **cartographer's**
+re-skin on a single-source token system (parchment palette, serif type, inked terrain art, restyled
+dungeon view), **faction territory** shown as shaded + colour-blind-hatched hexes with a clickable
+legend → detail, the **radial menu as the single hex-action surface** (keyboard + touch + ARIA), a
+**responsive/touch** layout, and a **directional travel** overhaul (a 3-ring compass — one hex / half
+day / full day — a fractional day-clock, roads that double pace and prevent getting lost, and a drawn
+movement path). Presentation-only, no schema change. See [PLAN.md](./PLAN.md) for what's next
+(Phase 9 small oracles, then the Phase 10 backlog). *Deferred:* travel modes (mounts/boats).
 
 ## Running
 
@@ -39,9 +46,12 @@ Vanilla ES modules, **no build step**, but it must be served over HTTP — it ca
 python3 -m http.server 8000   # or: npm run serve  → open http://localhost:8000
 ```
 
-From the app: **New World**, then **right-click any tile** for a radial menu of its actions
-(place terrain / generate, add settlements & POIs, hooks, regenerate, delete) — or use the side panel.
-Left-click selects, left-drag pans. Open a **dungeon/tower** to explore its mapped interior, and
+From the app: **New World**, then **right-click any tile** (or long-press on touch, or arrow-navigate
+the ring by keyboard) for a radial menu of its actions (place terrain / generate, add settlements &
+POIs, hooks, regenerate, delete) — or use the side panel. Left-click selects, left-drag pans, wheel or
+pinch zooms. **Double-click the party** for the travel compass (pick a direction and a distance — one
+hex, half a day, or a full day); double-click another hex to move toward it. Open a **dungeon/tower**
+to explore its mapped interior, and
 **Generate hook** / **Read map** / **Follow a trail** at a town to spin up adventure hooks
 (shown in the always-visible Hooks list). **Export/Import** is JSON backup; reload confirms the
 world persists in IndexedDB.
