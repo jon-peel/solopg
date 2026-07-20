@@ -158,9 +158,13 @@ let sessionDay = 0;
 let dayUsed = 0;
 const DAY_HOURS = 8;
 
-// Oracle roll history (Phase 9.1) — how many recent rolls the Oracle tab keeps
-// with the world. Retunable; the log is a play aid, not a record to preserve.
-const ORACLE_LOG_CAP = 50;
+// Oracle (Phase 9.1) — the GM's on-demand rolls are a transient play aid, not
+// world data: the Oracle tab shows only the LATEST result, held in memory here
+// (never persisted or exported). `oracleSeq` is an in-memory cursor so
+// consecutive rolls draw a fresh seeded stream. Both reset on page reload and on
+// world switch, so a reload starts blank — fine, it's ephemeral.
+let oracleLast = null; // { kind, line } of the most recent roll, or null
+let oracleSeq = 0;
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -220,6 +224,9 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
+  oracleLast = null; // the oracle result is a transient per-session aid
+  oracleSeq = 0;
+  if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
   setTravelPath(null); // clear the previous world's movement trail
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
@@ -1510,34 +1517,23 @@ function refreshFactions() {
   renderFactionLegend(factions);
 }
 
-// Refresh the Oracle tab (roll buttons + the persisted results list).
+// Refresh the Oracle tab (roll buttons + the single latest result).
 function refreshOracle() {
-  renderOraclePanel({
-    log: (current && current.oracleLog) || [],
-    onRoll: onOracleRoll,
-  });
+  renderOraclePanel({ last: oracleLast, onRoll: onOracleRoll });
 }
 
-// Roll one oracle (Phase 9.1). Each roll draws a fresh seeded stream off a
-// monotonic cursor (`oracleSeq`) so consecutive rolls differ yet any roll is
-// reproducible from the world seed; the pick is stamped with the session day,
-// appended to the capped `oracleLog`, mirrored to the console, and persisted.
-// The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN + persistence.
-async function onOracleRoll(kind) {
+// Roll one oracle (Phase 9.1). A transient GM aid: draw a fresh seeded stream off
+// the in-memory cursor, keep only the latest result (in memory — never saved or
+// exported), mirror it to the console, and re-render the tab. No persistence.
+// The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN.
+function onOracleRoll(kind) {
   if (!current) return;
-  const seq = current.oracleSeq || 0;
-  current.oracleSeq = seq + 1;
-  const rng = subRng(current.seed, "oracle", kind, seq);
+  const rng = subRng(current.seed, "oracle", kind, oracleSeq++);
   let pick;
   if (kind === "yesno") pick = askYesNo(rng);
   else return; // unknown kind — 9.2+ register more
-  const line = oracleLine(pick);
-  current.oracleLog = current.oracleLog || [];
-  current.oracleLog.push({ kind, line, day: sessionDay });
-  while (current.oracleLog.length > ORACLE_LOG_CAP) current.oracleLog.shift();
-  logLine(`🎲 Oracle (${kind}): ${line}`);
-  current = await saveWorld(current);
-  setWorld(current);
+  oracleLast = { kind, line: oracleLine(pick) };
+  logLine(`🎲 Oracle (${kind}): ${oracleLast.line}`);
   refreshOracle();
 }
 

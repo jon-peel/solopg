@@ -531,18 +531,17 @@ export function renderFactionsPanel(model) {
 }
 
 /**
- * Render the Oracle tab (Phase 9.1) into #oracle-panel: the roll buttons plus a
- * running results list (world.oracleLog, newest first). The buttons are static;
- * the results persist WITH the world (survive reload, cleared only by starting a
- * fresh world). Mirrors the Factions/Hooks tab pattern. The app owns the roll +
- * persistence; this only draws state + wires clicks back through model.onRoll.
- * @param {{ log?: {kind:string,line:string,day?:number}[], onRoll?: (kind:string)=>void }} model
+ * Render the Oracle tab (Phase 9.1) into #oracle-panel: the roll buttons plus the
+ * SINGLE latest result. The oracle is a transient GM aid — nothing is stored or
+ * exported; a page reload starts blank. The app owns the roll; this only draws
+ * the latest result + wires clicks back through model.onRoll.
+ * @param {{ last?: {kind:string,line:string}|null, onRoll?: (kind:string)=>void }} model
  */
 export function renderOraclePanel(model) {
   const host = document.getElementById("oracle-panel");
   if (!host) return;
   host.innerHTML = "";
-  const log = (model && model.log) || [];
+  const last = model && model.last;
 
   const head = document.createElement("div");
   head.className = "hooks-head";
@@ -560,40 +559,27 @@ export function renderOraclePanel(model) {
 
   const hint = document.createElement("div");
   hint.className = "panel-hint";
-  hint.textContent = "Consult the oracle for a quick ruling. Rolls append below and are kept with the world.";
+  hint.textContent = "Consult the oracle for a quick ruling — the latest result shows below.";
   host.appendChild(hint);
 
-  // Results, newest first.
-  const results = document.createElement("div");
-  results.className = "oracle-results";
-  results.id = "oracle-results";
-  if (!log.length) {
+  // The single latest result.
+  if (!last) {
     const empty = document.createElement("div");
     empty.className = "panel-hint";
-    empty.textContent = "No oracle rolls yet — press a button above.";
-    results.appendChild(empty);
-  } else {
-    for (let i = log.length - 1; i >= 0; i--) {
-      const entry = log[i] || {};
-      const row = document.createElement("div");
-      row.className = "oracle-row";
-      const kind = document.createElement("span");
-      kind.className = "oracle-kind";
-      kind.textContent = ORACLE_LABELS[entry.kind] || entry.kind || "Oracle";
-      const ans = document.createElement("span");
-      ans.className = "oracle-answer";
-      ans.textContent = entry.line != null ? String(entry.line) : "";
-      row.append(kind, ans);
-      if (typeof entry.day === "number") {
-        const day = document.createElement("span");
-        day.className = "oracle-day";
-        day.textContent = `Day ${entry.day}`;
-        row.append(day);
-      }
-      results.appendChild(row);
-    }
+    empty.textContent = "No roll yet — press a button above.";
+    host.appendChild(empty);
+    return;
   }
-  host.appendChild(results);
+  const result = document.createElement("div");
+  result.className = "oracle-result";
+  const kind = document.createElement("span");
+  kind.className = "oracle-kind";
+  kind.textContent = ORACLE_LABELS[last.kind] || last.kind || "Oracle";
+  const ans = document.createElement("span");
+  ans.className = "oracle-answer";
+  ans.textContent = last.line != null ? String(last.line) : "";
+  result.append(kind, ans);
+  host.appendChild(result);
 }
 
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform

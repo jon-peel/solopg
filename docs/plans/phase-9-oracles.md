@@ -53,38 +53,39 @@ All the *generative* oracles share one home and one output channel:
   Detail / Hooks / Pinned / Travel / Factions — same `TAB_REGIONS` pattern. It holds a compact
   stack of **roll buttons** (9.1: the Yes/No coin; 9.2+ add an odds picker, Meaning, Complication,
   Settlement, Tavern) above an **on-screen results list**.
-- **Results show on-screen in the tab** (newest first), *not* only in a log. (The app's old growing
-  event log was retired — `logLine` in `panel.js` now writes to the browser **console** only — so a
-  GM needs the answer visible in the panel.) Each roll is **mirrored to the console** via `logLine`
-  with a `🎲` prefix for debugging.
-- **Rolls persist with the world.** A roll appends `{ kind, line, day }` to **`world.oracleLog`**
-  (capped at `ORACLE_LOG_CAP = 50`, newest kept) and saves — so the oracle history survives reload,
-  cleared only by starting a fresh world.
+- **The tab shows the SINGLE latest result**, not a history. (The app's old growing event log was
+  retired — `logLine` in `panel.js` now writes to the browser **console** only — so a GM needs the
+  answer visible in the panel.) Each roll is also **mirrored to the console** via `logLine` with a
+  `🎲` prefix for debugging.
+- **Nothing is persisted or exported.** An oracle roll is a transient play aid, not world data — a
+  history of yes/nos isn't worth saving. The latest result lives **only in memory** (`oracleLast` in
+  `app.js`); a **page reload starts the tab blank** (acceptable — it's ephemeral). No world fields,
+  no `saveWorld` on a roll. (A one-line strip in `setCurrent` drops any `oracleLog`/`oracleSeq` left
+  on a world from the first 9.1 cut, so nothing stale ever exports.)
 - **Pure engine per oracle** in `js/gen/oracle.js` (a single module — these are small): `askYesNo`
   returns a **structured pick**; `oracleLine(pick)` composes the display string, the same
   compose-at-render rule as `feature-detail.js` / `hooks.js`. Tables arrive from 9.2 on.
 - **Determinism.** An oracle roll is an explicit GM action, so — unlike world generation — it should
-  feel *fresh* each press, yet stay reproducible for tests. Each roll draws
-  `subRng(seed, "oracle", kind, n)` where `n` is a **monotonic cursor** `world.oracleSeq` that only
-  ever increments (not the capped log length, which would stall). Two new world fields
-  (`oracleLog`, `oracleSeq`), added straight to `createWorld` — **no schema bump, no migration
-  block** (this phase's golden rule); reads guard with `|| []` / `|| 0` so an older world self-heals
-  on its first roll.
+  feel *fresh* each press. Each roll draws `subRng(seed, "oracle", kind, n)` where `n` is an
+  **in-memory cursor** `oracleSeq` that only ever increments; it resets on reload/world-switch, so a
+  reload replays from the top (unnoticeable for a coin flip). The pure engine keeps tests
+  deterministic regardless.
 
 Node-testable: the pick logic + prose composition are pure (`test/oracle.test.js`). The tab wiring
 is UI (manual checklist).
 
 **Manual test — 9.1 (run `./run-local.sh`, open http://localhost:8000):**
 ```
-[ ] New World → the side panel shows a new "Oracle" tab after "Factions".
-[ ] Open the Oracle tab → a "Yes / No" button + "No oracle rolls yet…" hint.
-[ ] Press "Yes / No" a few times → each press adds a row on top reading Yes or No,
-    tagged with the current "Day N"; over ~20 presses you see a mix of both.
+[ ] New World → the side panel shows a new "Oracle" tab (tab bar: Selection · Hooks ·
+    Pinned · Factions · Oracle, all fitting without overflow).
+[ ] Open the Oracle tab → a "Yes / No" button + "No roll yet…" hint.
+[ ] Press "Yes / No" a few times → the result box shows ONLY the latest answer
+    (Yes or No), replaced on each press; over ~20 presses you see both come up.
 [ ] Open the browser console → each roll also logged as "🎲 Oracle (yesno): Yes/No".
-[ ] Reload the page → the Oracle tab still lists the same past rolls (persisted).
-[ ] Export the world → the JSON contains an "oracleLog" array; re-import → rolls intact.
-[ ] Create a second New World → its Oracle tab starts empty (per-world history).
-[ ] Switch to another tab and back → buttons still work, list intact.
+[ ] Export the world → the JSON has NO oracle data (no oracleLog / oracleSeq).
+[ ] Reload the page → the Oracle tab is blank again (result is not persisted — expected).
+[ ] Switch to another tab and back (no page reload) → the last result still shows.
+[ ] Create a second New World → its Oracle tab starts blank.
 ```
 
 ---

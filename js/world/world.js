@@ -99,14 +99,8 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     party: { q: 0, r: 0 },
     // Factions (Phase 8.1, reserved) — populated starting 8.7; empty until then.
     factions: [],
-    // Oracle rolls (Phase 9.1) — the GM's on-demand fate/inspiration rolls kept
-    // with the world: `oracleLog` is the display history (capped, see app.js),
-    // `oracleSeq` a monotonic cursor that seeds each roll's rng stream so
-    // consecutive rolls differ and any roll is reproducible from the world seed.
-    // Additive per this phase's golden rule (no schema bump / migration) — reads
-    // guard with `|| []` / `|| 0`, so an older world self-heals on first roll.
-    oracleLog: [],
-    oracleSeq: 0,
+    // (Oracle rolls are a transient per-session aid — the app keeps only the
+    // latest result in memory, never on the world; see js/ui/app.js.)
     createdAt: now,
     updatedAt: now,
   };
