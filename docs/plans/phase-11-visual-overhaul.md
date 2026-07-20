@@ -139,11 +139,19 @@ Dependency- and risk-driven, not by picked-list number:
   **long-press to open the radial**, verify pinch-zoom and drag-pan on touch.
 - **Verify:** manual checklist on a narrow viewport / touch emulation.
 
-### 11.8 — Accessibility close-out
+### 11.8 — Accessibility close-out ✅
 - Visible **focus rings**, full **keyboard navigation** (radial arrow-rotate + Enter — overlaps the
   keyboard half of old 10.2), **ARIA** roles on the radial / menus / dialogs, `prefers-reduced-motion`,
   and a **final contrast + colour-blind audit** across the finished skin.
 - **Verify:** keyboard-only walkthrough checklist; contrast audit.
+- **Done:** radial arrow/Enter/Space/Esc navigation with a gold `.kbd` focus ring; `role=menu`/
+  `menuitem` + `aria-haspopup`/`aria-disabled` on the ring; `role=tablist`/`tab`/`tabpanel` +
+  `aria-selected`/`aria-controls` on the panel; icon-button `aria-label`s; `role=dialog aria-modal`
+  help card; `prefers-reduced-motion`; contrast sweep added to `theme.test.js`. Headless-verified
+  (arrows, Enter opens submenu, Esc steps back, tab aria toggles) with 0 page errors.
+
+**Phase 11 complete** — 11.1–11.8 all shipped. Follow-up queued separately: travel modes
+(mount/vehicle pace above base speed; boat over water).
 
 ## Sidebar overview — proposals (+D)
 
