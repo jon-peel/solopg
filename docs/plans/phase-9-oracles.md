@@ -81,6 +81,8 @@ is UI (manual checklist).
 [ ] Open the Oracle tab → a "Yes / No" button + "No roll yet…" hint.
 [ ] Press "Yes / No" a few times → the result box shows ONLY the latest answer
     (Yes or No), replaced on each press; over ~20 presses you see both come up.
+[ ] Press it repeatedly → each press flashes the result (box brightens, answer
+    fades red→ink) EVEN when the answer is the same, so you know the roll landed.
 [ ] Open the browser console → each roll also logged as "🎲 Oracle (yesno): Yes/No".
 [ ] Export the world → the JSON has NO oracle data (no oracleLog / oracleSeq).
 [ ] Reload the page → the Oracle tab is blank again (result is not persisted — expected).

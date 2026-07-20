@@ -1399,6 +1399,34 @@ button:hover {
   font-size: 1.15rem;
   color: var(--ink);
 }
+/* Flash on a fresh roll so a repeated answer still registers the press: the box
+   briefly brightens and the answer fades from wax-seal red to ink. Collapses to
+   an instant swap under the global prefers-reduced-motion rule above. */
+.oracle-result.oracle-flash {
+  animation: oracle-pop 0.6s ease-out;
+}
+.oracle-result.oracle-flash .oracle-answer {
+  animation: oracle-answer-ink 0.6s ease-out;
+}
+@keyframes oracle-pop {
+  0% {
+    background: rgba(138, 51, 36, 0.32);
+    border-color: var(--accent);
+  }
+  100% {
+    background: var(--accent-wash);
+    border-color: var(--edge);
+  }
+}
+@keyframes oracle-answer-ink {
+  0%,
+  40% {
+    color: var(--accent);
+  }
+  100% {
+    color: var(--ink);
+  }
+}
 
 /* Text-link "Back" out of a POI's detail (navigation, not an action button). */
 .link-back {

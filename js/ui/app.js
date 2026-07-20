@@ -1517,9 +1517,11 @@ function refreshFactions() {
   renderFactionLegend(factions);
 }
 
-// Refresh the Oracle tab (roll buttons + the single latest result).
-function refreshOracle() {
-  renderOraclePanel({ last: oracleLast, onRoll: onOracleRoll });
+// Refresh the Oracle tab (roll buttons + the single latest result). `flash` is
+// true only when a roll just happened, so the result animates on a real press
+// (even if the value is unchanged) but not on unrelated world refreshes.
+function refreshOracle(flash = false) {
+  renderOraclePanel({ last: oracleLast, onRoll: onOracleRoll, flash });
 }
 
 // Roll one oracle (Phase 9.1). A transient GM aid: draw a fresh seeded stream off
@@ -1534,7 +1536,7 @@ function onOracleRoll(kind) {
   else return; // unknown kind — 9.2+ register more
   oracleLast = { kind, line: oracleLine(pick) };
   logLine(`🎲 Oracle (${kind}): ${oracleLast.line}`);
-  refreshOracle();
+  refreshOracle(true); // flash the result so a repeated answer still reads as "rolled"
 }
 
 // The map-legend faction key (Phase 11.4): a clickable row per power — a colour
