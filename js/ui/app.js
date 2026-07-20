@@ -2558,6 +2558,7 @@ function wire() {
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
   $("btn-adv-hour").addEventListener("click", () => advanceHour());
   $("btn-next-dawn").addEventListener("click", () => advanceToNextDawn());
+  $("btn-panel").addEventListener("click", () => document.body.classList.toggle("panel-open"));
   for (const btn of document.querySelectorAll("#pace-panel .pace-scale-v button")) {
     btn.addEventListener("click", () => onSetEncumbrance(btn.dataset.enc));
   }

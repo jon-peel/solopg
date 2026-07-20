@@ -42,6 +42,11 @@ let world = null;
 let selected = null; // { q, r } | null
 let camera = { offsetX: 0, offsetY: 0, scale: 1 }; // CSS-pixel space
 let drag = null;
+// Touch (Phase 11.7): active pointers for pinch-zoom + a long-press timer that
+// stands in for right-click (opens the radial) on touch devices.
+const pointers = new Map(); // pointerId -> { x, y }
+let pinchPrev = null; // previous 2-finger distance, or null
+let longPressTimer = null;
 let iconsEnabled = true;
 let labelsEnabled = true; // show hex name labels on the map
 let hovered = null; // { q, r } under the cursor | null
@@ -66,7 +71,7 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
-  canvas.addEventListener("pointercancel", () => (drag = null));
+  canvas.addEventListener("pointercancel", onPointerCancel);
   canvas.addEventListener("pointerleave", onPointerLeave);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", onContextMenu);
@@ -114,18 +119,23 @@ export function pixelsPerMile() {
 }
 
 /** Zoom a step in (dir>0) or out (dir<0), keeping the canvas center fixed. */
-// Zoom to an absolute scale, anchored on the viewport centre (clamped).
-function zoomToScale(scale) {
+// Zoom to an absolute scale, anchored on a client point (clamped). The point
+// stays put under the cursor/fingers — used by the wheel, +/−, and pinch.
+function zoomAt(scale, clientX, clientY) {
   if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const px = rect.left + rect.width / 2;
-  const py = rect.top + rect.height / 2;
-  const before = clientToWorld(px, py);
+  const before = clientToWorld(clientX, clientY);
   camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
-  const after = clientToWorld(px, py);
+  const after = clientToWorld(clientX, clientY);
   camera.offsetX += (after.x - before.x) * camera.scale;
   camera.offsetY += (after.y - before.y) * camera.scale;
   render();
+}
+
+// Absolute zoom anchored on the viewport centre (the +/−/slider path).
+function zoomToScale(scale) {
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  zoomAt(scale, rect.left + rect.width / 2, rect.top + rect.height / 2);
 }
 
 export function zoomStep(dir) {
@@ -1201,16 +1211,34 @@ function strokeHex(cx, cy, color, widthPx) {
 // --- input ---------------------------------------------------------------
 
 function onPointerDown(e) {
-  if (e.button !== 0) return; // primary button pans; the right button opens the ring
-  drag = {
-    startX: e.clientX,
-    startY: e.clientY,
-    startOffsetX: camera.offsetX,
-    startOffsetY: camera.offsetY,
-    moved: false,
-  };
-  canvas.setPointerCapture?.(e.pointerId);
+  if (e.pointerType !== "touch" && e.button !== 0) return; // mouse: only the primary button pans
+  try { canvas.setPointerCapture?.(e.pointerId); } catch { /* stray/synthetic pointer id */ }
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointers.size === 2) {
+    // Second finger down → pinch-zoom; abandon any pan / long-press.
+    drag = null;
+    clearTimeout(longPressTimer);
+    pinchPrev = null;
+    canvas.classList.remove("dragging");
+    return;
+  }
+
+  drag = { startX: e.clientX, startY: e.clientY, startOffsetX: camera.offsetX, startOffsetY: camera.offsetY, moved: false };
   canvas.classList.add("dragging");
+  // Touch has no right-click: a stationary long-press opens the radial instead.
+  if (e.pointerType === "touch") {
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      if (drag && !drag.moved && pointers.size === 1) {
+        const { x, y } = clientToWorld(e.clientX, e.clientY);
+        const { q, r } = pixelToAxial(x, y, HEX_SIZE);
+        drag = null; // consume — no tap-select on release
+        canvas.classList.remove("dragging");
+        handlers.onContextMenu?.({ q, r, clientX: e.clientX, clientY: e.clientY });
+      }
+    }, 500);
+  }
 }
 
 // Right-click resolves the cell under the cursor and reports it (with the screen
@@ -1231,11 +1259,23 @@ function onDblClick(e) {
 }
 
 function onPointerMove(e) {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // Two fingers → pinch-zoom around their midpoint.
+  if (pointers.size === 2) {
+    const [p1, p2] = [...pointers.values()];
+    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (pinchPrev && dist > 0) zoomAt(camera.scale * (dist / pinchPrev), (p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+    pinchPrev = dist;
+    return;
+  }
+
   if (drag) {
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
     if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
       drag.moved = true;
+      clearTimeout(longPressTimer); // a drag isn't a long-press
     }
     camera.offsetX = drag.startOffsetX + dx;
     camera.offsetY = drag.startOffsetY + dy;
@@ -1266,8 +1306,12 @@ function onPointerLeave() {
 }
 
 function onPointerUp(e) {
+  clearTimeout(longPressTimer);
   canvas.classList.remove("dragging");
-  if (drag && !drag.moved) {
+  const wasPinch = pointers.size >= 2;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchPrev = null;
+  if (!wasPinch && drag && !drag.moved) {
     const { x, y } = clientToWorld(e.clientX, e.clientY);
     const { q, r } = pixelToAxial(x, y, HEX_SIZE);
     const hex = world && world.hexes[`${q},${r}`];
@@ -1277,13 +1321,15 @@ function onPointerUp(e) {
   drag = null;
 }
 
+function onPointerCancel(e) {
+  clearTimeout(longPressTimer);
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchPrev = null;
+  drag = null;
+  canvas.classList.remove("dragging");
+}
+
 function onWheel(e) {
   e.preventDefault();
-  const before = clientToWorld(e.clientX, e.clientY);
-  const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-  camera.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * factor));
-  const after = clientToWorld(e.clientX, e.clientY);
-  camera.offsetX += (after.x - before.x) * camera.scale;
-  camera.offsetY += (after.y - before.y) * camera.scale;
-  render();
+  zoomAt(camera.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY);
 }
