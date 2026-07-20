@@ -644,13 +644,15 @@ button:hover {
   border-color: var(--accent);
 }
 
-/* Dungeon View overlays the hex map within the stage. */
+/* Dungeon View overlays the hex map within the stage — above the map chrome
+   (scale bar, travel HUD, zoom controls) but below the radial ring (z 30). */
 #dungeon-view {
   position: absolute;
   inset: 0;
+  z-index: 20;
   display: flex;
   flex-direction: column;
-  background: #0d0f15;
+  background: radial-gradient(130% 130% at 50% 30%, #ddcca2 0%, #d0bd93 60%, #c3ae82 100%);
 }
 
 #dungeon-view[hidden] {
@@ -704,7 +706,7 @@ button:hover {
   width: 100%;
   min-height: 0;
   display: block;
-  background: #0d0f15;
+  background: transparent;
   cursor: grab;
 }
 
@@ -720,9 +722,11 @@ button:hover {
   padding: 0.5rem 0.6rem;
   font-size: 0.72rem;
   line-height: 1.5;
-  background: rgba(13, 15, 21, 0.92);
-  border: 1px solid var(--border, #2b3140);
-  border-radius: 6px;
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.96);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
 }
 
 #dungeon-legend[hidden] {
@@ -747,7 +751,11 @@ button:hover {
   width: 0.7rem;
   height: 0.7rem;
   border-radius: 2px;
+  border: 1px solid rgba(40, 28, 10, 0.35);
   display: inline-block;
+}
+#dungeon-legend strong {
+  color: var(--accent);
 }
 
 /* Overview stat chips at the top of the panel (Phase 11.5b). */

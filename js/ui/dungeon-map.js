@@ -6,18 +6,26 @@
 // pan/zoom). Reports room clicks via a callback. The layout math lives in the
 // (tested) generator; this just paints.
 
+// Parchment dungeon palette (Phase 11.6): pale-vellum rooms with a light content
+// wash, inked sepia walls + text — the same cartographer's identity as the map.
 const CONTENT_FILL = {
-  Monster: "#7c3b32",
-  Trap: "#7c6b32",
-  Empty: "#2f3542",
-  Special: "#3b4b7c",
+  Monster: "#e4c1a9", // warm red-tan
+  Trap: "#e8d59e", // amber
+  Empty: "#efe4c6", // plain vellum
+  Special: "#d2cadf", // pale violet
 };
 const CONTENT_GLYPH = { Monster: "👹", Trap: "⚠️", Special: "✨" }; // Empty: none
-const CORRIDOR_FILL = "#262b36";
-const DOOR_FILL = { door: "#caa46a", locked: "#c0524a", stuck: "#c98a3a", secret: "#9a6fd0" };
+const CORRIDOR_FILL = "#e3d4ac"; // passages (mid vellum)
+const DOOR_FILL = { door: "#c9a45f", locked: "#b3402f", stuck: "#c07a2a", secret: "#7a5aa6" };
 const DOOR_SYMBOL = { locked: "L", stuck: "J", secret: "S" }; // plain door: no letter
-const ROOM_STROKE = "#11131a";
-const SELECTED_STROKE = "#6ea8fe";
+const ROOM_STROKE = "#5b4a2a"; // inked walls (sepia)
+const WALL_INK = "#4a3a1e"; // door borders / heavy ink
+const SELECTED_STROKE = "#8a2418"; // oxblood (matches the world map)
+const INK_TEXT = "#3a2c14"; // room numbers, door symbols
+const GRID_INK = "rgba(90,74,42,0.14)"; // faint ruled grid on the page
+const LIT_GLOW = "rgba(255,190,90,0.33)";
+const CLEARED_DIM = "rgba(110,92,55,0.32)";
+const BADGE_SHADOW = "rgba(40,28,10,0.4)";
 const PAD = 16; // px border inside the canvas
 
 let canvas = null;
@@ -148,7 +156,7 @@ export function render() {
   ctx.clearRect(0, 0, rect.width, rect.height);
   hitRects = [];
   if (!level || !level.layout) {
-    ctx.fillStyle = "#6b7280";
+    ctx.fillStyle = "#6d5c3e";
     ctx.font = "14px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -180,7 +188,7 @@ export function render() {
   const sy = (gy) => oy + gy * cell;
 
   // Square grid (10 ft cells) under everything, for spatial reference.
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.strokeStyle = GRID_INK;
   ctx.lineWidth = 1 / camera.scale;
   ctx.beginPath();
   for (let gx = bb.minX; gx <= bb.minX + bb.w; gx++) {
@@ -212,13 +220,13 @@ export function render() {
     // Warm glow for a lit room (dark is the default look) — stronger so it
     // reads at a glance, plus a lamp dot top-right for the rare lit room.
     if (litRooms.has(r.n)) {
-      ctx.fillStyle = "rgba(255,168,56,0.4)";
+      ctx.fillStyle = LIT_GLOW;
       ctx.fillRect(x, y, w, h);
     }
 
     // Dim a cleared room (drawn under the number so it stays readable).
     if (marks && marks.state && marks.state[r.n] && marks.state[r.n].cleared) {
-      ctx.fillStyle = "rgba(13,15,21,0.5)";
+      ctx.fillStyle = CLEARED_DIM;
       ctx.fillRect(x, y, w, h);
     }
 
@@ -228,7 +236,7 @@ export function render() {
     ctx.lineWidth = r.n === selectedRoom ? 3 : 2;
     ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
 
-    ctx.fillStyle = "#e6e8ee";
+    ctx.fillStyle = INK_TEXT;
     ctx.fillText(String(r.n), x + w / 2, y + h / 2);
 
     // Lamp dot (top-right) marks a lit room unmistakably.
@@ -263,13 +271,13 @@ export function render() {
 
     ctx.fillStyle = DOOR_FILL[d.type] || DOOR_FILL.door;
     ctx.fillRect(wx - w / 2, wy - h / 2, w, h);
-    ctx.strokeStyle = "#1a1410";
+    ctx.strokeStyle = WALL_INK;
     ctx.lineWidth = 1.5;
     ctx.strokeRect(wx - w / 2, wy - h / 2, w, h);
 
     const sym = DOOR_SYMBOL[d.type] || "";
     if (sym && cell >= 9) {
-      ctx.fillStyle = "#1a1410";
+      ctx.fillStyle = INK_TEXT;
       ctx.font = `bold ${Math.max(8, Math.floor(cell * 0.7))}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -285,15 +293,15 @@ export function render() {
     ctx.font = `bold ${fs}px sans-serif`;
     for (const r of layout.rooms) {
       const badges = [];
-      if (marks.entrance.has(r.n)) badges.push(["E", "#5fbf77"]);
-      if (marks.exit.has(r.n)) badges.push(["X", "#5fbf77"]);
-      if (marks.down.has(r.n)) badges.push(["▼", "#6ec6d6"]);
-      if (marks.up.has(r.n)) badges.push(["▲", "#6ec6d6"]);
+      if (marks.entrance.has(r.n)) badges.push(["E", "#2f8f5a"]);
+      if (marks.exit.has(r.n)) badges.push(["X", "#2f8f5a"]);
+      if (marks.down.has(r.n)) badges.push(["▼", "#2f7f92"]);
+      if (marks.up.has(r.n)) badges.push(["▲", "#2f7f92"]);
       if (!badges.length) continue;
       let bx = sx(r.x) + 2;
       const by = sy(r.y) + 2;
       for (const [chr, col] of badges) {
-        ctx.fillStyle = "#0d0f15";
+        ctx.fillStyle = BADGE_SHADOW;
         ctx.fillText(chr, bx + 1, by + 1);
         ctx.fillStyle = col;
         ctx.fillText(chr, bx, by);
@@ -312,14 +320,14 @@ export function render() {
       const st = marks.state[r.n];
       if (!st) continue;
       const badges = [];
-      if (st.explored) badges.push(["•", "#6ec6d6"]);
-      if (st.cleared) badges.push(["✓", "#5fbf77"]);
-      if (st.looted) badges.push(["$", "#d8b24a"]);
+      if (st.explored) badges.push(["•", "#2f7f92"]);
+      if (st.cleared) badges.push(["✓", "#2f8f5a"]);
+      if (st.looted) badges.push(["$", "#a8791f"]);
       if (!badges.length) continue;
       let bx = sx(r.x) + r.w * cell - 2;
       const by = sy(r.y) + r.h * cell - 2;
       for (const [chr, col] of badges.reverse()) {
-        ctx.fillStyle = "#0d0f15";
+        ctx.fillStyle = BADGE_SHADOW;
         ctx.fillText(chr, bx + 1, by + 1);
         ctx.fillStyle = col;
         ctx.fillText(chr, bx, by);
