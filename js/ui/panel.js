@@ -5,6 +5,7 @@ import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
 import { factionLabel, factionDescription } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
+import { ORACLE_LABELS } from "../gen/oracle.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -12,7 +13,7 @@ const panel = () => document.getElementById("panel");
 // The panel shows one tab at a time; each region is built once (in showWorld)
 // and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", travel: "travel-panel", factions: "factions-panel" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", travel: "travel-panel", factions: "factions-panel", oracle: "oracle-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -31,7 +32,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "travel" | "factions"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "travel" | "factions" | "oracle"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -529,6 +530,72 @@ export function renderFactionsPanel(model) {
   for (const faction of factions) host.appendChild(factionCard(faction, model));
 }
 
+/**
+ * Render the Oracle tab (Phase 9.1) into #oracle-panel: the roll buttons plus a
+ * running results list (world.oracleLog, newest first). The buttons are static;
+ * the results persist WITH the world (survive reload, cleared only by starting a
+ * fresh world). Mirrors the Factions/Hooks tab pattern. The app owns the roll +
+ * persistence; this only draws state + wires clicks back through model.onRoll.
+ * @param {{ log?: {kind:string,line:string,day?:number}[], onRoll?: (kind:string)=>void }} model
+ */
+export function renderOraclePanel(model) {
+  const host = document.getElementById("oracle-panel");
+  if (!host) return;
+  host.innerHTML = "";
+  const log = (model && model.log) || [];
+
+  const head = document.createElement("div");
+  head.className = "hooks-head";
+  head.textContent = "Oracle";
+  host.appendChild(head);
+
+  // Roll buttons (9.1: the Yes/No coin at even odds; 9.2 adds the odds picker +
+  // exceptional/and-but, and 9.3-9.6 add the other oracles beside it).
+  const controls = document.createElement("div");
+  controls.className = "oracle-controls tile-actions";
+  if (model && model.onRoll) {
+    controls.appendChild(actionButton(ORACLE_LABELS.yesno, () => model.onRoll("yesno")));
+  }
+  host.appendChild(controls);
+
+  const hint = document.createElement("div");
+  hint.className = "panel-hint";
+  hint.textContent = "Consult the oracle for a quick ruling. Rolls append below and are kept with the world.";
+  host.appendChild(hint);
+
+  // Results, newest first.
+  const results = document.createElement("div");
+  results.className = "oracle-results";
+  results.id = "oracle-results";
+  if (!log.length) {
+    const empty = document.createElement("div");
+    empty.className = "panel-hint";
+    empty.textContent = "No oracle rolls yet — press a button above.";
+    results.appendChild(empty);
+  } else {
+    for (let i = log.length - 1; i >= 0; i--) {
+      const entry = log[i] || {};
+      const row = document.createElement("div");
+      row.className = "oracle-row";
+      const kind = document.createElement("span");
+      kind.className = "oracle-kind";
+      kind.textContent = ORACLE_LABELS[entry.kind] || entry.kind || "Oracle";
+      const ans = document.createElement("span");
+      ans.className = "oracle-answer";
+      ans.textContent = entry.line != null ? String(entry.line) : "";
+      row.append(kind, ans);
+      if (typeof entry.day === "number") {
+        const day = document.createElement("span");
+        day.className = "oracle-day";
+        day.textContent = `Day ${entry.day}`;
+        row.append(day);
+      }
+      results.appendChild(row);
+    }
+  }
+  host.appendChild(results);
+}
+
 // Encumbrance tier labels (Phase 8.4), matching ENCUMBRANCE_FACTOR's keys
 // (js/gen/travel.js) and the existing B/X travel-tip tooltip's phrasing.
 const ENCUMBRANCE_LABELS = {
@@ -931,6 +998,7 @@ export function showWorld(world, opts = {}) {
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
     mkTab("travel", "Travel"),
     mkTab("factions", "Factions", "factions-tab-badge"),
+    mkTab("oracle", "Oracle"),
   );
   el.appendChild(tabs);
   const region = (id, hidden) => {
@@ -946,6 +1014,7 @@ export function showWorld(world, opts = {}) {
   region("pinned-hooks", true); // the party's pinned leads
   region("travel-panel", true); // encumbrance + last trip report (renderTravelPanel)
   region("factions-panel", true); // the world's factions (renderFactionsPanel)
+  region("oracle-panel", true); // on-demand GM oracle rolls (renderOraclePanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.

@@ -45,28 +45,47 @@ map-anchored adventure hooks) and a *region/realm* generator (regions already ex
 
 ---
 
-## Surface & shared plumbing (9.1)
+## Surface & shared plumbing (9.1) — ✅ **built**
 
 All the *generative* oracles share one home and one output channel:
 
-- **A new "Oracle" side-panel tab** (`js/ui/panel.js`), sitting alongside Detail / Hooks / Pinned /
-  Travel / Factions — same `TAB_REGIONS` pattern, same tab-badge plumbing. It holds a compact
-  stack of **roll buttons** (Yes/No with an odds picker, Meaning, Complication, Settlement,
-  Tavern) — the GM's quick-reference panel.
-- **Results append to the existing running log** (`logLine` in `app.js`) — the same channel
-  faction subtext already uses, so an oracle roll reads inline with the world's own events. Each
-  line is prefixed with a small glyph so oracle rolls are scannable (`🎲`).
-- **Pure engine per oracle** in `js/gen/oracle.js` (a single module — these are small), reading
-  JSON tables + a seeded sub-stream, returning a **structured pick**; prose is composed at render
-  (`oracleLine(pick)`), the same compose-at-render rule as `feature-detail.js` / `hooks.js`.
-- **Determinism.** An oracle roll is an explicit GM action, so — unlike world generation — it
-  should feel *fresh* each press, not reproduce. It draws from `subRng(seed, "oracle", kind, n)`
-  where `n` is a per-kind press counter kept on the world (`world.oracleCounter`), so the *stream*
-  is seeded/reproducible for tests but advances on every roll in play. (This is the one new field
-  on the world; per the golden rule we just add it — no migration.)
+- **A new "Oracle" side-panel tab** (`js/ui/panel.js` `renderOraclePanel`), sitting alongside
+  Detail / Hooks / Pinned / Travel / Factions — same `TAB_REGIONS` pattern. It holds a compact
+  stack of **roll buttons** (9.1: the Yes/No coin; 9.2+ add an odds picker, Meaning, Complication,
+  Settlement, Tavern) above an **on-screen results list**.
+- **Results show on-screen in the tab** (newest first), *not* only in a log. (The app's old growing
+  event log was retired — `logLine` in `panel.js` now writes to the browser **console** only — so a
+  GM needs the answer visible in the panel.) Each roll is **mirrored to the console** via `logLine`
+  with a `🎲` prefix for debugging.
+- **Rolls persist with the world.** A roll appends `{ kind, line, day }` to **`world.oracleLog`**
+  (capped at `ORACLE_LOG_CAP = 50`, newest kept) and saves — so the oracle history survives reload,
+  cleared only by starting a fresh world.
+- **Pure engine per oracle** in `js/gen/oracle.js` (a single module — these are small): `askYesNo`
+  returns a **structured pick**; `oracleLine(pick)` composes the display string, the same
+  compose-at-render rule as `feature-detail.js` / `hooks.js`. Tables arrive from 9.2 on.
+- **Determinism.** An oracle roll is an explicit GM action, so — unlike world generation — it should
+  feel *fresh* each press, yet stay reproducible for tests. Each roll draws
+  `subRng(seed, "oracle", kind, n)` where `n` is a **monotonic cursor** `world.oracleSeq` that only
+  ever increments (not the capped log length, which would stall). Two new world fields
+  (`oracleLog`, `oracleSeq`), added straight to `createWorld` — **no schema bump, no migration
+  block** (this phase's golden rule); reads guard with `|| []` / `|| 0` so an older world self-heals
+  on its first roll.
 
-Node-testable: the pick logic and prose composition are pure. The tab wiring is UI (manual
-checklist).
+Node-testable: the pick logic + prose composition are pure (`test/oracle.test.js`). The tab wiring
+is UI (manual checklist).
+
+**Manual test — 9.1 (run `./run-local.sh`, open http://localhost:8000):**
+```
+[ ] New World → the side panel shows a new "Oracle" tab after "Factions".
+[ ] Open the Oracle tab → a "Yes / No" button + "No oracle rolls yet…" hint.
+[ ] Press "Yes / No" a few times → each press adds a row on top reading Yes or No,
+    tagged with the current "Day N"; over ~20 presses you see a mix of both.
+[ ] Open the browser console → each roll also logged as "🎲 Oracle (yesno): Yes/No".
+[ ] Reload the page → the Oracle tab still lists the same past rolls (persisted).
+[ ] Export the world → the JSON contains an "oracleLog" array; re-import → rolls intact.
+[ ] Create a second New World → its Oracle tab starts empty (per-world history).
+[ ] Switch to another tab and back → buttons still work, list intact.
+```
 
 ---
 
@@ -203,7 +222,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 
 | Step | Item | Class | Notes |
 |---|---|---|---|
-| **9.1** | Oracle tab + `oracle.js` + log channel | plumbing | unblocks 9.2–9.6 |
+| **9.1** | Oracle tab + `oracle.js` + on-screen results | plumbing | ✅ **done** — unblocks 9.2–9.6 |
 | **9.2** | Yes/No fate oracle | generative | odds + exceptional + and/but + event flag |
 | **9.3** | Meaning / inspiration | generative | action × subject |
 | **9.4** | Complication / twist | generative | single table |

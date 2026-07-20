@@ -1402,6 +1402,38 @@ button:hover {
   font-style: italic;
 }
 
+/* Oracle tab (Phase 9.1) — a running list of the GM's rolls, newest first. */
+.oracle-results {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.oracle-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  background: var(--accent-wash);
+}
+.oracle-kind {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.oracle-answer {
+  font-weight: 600;
+  color: var(--ink);
+}
+.oracle-day {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
 /* Text-link "Back" out of a POI's detail (navigation, not an action button). */
 .link-back {
   margin-top: 0.4rem;

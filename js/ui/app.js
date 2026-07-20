@@ -48,8 +48,9 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, renderFactionsPanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
+import { askYesNo, oracleLine } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -157,6 +158,10 @@ let sessionDay = 0;
 let dayUsed = 0;
 const DAY_HOURS = 8;
 
+// Oracle roll history (Phase 9.1) — how many recent rolls the Oracle tab keeps
+// with the world. Retunable; the log is a play aid, not a record to preserve.
+const ORACLE_LOG_CAP = 50;
+
 // Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
 // sessionDay: replaced by each travel press, reset on world switch.
 let lastDay = null;
@@ -235,6 +240,7 @@ async function setCurrent(world) {
   renderSelection();
   refreshGlobalHooks();
   refreshFactions();
+  refreshOracle();
   refreshTravelPanel();
   refreshHookMarks();
   refreshHookFocus();
@@ -1520,6 +1526,37 @@ function refreshFactions() {
   renderFactionLegend(factions);
 }
 
+// Refresh the Oracle tab (roll buttons + the persisted results list).
+function refreshOracle() {
+  renderOraclePanel({
+    log: (current && current.oracleLog) || [],
+    onRoll: onOracleRoll,
+  });
+}
+
+// Roll one oracle (Phase 9.1). Each roll draws a fresh seeded stream off a
+// monotonic cursor (`oracleSeq`) so consecutive rolls differ yet any roll is
+// reproducible from the world seed; the pick is stamped with the session day,
+// appended to the capped `oracleLog`, mirrored to the console, and persisted.
+// The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN + persistence.
+async function onOracleRoll(kind) {
+  if (!current) return;
+  const seq = current.oracleSeq || 0;
+  current.oracleSeq = seq + 1;
+  const rng = subRng(current.seed, "oracle", kind, seq);
+  let pick;
+  if (kind === "yesno") pick = askYesNo(rng);
+  else return; // unknown kind — 9.2+ register more
+  const line = oracleLine(pick);
+  current.oracleLog = current.oracleLog || [];
+  current.oracleLog.push({ kind, line, day: sessionDay });
+  while (current.oracleLog.length > ORACLE_LOG_CAP) current.oracleLog.shift();
+  logLine(`🎲 Oracle (${kind}): ${line}`);
+  current = await saveWorld(current);
+  setWorld(current);
+  refreshOracle();
+}
+
 // The map-legend faction key (Phase 11.4): a clickable row per power — a colour
 // swatch hatched at the faction's angle + its name. Clicking opens its detail
 // (the Factions tab) and centres the map on its seat/first holding.
@@ -2105,6 +2142,7 @@ async function persistAndRefresh() {
   renderSelection();
   refreshGlobalHooks();
   refreshFactions();
+  refreshOracle();
   refreshTravelPanel();
   refreshHookFocus();
   refreshMapChrome();
