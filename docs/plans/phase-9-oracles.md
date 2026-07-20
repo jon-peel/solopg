@@ -53,7 +53,8 @@ All the *generative* oracles share one home and one output channel:
   Detail / Hooks / Pinned / Travel / Factions — same `TAB_REGIONS` pattern. It holds a compact
   stack of **roll buttons** (9.1: the Yes/No coin; 9.2+ add an odds picker, Meaning, Complication,
   Settlement, Tavern) above an **on-screen results list**.
-- **The tab shows the SINGLE latest result**, not a history. (The app's old growing event log was
+- **Each oracle shows its OWN latest result** in a block under its section — not a shared box and not
+  a history (`oracleResults` keyed by kind in `app.js`). (The app's old growing event log was
   retired — `logLine` in `panel.js` now writes to the browser **console** only — so a GM needs the
   answer visible in the panel.) Each roll is also **mirrored to the console** via `logLine` with a
   `🎲` prefix for debugging.

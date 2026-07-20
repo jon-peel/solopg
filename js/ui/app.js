@@ -50,7 +50,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, oracleLine, ORACLE_LABELS, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -159,11 +159,11 @@ let dayUsed = 0;
 const DAY_HOURS = 8;
 
 // Oracle (Phase 9.1) — the GM's on-demand rolls are a transient play aid, not
-// world data: the Oracle tab shows only the LATEST result, held in memory here
-// (never persisted or exported). `oracleSeq` is an in-memory cursor so
+// world data: the Oracle tab shows the latest result PER KIND, held in memory
+// here (never persisted or exported). `oracleSeq` is an in-memory cursor so
 // consecutive rolls draw a fresh seeded stream. Both reset on page reload and on
 // world switch, so a reload starts blank — fine, it's ephemeral.
-let oracleLast = null; // { kind, line } of the most recent roll, or null
+let oracleResults = {}; // { [kind]: { tag, line, note } } — latest result per oracle kind
 let oracleSeq = 0;
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
@@ -224,7 +224,7 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
-  oracleLast = null; // the oracle result is a transient per-session aid
+  oracleResults = {}; // the oracle results are a transient per-session aid
   oracleSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
   setTravelPath(null); // clear the previous world's movement trail
@@ -1517,11 +1517,11 @@ function refreshFactions() {
   renderFactionLegend(factions);
 }
 
-// Refresh the Oracle tab (roll buttons + the single latest result). `flash` is
-// true only when a roll just happened, so the result animates on a real press
-// (even if the value is unchanged) but not on unrelated world refreshes.
-function refreshOracle(flash = false) {
-  renderOraclePanel({ last: oracleLast, onRoll: onOracleRoll, flash });
+// Refresh the Oracle tab (each oracle's controls + its own latest result).
+// `flashKind` is set only to the kind that just rolled, so only that block
+// animates on a real press (even if unchanged) — not on unrelated refreshes.
+function refreshOracle(flashKind = null) {
+  renderOraclePanel({ results: oracleResults, flashKind, onRoll: onOracleRoll });
 }
 
 // Roll one oracle (Phase 9.2/9.3). A transient GM aid: draw a fresh seeded stream
@@ -1536,16 +1536,15 @@ async function onOracleRoll(kind, odds) {
   let pick, tag = null, note = null;
   if (kind === "yesno") {
     pick = askYesNo(rng, { odds });
-    tag = pick.oddsLabel;
+    tag = pick.oddsLabel; // the odds it was rolled at
     if (pick.event) note = "⚡ A random event intrudes — read it into the scene.";
   } else if (kind === "meaning") {
     const tables = await loadTables(ORACLE_TABLE_IDS);
-    pick = rollMeaning(tables, rng);
-    tag = ORACLE_LABELS.meaning;
+    pick = rollMeaning(tables, rng); // no tag — its section heading already names it
   } else return; // unknown kind — 9.4+ register more
-  oracleLast = { tag: tag || ORACLE_LABELS[kind] || null, line: oracleLine(pick), note };
-  logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${oracleLast.line}${note ? " · random event" : ""}`);
-  refreshOracle(true); // flash the result so a repeated answer still reads as "rolled"
+  oracleResults[kind] = { tag, line: oracleLine(pick), note };
+  logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${oracleResults[kind].line}${note ? " · random event" : ""}`);
+  refreshOracle(kind); // flash only this oracle's block so a repeated answer still reads as "rolled"
 }
 
 // The map-legend faction key (Phase 11.4): a clickable row per power — a colour

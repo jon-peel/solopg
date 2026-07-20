@@ -531,27 +531,27 @@ export function renderFactionsPanel(model) {
 }
 
 /**
- * Render the Oracle tab (Phase 9.2) into #oracle-panel: the oracle controls plus
- * the SINGLE latest result. The oracle is a transient GM aid — nothing is stored
- * or exported; a page reload starts blank. The app owns the roll; this only draws
- * the latest result + wires clicks back through model.onRoll(kind, odds).
- * `model.flash` (set only when a roll just happened) replays the result's flash
- * animation, so a repeated answer still visibly registers the press.
- * @param {{ last?: {tag?:string,line:string,note?:string|null}|null, flash?: boolean,
- *   onRoll?: (kind:string, odds?:string)=>void }} model
+ * Render the Oracle tab (Phase 9.2/9.3) into #oracle-panel: each oracle's controls
+ * followed by ITS OWN latest result block. The oracle is a transient GM aid —
+ * nothing is stored or exported; a page reload starts blank. The app owns the
+ * roll; this only draws the per-kind results + wires clicks back through
+ * model.onRoll(kind, odds). `model.flashKind` (set only to the kind that just
+ * rolled) replays that block's flash so a repeated answer still registers.
+ * @param {{ results?: Record<string,{tag?:string,line:string,note?:string|null}>,
+ *   flashKind?: string|null, onRoll?: (kind:string, odds?:string)=>void }} model
  */
 export function renderOraclePanel(model) {
   const host = document.getElementById("oracle-panel");
   if (!host) return;
   host.innerHTML = "";
-  const last = model && model.last;
+  const results = (model && model.results) || {};
+  const flashKind = model && model.flashKind;
+  const roll = model && model.onRoll;
 
   const head = document.createElement("div");
   head.className = "hooks-head";
   head.textContent = "Oracle";
   host.appendChild(head);
-
-  const roll = model && model.onRoll;
 
   // Yes/No fate oracle (9.2): pick the odds → roll. Each button both sets the
   // likelihood and rolls, so it's one click. (9.4-9.6 add more oracle sections.)
@@ -566,6 +566,7 @@ export function renderOraclePanel(model) {
     }
   }
   host.appendChild(odds);
+  appendOracleResult(host, results.yesno, flashKind === "yesno");
 
   // Meaning oracle (9.3): an action × subject pair to interpret an open question
   // or a Yes/No's random-event flag.
@@ -578,34 +579,38 @@ export function renderOraclePanel(model) {
     meaning.appendChild(b);
   }
   host.appendChild(meaning);
+  appendOracleResult(host, results.meaning, flashKind === "meaning");
+}
 
-  // The single latest result (shared across oracle kinds — the tag says which).
-  if (!last) {
+// One oracle kind's latest result block (or an empty hint), appended to `host`.
+// `flash` replays the reveal animation for a just-happened roll.
+function appendOracleResult(host, result, flash) {
+  if (!result) {
     const empty = document.createElement("div");
     empty.className = "panel-hint";
-    empty.textContent = "No roll yet — press a button above.";
+    empty.textContent = "No roll yet.";
     host.appendChild(empty);
     return;
   }
-  const result = document.createElement("div");
-  result.className = "oracle-result" + (model && model.flash ? " oracle-flash" : "");
-  if (last.tag) {
+  const block = document.createElement("div");
+  block.className = "oracle-result" + (flash ? " oracle-flash" : "");
+  if (result.tag) {
     const tag = document.createElement("span");
     tag.className = "oracle-kind";
-    tag.textContent = last.tag;
-    result.appendChild(tag);
+    tag.textContent = result.tag;
+    block.appendChild(tag);
   }
   const ans = document.createElement("span");
   ans.className = "oracle-answer";
-  ans.textContent = last.line != null ? String(last.line) : "";
-  result.appendChild(ans);
-  host.appendChild(result);
+  ans.textContent = result.line != null ? String(result.line) : "";
+  block.appendChild(ans);
+  host.appendChild(block);
 
-  // Random-event nudge (9.2) — shown as its own note under the answer.
-  if (last.note) {
+  // Random-event nudge (9.2) — its own note under the answer.
+  if (result.note) {
     const note = document.createElement("div");
-    note.className = "oracle-note" + (model && model.flash ? " oracle-flash-note" : "");
-    note.textContent = last.note;
+    note.className = "oracle-note" + (flash ? " oracle-flash-note" : "");
+    note.textContent = result.note;
     host.appendChild(note);
   }
 }
