@@ -593,6 +593,26 @@ export function renderOraclePanel(model) {
   }
   host.appendChild(complication);
   appendOracleResult(host, results.complication, flashKind === "complication");
+
+  // Settlement situation (9.5): context-aware — it reads the selected town (its
+  // size/terrain + any faction presence). The button shows only when a settlement
+  // is selected; otherwise a hint points at the map.
+  host.appendChild(sectionLabel(ORACLE_LABELS.settlement));
+  const settlement = (model && model.settlement) || {};
+  if (roll && settlement.available) {
+    const row = document.createElement("div");
+    row.className = "oracle-settlement tile-actions";
+    const b = actionButton("Roll situation", () => roll("settlement"));
+    b.title = `What's stirring in ${settlement.label}?`;
+    row.appendChild(b);
+    host.appendChild(row);
+    appendOracleResult(host, results.settlement, flashKind === "settlement");
+  } else {
+    const hint = document.createElement("div");
+    hint.className = "panel-hint";
+    hint.textContent = "Select a town on the map to read what's stirring there.";
+    host.appendChild(hint);
+  }
 }
 
 // One oracle kind's latest result block (or an empty hint), appended to `host`.

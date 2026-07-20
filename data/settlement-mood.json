@@ -1,0 +1,31 @@
+{
+  "id": "settlement-mood",
+  "title": "Settlement mood",
+  "_note": "Phase 9.5 Settlement-situation oracle: the town's current TEMPER, an adjectival state phrase composed as \"{Mood}. {event}\" (see settlement-event). Situational only — never an NPC. Lowercase, no terminal punctuation (the composer capitalises + adds the stop). All weight 1.",
+  "entries": [
+    { "value": "tense and watchful" },
+    { "value": "in a festive mood" },
+    { "value": "wary of outsiders" },
+    { "value": "quietly prosperous" },
+    { "value": "on edge" },
+    { "value": "grieving a recent loss" },
+    { "value": "restless and bored" },
+    { "value": "buzzing with rumour" },
+    { "value": "sullen and resentful" },
+    { "value": "hopeful after good news" },
+    { "value": "gripped by suspicion" },
+    { "value": "worn down and weary" },
+    { "value": "proud and boastful" },
+    { "value": "frightened behind barred doors" },
+    { "value": "hungry and short-tempered" },
+    { "value": "welcoming to anyone with coin" },
+    { "value": "divided against itself" },
+    { "value": "swollen with newcomers" },
+    { "value": "unnaturally quiet" },
+    { "value": "defiant" },
+    { "value": "pious and observant" },
+    { "value": "lawless after dark" },
+    { "value": "feverish with trade" },
+    { "value": "mourning better days" }
+  ]
+}

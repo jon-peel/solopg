@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { askYesNo, rollMeaning, rollComplication, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -110,12 +110,12 @@ test("ORACLE_ODDS is an ordered ladder with the expected keys", () => {
 
 // --- Meaning oracle (9.3) ---
 
-test("Meaning tables are valid and non-trivial", () => {
+test("oracle tables are valid and non-trivial", () => {
   const t = oracleTables();
   for (const id of ORACLE_TABLE_IDS) {
     const table = t.get(id);
     assert.ok(table, `${id} loaded`);
-    assert.ok(table.entries.length >= 20, `${id} has a decent spread`);
+    assert.ok(table.entries.length >= 12, `${id} has a decent spread`);
   }
 });
 
@@ -159,4 +159,39 @@ test("rollComplication is deterministic for a given stream", () => {
 test("oracleLine composes a Complication; label present", () => {
   assert.equal(oracleLine({ kind: "complication", text: "The door locks behind you." }), "The door locks behind you.");
   assert.equal(ORACLE_LABELS.complication, "Complication");
+});
+
+// --- Settlement situation oracle (9.5) ---
+
+test("rollSettlement draws mood + happening from the tables; no faction note by default", () => {
+  const t = oracleTables();
+  const moods = new Set(t.get("settlement-mood").entries.map((e) => e.value));
+  const events = new Set(t.get("settlement-event").entries.map((e) => e.value));
+  const p = rollSettlement(t, mulberry32(5));
+  assert.equal(p.kind, "settlement");
+  assert.ok(moods.has(p.mood));
+  assert.ok(events.has(p.event));
+  assert.equal(p.factionNote, null);
+});
+
+test("rollSettlement adds a faction note with {faction} substituted when a faction is present", () => {
+  const t = oracleTables();
+  const p = rollSettlement(t, mulberry32(5), { factionName: "The Ashen Hand" });
+  assert.ok(p.factionNote, "a note is produced");
+  assert.ok(p.factionNote.includes("The Ashen Hand"), "name substituted");
+  assert.ok(!p.factionNote.includes("{faction}"), "placeholder consumed");
+});
+
+test("rollSettlement is deterministic for a given stream", () => {
+  const t = oracleTables();
+  assert.deepEqual(
+    rollSettlement(t, mulberry32(21), { factionName: "X" }),
+    rollSettlement(t, mulberry32(21), { factionName: "X" }),
+  );
+});
+
+test("oracleLine composes a Settlement situation (Mood. Happening.)", () => {
+  const line = oracleLine({ kind: "settlement", mood: "tense and watchful", event: "A caravan has just arrived.", factionNote: null });
+  assert.equal(line, "Tense and watchful. A caravan has just arrived.");
+  assert.equal(ORACLE_LABELS.settlement, "Settlement");
 });

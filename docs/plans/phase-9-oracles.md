@@ -182,15 +182,39 @@ stat.
 
 ## Group D — settlements & places (generative, **no NPCs**)
 
-### 9.5 Settlement situation
-"What's going on in this town **right now**." A terrain- **and faction-aware** composable prompt
-(same axes-×-skin approach as `feature-detail.js`): a **mood** × a **current event / notable
-feature**, skinned by the settlement's size and its hex terrain, and — when a faction holds or
-borders the hex — coloured by that faction's presence ("recruiters in the square", "a curfew after
-dark"). Strictly *situational* — it never names or stats an NPC. Rolled from the settlement's
-selection card (a "What's stirring?" action) and/or the Oracle tab against the selected hex.
+### 9.5 Settlement situation — ✅ **built**
+"What's going on in this town **right now**." A composed **mood × happening**, plus — when a faction
+holds or borders the hex — a **faction-presence note** ("Recruiters for the … work the square."). The
+first *context-aware* oracle: it reads the **selected** settlement.
 
-Data: `data/settlement-mood.json`, `data/settlement-event.json` (+ light terrain/size skins).
+- **Data:** `settlement-mood.json` (24 adjectival tempers) × `settlement-event.json` (30 size-neutral
+  happenings) → *"Tense and watchful. A shortage has sharpened tempers."* Faction colour from
+  `settlement-faction.json` (16 notes) with a `{faction}` placeholder the engine substitutes. Every
+  faction template keeps `{faction}` as the **object of a preposition** ("for / of / under / against
+  {faction}") so it's grammatical for any name form (*The Ashen Hand*, *Adders of the Reach*,
+  *House Umber*) — no doubled article, no possessive.
+- **Engine:** `rollSettlement(tables, rng, { factionName })` → `{ kind:"settlement", mood, event,
+  factionNote }`; `oracleLine` composes *"{Mood}. {event}"*. Pure, node-tested.
+- **Context (app):** `selectedSettlementContext()` reads the selected hex's settlement (name · size)
+  and `factionNameAt(q,r)` — the faction holding the hex, else one bordering it. `refreshOracle` runs
+  on selection change so the section tracks the current town.
+- **UI:** a "Settlement" section; when a town is selected, a **"Roll situation"** button (tooltip
+  names the town) + its result block (tag = town, the faction note as a `⚑` sub-note). When no town
+  is selected, a hint points at the map. Strictly *situational* — never an NPC.
+- *(The "What's stirring?" action on the selection card and per-terrain/size skins were **not**
+  built — the Oracle-tab entry + size-neutral events cover it cleanly; both can be added later.)*
+
+**Manual test — 9.5 (run `./run-local.sh`):**
+```
+[ ] Oracle tab with NO town selected → "Settlement" section shows a hint, no button.
+[ ] Select a town (a hex with a settlement) → a "Roll situation" button appears
+    (hover: "What's stirring in <Town> · <Size>?").
+[ ] Press it → a "Mood. Happening." result, tagged with the town, flashing each press.
+[ ] Select a town on/next to faction territory → rolls include a "⚑ …{faction}…" note,
+    reading grammatically (no "The The …").
+[ ] Select an empty hex → the button disappears, the hint returns.
+[ ] Console → each roll logs "🎲 Oracle (settlement): …".
+```
 
 ### 9.6 Tavern / shop
 A quick establishment prompt with **no proprietor NPC**: a **sign / name** × a **specialty** × a
@@ -288,7 +312,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 | **9.2** | Yes/No fate oracle | generative | ✅ **done** — odds ladder + six-outcome (…and/…but) + event flag |
 | **9.3** | Meaning / inspiration | generative | ✅ **done** — action × subject (52 × 50) |
 | **9.4** | Complication / twist | generative | ✅ **done** — single table (48) · Group A complete |
-| **9.5** | Settlement situation | generative | terrain- & faction-aware; **no NPC** |
+| **9.5** | Settlement situation | generative | ✅ **done** — mood × happening + faction note; context-aware; **no NPC** |
 | **9.6** | Tavern / shop | generative | sign × specialty × quirk; **no NPC** |
 | **9.7** | Wilderness-encounter **check + prompt** | trigger | per-travel-day + manual; GM rolls the table |
 | **9.8** | **Treasure-type** tags on dungeons/hooks | trigger | replaces rolled gp; GM rolls contents |

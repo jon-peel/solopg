@@ -107,12 +107,42 @@ export function rollComplication(tables, rng) {
   return { kind: "complication", text: rollTable(tables.get("oracle-complication"), rng).value };
 }
 
+// --- Settlement situation (Phase 9.5) -------------------------------------
+//
+// "What's stirring in this town right now" — a composed MOOD × HAPPENING, plus a
+// faction note when a power holds or borders the hex (the app decides that and
+// passes the faction's name). Strictly situational — never an NPC. The picks are
+// system-agnostic; the app supplies the where (place label) and the who (faction).
+
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+/**
+ * Roll a Settlement situation (Phase 9.5). Draws a mood then a happening, then —
+ * only when `factionName` is given — a faction-presence note with {faction}
+ * substituted. Fixed draw order (mood → event → faction) for determinism.
+ * @param {Map<string,object>} tables incl. settlement-mood / settlement-event /
+ *   settlement-faction
+ * @param {() => number} rng
+ * @param {{ factionName?: string|null }} [opts]
+ * @returns {{ kind:"settlement", mood:string, event:string, factionNote:string|null }}
+ */
+export function rollSettlement(tables, rng, opts = {}) {
+  const mood = rollTable(tables.get("settlement-mood"), rng).value;
+  const event = rollTable(tables.get("settlement-event"), rng).value;
+  let factionNote = null;
+  if (opts.factionName) {
+    const tmpl = rollTable(tables.get("settlement-faction"), rng).value;
+    factionNote = tmpl.replace(/\{faction\}/g, opts.factionName);
+  }
+  return { kind: "settlement", mood, event, factionNote };
+}
+
 /**
  * Compose the one-line display string for an oracle pick (compose-at-render).
  * Each oracle kind knows how to phrase its own pick; unknown kinds fall back to
  * the raw answer so a new kind can't crash the log before its prose lands. The
  * random-event flag is NOT folded in here — the UI shows it as its own note.
- * @param {{ kind:string, answer?:string, tone?:string|null, action?:string, subject?:string, text?:string }} pick
+ * @param {{ kind:string, answer?:string, tone?:string|null, action?:string, subject?:string, text?:string, mood?:string, event?:string }} pick
  * @returns {string}
  */
 export function oracleLine(pick) {
@@ -120,6 +150,7 @@ export function oracleLine(pick) {
   if (pick.kind === "yesno") return pick.tone ? `${pick.answer}, ${pick.tone}` : pick.answer;
   if (pick.kind === "meaning") return `${pick.action} · ${pick.subject}`;
   if (pick.kind === "complication") return pick.text;
+  if (pick.kind === "settlement") return `${cap(pick.mood)}. ${pick.event}`;
   return String(pick.answer ?? "");
 }
 
@@ -128,7 +159,11 @@ export const ORACLE_LABELS = {
   yesno: "Yes / No",
   meaning: "Meaning",
   complication: "Complication",
+  settlement: "Settlement",
 };
 
-/** Table ids the table-backed oracles (9.3 Meaning, 9.4 Complication) need. */
-export const ORACLE_TABLE_IDS = ["oracle-action", "oracle-subject", "oracle-complication"];
+/** Table ids the table-backed oracles (9.3 Meaning, 9.4 Complication, 9.5 Settlement) need. */
+export const ORACLE_TABLE_IDS = [
+  "oracle-action", "oracle-subject", "oracle-complication",
+  "settlement-mood", "settlement-event", "settlement-faction",
+];

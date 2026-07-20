@@ -1,0 +1,23 @@
+{
+  "id": "settlement-faction",
+  "title": "Settlement — faction presence",
+  "_note": "Phase 9.5 Settlement-situation oracle: an extra note when a faction HOLDS or borders the hex, colouring the town with that power's presence. {faction} is replaced with the faction's full name by the engine — names carry their own article/form (\"The Ashen Hand\", \"Adders of the Reach\", \"House Umber\"), so every template keeps {faction} as the object of a preposition to stay grammatical (no doubled \"the\", no possessive). Full sentences with terminal punctuation. All weight 1.",
+  "entries": [
+    { "value": "Recruiters for {faction} work the square." },
+    { "value": "Banners of {faction} hang from the walls." },
+    { "value": "A checkpoint turns strangers away in the name of {faction}." },
+    { "value": "Informers loyal to {faction} are everywhere — speak carefully." },
+    { "value": "Tolls have been raised on the orders of {faction}." },
+    { "value": "Able hands are being conscripted for {faction}." },
+    { "value": "Patrols under {faction} keep a heavy presence." },
+    { "value": "Whispers say the grip of {faction} is slipping here." },
+    { "value": "A magistrate installed by {faction} now holds court." },
+    { "value": "Tribute owed to {faction} is overdue, and tempers with it." },
+    { "value": "Grain and coin buy loyalty for {faction}." },
+    { "value": "Locals mutter against {faction} behind closed doors." },
+    { "value": "An agent of {faction} watches the comings and goings." },
+    { "value": "Gatherings after dark are forbidden by {faction}." },
+    { "value": "Deserters from {faction} are being hunted here." },
+    { "value": "The town is being fortified for {faction} against a rival." }
+  ]
+}

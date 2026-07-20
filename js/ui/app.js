@@ -50,7 +50,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, rollComplication, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -722,6 +722,7 @@ function selectCell(q, r) {
   setSelected(selected);
   setPanelTab("detail"); // selecting a cell shows its detail
   renderSelection();
+  refreshOracle(); // keep the Settlement oracle's section in sync with the selection
 }
 
 // The panel is read-only now: it shows the selected cell's info and lets you
@@ -1520,8 +1521,42 @@ function refreshFactions() {
 // Refresh the Oracle tab (each oracle's controls + its own latest result).
 // `flashKind` is set only to the kind that just rolled, so only that block
 // animates on a real press (even if unchanged) — not on unrelated refreshes.
+// Passes the selected-settlement context so the Settlement oracle (9.5) reflects
+// the current selection.
 function refreshOracle(flashKind = null) {
-  renderOraclePanel({ results: oracleResults, flashKind, onRoll: onOracleRoll });
+  const ctx = selectedSettlementContext();
+  renderOraclePanel({
+    results: oracleResults,
+    flashKind,
+    onRoll: onOracleRoll,
+    settlement: ctx ? { available: true, label: ctx.label } : { available: false },
+  });
+}
+
+// The currently-selected settlement's context for the Settlement oracle (9.5):
+// its display label + any faction presence. Null when the selected hex has no
+// settlement, so the oracle's button hides.
+function selectedSettlementContext() {
+  if (!current || !selected) return null;
+  const { q, r } = selected;
+  const hex = getHex(current, q, r);
+  if (!(hex && hex.placed && hex.settlement && hex.settlement.present)) return null;
+  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+  return { label: `${name} · ${hex.settlement.size}`, factionName: factionNameAt(q, r) };
+}
+
+// The faction holding (q,r), else one holding an adjacent hex, else null — so the
+// Settlement oracle can colour a town by the power that holds or borders it.
+function factionNameAt(q, r) {
+  const factions = getFactions(current);
+  const holds = (f, hq, hr) => (f.holdings || []).some((h) => h.q === hq && h.r === hr);
+  const here = factions.find((f) => holds(f, q, r));
+  if (here) return here.name;
+  for (const n of neighbors(q, r)) {
+    const border = factions.find((f) => holds(f, n.q, n.r));
+    if (border) return border.name;
+  }
+  return null;
 }
 
 // Roll one oracle (Phase 9.2/9.3). A transient GM aid: draw a fresh seeded stream
@@ -1544,7 +1579,14 @@ async function onOracleRoll(kind, odds) {
   } else if (kind === "complication") {
     const tables = await loadTables(ORACLE_TABLE_IDS);
     pick = rollComplication(tables, rng);
-  } else return; // unknown kind — 9.5+ register more
+  } else if (kind === "settlement") {
+    const ctx = selectedSettlementContext();
+    if (!ctx) return; // the button only shows when a town is selected
+    const tables = await loadTables(ORACLE_TABLE_IDS);
+    pick = rollSettlement(tables, rng, { factionName: ctx.factionName });
+    tag = ctx.label; // the town this situation is for
+    if (pick.factionNote) note = "⚑ " + pick.factionNote;
+  } else return; // unknown kind — 9.6+ register more
   oracleResults[kind] = { tag, line: oracleLine(pick), note };
   logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${oracleResults[kind].line}${note ? " · random event" : ""}`);
   refreshOracle(kind); // flash only this oracle's block so a repeated answer still reads as "rolled"
