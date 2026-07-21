@@ -416,7 +416,9 @@ async function maybeEmergeFactions(days) {
   const tables = await loadTables(FACTION_TABLE_IDS);
   const events = [];
   for (const em of emergences) {
-    const ev = em.type === "internal" ? emergeRebellion(tables, em.targetId) : emergeExternal(tables);
+    const ev = em.type === "lord" ? emergeLord(tables)
+      : em.type === "internal" ? emergeRebellion(tables, em.targetId)
+      : emergeExternal(tables);
     if (ev) events.push(ev);
   }
   if (events.length) {
@@ -481,6 +483,54 @@ function emergeRebellion(tables, targetId) {
   return { kind: "emerge", factionId: rebel.id, q: cell.q, r: cell.r, internal: true, fromFactionId: targetId };
 }
 
+// A lair-bound LORD awakens on its own (9.9) — the primary way a lich/dragon/…
+// arises. Wakes in an eligible empty lair (a dungeon/tower/shrine of its type +
+// terrain): a fresh lord faction seats there and its kin infuse the interior on
+// next open (via overlordFor). A lord SUPERSEDES whatever held the lair (even a
+// monster den), so its occupant is set directly. Returns a lord "emerge" event.
+function emergeLord(tables) {
+  const lair = pickLordLair();
+  if (!lair) return null;
+  const n = nextFactionId(current);
+  const rng = subRng(current.seed, "emerge-make", current.emergeTicks, n);
+  const faction = promoteFaction(tables, rng, {
+    q: lair.q, r: lair.r, poiId: lair.poiId, index: n, seed: current.seed, archetype: lair.archetype,
+  });
+  addFaction(current, faction);
+  const poi = poiAt(lair.q, lair.r);
+  if (poi) { // a lord claims its lair outright (occupyPoiForFaction leaves dens alone)
+    poi.occupant = { kind: "occupied", by: faction.name, factionId: faction.id };
+    poi.name = `${poiBaseName(poi)} — ${faction.name}`;
+  }
+  return { kind: "emerge", factionId: faction.id, q: lair.q, r: lair.r, lord: true, archetype: lair.archetype };
+}
+
+// Pick an eligible empty lair for a waking lord (9.9), party-biased like the rest:
+// an unclaimed POI of a lord's type + terrain (eligibleLords), preferring one near
+// the party, then any. Then a lord archetype the site allows. Deterministic.
+function pickLordLair() {
+  const rng = subRng(current.seed, "emerge-lair", current.emergeTicks);
+  const party = current.party || { q: 0, r: 0 };
+  const factions = getFactions(current);
+  const held = new Set();
+  for (const f of factions) for (const h of f.holdings || []) held.add(axialKey(h.q, h.r));
+  const cands = [];
+  for (const hex of Object.values(current.hexes || {})) {
+    if (!hex.placed || held.has(axialKey(hex.coords.q, hex.coords.r))) continue;
+    for (const poi of hex.pois || []) {
+      if (poi.occupant && poi.occupant.factionId) continue; // not another faction's site
+      const lords = eligibleLords(poi.type, hex.terrain, factions);
+      if (lords.length) cands.push({ q: hex.coords.q, r: hex.coords.r, poiId: poi.id, lords, near: axialDistance(hex.coords.q, hex.coords.r, party.q, party.r) <= PARTY_EMERGE_RADIUS });
+    }
+  }
+  const pool = cands.filter((c) => c.near).length ? cands.filter((c) => c.near) : cands;
+  if (!pool.length) return null;
+  pool.sort((a, b) => a.q - b.q || a.r - b.r);
+  const site = pool[Math.floor(rng() * pool.length)];
+  const archetype = site.lords[Math.floor(rng() * site.lords.length)].archetype;
+  return { q: site.q, r: site.r, poiId: site.poiId, archetype };
+}
+
 // Where an external power rises (9.9), preferring — in order — a near occupied POI,
 // a near bare hex, then any occupied POI / bare hex. "Near" = within
 // PARTY_EMERGE_RADIUS of the party (the bias). Bare hexes stay clear of existing
@@ -534,9 +584,10 @@ function logFactionEvents(events) {
   const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
   const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
   for (const ev of events) {
-    if (ev.kind === "emerge") logLine(ev.internal
-      ? `Unrest within ${nameOf(ev.fromFactionId)} — ${nameOf(ev.factionId)} rises in revolt at ${placeOf(ev.q, ev.r)}.`
-      : `A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`);
+    if (ev.kind === "emerge") logLine(
+      ev.lord ? `A dread power awakens — ${nameOf(ev.factionId)} (${ev.archetype}) stirs at ${placeOf(ev.q, ev.r)}.`
+        : ev.internal ? `Unrest within ${nameOf(ev.fromFactionId)} — ${nameOf(ev.factionId)} rises in revolt at ${placeOf(ev.q, ev.r)}.`
+          : `A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`);
     else if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
     else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
     else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);

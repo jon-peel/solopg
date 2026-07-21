@@ -939,6 +939,27 @@ test("rollEmergences: a modest, non-dominant map breeds no rebellion", () => {
   assert.ok(ems.every((e) => e.type === "external"), "no internal rebellion without a hegemon");
 });
 
+test("rollEmergences: no eligible lair → a lord never awakens", () => {
+  for (let s = 0; s < 40; s++) {
+    const ems = rollEmergences(landWorld(40), 5000, s); // bare hexes, no POIs
+    assert.ok(ems.every((e) => e.type !== "lord"), "no lair, no lord");
+  }
+});
+
+test("rollEmergences: a lord can awaken when an eligible lair exists", () => {
+  // A Mountains dungeon (dragon/lich/vampire-eligible) among open land.
+  const lairWorld = (over = {}) => {
+    const w = landWorld(30, over);
+    w.hexes[axialKey(-1, 0)] = { placed: true, coords: { q: -1, r: 0 }, terrain: "Mountains", pois: [{ id: "poi:lair", type: "dungeon", occupant: { kind: "none" } }] };
+    return w;
+  };
+  let sawLord = false;
+  for (let s = 0; s < 60 && !sawLord; s++) {
+    if (rollEmergences(lairWorld(), 4000, s).some((e) => e.type === "lord")) sawLord = true;
+  }
+  assert.ok(sawLord, "over many long spans a lord eventually wakes in its lair");
+});
+
 test("rollEmergences: deterministic for the same world state + seed", () => {
   const a = landWorld(30), b = landWorld(30);
   assert.deepEqual(rollEmergences(a, 300, 42), rollEmergences(b, 300, 42));

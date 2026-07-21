@@ -332,11 +332,16 @@ size and self-regulates instead of freezing into a monoculture.
   - **Internal** chance `= INTERNAL_BASE(0.10) × (dominance − 0.5)/0.5` once one faction holds > 50 %
     of the claimed land **and** ≥ `MIN_REBELLION_SIZE(5)` hexes: a **rebellion erupts inside the
     hegemon** — the anti-monoculture valve, so a "full" world keeps churning.
+  - **Lord** awakening — `{type:"lord"}` — an **extremely rare** (`LORD_CHANCE_PER_DAY 0.001`, ~32 %
+    a year) epic event, and now the **primary** way a lair-bound lord (lich/dragon/vampire/
+    necromancer/hag) arises (8.16 Promote is the manual override). It fires **only when an eligible
+    empty lair exists** (`hasEligibleLair` — a dungeon/tower/shrine of the lord's type + terrain,
+    unheld, respecting the dragon's `unique` flag) and **bypasses the ceiling**.
   - A **size-scaled ceiling** `= clamp(3, round(land / HEXES_PER_FACTION=6), 20)` and
-    `EMERGE_COOLDOWN_DAYS(8)` keep it from flooding. Two **reload-safe** accumulators (`emergeTicks`,
-    `emergeSince`) on the world (added to `createWorld`, no migration). Node-tested: no-land→none,
-    open→external, cooldown window, ceiling scales with size, dominance→internal (targeting the
-    hegemon), no-hegemon→none, determinism, junk input.
+    `EMERGE_COOLDOWN_DAYS(8)` keep rank-and-file emergence from flooding. Two **reload-safe**
+    accumulators (`emergeTicks`, `emergeSince`) on the world (added to `createWorld`, no migration).
+    Node-tested: no-land→none, open→external, cooldown, ceiling scales with size, dominance→internal
+    (hegemon), no-hegemon→none, **no-lair→no-lord, lair→lord-can-wake**, determinism, junk input.
 - **Where it emerges (app), biased toward the party.**
   - *External* — `pickExternalSite` prefers, in order: a **near** unaffiliated occupied POI, a near
     bare hex, then any POI / bare hex (near = within `PARTY_EMERGE_RADIUS(8)` of the party). Promotes
@@ -344,6 +349,10 @@ size and self-regulates instead of freezing into a monoculture.
   - *Internal* — `emergeRebellion` carves a **non-seat province** out of the hegemon and seats a fresh
     **`rebellion`** faction there; it then eats outward via the normal contest engine — toward the
     seat (a coup) or crushed at the border (fizzles).
+  - *Lord* — `emergeLord` / `pickLordLair` wake a lord in a party-biased eligible lair via
+    `promoteFaction(archetype)`; the lord **claims the lair outright** (occupant set directly, since
+    `occupyPoiForFaction` leaves monster dens alone) and its kin **infuse the interior on next open**
+    (existing `overlordFor`, 8.18) — no extra work.
 - **Narrated as subtext.** An `"emerge"` FactionEvent through `logFactionEvents` — external:
   *"A new power stirs — … rises at (…)"*; internal: *"Unrest within {hegemon} — … rises in revolt at
   (…)"*. **No hooks.** Lords never auto-emerge (not in `faction-archetype.json`).
@@ -357,7 +366,10 @@ size and self-regulates instead of freezing into a monoculture.
 [ ] Let one faction grow dominant (progress a lot / few rivals) → eventually "Unrest within
     <that faction> — <rebel> rises in revolt": a province defects and fights it from inside.
 [ ] Keep going → external spawns slow as the map fills, rebellions pick up; it never floods.
-[ ] A lich/dragon never auto-emerges (Promote-only). Reload → emerged factions persist.
+[ ] Over a LONG campaign with dungeons/towers on the map, a lord occasionally wakes on its own:
+    "A dread power awakens — <name> (dragon/lich/…) stirs at …", claiming that lair; opening the
+    lair shows its kin infused inside (8.18). Rare — it's the primary way lords now arise.
+[ ] Reload → emerged factions (incl. lords) persist.
 ```
 
 **Phase 9 is complete** — all generative oracles (A + D), both trigger-and-prompt oracles (9.7

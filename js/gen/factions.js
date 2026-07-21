@@ -596,6 +596,27 @@ const EXTERNAL_BASE = 0.12;              // per-day external chance at a fully-o
 const INTERNAL_BASE = 0.1;               // per-day internal chance at full dominance
 const DOMINANCE_THRESHOLD = 0.5;         // rebellions only once one power passes this share
 const MIN_REBELLION_SIZE = 5;            // ...and holds at least this many hexes
+// Lair-bound lords (lich/dragon/…) awaken on their OWN — the primary way they
+// arise (8.16 Promote is now the manual override). EXTREMELY rare, and only when a
+// valid empty lair exists (a dungeon/tower/shrine of the lord's type + terrain,
+// unheld). Bypasses the ceiling — an epic event, not a competitor for open ground.
+const LORD_CHANCE_PER_DAY = 0.001;       // ~1 every few years, when a lair is available
+
+// Is there at least one empty, unclaimed POI a lair-bound lord could wake in?
+// (A dungeon for a lich, a Mountains dungeon for a dragon, a Swamp POI for a hag…)
+function hasEligibleLair(world) {
+  const active = (world.factions || []).filter(isActive);
+  const held = new Set();
+  for (const f of active) for (const h of f.holdings || []) held.add(axialKey(h.q, h.r));
+  for (const hex of Object.values(world.hexes || {})) {
+    if (!hex.placed || held.has(axialKey(hex.coords.q, hex.coords.r))) continue;
+    for (const poi of hex.pois || []) {
+      if (poi.occupant && poi.occupant.factionId) continue; // not another faction's site
+      if (eligibleLords(poi.type, hex.terrain, active).length) return true;
+    }
+  }
+  return false;
+}
 
 // Explored-map stats the pressure model reads (pure). land = placed passable hexes;
 // claimed = distinct hexes any active faction holds; largest = the hegemon.
@@ -625,7 +646,7 @@ function emergenceStats(world) {
  * @param {object} world  read: hexes, factions[]; mutated: emergeTicks / emergeSince
  * @param {number} days
  * @param {number|string} seed
- * @returns {{type:"external"}|{type:"internal",targetId:string}[]}
+ * @returns {({type:"external"}|{type:"internal",targetId:string}|{type:"lord"})[]}
  */
 export function rollEmergences(world, days, seed) {
   if (!world || !Number.isFinite(days) || days < 1) return [];
@@ -637,18 +658,25 @@ export function rollEmergences(world, days, seed) {
   const intChance = (s.largestSize >= MIN_REBELLION_SIZE && dominance > DOMINANCE_THRESHOLD)
     ? INTERNAL_BASE * (dominance - DOMINANCE_THRESHOLD) / (1 - DOMINANCE_THRESHOLD)
     : 0;
+  const lordChance = hasEligibleLair(world) ? LORD_CHANCE_PER_DAY : 0;
 
   const out = [];
   for (let i = 0; i < days; i++) {
     world.emergeTicks = (world.emergeTicks || 0) + 1;
     world.emergeSince = (world.emergeSince || 0) + 1;
-    if (s.activeCount + out.length >= ceiling) continue;   // size-scaled ceiling
     if (world.emergeSince < EMERGE_COOLDOWN_DAYS) continue; // spacing
     const r = subRng(seed, "emerge", world.emergeTicks)();
-    if (r < extChance) {
+    // A lord awakening is rarest and bypasses the ceiling (an epic event).
+    if (r < lordChance) {
+      out.push({ type: "lord" });
+      world.emergeSince = 0;
+      continue;
+    }
+    if (s.activeCount + out.length >= ceiling) continue; // ceiling caps rank-and-file powers
+    if (r < lordChance + extChance) {
       out.push({ type: "external" });
       world.emergeSince = 0;
-    } else if (r < extChance + intChance) {
+    } else if (r < lordChance + extChance + intChance) {
       out.push({ type: "internal", targetId: s.largest.id });
       world.emergeSince = 0;
     }
