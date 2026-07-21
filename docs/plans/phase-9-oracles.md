@@ -316,31 +316,44 @@ Engine: `treasureTypeFor(context, rng)` (pure); render shows the letter as a pro
 
 ---
 
-## Group E — automatic faction emergence (9.9)
+## Group E — automatic faction emergence (9.9) — ✅ **built**
 
-Factions currently only appear by the GM's hand (Generate / Promote). Phase 9 lets a **new power
-emerge on its own** as time passes — **day-driven with a floor** (the user's choice):
+Factions used to appear only by the GM's hand (Generate / Promote). Now a **new power emerges on its
+own** as time passes — **day-driven with a floor** (the user's choice):
 
-- **Where it fires.** In the day chokepoint, alongside the existing day-driven faction turns
-  (`advanceFactionDays` / the `advanceTime` path in `app.js`). A new pure entry point
-  `maybeEmergeFaction(world, days, seed)` runs per whole-day boundary.
-- **Day-driven, floored, capped.** A **base per-day chance** (`EMERGE_CHANCE_PER_DAY`, small — a
-  new power should be an event, on the order of one every several weeks). The chance is **boosted
-  while the active-faction count is below a `FACTION_FLOOR`** (the world should never feel empty)
-  and **suppressed to ~0 at/above a `FACTION_CAP`** (soft max, so the map never floods). A
-  **cooldown** (`EMERGE_COOLDOWN_DAYS`, tracked on the world) spaces emergences out. All tunable
-  consts, flagged for real-play retune like every other generation constant.
-- **Where it emerges.** Reusing the existing seat/promote machinery: prefer **promoting a suitable
-  occupied POI** in the revealed map (an unaffiliated bandit camp, cult shrine, monster lair →
-  `promoteFaction`), else **seat a fresh faction on a valid bare site** (`isValidSeat`) far enough
-  from existing seats. Deterministic per `(seed, day)`.
-- **Narrated as subtext.** A new **`"emerge"` FactionEvent**, logged through the existing
-  `logFactionEvents` path — *"A new power stirs in the east: the Ashen Hand."* — and drawn on the
-  map like any faction. **No hooks** (factions stay subtext). Lords (necromancer/lich/…) are **not**
-  auto-emerged — those stay a deliberate Promote-only choice (8.16).
+- **Where it fires.** In the day chokepoint (`advanceTime` → `maybeEmergeFactions`), right after the
+  day-driven faction turns.
+- **The pure gate.** `rollEmergences(world, days, seed)` in `factions.js` walks the days and returns
+  how many powers should rise: a **per-day chance** — `EMERGE_FLOOR_CHANCE 0.10` **below**
+  `FACTION_FLOOR (2)` active, `EMERGE_BASE_CHANCE 0.03` above — **zero at/above** `FACTION_CAP (6)`,
+  spaced by `EMERGE_COOLDOWN_DAYS (10)`. It advances two **reload-safe** world accumulators
+  (`emergeTicks`, a monotonic rng cursor; `emergeSince`, the cooldown counter) — added to
+  `createWorld`, no migration (golden rule). All tunable. Node-tested (cap, cooldown window, floor
+  boost, determinism, junk input).
+- **Where it emerges (app).** `pickEmergenceSite` prefers **promoting an unaffiliated occupied POI**
+  on open ground (a bandit camp → a bandit power), else seats a **fresh faction on a bare, passable,
+  unsettled land hex** kept ≥3 hexes from an existing seat. `emergeOneFaction` reuses
+  `promoteFaction` / `generateFaction` + `isValidSeat` exactly like the manual Generate path.
+- **Narrated as subtext.** A new **`"emerge"` FactionEvent** through the existing `logFactionEvents`
+  path — *"A new power stirs — The Ashen Hand rises at (…)."* — then drawn on the map like any
+  faction. **No hooks.** Lords never auto-emerge (they're not in `faction-archetype.json` — a
+  deliberate Promote-only choice, 8.16).
 
-Pure and node-testable: the gate (chance/floor/cap/cooldown) and site selection are functions over
-`(world, seed, day)`; only the persist/render is UI.
+**Manual test — 9.9 (run `./run-local.sh`):**
+```
+[ ] New World, generate a region, place the party. With 0-1 factions, use "Progress N days"
+    (e.g. 30-60) a few times → after the cooldown, a new faction appears on the map
+    (coloured territory + a seat), and the console logs "A new power stirs — <name> rises at …".
+[ ] It tends to take over an existing occupied POI (bandit camp / cult shrine) when one is free,
+    else seats on open wilderness a few hexes off any existing seat.
+[ ] Keep progressing → emergences slow as the count climbs and stop around the soft cap (6);
+    they don't flood.
+[ ] A lich/dragon/etc. never auto-emerges (still Promote-only).
+[ ] Reload → the emerged factions persist (they're real world.factions).
+```
+
+**Phase 9 is complete** — all generative oracles (A + D), both trigger-and-prompt oracles (9.7
+encounter, 9.8 treasure), and the living-world auto-emergence (9.9).
 
 ---
 
@@ -359,7 +372,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 | **9.6** | Tavern / shop | generative | ✅ **done** — sign × specialty × quirk; **no NPC** · Group D complete |
 | **9.7** | Wilderness-encounter **check + prompt** | trigger | ✅ **done** — per-travel-day + manual; GM rolls the table |
 | **9.8** | **Treasure-type** tags on dungeons/towers | trigger | ✅ **done** — replaces rolled gp with a B/X letter; GM rolls contents |
-| **9.9** | Automatic faction **emergence** | living world | day-driven, floored, capped, cooldown |
+| **9.9** | Automatic faction **emergence** | living world | ✅ **done** — day-driven, floored, capped, cooldown |
 
 Each step: pure engine + tables → `node --test` green → commit → a short manual browser checklist
 (roll the oracle → expected log line; travel a day → encounter prompt fires at the right rate;

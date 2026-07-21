@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc, neighbors } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors, axialDistance } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -27,7 +27,7 @@ import {
   getFactions,
   removeFaction,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -399,8 +399,87 @@ async function advanceTime(days) {
     const events = advanceFactionDays(current, wholeCrossed, current.seed);
     logFactionEvents(events);
     applyFactionOccupancy(events);
+    await maybeEmergeFactions(wholeCrossed); // (9.9) a new power sometimes stirs on its own
   }
   renderDayReadout();
+}
+
+// Automatic faction emergence (Phase 9.9): as days pass a new power sometimes
+// stirs on its own. The pure gate (rollEmergences) decides HOW MANY — day-driven
+// with a floor + soft cap + cooldown — and advances the world's reload-safe
+// accumulators; here we create each on a suitable site. Narrated as subtext (an
+// "emerge" event), no hooks; lords never auto-emerge (not in the archetype roll).
+async function maybeEmergeFactions(days) {
+  if (!current) return;
+  const n = rollEmergences(current, days, current.seed);
+  if (n <= 0) return;
+  const tables = await loadTables(FACTION_TABLE_IDS);
+  const events = [];
+  for (let i = 0; i < n; i++) {
+    const ev = emergeOneFaction(tables);
+    if (ev) events.push(ev);
+  }
+  if (events.length) {
+    logFactionEvents(events);
+    await persistAndRefresh(); // save the new faction + accumulators, redraw territory
+  }
+}
+
+// Create one emergent faction on a chosen site (9.9): promote an unaffiliated
+// occupied POI (thematic — a bandit camp becomes a bandit power), else seat a
+// fresh faction on a bare wilderness hex. Returns an "emerge" event, or null when
+// there's nowhere left to rise.
+function emergeOneFaction(tables) {
+  const site = pickEmergenceSite();
+  if (!site) return null;
+  const n = nextFactionId(current);
+  const rng = subRng(current.seed, "emerge-make", current.emergeTicks, n);
+  const hex = getHex(current, site.q, site.r);
+  const poi = hex && Array.isArray(hex.pois) ? hex.pois[0] : undefined;
+  let faction;
+  if (site.promote) {
+    faction = promoteFaction(tables, rng, { q: site.q, r: site.r, poiId: site.poiId, index: n, seed: current.seed, occupant: site.occupant });
+  } else {
+    faction = generateFaction(tables, rng, { q: site.q, r: site.r, index: n, seed: current.seed, poiId: poi && poi.id });
+    if (isValidSeat(current, faction.archetype, site.q, site.r)) {
+      faction.seat = { q: site.q, r: site.r, ...(poi ? { poiId: poi.id } : {}) };
+    }
+  }
+  addFaction(current, faction);
+  if (poi) occupyPoiForFaction(poi, faction); // a faction born on a site holds it (8.17)
+  return { kind: "emerge", factionId: faction.id, q: site.q, r: site.r };
+}
+
+// Pick where a new power rises (9.9): prefer an unaffiliated occupied POI on open
+// ground; else a bare, passable, unsettled land hex kept a few hexes clear of an
+// existing seat (so it isn't born in another power's lap). Deterministic — the
+// pool is coord-sorted before a seeded pick.
+const MIN_EMERGE_SEAT_DISTANCE = 3;
+function pickEmergenceSite() {
+  const rng = subRng(current.seed, "emerge-site", current.emergeTicks);
+  const factions = getFactions(current);
+  const held = new Set();
+  const seats = [];
+  for (const f of factions) {
+    for (const h of f.holdings || []) held.add(axialKey(h.q, h.r));
+    if (f.seat) seats.push(f.seat);
+  }
+  const promote = [], bare = [];
+  for (const hex of Object.values(current.hexes || {})) {
+    if (!hex.placed) continue;
+    const { q, r } = hex.coords;
+    if (held.has(axialKey(q, r))) continue; // not on another faction's ground
+    const poi = (hex.pois || [])[0];
+    if (poi && poi.occupant && poi.occupant.kind === "occupied" && !poi.occupant.factionId) {
+      promote.push({ q, r, poiId: poi.id, occupant: poi.occupant, promote: true });
+    } else if ((TRAVEL_COST[hex.terrain] || 0) > 0 && !(hex.settlement && hex.settlement.present)) {
+      if (seats.every((s) => axialDistance(q, r, s.q, s.r) >= MIN_EMERGE_SEAT_DISTANCE)) bare.push({ q, r });
+    }
+  }
+  const pool = promote.length ? promote : bare;
+  if (!pool.length) return null;
+  pool.sort((a, b) => a.q - b.q || a.r - b.r); // stable order before the rng pick
+  return pool[Math.floor(rng() * pool.length)];
 }
 
 // Whole-day advance (the stationary "Progress N days" control) — keeps the
@@ -419,7 +498,8 @@ function logFactionEvents(events) {
   const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
   const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
   for (const ev of events) {
-    if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
+    if (ev.kind === "emerge") logLine(`A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`);
+    else if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
     else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
     else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
     else if (ev.kind === "relocate") logLine(`${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`);

@@ -15,6 +15,10 @@ import {
   factionDescription,
   eligibleLords,
   FACTION_BUILD,
+  rollEmergences,
+  FACTION_FLOOR,
+  FACTION_CAP,
+  EMERGE_COOLDOWN_DAYS,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
 import { validateTable } from "../js/core/table.js";
@@ -871,4 +875,61 @@ test("rebellion is a rare rollable archetype in the table", () => {
   assert.ok(valuesOf("faction-archetype", t).has("rebellion"));
   const reb = t.get("faction-archetype").entries.find((e) => e.value === "rebellion");
   assert.ok(reb.weight <= 1, "low weight → rare");
+});
+
+// --- Automatic emergence gate (Phase 9.9) ---
+
+const emptyWorld = (over = {}) => ({ factions: [], emergeTicks: 0, emergeSince: EMERGE_COOLDOWN_DAYS, ...over });
+const activeFactions = (n) => Array.from({ length: n }, (_, i) => ({ id: `f${i}`, status: "active" }));
+
+test("rollEmergences: advances emergeTicks by the days walked", () => {
+  const w = emptyWorld();
+  rollEmergences(w, 4, 1);
+  assert.equal(w.emergeTicks, 4);
+});
+
+test("rollEmergences: the cooldown blocks any emergence in its window", () => {
+  // Fresh off an emergence (emergeSince 0): no day within the cooldown can fire.
+  const w = emptyWorld({ emergeSince: 0 });
+  assert.equal(rollEmergences(w, EMERGE_COOLDOWN_DAYS - 1, 12345), 0);
+});
+
+test("rollEmergences: at/above the cap, nothing emerges", () => {
+  const w = emptyWorld({ factions: activeFactions(FACTION_CAP) });
+  assert.equal(rollEmergences(w, 500, 7), 0);
+});
+
+test("rollEmergences: an empty map eventually spawns powers (below the floor)", () => {
+  const w = emptyWorld();
+  const n = rollEmergences(w, 400, 3);
+  assert.ok(n >= 1, "at least one power rises over a long span");
+  assert.ok(n <= FACTION_CAP, "never past the soft cap");
+});
+
+test("rollEmergences: never exceeds the cap even over a huge span", () => {
+  const w = emptyWorld({ factions: activeFactions(FACTION_CAP - 1) });
+  const n = rollEmergences(w, 5000, 9);
+  assert.ok((w.factions.length + n) <= FACTION_CAP + 1, "at most one more to reach the cap window");
+});
+
+test("rollEmergences: deterministic for the same world state + seed", () => {
+  const a = emptyWorld(), b = emptyWorld();
+  assert.equal(rollEmergences(a, 300, 42), rollEmergences(b, 300, 42));
+  assert.equal(a.emergeTicks, b.emergeTicks);
+});
+
+test("rollEmergences: below the floor emerges faster than above it", () => {
+  // Below floor (0 active) vs above floor (FACTION_FLOOR active, below cap).
+  let below = 0, above = 0;
+  for (let s = 0; s < 40; s++) {
+    below += rollEmergences(emptyWorld(), 60, s);
+    above += rollEmergences(emptyWorld({ factions: activeFactions(FACTION_FLOOR) }), 60, s);
+  }
+  assert.ok(below > above, `below-floor (${below}) should outpace above-floor (${above})`);
+});
+
+test("rollEmergences: no-ops on junk input", () => {
+  assert.equal(rollEmergences(null, 5, 1), 0);
+  assert.equal(rollEmergences(emptyWorld(), 0, 1), 0);
+  assert.equal(rollEmergences(emptyWorld(), -3, 1), 0);
 });

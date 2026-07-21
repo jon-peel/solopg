@@ -577,6 +577,50 @@ export function advanceFactionDays(world, days, seed) {
   return events;
 }
 
+// --- Automatic emergence (Phase 9.9) --------------------------------------
+// As days pass, a new power sometimes stirs on its OWN — day-driven with a floor:
+// a small per-day chance, boosted while few factions exist (below FACTION_FLOOR)
+// and suppressed to nothing at/above a soft cap (FACTION_CAP), spaced by a
+// cooldown. Tuning consts, retunable like the rest. This is the PURE GATE — it
+// decides HOW MANY emerge and advances the reload-safe accumulators; the app
+// creates each faction (site selection + generate/promote need the tables).
+export const FACTION_FLOOR = 2;          // below this many active, emerge eagerly
+export const FACTION_CAP = 6;            // at/above this many active, stop emerging
+export const EMERGE_COOLDOWN_DAYS = 10;  // minimum days between emergences
+export const EMERGE_BASE_CHANCE = 0.03;  // per day at/above the floor (~1 a month)
+export const EMERGE_FLOOR_CHANCE = 0.1;  // per day below the floor (fills faster)
+
+/**
+ * The emergence GATE (Phase 9.9) — pure. Walks `days` one at a time, advancing the
+ * world's reload-safe accumulators (`emergeTicks`, a monotonic rng cursor, and
+ * `emergeSince`, days since the last emergence), and returns HOW MANY new factions
+ * should emerge over the span (usually 0 or 1). Chance is boosted below
+ * FACTION_FLOOR, zero at/above FACTION_CAP, and gated by EMERGE_COOLDOWN_DAYS.
+ * Deterministic: each day's roll is seeded on the world seed + the tick ordinal.
+ * The CALLER creates the factions.
+ * @param {object} world  read: factions[]; mutated: emergeTicks / emergeSince
+ * @param {number} days
+ * @param {number|string} seed
+ * @returns {number} count of emergences to create
+ */
+export function rollEmergences(world, days, seed) {
+  if (!world || !Number.isFinite(days) || days < 1) return 0;
+  let pending = 0;
+  for (let i = 0; i < days; i++) {
+    world.emergeTicks = (world.emergeTicks || 0) + 1;
+    world.emergeSince = (world.emergeSince || 0) + 1;
+    const active = (world.factions || []).filter(isActive).length + pending;
+    if (active >= FACTION_CAP) continue;                    // soft cap
+    if (world.emergeSince < EMERGE_COOLDOWN_DAYS) continue;  // spacing
+    const chance = active < FACTION_FLOOR ? EMERGE_FLOOR_CHANCE : EMERGE_BASE_CHANCE;
+    if (subRng(seed, "emerge", world.emergeTicks)() < chance) {
+      pending += 1;
+      world.emergeSince = 0;
+    }
+  }
+  return pending;
+}
+
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Short label for the factions list (just the name). */
