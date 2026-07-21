@@ -1,0 +1,22 @@
+{
+  "id": "treasure-type",
+  "title": "Treasure Type (B/X lair) — the GM rolls the contents",
+  "_note": "Phase 9.8: solopg is a referee's oracle, not a rulebook — a dungeon hoard is tagged with a B/X-style lair Treasure Type LETTER and the GM rolls the actual coins/gems/magic on their own tables. The app no longer invents gp values. `tier` (1 modest .. 3 rich) tracks depth/difficulty via the same tier-affinity weighting the old value table used, so deeper hoards read as richer letters. Retune/extend for your ruleset (OSE uses the same A-O letters).",
+  "entries": [
+    { "weight": 2, "value": { "type": "C", "tier": 1 } },
+    { "weight": 2, "value": { "type": "J", "tier": 1 } },
+    { "weight": 2, "value": { "type": "K", "tier": 1 } },
+    { "weight": 2, "value": { "type": "L", "tier": 1 } },
+    { "weight": 2, "value": { "type": "B", "tier": 2 } },
+    { "weight": 2, "value": { "type": "D", "tier": 2 } },
+    { "weight": 2, "value": { "type": "E", "tier": 2 } },
+    { "weight": 1, "value": { "type": "I", "tier": 2 } },
+    { "weight": 1, "value": { "type": "N", "tier": 2 } },
+    { "weight": 1, "value": { "type": "O", "tier": 2 } },
+    { "weight": 2, "value": { "type": "A", "tier": 3 } },
+    { "weight": 1, "value": { "type": "F", "tier": 3 } },
+    { "weight": 1, "value": { "type": "G", "tier": 3 } },
+    { "weight": 1, "value": { "type": "M", "tier": 3 } },
+    { "weight": 1, "value": { "type": "H", "tier": 3 } }
+  ]
+}

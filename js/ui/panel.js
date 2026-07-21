@@ -782,14 +782,11 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
-// Coins read book-style as a dice expression, no weight ("Loose coins (2d6×10 gp)");
-// gems/idols/plate roll a concrete value + weight ("— 240 gp, 12 cn"); leads/magic
-// show neither. Guard is always appended.
+// The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X lair
+// Treasure Type LETTER + how it's guarded, and the GM rolls the contents on their
+// own tables — no invented gp. ("Treasure Type D, hidden — roll on your tables.")
 function treasureLine(t) {
-  let amount = "";
-  if (t.dice) amount = ` (${t.dice} gp)`;
-  else if (t.gp > 0) amount = ` — ${t.gp} gp${t.weight ? `, ${t.weight} cn` : ""}`;
-  return `Treasure: ${t.kind}${amount} (${t.guard})`;
+  return `Treasure Type ${t.type}, ${t.guard} — roll on your tables.`;
 }
 
 export function renderDungeonPanel({

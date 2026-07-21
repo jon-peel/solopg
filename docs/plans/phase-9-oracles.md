@@ -280,26 +280,37 @@ which table* to roll.
 
 ---
 
-## Group C — treasure, as **trigger-and-prompt** (9.8)
+## Group C — treasure, as **trigger-and-prompt** (9.8) — ✅ **built**
 
-Today dungeon rooms (and, lightly, hook payoffs) carry a **rolled gp value** (`dungeon-treasure.json`
-→ `kind`/`gp`/`bulk`). Per the user's steer, treasure should instead read as a **system prompt**:
-a **Treasure Type letter** (B/X-style **A–O** lair types + individual types) that the GM rolls on
-their own tables — *not* a coin count the app invents.
+Dungeon (and tower) rooms used to carry a **rolled gp value** (`dungeon-treasure.json` →
+`kind`/`gp`/`bulk`). Now a hoard reads as a **B/X lair Treasure Type letter** the GM rolls on their
+own tables — the app invents no coins.
 
-- **Assign a type from context.** A `treasure-type` mapping keyed on the *guardian / site* — a
-  monster den, a lord's hoard, an incidental cache — yields a **letter** (its lair type) plus, for
-  a room's occupants, an **individual** type where the system uses one. This is a rule-ish table
-  (`data/treasure-type.json`) mapping context → letter, defaulting sensibly by dungeon depth/tier.
-- **Surface it as a prompt.** A stocked room / a threat's payoff / a lair reads
-  *"Hoard — **Treasure Type D** (roll on your tables)"*, optionally keeping a one-line evocative
-  descriptor (a gilded idol, a damp strongbox) for colour. The rolled **gp/bulk numbers are
-  dropped** — the app stops inventing values.
-- **Golden-rule note.** This **supersedes** the gp/bulk half of the Phase-4 treasure work
-  (4.9.5 / dungeon step 18). Because we keep no back-compat, `dungeon-treasure.json`'s `gp`/`bulk`
-  fields are removed rather than migrated, and `dungeon.js` / `hooks.js` / the room-render code are
-  updated to carry + show a `treasureType` letter instead. (B/X treasure types are the assumed
-  system — the app already uses B/X travel tiers; the table is data-swappable for another ruleset.)
+- **Scope — dungeons/towers only.** That's the only place the app rolled concrete treasure *values*.
+  **Hooks were already prompt-shaped** — a bounty reward reads *"a heavy purse of gold from {patron}"*
+  and a chain prize *"a dragon's scattered hoard"* (qualitative, never a gp roll), so they're
+  unchanged.
+- **The table.** `data/treasure-type.json` — B/X lair letters (A/B/C/D/E/F/G/H/I/J/K/L/M/N/O) each
+  tagged `tier` 1–3, weighted by the level's treasure tier via the **same tier-affinity** the old
+  value table used, so deeper hoards lean toward richer letters (test: type-tier rises with depth).
+- **Shape + render.** A room's `treasure` is now `{ type, guard }` (was `{ kind, guard, gp?/dice?/
+  weight? }`); the render reads *"Treasure Type D, hidden — roll on your tables."* `dungeon.js` and
+  `tower.js` both roll a letter; `rollDice`/`BULK_FACTOR` and the gp/weight machinery are gone.
+- **Golden-rule note.** Supersedes the gp/bulk half of the Phase-4 treasure work (4.9.5 / dungeon
+  step 18). `dungeon-treasure.json` is **deleted** (no migration); `DUNGEON_BUILD 21→22` and
+  `TOWER_BUILD 2→3` make existing interiors **regenerate on open** with the new shape. B/X letters
+  are the assumed system (the app already uses B/X travel tiers); the table is data-swappable (OSE
+  uses the same A–O).
+
+**Manual test — 9.8 (run `./run-local.sh`):**
+```
+[ ] Open a dungeon (or tower) with treasure → a stocked room reads
+    "Treasure Type <letter>, <guard> — roll on your tables." — no gp / cn numbers anywhere.
+[ ] Deeper levels trend toward richer letters (A/F/G/H/M) vs shallow (C/J/K/L).
+[ ] An OLD saved dungeon, opened after this update, regenerates to the new treasure shape
+    (build stamp bump) — no crash, no "undefined gp".
+[ ] The 💰 room marker still appears on rooms that hold treasure.
+```
 
 Engine: `treasureTypeFor(context, rng)` (pure); render shows the letter as a prompt line.
 
@@ -347,7 +358,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 | **9.5** | Settlement situation | generative | ✅ **done** — mood × happening + faction note; context-aware; **no NPC** |
 | **9.6** | Tavern / shop | generative | ✅ **done** — sign × specialty × quirk; **no NPC** · Group D complete |
 | **9.7** | Wilderness-encounter **check + prompt** | trigger | ✅ **done** — per-travel-day + manual; GM rolls the table |
-| **9.8** | **Treasure-type** tags on dungeons/hooks | trigger | replaces rolled gp; GM rolls contents |
+| **9.8** | **Treasure-type** tags on dungeons/towers | trigger | ✅ **done** — replaces rolled gp with a B/X letter; GM rolls contents |
 | **9.9** | Automatic faction **emergence** | living world | day-driven, floored, capped, cooldown |
 
 Each step: pure engine + tables → `node --test` green → commit → a short manual browser checklist
