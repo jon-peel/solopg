@@ -626,20 +626,8 @@ export function renderOraclePanel(model) {
   }
   host.appendChild(tavern);
   appendOracleResult(host, results.tavern, flashKind === "tavern");
-
-  // Wilderness encounter (9.7): a trigger-and-prompt — the app makes the check on
-  // the party's terrain, the GM rolls the encounter on their own tables. Fires
-  // automatically per travel-day too; this button is the manual on-demand check.
-  host.appendChild(sectionLabel(ORACLE_LABELS.encounter));
-  const encounter = document.createElement("div");
-  encounter.className = "oracle-encounter tile-actions";
-  if (roll) {
-    const b = actionButton("Check for encounter", () => roll("encounter"));
-    b.title = "Check the party's hex for a wilderness encounter (you roll what it is)";
-    encounter.appendChild(b);
-  }
-  host.appendChild(encounter);
-  appendOracleResult(host, results.encounter, flashKind === "encounter");
+  // (Wilderness encounters live on the map now — starred along the travel route,
+  // not rolled from this panel. See applyTravel / drawEncounterMarks.)
 }
 
 // One oracle kind's latest result block (or an empty hint), appended to `host`.

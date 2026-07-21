@@ -1611,15 +1611,6 @@ async function onOracleRoll(kind, odds) {
     const tables = await loadTables(ORACLE_TABLE_IDS);
     pick = rollTavern(tables, rng);
     body = [`Known for ${pick.specialty}.`, pick.quirk]; // the sign is the headline, these the detail
-  } else if (kind === "encounter") {
-    // Manual wilderness-encounter check on the party's current hex (9.7). Unlike
-    // the auto check it fires even in a settlement — the GM asked explicitly.
-    const hex = current.party && getHex(current, current.party.q, current.party.r);
-    if (!(hex && hex.placed)) {
-      oracleResults.encounter = { tag: null, line: "Place the party in the world first.", body: null, note: null };
-      return refreshOracle("encounter");
-    }
-    pick = rollEncounterCheck(hex.terrain, rng); // no tag — the line names the terrain
   } else return; // unknown kind — 9.8+ register more
   const line = oracleLine(pick);
   oracleResults[kind] = { tag, line, body, note };

@@ -261,12 +261,11 @@ which table* to roll.
   (*"⚔ Encounter in the Forest at (q, r) — roll on your encounter table."*). Marks clear on the next
   journey and on world switch (session-only, like the trail). *(Frequency is now **per hex entered**
   at the terrain's N-in-6 rate — retune `ENCOUNTER_CHANCE` if that's too many stars.)*
-- **Manual check.** A "Check for encounter" button in the Oracle tab runs the same check on the
-  party's hex on demand (a watch, a noisy camp) — fires even in a settlement (the GM asked), result
-  in the Oracle tab's **Wilderness encounter** block.
-- **The prompt, never the monster.** On a hit the line reads *"Encounter! Roll a {terrain} wilderness
-  encounter on your table."*; a miss reads *"No encounter ({terrain})."* No hooks, no monster
-  placement — a table pointer, in keeping with factions-as-subtext.
+- **Map-only, no Oracle-tab section.** Encounters surface purely on the travel route — there is **no
+  "Wilderness encounter" section on the Oracle page** (removed at the user's request). The engine
+  (`rollEncounterCheck`) is driven by travel; the Oracle tab holds only the generative oracles.
+- **The prompt, never the monster.** No hooks, no monster placement — the star flags *where*, the GM
+  rolls *what* on their own tables, in keeping with factions-as-subtext.
 
 **Manual test — 9.7 (run `./run-local.sh`):**
 ```
@@ -275,8 +274,7 @@ which table* to roll.
 [ ] Console logs "⚔ Encounter in the <terrain> at (q, r) — roll on your table." for each star.
 [ ] Travel again → the previous journey's stars clear; the new route's stars show.
 [ ] A route hex that holds a town gets no star (no wilderness check in a settlement).
-[ ] Oracle tab → "Wilderness encounter" section: "Check for encounter" checks the party's hex
-    on demand (hit / miss), flashing each press.
+[ ] Oracle tab → no "Wilderness encounter" section (encounters are map-only now).
 [ ] The app never names a monster — only flags WHERE and prompts you to roll your own.
 ```
 
