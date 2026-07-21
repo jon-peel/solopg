@@ -244,26 +244,41 @@ encounter, 9.8 treasure) and **9.9 auto-emergence**.
 
 ---
 
-## Group B — wilderness encounter, as **trigger-and-prompt** (9.7)
+## Group B — wilderness encounter, as **trigger-and-prompt** (9.7) — ✅ **built**
 
 The app does **not** roll the monster — it makes the **check** and tells the GM *when* and *on
 which table* to roll.
 
-- **The check.** A per-**travel-day** encounter check (OSR-standard: a small per-terrain chance,
-  e.g. 1-in-6 open ground rising in wilder terrain). Per-terrain frequency lives as tuning
-  (`ENCOUNTER_CHANCE` by terrain in a const map, echoing `TRAVEL_COST` in `travel.js`, or a small
-  JSON table). It fires at the **whole-day boundary** in the `advanceTime` chokepoint — right where
-  faction turns already fire — using the terrain of the hex the party occupies/enters.
-- **The prompt.** On a hit, `logLine` emits a **prompt, not a result**:
-  *"🎲 A wilderness encounter in the Forest — roll on your encounter table."* The GM rolls it on
-  their own game's tables. The app may name the terrain and (later, optional) suggest a *distance /
-  surprise* only if it stays system-neutral.
-- **Manual roll too.** An Oracle-tab / radial "Check for encounter" button runs the same check on
-  demand (a watch, a noisy camp), independent of travel.
-- **No hooks, no monster placement** — this is a table pointer, in keeping with factions-as-subtext.
+- **The check.** `ENCOUNTER_CHANCE` per terrain (B/X "N-in-6": Plains 1/6, Forest/Hills/Mountains/
+  Desert 2/6, Swamp 3/6, water 1/6) — tuning consts in `oracle.js`, like `TRAVEL_COST`.
+  `rollEncounterCheck(terrain, rng)` → `{ kind:"encounter", terrain, encounter, chance }`. Pure,
+  node-tested (thresholds, per-terrain coverage, hit-rate, prose).
+- **Automatic per travel-day.** Fires at each **whole-day boundary** in the `advanceTime` chokepoint
+  — right where faction turns fire — on the **party's terrain**, once per day crossed. **Skipped in a
+  settlement** (in town = no wilderness check). A hit logs the prompt to the console
+  (*"⚔ Day N: a wilderness encounter in the Forest — roll on your encounter table."*) and surfaces
+  the latest check in the Oracle tab's **Wilderness encounter** block (a hit is never hidden by a
+  later miss in a multi-day batch).
+- **Manual check.** A "Check for encounter" button in the Oracle tab runs the same check on the
+  party's hex on demand (a watch, a noisy camp) — and fires even in a settlement (the GM asked).
+- **The prompt, never the monster.** On a hit the line reads *"Encounter! Roll a {terrain} wilderness
+  encounter on your table."*; a miss reads *"No encounter ({terrain})."* No hooks, no monster
+  placement — a table pointer, in keeping with factions-as-subtext.
+- *(Surfacing: console + the Oracle-tab block, matching how travel/faction events already log. A
+  louder on-map cue could be a follow-up. The radial "Check for encounter" entry was left for later —
+  the Oracle-tab button covers it.)*
 
-Engine: `rollEncounterCheck(terrain, rng)` (pure, node-tested) → `{ encounter: boolean, terrain }`;
-the prose ("roll on your …") is composed at render.
+**Manual test — 9.7 (run `./run-local.sh`):**
+```
+[ ] Oracle tab → a "Wilderness encounter" section with a "Check for encounter" button.
+[ ] With the party on a wilderness hex, press it repeatedly → results alternate between
+    "Encounter! Roll a <terrain> …" and "No encounter (<terrain>)", roughly at the terrain's
+    N-in-6 rate; each press flashes.
+[ ] Double-click the party and travel a day through wilderness → if a check hits, the console
+    logs "⚔ Day N: … roll on your encounter table." and the Encounter block updates.
+[ ] Travel that ends in / rest in a TOWN hex → no automatic wilderness check fires.
+[ ] The app never names a monster — only prompts you to roll on your own table.
+```
 
 ---
 
@@ -333,7 +348,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 | **9.4** | Complication / twist | generative | ✅ **done** — single table (48) · Group A complete |
 | **9.5** | Settlement situation | generative | ✅ **done** — mood × happening + faction note; context-aware; **no NPC** |
 | **9.6** | Tavern / shop | generative | ✅ **done** — sign × specialty × quirk; **no NPC** · Group D complete |
-| **9.7** | Wilderness-encounter **check + prompt** | trigger | per-travel-day + manual; GM rolls the table |
+| **9.7** | Wilderness-encounter **check + prompt** | trigger | ✅ **done** — per-travel-day + manual; GM rolls the table |
 | **9.8** | **Treasure-type** tags on dungeons/hooks | trigger | replaces rolled gp; GM rolls contents |
 | **9.9** | Automatic faction **emergence** | living world | day-driven, floored, capped, cooldown |
 

@@ -50,7 +50,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -397,8 +397,37 @@ async function advanceTime(days) {
     const events = advanceFactionDays(current, wholeCrossed, current.seed);
     logFactionEvents(events);
     applyFactionOccupancy(events);
+    checkTravelEncounters(wholeCrossed, Math.floor(before) + 1); // wilderness checks per day (9.7)
   }
   renderDayReadout();
+}
+
+// Wilderness encounter checks for each whole day crossed (Phase 9.7), on the
+// party's current terrain — SKIPPED in a settlement (in town). A hit logs a PROMPT
+// to the console and surfaces the latest check in the Oracle tab's Encounter
+// block; the app never rolls the monster (trigger-and-prompt). A hit is never
+// hidden by a later miss in the same batch.
+function checkTravelEncounters(wholeDays, firstDay) {
+  if (!current || !current.party) return;
+  const hex = getHex(current, current.party.q, current.party.r);
+  if (!(hex && hex.placed)) return;
+  if (hex.settlement && hex.settlement.present) return; // in town — no wilderness check
+  const terrain = hex.terrain;
+  let stored = null;
+  for (let i = 0; i < wholeDays; i++) {
+    const day = firstDay + i;
+    const check = rollEncounterCheck(terrain, subRng(current.seed, "encounter", current.party.q, current.party.r, day));
+    if (check.encounter) {
+      logLine(`⚔ Day ${day}: a wilderness encounter in the ${terrain} — roll on your encounter table.`);
+      stored = check; // keep the (last) hit
+    } else if (!stored) {
+      stored = check; // a miss shows only if no day hit
+    }
+  }
+  if (stored) {
+    oracleResults.encounter = { tag: null, line: oracleLine(stored), body: null, note: null };
+    refreshOracle("encounter");
+  }
 }
 
 // Whole-day advance (the stationary "Progress N days" control) — keeps the
@@ -1590,7 +1619,16 @@ async function onOracleRoll(kind, odds) {
     const tables = await loadTables(ORACLE_TABLE_IDS);
     pick = rollTavern(tables, rng);
     body = [`Known for ${pick.specialty}.`, pick.quirk]; // the sign is the headline, these the detail
-  } else return; // unknown kind — 9.7+ register more
+  } else if (kind === "encounter") {
+    // Manual wilderness-encounter check on the party's current hex (9.7). Unlike
+    // the auto check it fires even in a settlement — the GM asked explicitly.
+    const hex = current.party && getHex(current, current.party.q, current.party.r);
+    if (!(hex && hex.placed)) {
+      oracleResults.encounter = { tag: null, line: "Place the party in the world first.", body: null, note: null };
+      return refreshOracle("encounter");
+    }
+    pick = rollEncounterCheck(hex.terrain, rng); // no tag — the line names the terrain
+  } else return; // unknown kind — 9.8+ register more
   const line = oracleLine(pick);
   oracleResults[kind] = { tag, line, body, note };
   const parts = [line, ...(body || []), ...(note ? [note] : [])];

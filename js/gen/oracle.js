@@ -157,6 +157,40 @@ export function rollTavern(tables, rng) {
   return { kind: "tavern", sign, specialty, quirk };
 }
 
+// --- Wilderness encounter check (Phase 9.7) -------------------------------
+//
+// A TRIGGER-AND-PROMPT oracle: the app decides WHETHER an encounter happens (a
+// per-terrain check) and names the terrain — the GM rolls the actual encounter on
+// their OWN tables. The app never invents a monster. Fires automatically per
+// travel-day and on a manual button.
+
+// Per-terrain encounter chance PER DAY. B/X-flavoured "N-in-6" odds; TUNING, not
+// content (like TRAVEL_COST in travel.js) — retune freely. Sea/Lake are low (the
+// party doesn't cross water, but a manual check stays valid).
+export const ENCOUNTER_CHANCE = {
+  Plains: 1 / 6,
+  Forest: 2 / 6,
+  Hills: 2 / 6,
+  Mountains: 2 / 6,
+  Desert: 2 / 6,
+  Swamp: 3 / 6,
+  Lake: 1 / 6,
+  Sea: 1 / 6,
+};
+const DEFAULT_ENCOUNTER_CHANCE = 1 / 6;
+
+/**
+ * Wilderness encounter CHECK (Phase 9.7) — pure. Rolls the per-terrain chance and
+ * reports only WHETHER an encounter occurs; the GM rolls what it is.
+ * @param {string} terrain the terrain to check (party's hex)
+ * @param {() => number} rng
+ * @returns {{ kind:"encounter", terrain:string, encounter:boolean, chance:number }}
+ */
+export function rollEncounterCheck(terrain, rng) {
+  const chance = ENCOUNTER_CHANCE[terrain] ?? DEFAULT_ENCOUNTER_CHANCE;
+  return { kind: "encounter", terrain, encounter: rng() < chance, chance };
+}
+
 /**
  * Compose the one-line display string for an oracle pick (compose-at-render).
  * Each oracle kind knows how to phrase its own pick; unknown kinds fall back to
@@ -172,6 +206,11 @@ export function oracleLine(pick) {
   if (pick.kind === "complication") return pick.text;
   if (pick.kind === "settlement") return `${cap(pick.mood)}. ${pick.event}`;
   if (pick.kind === "tavern") return pick.sign; // the headline; specialty + quirk are the body
+  if (pick.kind === "encounter") {
+    return pick.encounter
+      ? `Encounter! Roll a ${pick.terrain} wilderness encounter on your table.`
+      : `No encounter (${pick.terrain}).`;
+  }
   return String(pick.answer ?? "");
 }
 
@@ -182,6 +221,7 @@ export const ORACLE_LABELS = {
   complication: "Complication",
   settlement: "Settlement",
   tavern: "Tavern / shop",
+  encounter: "Wilderness encounter",
 };
 
 /** Table ids the table-backed oracles (Meaning, Complication, Settlement, Tavern) need. */

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS, ENCOUNTER_CHANCE } from "../js/gen/oracle.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -218,4 +218,45 @@ test("rollTavern is deterministic for a given stream", () => {
 test("oracleLine returns the tavern sign as the headline", () => {
   assert.equal(oracleLine({ kind: "tavern", sign: "The Rusty Tankard", specialty: "watered ale", quirk: "A cat rules the fire." }), "The Rusty Tankard");
   assert.equal(ORACLE_LABELS.tavern, "Tavern / shop");
+});
+
+// --- Wilderness encounter check (9.7) ---
+
+test("rollEncounterCheck: roll below the terrain chance hits, at/above misses", () => {
+  // Plains 1/6 ≈ 0.167.
+  assert.equal(rollEncounterCheck("Plains", () => 0.1).encounter, true);
+  assert.equal(rollEncounterCheck("Plains", () => 0.2).encounter, false);
+  // Swamp 3/6 = 0.5.
+  assert.equal(rollEncounterCheck("Swamp", () => 0.49).encounter, true);
+  assert.equal(rollEncounterCheck("Swamp", () => 0.5).encounter, false);
+});
+
+test("rollEncounterCheck: shape carries terrain + chance; unknown terrain uses the default", () => {
+  const p = rollEncounterCheck("Forest", () => 0.9);
+  assert.equal(p.kind, "encounter");
+  assert.equal(p.terrain, "Forest");
+  assert.equal(p.chance, ENCOUNTER_CHANCE.Forest);
+  const u = rollEncounterCheck("Voidlands", () => 0.9);
+  assert.equal(u.chance, 1 / 6); // default
+});
+
+test("ENCOUNTER_CHANCE covers every travel terrain", () => {
+  for (const t of ["Plains", "Forest", "Hills", "Mountains", "Desert", "Swamp", "Lake", "Sea"]) {
+    assert.ok(typeof ENCOUNTER_CHANCE[t] === "number", `${t} has a chance`);
+  }
+});
+
+test("rollEncounterCheck: observed hit-rate ≈ terrain chance over many rolls", () => {
+  const rng = mulberry32(11);
+  let hits = 0;
+  const N = 6000;
+  for (let i = 0; i < N; i++) if (rollEncounterCheck("Forest", rng).encounter) hits++;
+  const ratio = hits / N; // Forest = 2/6 ≈ 0.333
+  assert.ok(ratio > 0.31 && ratio < 0.36, `ratio ${ratio} not ~0.333`);
+});
+
+test("oracleLine composes an encounter hit and a miss; label present", () => {
+  assert.equal(oracleLine({ kind: "encounter", terrain: "Forest", encounter: true }), "Encounter! Roll a Forest wilderness encounter on your table.");
+  assert.equal(oracleLine({ kind: "encounter", terrain: "Hills", encounter: false }), "No encounter (Hills).");
+  assert.equal(ORACLE_LABELS.encounter, "Wilderness encounter");
 });
