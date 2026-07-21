@@ -1431,6 +1431,14 @@ button:hover {
 .oracle-odds {
   margin-top: 0.2rem;
 }
+/* Normal-weight detail lines under a result headline (e.g. a tavern's specialty
+   and quirk); fade in with the result on a roll. */
+.oracle-body {
+  margin-top: 0.25rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
 /* Random-event nudge under the answer; fades in with the result on a roll. */
 .oracle-note {
   margin-top: 0.35rem;

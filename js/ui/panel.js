@@ -613,6 +613,19 @@ export function renderOraclePanel(model) {
     hint.textContent = "Select a town on the map to read what's stirring there.";
     host.appendChild(hint);
   }
+
+  // Tavern / shop (9.6): a sign × specialty × quirk to make a stop memorable.
+  // Context-free like Meaning; no proprietor NPC.
+  host.appendChild(sectionLabel(ORACLE_LABELS.tavern));
+  const tavern = document.createElement("div");
+  tavern.className = "oracle-tavern tile-actions";
+  if (roll) {
+    const b = actionButton("Roll tavern / shop", () => roll("tavern"));
+    b.title = "Roll a sign, specialty, and quirk for an establishment";
+    tavern.appendChild(b);
+  }
+  host.appendChild(tavern);
+  appendOracleResult(host, results.tavern, flashKind === "tavern");
 }
 
 // One oracle kind's latest result block (or an empty hint), appended to `host`.
@@ -639,7 +652,18 @@ function appendOracleResult(host, result, flash) {
   block.appendChild(ans);
   host.appendChild(block);
 
-  // Random-event nudge (9.2) — its own note under the answer.
+  // Body lines (9.6) — normal-weight detail under the headline (e.g. a tavern's
+  // specialty + quirk).
+  if (Array.isArray(result.body)) {
+    for (const b of result.body) {
+      const line = document.createElement("div");
+      line.className = "oracle-body" + (flash ? " oracle-flash-note" : "");
+      line.textContent = b;
+      host.appendChild(line);
+    }
+  }
+
+  // Accent note (9.2 random event / 9.5 faction) — its own line under the result.
   if (result.note) {
     const note = document.createElement("div");
     note.className = "oracle-note" + (flash ? " oracle-flash-note" : "");

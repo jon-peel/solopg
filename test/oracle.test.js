@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS } from "../js/gen/oracle.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -194,4 +194,28 @@ test("oracleLine composes a Settlement situation (Mood. Happening.)", () => {
   const line = oracleLine({ kind: "settlement", mood: "tense and watchful", event: "A caravan has just arrived.", factionNote: null });
   assert.equal(line, "Tense and watchful. A caravan has just arrived.");
   assert.equal(ORACLE_LABELS.settlement, "Settlement");
+});
+
+// --- Tavern / shop oracle (9.6) ---
+
+test("rollTavern draws sign + specialty + quirk from the tables", () => {
+  const t = oracleTables();
+  const signs = new Set(t.get("tavern-sign").entries.map((e) => e.value));
+  const specialties = new Set(t.get("tavern-specialty").entries.map((e) => e.value));
+  const quirks = new Set(t.get("tavern-quirk").entries.map((e) => e.value));
+  const p = rollTavern(t, mulberry32(8));
+  assert.equal(p.kind, "tavern");
+  assert.ok(signs.has(p.sign));
+  assert.ok(specialties.has(p.specialty));
+  assert.ok(quirks.has(p.quirk));
+});
+
+test("rollTavern is deterministic for a given stream", () => {
+  const t = oracleTables();
+  assert.deepEqual(rollTavern(t, mulberry32(64)), rollTavern(t, mulberry32(64)));
+});
+
+test("oracleLine returns the tavern sign as the headline", () => {
+  assert.equal(oracleLine({ kind: "tavern", sign: "The Rusty Tankard", specialty: "watered ale", quirk: "A cat rules the fire." }), "The Rusty Tankard");
+  assert.equal(ORACLE_LABELS.tavern, "Tavern / shop");
 });

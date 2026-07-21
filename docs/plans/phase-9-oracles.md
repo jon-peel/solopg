@@ -216,12 +216,31 @@ first *context-aware* oracle: it reads the **selected** settlement.
 [ ] Console → each roll logs "🎲 Oracle (settlement): …".
 ```
 
-### 9.6 Tavern / shop
-A quick establishment prompt with **no proprietor NPC**: a **sign / name** × a **specialty** × a
-**quirk** (a warped floor, a resident cat, watered ale, a back room that's always booked). Enough
-to make a stop memorable; the people in it are the GM's to voice.
+### 9.6 Tavern / shop — ✅ **built** (Group D complete)
+A quick establishment with **no proprietor NPC**: a **sign** × a **specialty** × a **quirk** →
+*"The Widow's Mite — known for spiced wine and worse company. There's a back room that's always
+somehow booked."* Enough to make a stop memorable; the people in it are the GM's to voice.
 
-Data: `data/tavern-sign.json`, `data/tavern-specialty.json`, `data/tavern-quirk.json`.
+- **Data:** `tavern-sign.json` (40 curated signs) · `tavern-specialty.json` (28) · `tavern-quirk.json`
+  (30). Context-free like Meaning.
+- **Engine:** `rollTavern(tables, rng)` → `{ kind:"tavern", sign, specialty, quirk }`; `oracleLine`
+  returns the **sign** as the headline. Pure, node-tested.
+- **UI + a new `body` slot:** the result block now supports normal-weight **body lines** under the
+  headline — the tavern shows its sign big, then "Known for {specialty}." and the quirk beneath.
+  (Also refactored the console log to print each result's real body/note, fixing a 9.5 line that
+  mislabelled the faction note as "random event".)
+
+**Manual test — 9.6 (run `./run-local.sh`):**
+```
+[ ] Oracle tab → a "Tavern / shop" section with a "Roll tavern / shop" button.
+[ ] Press it → the sign shows big, with "Known for …." and a quirk line beneath;
+    different most presses, flashing each time.
+[ ] The other oracle blocks stay put; console logs the full "sign · known for … · quirk".
+```
+
+**Group D (settlements & places) is now complete** — Settlement situation · Tavern/shop. All the
+**generative** oracles (Groups A + D) are done; what remains is the **trigger-and-prompt** pair (9.7
+encounter, 9.8 treasure) and **9.9 auto-emergence**.
 
 ---
 
@@ -313,7 +332,7 @@ trigger-and-prompt integrations (they touch travel/dungeons/hooks), then the liv
 | **9.3** | Meaning / inspiration | generative | ✅ **done** — action × subject (52 × 50) |
 | **9.4** | Complication / twist | generative | ✅ **done** — single table (48) · Group A complete |
 | **9.5** | Settlement situation | generative | ✅ **done** — mood × happening + faction note; context-aware; **no NPC** |
-| **9.6** | Tavern / shop | generative | sign × specialty × quirk; **no NPC** |
+| **9.6** | Tavern / shop | generative | ✅ **done** — sign × specialty × quirk; **no NPC** · Group D complete |
 | **9.7** | Wilderness-encounter **check + prompt** | trigger | per-travel-day + manual; GM rolls the table |
 | **9.8** | **Treasure-type** tags on dungeons/hooks | trigger | replaces rolled gp; GM rolls contents |
 | **9.9** | Automatic faction **emergence** | living world | day-driven, floored, capped, cooldown |

@@ -50,7 +50,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -1568,7 +1568,7 @@ function factionNameAt(q, r) {
 async function onOracleRoll(kind, odds) {
   if (!current) return;
   const rng = subRng(current.seed, "oracle", kind, oracleSeq++);
-  let pick, tag = null, note = null;
+  let pick, tag = null, body = null, note = null;
   if (kind === "yesno") {
     pick = askYesNo(rng, { odds });
     tag = pick.oddsLabel; // the odds it was rolled at
@@ -1586,9 +1586,15 @@ async function onOracleRoll(kind, odds) {
     pick = rollSettlement(tables, rng, { factionName: ctx.factionName });
     tag = ctx.label; // the town this situation is for
     if (pick.factionNote) note = "⚑ " + pick.factionNote;
-  } else return; // unknown kind — 9.6+ register more
-  oracleResults[kind] = { tag, line: oracleLine(pick), note };
-  logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${oracleResults[kind].line}${note ? " · random event" : ""}`);
+  } else if (kind === "tavern") {
+    const tables = await loadTables(ORACLE_TABLE_IDS);
+    pick = rollTavern(tables, rng);
+    body = [`Known for ${pick.specialty}.`, pick.quirk]; // the sign is the headline, these the detail
+  } else return; // unknown kind — 9.7+ register more
+  const line = oracleLine(pick);
+  oracleResults[kind] = { tag, line, body, note };
+  const parts = [line, ...(body || []), ...(note ? [note] : [])];
+  logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${parts.join(" · ")}`);
   refreshOracle(kind); // flash only this oracle's block so a repeated answer still reads as "rolled"
 }
 

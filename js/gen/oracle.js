@@ -137,12 +137,32 @@ export function rollSettlement(tables, rng, opts = {}) {
   return { kind: "settlement", mood, event, factionNote };
 }
 
+// --- Tavern / shop (Phase 9.6) --------------------------------------------
+//
+// A quick establishment to make a stop memorable: a SIGN (name) × a SPECIALTY
+// (what it's known for) × a QUIRK. No proprietor NPC — the people in it are the
+// GM's to voice. Context-free, like Meaning.
+
+/**
+ * Roll a Tavern / shop (Phase 9.6). Draws sign → specialty → quirk in that fixed
+ * order (deterministic for a given rng stream).
+ * @param {Map<string,object>} tables incl. tavern-sign / tavern-specialty / tavern-quirk
+ * @param {() => number} rng
+ * @returns {{ kind:"tavern", sign:string, specialty:string, quirk:string }}
+ */
+export function rollTavern(tables, rng) {
+  const sign = rollTable(tables.get("tavern-sign"), rng).value;
+  const specialty = rollTable(tables.get("tavern-specialty"), rng).value;
+  const quirk = rollTable(tables.get("tavern-quirk"), rng).value;
+  return { kind: "tavern", sign, specialty, quirk };
+}
+
 /**
  * Compose the one-line display string for an oracle pick (compose-at-render).
  * Each oracle kind knows how to phrase its own pick; unknown kinds fall back to
  * the raw answer so a new kind can't crash the log before its prose lands. The
  * random-event flag is NOT folded in here — the UI shows it as its own note.
- * @param {{ kind:string, answer?:string, tone?:string|null, action?:string, subject?:string, text?:string, mood?:string, event?:string }} pick
+ * @param {{ kind:string, answer?:string, tone?:string|null, action?:string, subject?:string, text?:string, mood?:string, event?:string, sign?:string }} pick
  * @returns {string}
  */
 export function oracleLine(pick) {
@@ -151,6 +171,7 @@ export function oracleLine(pick) {
   if (pick.kind === "meaning") return `${pick.action} · ${pick.subject}`;
   if (pick.kind === "complication") return pick.text;
   if (pick.kind === "settlement") return `${cap(pick.mood)}. ${pick.event}`;
+  if (pick.kind === "tavern") return pick.sign; // the headline; specialty + quirk are the body
   return String(pick.answer ?? "");
 }
 
@@ -160,10 +181,12 @@ export const ORACLE_LABELS = {
   meaning: "Meaning",
   complication: "Complication",
   settlement: "Settlement",
+  tavern: "Tavern / shop",
 };
 
-/** Table ids the table-backed oracles (9.3 Meaning, 9.4 Complication, 9.5 Settlement) need. */
+/** Table ids the table-backed oracles (Meaning, Complication, Settlement, Tavern) need. */
 export const ORACLE_TABLE_IDS = [
   "oracle-action", "oracle-subject", "oracle-complication",
   "settlement-mood", "settlement-event", "settlement-faction",
+  "tavern-sign", "tavern-specialty", "tavern-quirk",
 ];
