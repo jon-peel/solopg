@@ -64,6 +64,7 @@ import {
   setRiverDraft,
   setRoadDraft,
   setTravelPath,
+  setEncounterMarks,
   zoomStep,
   setZoom,
   getZoom,
@@ -228,6 +229,7 @@ async function setCurrent(world) {
   oracleSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
   setTravelPath(null); // clear the previous world's movement trail
+  setEncounterMarks(null); // ...and its encounter stars
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
@@ -397,37 +399,8 @@ async function advanceTime(days) {
     const events = advanceFactionDays(current, wholeCrossed, current.seed);
     logFactionEvents(events);
     applyFactionOccupancy(events);
-    checkTravelEncounters(wholeCrossed, Math.floor(before) + 1); // wilderness checks per day (9.7)
   }
   renderDayReadout();
-}
-
-// Wilderness encounter checks for each whole day crossed (Phase 9.7), on the
-// party's current terrain — SKIPPED in a settlement (in town). A hit logs a PROMPT
-// to the console and surfaces the latest check in the Oracle tab's Encounter
-// block; the app never rolls the monster (trigger-and-prompt). A hit is never
-// hidden by a later miss in the same batch.
-function checkTravelEncounters(wholeDays, firstDay) {
-  if (!current || !current.party) return;
-  const hex = getHex(current, current.party.q, current.party.r);
-  if (!(hex && hex.placed)) return;
-  if (hex.settlement && hex.settlement.present) return; // in town — no wilderness check
-  const terrain = hex.terrain;
-  let stored = null;
-  for (let i = 0; i < wholeDays; i++) {
-    const day = firstDay + i;
-    const check = rollEncounterCheck(terrain, subRng(current.seed, "encounter", current.party.q, current.party.r, day));
-    if (check.encounter) {
-      logLine(`⚔ Day ${day}: a wilderness encounter in the ${terrain} — roll on your encounter table.`);
-      stored = check; // keep the (last) hit
-    } else if (!stored) {
-      stored = check; // a miss shows only if no day hit
-    }
-  }
-  if (stored) {
-    oracleResults.encounter = { tag: null, line: oracleLine(stored), body: null, note: null };
-    refreshOracle("encounter");
-  }
 }
 
 // Whole-day advance (the stationary "Progress N days" control) — keeps the
@@ -897,6 +870,25 @@ async function applyTravel(result, aimLabel, aimKind) {
   logLine(travelHeadline(result, aimLabel, aimKind));
   await persistAndRefresh();
   setTravelPath([origin, ...result.log.map((l) => ({ q: l.q, r: l.r }))]); // draw the trail (after the refresh's setWorld)
+  setEncounterMarks(travelEncounterHexes(result)); // star the hexes where an encounter came up (9.7)
+}
+
+// Per-hex wilderness encounter checks over the hexes just entered (Phase 9.7).
+// Returns the coords that hit — drawn as star marks on the route. Skips settlement
+// hexes (no wilderness encounter in a town). The app only flags WHERE an encounter
+// is; the GM rolls WHAT it is on their own tables. Each hit also logs a prompt.
+function travelEncounterHexes(result) {
+  const hits = [];
+  for (const step of result.log || []) {
+    const hex = getHex(current, step.q, step.r);
+    if (hex && hex.settlement && hex.settlement.present) continue; // in a town — no wilderness check
+    const rng = subRng(current.seed, "encounter", step.q, step.r, sessionDay);
+    if (rollEncounterCheck(step.terrain, rng).encounter) {
+      hits.push({ q: step.q, r: step.r });
+      logLine(`⚔ Encounter in the ${step.terrain} at (${step.q}, ${step.r}) — roll on your encounter table.`);
+    }
+  }
+  return hits;
 }
 
 // One-line summary of a day's travel, composed here (app knows the day, the

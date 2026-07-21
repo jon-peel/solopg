@@ -89,10 +89,17 @@ export function setWorld(w) {
 }
 
 let travelPath = null; // the last move's path [{q,r}, …] (origin + each hex entered)
+let encounterMarks = null; // hexes on the last route where a wilderness encounter came up (9.7)
 
 /** Show the trail of the party's last move (null clears it). */
 export function setTravelPath(path) {
   travelPath = path && path.length > 1 ? path : null;
+  render();
+}
+
+/** Mark hexes on the last route where a wilderness encounter came up (null clears). */
+export function setEncounterMarks(list) {
+  encounterMarks = list && list.length ? list : null;
   render();
 }
 
@@ -337,6 +344,7 @@ export function render() {
 
   // 4c. The last move's trail (Phase 11) — under the party marker.
   drawTravelPath();
+  drawEncounterMarks(); // stars on the route's encounter hexes (9.7), over the trail
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
   //    TOP of everything else and visible at every zoom, regardless of whether
@@ -1128,6 +1136,28 @@ function drawTravelPath() {
     ctx.lineWidth = 1.2 / camera.scale;
     ctx.strokeStyle = "rgba(40,28,10,0.6)";
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// A star on each route hex where a wilderness encounter came up (9.7) — the app
+// flags WHERE; the GM rolls WHAT on their own tables. Drawn over the travel trail,
+// nudged up off the route dot; scales with zoom like the other glyph markers.
+function drawEncounterMarks() {
+  if (!encounterMarks || !encounterMarks.length) return;
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.font = `${HEX_SIZE * 0.78}px sans-serif`;
+  ctx.lineWidth = HEX_SIZE * 0.14;
+  for (const m of encounterMarks) {
+    const c = axialToPixel(m.q, m.r, HEX_SIZE);
+    const y = c.y - HEX_SIZE * 0.14; // sit above the route dot
+    ctx.strokeStyle = "rgba(250,241,222,0.95)"; // parchment halo for contrast
+    ctx.strokeText("★", c.x, y);
+    ctx.fillStyle = "#8a3324"; // wax-seal red — an encounter alert
+    ctx.fillText("★", c.x, y);
   }
   ctx.restore();
 }
