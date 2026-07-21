@@ -578,47 +578,82 @@ export function advanceFactionDays(world, days, seed) {
 }
 
 // --- Automatic emergence (Phase 9.9) --------------------------------------
-// As days pass, a new power sometimes stirs on its OWN — day-driven with a floor:
-// a small per-day chance, boosted while few factions exist (below FACTION_FLOOR)
-// and suppressed to nothing at/above a soft cap (FACTION_CAP), spaced by a
-// cooldown. Tuning consts, retunable like the rest. This is the PURE GATE — it
-// decides HOW MANY emerge and advances the reload-safe accumulators; the app
-// creates each faction (site selection + generate/promote need the tables).
-export const FACTION_FLOOR = 2;          // below this many active, emerge eagerly
-export const FACTION_CAP = 6;            // at/above this many active, stop emerging
-export const EMERGE_COOLDOWN_DAYS = 10;  // minimum days between emergences
-export const EMERGE_BASE_CHANCE = 0.03;  // per day at/above the floor (~1 a month)
-export const EMERGE_FLOOR_CHANCE = 0.1;  // per day below the floor (fills faster)
+// As days pass, new powers rise on their OWN — a PRESSURE model over the explored
+// map (no fixed cap), so it scales with world size and self-regulates:
+//   • EXTERNAL emergence ∝ open frontier — a wide-open world spawns powers readily;
+//     as it fills, external emergence falls to ~0 (self-limiting by size).
+//   • INTERNAL emergence ∝ dominance — when one faction hoards the claimed land, a
+//     rebellion erupts INSIDE it (carving out a province to eat from within or
+//     fizzle). This is the anti-monoculture valve: a "full" world keeps churning.
+// A soft ceiling (land/HEXES_PER_FACTION) and a cooldown keep it from flooding.
+// All tuning, retunable. This is the PURE GATE — it decides WHAT emerges (external
+// vs internal, and which faction a rebellion targets) and advances the reload-safe
+// accumulators; the app picks the exact site + creates the faction (needs tables).
+export const EMERGE_COOLDOWN_DAYS = 8;   // minimum days between emergences
+export const HEXES_PER_FACTION = 6;      // soft ceiling = explored land / this
+const MAX_FACTIONS_ABS = 20;             // hard ceiling regardless of size
+const EXTERNAL_BASE = 0.12;              // per-day external chance at a fully-open world
+const INTERNAL_BASE = 0.1;               // per-day internal chance at full dominance
+const DOMINANCE_THRESHOLD = 0.5;         // rebellions only once one power passes this share
+const MIN_REBELLION_SIZE = 5;            // ...and holds at least this many hexes
+
+// Explored-map stats the pressure model reads (pure). land = placed passable hexes;
+// claimed = distinct hexes any active faction holds; largest = the hegemon.
+function emergenceStats(world) {
+  const hexes = world.hexes || {};
+  let land = 0;
+  for (const h of Object.values(hexes)) if (h.placed && (TRAVEL_COST[h.terrain] || 0) > 0) land++;
+  const active = (world.factions || []).filter(isActive);
+  const claimed = new Set();
+  let largest = null, largestSize = 0;
+  for (const f of active) {
+    const size = (f.holdings || []).length;
+    for (const h of f.holdings || []) claimed.add(axialKey(h.q, h.r));
+    if (size > largestSize) { largestSize = size; largest = f; }
+  }
+  return { land, claimed: claimed.size, activeCount: active.length, largest, largestSize };
+}
 
 /**
- * The emergence GATE (Phase 9.9) — pure. Walks `days` one at a time, advancing the
- * world's reload-safe accumulators (`emergeTicks`, a monotonic rng cursor, and
- * `emergeSince`, days since the last emergence), and returns HOW MANY new factions
- * should emerge over the span (usually 0 or 1). Chance is boosted below
- * FACTION_FLOOR, zero at/above FACTION_CAP, and gated by EMERGE_COOLDOWN_DAYS.
- * Deterministic: each day's roll is seeded on the world seed + the tick ordinal.
- * The CALLER creates the factions.
- * @param {object} world  read: factions[]; mutated: emergeTicks / emergeSince
+ * The emergence GATE (Phase 9.9, pressure model) — pure. Walks `days` one at a
+ * time, advancing the world's reload-safe accumulators (`emergeTicks` monotonic
+ * rng cursor, `emergeSince` cooldown counter), and returns a DESCRIPTOR per
+ * emergence: `{ type:"external" }` or `{ type:"internal", targetId }`. Chances come
+ * from the explored map (open frontier → external, dominance → internal), gated by
+ * a size-scaled ceiling and the cooldown. Deterministic per (seed, tick). The
+ * CALLER picks the site and creates the faction.
+ * @param {object} world  read: hexes, factions[]; mutated: emergeTicks / emergeSince
  * @param {number} days
  * @param {number|string} seed
- * @returns {number} count of emergences to create
+ * @returns {{type:"external"}|{type:"internal",targetId:string}[]}
  */
 export function rollEmergences(world, days, seed) {
-  if (!world || !Number.isFinite(days) || days < 1) return 0;
-  let pending = 0;
+  if (!world || !Number.isFinite(days) || days < 1) return [];
+  const s = emergenceStats(world);
+  const ceiling = Math.max(3, Math.min(MAX_FACTIONS_ABS, Math.round(s.land / HEXES_PER_FACTION)));
+  const openFrac = s.land > 0 ? Math.max(0, (s.land - s.claimed) / s.land) : 0;
+  const dominance = s.claimed > 0 ? s.largestSize / s.claimed : 0;
+  const extChance = EXTERNAL_BASE * openFrac;
+  const intChance = (s.largestSize >= MIN_REBELLION_SIZE && dominance > DOMINANCE_THRESHOLD)
+    ? INTERNAL_BASE * (dominance - DOMINANCE_THRESHOLD) / (1 - DOMINANCE_THRESHOLD)
+    : 0;
+
+  const out = [];
   for (let i = 0; i < days; i++) {
     world.emergeTicks = (world.emergeTicks || 0) + 1;
     world.emergeSince = (world.emergeSince || 0) + 1;
-    const active = (world.factions || []).filter(isActive).length + pending;
-    if (active >= FACTION_CAP) continue;                    // soft cap
-    if (world.emergeSince < EMERGE_COOLDOWN_DAYS) continue;  // spacing
-    const chance = active < FACTION_FLOOR ? EMERGE_FLOOR_CHANCE : EMERGE_BASE_CHANCE;
-    if (subRng(seed, "emerge", world.emergeTicks)() < chance) {
-      pending += 1;
+    if (s.activeCount + out.length >= ceiling) continue;   // size-scaled ceiling
+    if (world.emergeSince < EMERGE_COOLDOWN_DAYS) continue; // spacing
+    const r = subRng(seed, "emerge", world.emergeTicks)();
+    if (r < extChance) {
+      out.push({ type: "external" });
+      world.emergeSince = 0;
+    } else if (r < extChance + intChance) {
+      out.push({ type: "internal", targetId: s.largest.id });
       world.emergeSince = 0;
     }
   }
-  return pending;
+  return out;
 }
 
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);

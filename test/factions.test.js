@@ -16,9 +16,8 @@ import {
   eligibleLords,
   FACTION_BUILD,
   rollEmergences,
-  FACTION_FLOOR,
-  FACTION_CAP,
   EMERGE_COOLDOWN_DAYS,
+  HEXES_PER_FACTION,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
 import { validateTable } from "../js/core/table.js";
@@ -877,59 +876,77 @@ test("rebellion is a rare rollable archetype in the table", () => {
   assert.ok(reb.weight <= 1, "low weight → rare");
 });
 
-// --- Automatic emergence gate (Phase 9.9) ---
+// --- Automatic emergence gate (Phase 9.9, pressure model) ---
 
-const emptyWorld = (over = {}) => ({ factions: [], emergeTicks: 0, emergeSince: EMERGE_COOLDOWN_DAYS, ...over });
-const activeFactions = (n) => Array.from({ length: n }, (_, i) => ({ id: `f${i}`, status: "active" }));
+// A world with `land` placed passable (Plains) hexes and optional preset factions.
+function landWorld(land, over = {}) {
+  const hexes = {};
+  for (let i = 0; i < land; i++) hexes[axialKey(i, 0)] = { placed: true, coords: { q: i, r: 0 }, terrain: "Plains" };
+  return { hexes, factions: [], emergeTicks: 0, emergeSince: EMERGE_COOLDOWN_DAYS, ...over };
+}
+// A faction holding a run of hexes [x0..x0+size) on row 0 (so they count as claimed).
+const heldRun = (id, size, x0 = 0) => ({
+  id, status: "active", seat: { q: x0, r: 0 },
+  holdings: Array.from({ length: size }, (_, k) => ({ q: x0 + k, r: 0 })),
+});
 
 test("rollEmergences: advances emergeTicks by the days walked", () => {
-  const w = emptyWorld();
+  const w = landWorld(30);
   rollEmergences(w, 4, 1);
   assert.equal(w.emergeTicks, 4);
 });
 
+test("rollEmergences: no explored land → nothing emerges", () => {
+  const w = landWorld(0);
+  assert.deepEqual(rollEmergences(w, 500, 7), []);
+});
+
 test("rollEmergences: the cooldown blocks any emergence in its window", () => {
-  // Fresh off an emergence (emergeSince 0): no day within the cooldown can fire.
-  const w = emptyWorld({ emergeSince: 0 });
-  assert.equal(rollEmergences(w, EMERGE_COOLDOWN_DAYS - 1, 12345), 0);
+  const w = landWorld(30, { emergeSince: 0 }); // fresh off an emergence
+  assert.deepEqual(rollEmergences(w, EMERGE_COOLDOWN_DAYS - 1, 12345), []);
 });
 
-test("rollEmergences: at/above the cap, nothing emerges", () => {
-  const w = emptyWorld({ factions: activeFactions(FACTION_CAP) });
-  assert.equal(rollEmergences(w, 500, 7), 0);
+test("rollEmergences: an open explored world spawns EXTERNAL powers over time", () => {
+  const w = landWorld(30);
+  const ems = rollEmergences(w, 400, 3);
+  assert.ok(ems.length >= 1, "at least one power rises over a long span");
+  assert.ok(ems.every((e) => e.type === "external"), "all external on open ground");
 });
 
-test("rollEmergences: an empty map eventually spawns powers (below the floor)", () => {
-  const w = emptyWorld();
-  const n = rollEmergences(w, 400, 3);
-  assert.ok(n >= 1, "at least one power rises over a long span");
-  assert.ok(n <= FACTION_CAP, "never past the soft cap");
+test("rollEmergences: a size-scaled ceiling caps the count", () => {
+  // 30 land → ceiling = max(3, round(30/6)) = 5. Over a huge span it must not exceed it.
+  const ceiling = Math.max(3, Math.round(30 / HEXES_PER_FACTION));
+  const ems = rollEmergences(landWorld(30), 20000, 5);
+  assert.ok(ems.length <= ceiling, `<= ceiling ${ceiling}, got ${ems.length}`);
+  // ...and a smaller map allows fewer than a bigger one.
+  const big = rollEmergences(landWorld(90), 20000, 5).length;
+  assert.ok(big > ceiling, `a bigger world supports more powers (${big} > ${ceiling})`);
 });
 
-test("rollEmergences: never exceeds the cap even over a huge span", () => {
-  const w = emptyWorld({ factions: activeFactions(FACTION_CAP - 1) });
-  const n = rollEmergences(w, 5000, 9);
-  assert.ok((w.factions.length + n) <= FACTION_CAP + 1, "at most one more to reach the cap window");
+test("rollEmergences: a claimed map ruled by one power breeds INTERNAL rebellions", () => {
+  // 40 land, one faction holds 38 (dominant, no open ground → external ~0).
+  const w = landWorld(40, { factions: [heldRun("faction:big", 38), heldRun("faction:small", 2, 38)] });
+  const ems = rollEmergences(w, 600, 4);
+  assert.ok(ems.length >= 1, "a rebellion eventually rises");
+  assert.ok(ems.every((e) => e.type === "internal" && e.targetId === "faction:big"),
+    "all internal, targeting the hegemon");
+});
+
+test("rollEmergences: a modest, non-dominant map breeds no rebellion", () => {
+  // Two even powers, plenty of open ground → no internal pressure.
+  const w = landWorld(40, { factions: [heldRun("faction:a", 4), heldRun("faction:b", 4, 20)] });
+  const ems = rollEmergences(w, 600, 4);
+  assert.ok(ems.every((e) => e.type === "external"), "no internal rebellion without a hegemon");
 });
 
 test("rollEmergences: deterministic for the same world state + seed", () => {
-  const a = emptyWorld(), b = emptyWorld();
-  assert.equal(rollEmergences(a, 300, 42), rollEmergences(b, 300, 42));
+  const a = landWorld(30), b = landWorld(30);
+  assert.deepEqual(rollEmergences(a, 300, 42), rollEmergences(b, 300, 42));
   assert.equal(a.emergeTicks, b.emergeTicks);
 });
 
-test("rollEmergences: below the floor emerges faster than above it", () => {
-  // Below floor (0 active) vs above floor (FACTION_FLOOR active, below cap).
-  let below = 0, above = 0;
-  for (let s = 0; s < 40; s++) {
-    below += rollEmergences(emptyWorld(), 60, s);
-    above += rollEmergences(emptyWorld({ factions: activeFactions(FACTION_FLOOR) }), 60, s);
-  }
-  assert.ok(below > above, `below-floor (${below}) should outpace above-floor (${above})`);
-});
-
 test("rollEmergences: no-ops on junk input", () => {
-  assert.equal(rollEmergences(null, 5, 1), 0);
-  assert.equal(rollEmergences(emptyWorld(), 0, 1), 0);
-  assert.equal(rollEmergences(emptyWorld(), -3, 1), 0);
+  assert.deepEqual(rollEmergences(null, 5, 1), []);
+  assert.deepEqual(rollEmergences(landWorld(30), 0, 1), []);
+  assert.deepEqual(rollEmergences(landWorld(30), -3, 1), []);
 });

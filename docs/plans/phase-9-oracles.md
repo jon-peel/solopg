@@ -316,44 +316,52 @@ Engine: `treasureTypeFor(context, rng)` (pure); render shows the letter as a pro
 
 ---
 
-## Group E — automatic faction emergence (9.9) — ✅ **built**
+## Group E — automatic faction emergence (9.9) — ✅ **built (pressure model)**
 
-Factions used to appear only by the GM's hand (Generate / Promote). Now a **new power emerges on its
-own** as time passes — **day-driven with a floor** (the user's choice):
+Factions used to appear only by the GM's hand. Now new powers rise on their own as time passes — a
+**pressure model over the explored map** (no fixed cap), chosen with the user so it scales with world
+size and self-regulates instead of freezing into a monoculture.
 
-- **Where it fires.** In the day chokepoint (`advanceTime` → `maybeEmergeFactions`), right after the
+- **Where it fires.** The day chokepoint (`advanceTime` → `maybeEmergeFactions`), right after the
   day-driven faction turns.
-- **The pure gate.** `rollEmergences(world, days, seed)` in `factions.js` walks the days and returns
-  how many powers should rise: a **per-day chance** — `EMERGE_FLOOR_CHANCE 0.10` **below**
-  `FACTION_FLOOR (2)` active, `EMERGE_BASE_CHANCE 0.03` above — **zero at/above** `FACTION_CAP (6)`,
-  spaced by `EMERGE_COOLDOWN_DAYS (10)`. It advances two **reload-safe** world accumulators
-  (`emergeTicks`, a monotonic rng cursor; `emergeSince`, the cooldown counter) — added to
-  `createWorld`, no migration (golden rule). All tunable. Node-tested (cap, cooldown window, floor
-  boost, determinism, junk input).
-- **Where it emerges (app).** `pickEmergenceSite` prefers **promoting an unaffiliated occupied POI**
-  on open ground (a bandit camp → a bandit power), else seats a **fresh faction on a bare, passable,
-  unsettled land hex** kept ≥3 hexes from an existing seat. `emergeOneFaction` reuses
-  `promoteFaction` / `generateFaction` + `isValidSeat` exactly like the manual Generate path.
-- **Narrated as subtext.** A new **`"emerge"` FactionEvent** through the existing `logFactionEvents`
-  path — *"A new power stirs — The Ashen Hand rises at (…)."* — then drawn on the map like any
-  faction. **No hooks.** Lords never auto-emerge (they're not in `faction-archetype.json` — a
-  deliberate Promote-only choice, 8.16).
+- **The pure gate.** `rollEmergences(world, days, seed)` reads the explored map and, per day, may emit
+  a descriptor — `{type:"external"}` or `{type:"internal", targetId}`:
+  - **External** chance `= EXTERNAL_BASE(0.12) × openFrac` (unclaimed passable land ÷ total land): a
+    wide-open world spawns powers readily; as it fills, external emergence falls to ~0 — **self-limiting
+    by size**, no magic cap.
+  - **Internal** chance `= INTERNAL_BASE(0.10) × (dominance − 0.5)/0.5` once one faction holds > 50 %
+    of the claimed land **and** ≥ `MIN_REBELLION_SIZE(5)` hexes: a **rebellion erupts inside the
+    hegemon** — the anti-monoculture valve, so a "full" world keeps churning.
+  - A **size-scaled ceiling** `= clamp(3, round(land / HEXES_PER_FACTION=6), 20)` and
+    `EMERGE_COOLDOWN_DAYS(8)` keep it from flooding. Two **reload-safe** accumulators (`emergeTicks`,
+    `emergeSince`) on the world (added to `createWorld`, no migration). Node-tested: no-land→none,
+    open→external, cooldown window, ceiling scales with size, dominance→internal (targeting the
+    hegemon), no-hegemon→none, determinism, junk input.
+- **Where it emerges (app), biased toward the party.**
+  - *External* — `pickExternalSite` prefers, in order: a **near** unaffiliated occupied POI, a near
+    bare hex, then any POI / bare hex (near = within `PARTY_EMERGE_RADIUS(8)` of the party). Promotes
+    a POI (a bandit camp → a bandit power) or seats a fresh faction on open land ≥3 from any seat.
+  - *Internal* — `emergeRebellion` carves a **non-seat province** out of the hegemon and seats a fresh
+    **`rebellion`** faction there; it then eats outward via the normal contest engine — toward the
+    seat (a coup) or crushed at the border (fizzles).
+- **Narrated as subtext.** An `"emerge"` FactionEvent through `logFactionEvents` — external:
+  *"A new power stirs — … rises at (…)"*; internal: *"Unrest within {hegemon} — … rises in revolt at
+  (…)"*. **No hooks.** Lords never auto-emerge (not in `faction-archetype.json`).
 
 **Manual test — 9.9 (run `./run-local.sh`):**
 ```
-[ ] New World, generate a region, place the party. With 0-1 factions, use "Progress N days"
-    (e.g. 30-60) a few times → after the cooldown, a new faction appears on the map
-    (coloured territory + a seat), and the console logs "A new power stirs — <name> rises at …".
-[ ] It tends to take over an existing occupied POI (bandit camp / cult shrine) when one is free,
-    else seats on open wilderness a few hexes off any existing seat.
-[ ] Keep progressing → emergences slow as the count climbs and stop around the soft cap (6);
-    they don't flood.
-[ ] A lich/dragon/etc. never auto-emerges (still Promote-only).
-[ ] Reload → the emerged factions persist (they're real world.factions).
+[ ] New World, generate a good-sized region, place the party. "Progress N days" (30-60) a few
+    times → after the cooldown a new faction appears NEAR the party (territory + seat); the
+    console logs "A new power stirs — <name> rises at …".
+[ ] Bigger explored world → more powers over time; a small one → fewer (scales with size).
+[ ] Let one faction grow dominant (progress a lot / few rivals) → eventually "Unrest within
+    <that faction> — <rebel> rises in revolt": a province defects and fights it from inside.
+[ ] Keep going → external spawns slow as the map fills, rebellions pick up; it never floods.
+[ ] A lich/dragon never auto-emerges (Promote-only). Reload → emerged factions persist.
 ```
 
 **Phase 9 is complete** — all generative oracles (A + D), both trigger-and-prompt oracles (9.7
-encounter, 9.8 treasure), and the living-world auto-emergence (9.9).
+encounter, 9.8 treasure), and the living-world auto-emergence (9.9, pressure model).
 
 ---
 
