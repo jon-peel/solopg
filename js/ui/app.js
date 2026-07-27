@@ -48,7 +48,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, renderChroniclePanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
@@ -152,15 +152,11 @@ let draftKind = null;   // "river" | "road" — what the active draft builds
 // ONE per travelled day; 8.6 adds a manual "Progress N days" while stationary.
 let sessionDay = 0;
 
-// World chronicle (Phase 12.2) — the persisted, capped log of located world
-// events lives on `world.chronicle`; these two are the (retunable) knobs. The
-// cap keeps the array (and every save) bounded; TICKER_RADIUS gates which events
-// are close enough to the party to flash the bottom ticker.
-const CHRONICLE_CAP = 200;
+// Bottom ticker (Phase 12.2) — a transient flash for a nearby event. TICKER_RADIUS
+// gates which events are close enough to the party to flash it; the timer is the
+// auto-hide handle; tickerAt is the last-flashed event's coords (so a click on the
+// ticker can recentre there). Session-only, never persisted.
 const TICKER_RADIUS = 10;
-// Bottom ticker (Phase 12.2) — a transient flash for a nearby event. The timer is
-// the auto-hide handle; tickerAt is the last-flashed event's coords (so a click on
-// the ticker can recentre there). Session-only, never persisted.
 let tickerTimer = null;
 let tickerAt = null;
 
@@ -263,7 +259,6 @@ async function setCurrent(world) {
   refreshGlobalHooks();
   refreshFactions();
   refreshOracle();
-  refreshChronicle();
   refreshHookMarks();
   refreshHookFocus();
   refreshMapChrome();
@@ -594,19 +589,12 @@ async function advanceDays(n) {
   await advanceTime(n);
 }
 
-// The single world-event sink (Phase 12.2): append `text` to the persisted, capped
-// world.chronicle (tagged with the session day, a kind, and an optional {q,r}),
-// mirror it to the console (logLine), and flash the bottom ticker only when the
-// event is LOCATED near the party (within TICKER_RADIUS). Guards on read — an older
-// world simply grows a `chronicle` on its first event, no migration. With no world
-// loaded it degrades to a plain console line.
+// The single world-event sink (Phase 12.2): narrate `text` to the console (logLine),
+// and flash the bottom ticker only when the event is LOCATED near the party (within
+// TICKER_RADIUS).
 function recordEvent(text, opts = {}) {
-  if (!current) { logLine(text); return; }
-  if (!Array.isArray(current.chronicle)) current.chronicle = [];
-  current.chronicle.push({ day: sessionDay, text, kind: opts.kind || "event", at: opts.at || null });
-  while (current.chronicle.length > CHRONICLE_CAP) current.chronicle.shift();
   logLine(text);
-  if (opts.at && isNearParty(opts.at, current.party, TICKER_RADIUS)) showTicker(text, opts.at);
+  if (opts.at && current && isNearParty(opts.at, current.party, TICKER_RADIUS)) showTicker(text, opts.at);
 }
 
 // Flash the bottom ticker with `text` (Phase 12.2): reveal it, remember the event's
@@ -629,9 +617,9 @@ function showTicker(text, at = null) {
 // Phase 8.15 (B) — narrate every faction event on the turn (both the day-tick and
 // the manual button route through here). One legible line per event; names resolve
 // via getFactions and a place label via destinationLabel. Since 12.2 each event is
-// routed through recordEvent (which mirrors to the console + chronicle + ticker),
-// tagged with its coords when it has any (the `eliminated` event has none → no
-// ticker) — the exact sentences are unchanged, only the sink.
+// routed through recordEvent (which mirrors to the console + ticker), tagged with
+// its coords when it has any (the `eliminated` event has none → no ticker) — the
+// exact sentences are unchanged, only the sink.
 function logFactionEvents(events) {
   if (!Array.isArray(events) || !events.length) return;
   const factions = getFactions(current);
@@ -1095,8 +1083,7 @@ async function applyTravel(result, aimLabel, aimKind) {
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
   if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
   // Record the day's recap AND run the per-hex encounter checks BEFORE persisting
-  // (Phase 12.2): both append to world.chronicle via recordEvent, so they must land
-  // ahead of the save or they'd be dropped on the next load. setTravelPath /
+  // (Phase 12.2): both narrate via recordEvent (console + ticker). setTravelPath /
   // setEncounterMarks are pure map overlays, so they still run after the refresh.
   recordEvent(travelHeadline(result, aimLabel, aimKind), { at: result.finalPos, kind: "travel" });
   const hits = travelEncounterHexes(result); // star the hexes where an encounter came up (9.7)
@@ -1778,16 +1765,6 @@ function refreshOracle(flashKind = null) {
     flashKind,
     onRoll: onOracleRoll,
     settlement: ctx ? { available: true, label: ctx.label } : { available: false },
-  });
-}
-
-// Refresh the Chronicle tab (Phase 12.2) — the world's located-event log, rendered
-// newest-first with click-to-recentre. Guards on read (`chronicle || []`) so an
-// older world without the field just shows the empty state.
-function refreshChronicle() {
-  renderChroniclePanel({
-    chronicle: current ? (current.chronicle || []) : [],
-    onCenter: (q, r) => recenterOn(q, r),
   });
 }
 
@@ -2522,7 +2499,6 @@ async function persistAndRefresh() {
   refreshGlobalHooks();
   refreshFactions();
   refreshOracle();
-  refreshChronicle();
   refreshHookFocus();
   refreshMapChrome();
 }
@@ -2998,10 +2974,9 @@ function wire() {
   $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
   $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
   // Bottom ticker (Phase 12.2): wired ONCE against the static element — clicking it
-  // jumps to the Chronicle tab and recentres on the flashed event's hex (if located).
+  // recentres on the flashed event's hex (if located).
   const ticker = $("event-ticker");
   if (ticker) ticker.addEventListener("click", () => {
-    setPanelTab("chronicle");
     if (tickerAt) recenterOn(tickerAt.q, tickerAt.r);
   });
   $("help-overlay").addEventListener("click", (e) => {

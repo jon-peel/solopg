@@ -1026,7 +1026,7 @@ button:hover {
 
 /* Bottom-centre event ticker (Phase 12.2): a transient flash for a world event
    near the party, then it fades. Sits above #legend (z 6), below #faction-popup
-   (z 8). Click it to open the Chronicle + recentre on the event. */
+   (z 8). Click it to recentre on the event. */
 #event-ticker {
   position: absolute;
   bottom: 0.6rem;
@@ -1301,11 +1301,9 @@ button:hover {
   color: var(--accent);
 }
 
-/* Side-panel tabs: Detail | Hooks (Phase 7). Wraps to a second row (Phase 12.2)
-   once the Chronicle tab makes five labels too wide for the 320px panel. */
+/* Side-panel tabs: Detail | Hooks (Phase 7). */
 .panel-tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 0.25rem;
   margin: 0 0 0.5rem;
   border-bottom: 1px solid var(--border);
@@ -1409,33 +1407,6 @@ button:hover {
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 0.2rem;
-}
-
-/* Chronicle rows (Phase 12.2): the world's located-event log, newest-first. A
-   row with coords is clickable to recentre the map there. */
-.chron-row {
-  padding: 0.3rem 0.35rem;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
-  color: var(--ink);
-}
-.chron-row.clickable {
-  cursor: pointer;
-  border-radius: var(--radius);
-}
-.chron-row.clickable:hover {
-  background: var(--paper-raised);
-}
-.chron-tag {
-  display: block;
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin-bottom: 0.1rem;
-}
-.chron-text {
-  display: block;
 }
 
 /* Editable world name (replaces the old prompt()-based rename). */
