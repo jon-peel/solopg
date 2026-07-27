@@ -249,6 +249,38 @@ function sectionLabel(text) {
   return el;
 }
 
+// One labelled field in the room stat-block: a small uppercase muted label
+// with the value(s) below. `lines` is a string, a Node (inline markup like
+// the treasure badge), or an array of either — each array item is its own line.
+function roomField(label, lines) {
+  const field = document.createElement("div");
+  field.className = "room-field";
+  const lbl = document.createElement("div");
+  lbl.className = "room-field-label";
+  lbl.textContent = label;
+  field.appendChild(lbl);
+  const val = document.createElement("div");
+  val.className = "room-field-value";
+  for (const line of Array.isArray(lines) ? lines : [lines]) {
+    const row = document.createElement("div");
+    if (typeof line === "string") row.textContent = line;
+    else row.appendChild(line);
+    val.appendChild(row);
+  }
+  field.appendChild(val);
+  return field;
+}
+
+// Treasure field value: the existing Treasure Type badge (12.4) + guard text.
+function treasureValue(treasure) {
+  const row = document.createDocumentFragment();
+  const badge = document.createElement("span");
+  badge.className = "treasure-badge";
+  badge.textContent = treasure.type;
+  row.append(badge, ` ${treasure.guard} — roll on your tables.`);
+  return row;
+}
+
 // Overflow "…" menu for the wayfinding/destructive actions, so the card stays
 // tidy even when the map is large and you just need to find a hex.
 function hookKebab(hook, model) {
@@ -786,33 +818,20 @@ export function renderDungeonPanel({
 
   if (room) {
     sel.appendChild(sectionLabel(`Room ${room.n}`));
-    for (const line of [
-      room.held ? `Held by ${room.held}` : null,
-      room.monster
-        ? `Monster: ${room.monster.na} ${room.monster.name} (${room.monster.status})`
-        : `Content: ${room.content}`,
-      room.trap ? `Trap: ${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}` : null,
-      room.special ? `Special: ${room.special}` : null,
-      room.dressing || null,
-      // The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X
-      // lair Treasure Type LETTER + how it's guarded, and the GM rolls the contents
-      // on their own tables — no invented gp. (badge "D" + "hidden — roll on your tables.")
-      room.treasure || null,
-      room.light ? `Lit: ${room.light.source}` : null,
-      ...surface, // "Dungeon entrance (surface)", "Exit to surface"
-    ].filter(Boolean)) {
-      const div = document.createElement("div");
-      div.className = "log-line";
-      if (typeof line === "string") {
-        div.textContent = line;
-      } else {
-        const badge = document.createElement("span");
-        badge.className = "treasure-badge";
-        badge.textContent = line.type;
-        div.append(badge, ` ${line.guard} — roll on your tables.`);
-      }
-      sel.appendChild(div);
-    }
+    const occupants = [];
+    if (room.held) occupants.push(`Held by ${room.held}`);
+    if (room.monster) occupants.push(`${room.monster.na} ${room.monster.name} (${room.monster.status})`);
+
+    if (room.dressing) sel.appendChild(roomField("Description", room.dressing));
+    if (occupants.length) sel.appendChild(roomField("Occupants", occupants));
+    // The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X
+    // lair Treasure Type LETTER + how it's guarded, and the GM rolls the contents
+    // on their own tables — no invented gp. (badge "D" + "hidden — roll on your tables.")
+    if (room.treasure) sel.appendChild(roomField("Treasure", treasureValue(room.treasure)));
+    if (room.trap) sel.appendChild(roomField("Traps", `${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}`));
+    if (room.special) sel.appendChild(roomField("Special", room.special));
+    if (room.light) sel.appendChild(roomField("Light", room.light.source));
+    if (surface.length) sel.appendChild(roomField("Exits", surface));
     // Stair navigation buttons (switch level + select the connected room).
     if (connections.length && onGoTo) {
       const row = document.createElement("div");

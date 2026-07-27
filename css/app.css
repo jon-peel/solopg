@@ -1358,6 +1358,24 @@ button:hover {
   margin-right: 0.3rem;
 }
 
+/* Room detail stat-block (redesign): labelled fields replace the old flat
+   .log-line stack so Occupants/Treasure/Traps/etc. read as a scannable
+   stat-block instead of a uniform wall of lines. */
+.room-field { margin-top: 0.55rem; }
+.room-field-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.room-field-value {
+  margin-top: 0.1rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.room-field-value > div + div { margin-top: 0.15rem; }
+
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 
 /* Selected hook (its target/origin are ringed on the map). */
