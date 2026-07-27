@@ -70,7 +70,7 @@ additive fields. Old saves may be discarded.
 - Hex (`hexes["q,r"]`): `{ key, coords:{q,r}, placed, terrain, terrainFeature, settlement, pois:[],
   explored, gen, name?, note?, locked? }`.
 - `settlement`: `{present:false}` or `{present:true, size, kind?, waterBoost?}` (size ∈ Hamlet/
-  Village/Town/City). **12.4 adds `taverns:[{sign,specialty,quirk}]`.**
+  Village/Town/City). **12.7 adds `taverns:[{sign,specialty,quirk}]`.**
 - POI: `{ id:"poi:<n>", type, name, occupant, detail }`; occupant ∈ `{kind:"lair",creature}` |
   `{kind:"occupied",by,factionId?}` | `{kind:"none"}`. Dungeon/tower rooms carry
   `treasure:{type,guard}|null` (9.8).
@@ -78,7 +78,7 @@ additive fields. Old saves may be discarded.
   goal:{kind,progress,max}, strength, holdings:[{q,r,poiId?}], seat:{q,r,poiId?}|null,
   clock:{turns,sinceTurn}, origin, status, kind? }`.
 
-**Oracle system (Phase 9, for 12.4/12.7 context):** `js/gen/oracle.js` exports `askYesNo`,
+**Oracle system (Phase 9, for 12.6/12.7 context):** `js/gen/oracle.js` exports `askYesNo`,
 `rollMeaning`, `rollComplication`, `rollSettlement`, `rollTavern`, `rollEncounterCheck`, `oracleLine`,
 `ORACLE_LABELS`, `ORACLE_ODDS`, `ORACLE_TABLE_IDS`, `ENCOUNTER_CHANCE`. The Oracle tab
 (`renderOraclePanel`) has sections Yes/No · Meaning · Complication · Settlement · Tavern, each with a
@@ -88,7 +88,7 @@ in-memory `oracleResults` map (transient, never persisted — the user wants no 
 `rollTavern(tables,rng)` → `{kind:"tavern",sign,specialty,quirk}` (tables: `tavern-sign/-specialty/
 -quirk`, in `ORACLE_TABLE_IDS`).
 
-**Faction emergence (Phase 9.9, for 12.1/12.2/12.6 context):** `js/gen/factions.js` `rollEmergences
+**Faction emergence (Phase 9.9, for 12.1/12.2/12.5 context):** `js/gen/factions.js` `rollEmergences
 (world,days,seed)` (pure gate, pressure model) returns descriptors `{type:"external"|"internal"|
 "lord",...}`; `app.js` `maybeEmergeFactions(days)` (called from `advanceTime`) creates each via
 `emergeExternal`/`emergeRebellion`/`emergeLord` and emits `{kind:"emerge",...}` FactionEvents.
@@ -104,7 +104,7 @@ Add to `createWorld` (`js/world/world.js`), guarded on read elsewhere:
 ```js
 chronicle: [],   // 12.2 — persisted event log, capped (newest kept)
 ```
-`settlement.taverns` (12.4) is added lazily when first generated (no createWorld change; settlements
+`settlement.taverns` (12.7) is added lazily when first generated (no createWorld change; settlements
 are per-hex).
 
 ---
@@ -259,7 +259,79 @@ canvas hover label is built in `render()` at `map.js:~308-330` (the `lines` arra
 
 ---
 
-## 12.4 — Persistent, editable settlement taverns
+## 12.4 — Treasure-type badge
+
+**Goal.** Render the B/X Treasure Type letter (9.8) as a badge, and show it on the 💰 marker.
+
+**Current state.** `treasureLine(t)` (`panel.js:788`) returns `"Treasure Type D, hidden — roll on your
+tables."` as a plain line in the room view (`renderDungeonPanel`, `panel.js:~843`). The dungeon canvas
+marks treasure rooms with a 💰 (`js/ui/dungeon-map.js:~341`, `treasureRooms` set).
+
+**Implementation.**
+1. In `renderDungeonPanel`'s room section, instead of the plain `treasureLine`, render a small
+   **badge** element (e.g. `<span class="treasure-badge">D</span>`) + the guard text ("hidden — roll
+   on your tables"). Add `.treasure-badge` CSS (a boxed/pill letter, wax-seal accent). Keep
+   `treasureLine` for the console/log or refactor into a `{type,guard}`-aware renderer.
+2. Optional (dungeon canvas): the 💰 marker has no tooltip today (canvas). A cheap win is to show the
+   type in the **room-select** flow already (the panel badge covers it). A true canvas hover tooltip
+   would need hit-testing on `dungeon-map.js` — defer unless wanted.
+
+**Tests.** None (rendering). Suite stays green.
+
+**Manual checklist.**
+```
+[ ] Open a dungeon/tower with treasure → a stocked room shows a [D]-style badge + guard text.
+[ ] The 💰 room marker still appears on treasure rooms.
+```
+
+---
+
+## 12.5 — Legend polish (new marks) + lord marker
+
+**Goal.** Document the new marks in the legend and give lords a distinct map marker.
+
+**Current state.** `#legend` has `#legend-terrain`, `#legend-poi`, `#legend-factions` sections. Faction
+territory + seat are drawn on the map (`map.js`), rank-and-file and lords look the same. Encounter ★
+(9.7) has no legend entry.
+
+**Implementation.**
+1. **Encounter ★ legend entry** — add a static key row (a red ★ + "Wilderness encounter — roll on
+   your table") to the legend (a new small section or appended to `#legend-poi`). Populate wherever
+   the terrain/POI legend is built (search `legend-terrain`/`legend-poi` population in `app.js`).
+2. **Lord marker (12.5b).** Give a lord faction's **seat** a distinct glyph (e.g. a crown/skull) on
+   the map so a lich/dragon reads differently from a rank-and-file seat. Detect via
+   `LORD_ARCHETYPES.includes(faction.archetype)` (export `LORD_ARCHETYPES` is already in
+   `factions.js`). Draw it in the map's faction/seat rendering pass. Add a legend key entry for it.
+
+**Manual checklist.**
+```
+[ ] Legend shows a "Wilderness encounter ★" key.
+[ ] A lord's seat draws a distinct marker (crown/skull) vs a normal faction seat; legend documents it.
+```
+
+---
+
+## 12.6 — Visual polish (no behaviour change)
+
+**Goal.** Prettify the surfaces this session leaned on. Pure CSS/markup structure; keep behaviour.
+
+- **Oracle tab** (`renderOraclePanel`, `panel.js:543`; CSS `.oracle-*`) — better section rhythm,
+  optional per-oracle icons, nicer result cards + empty states.
+- **Dungeon room view** (`renderDungeonPanel`, `panel.js:792`) — clearer hierarchy (monster / trap /
+  special / treasure-badge / dressing / light), tighter typography; align with the treasure badge (12.4).
+- **Tile & settlement detail** (`renderSelectionPanel`, `panel.js:707`) — a cleaner card: terrain
+  header, settlement line, POI list, the 12.7 taverns block, notes. Follow the existing parchment
+  token system in `css/app.css` / `js/ui/theme.js` (Phase 11) — don't introduce magic colours.
+
+**Manual checklist.**
+```
+[ ] Oracle tab, dungeon room, and tile/settlement cards look cleaner; light + dark parchment OK;
+    nothing functional regressed (rolls, room nav, notes, taverns still work).
+```
+
+---
+
+## 12.7 — Persistent, editable settlement taverns
 
 **Goal.** Taverns become a saved fixture of a town (exported), auto-generated when its situation is
 first rolled, shown on the town's card, closeable + addable. The situation (mood/event) stays
@@ -309,93 +381,21 @@ coords → same taverns). `rollTavern` already tested.
 
 ---
 
-## 12.5 — Treasure-type badge
-
-**Goal.** Render the B/X Treasure Type letter (9.8) as a badge, and show it on the 💰 marker.
-
-**Current state.** `treasureLine(t)` (`panel.js:788`) returns `"Treasure Type D, hidden — roll on your
-tables."` as a plain line in the room view (`renderDungeonPanel`, `panel.js:~843`). The dungeon canvas
-marks treasure rooms with a 💰 (`js/ui/dungeon-map.js:~341`, `treasureRooms` set).
-
-**Implementation.**
-1. In `renderDungeonPanel`'s room section, instead of the plain `treasureLine`, render a small
-   **badge** element (e.g. `<span class="treasure-badge">D</span>`) + the guard text ("hidden — roll
-   on your tables"). Add `.treasure-badge` CSS (a boxed/pill letter, wax-seal accent). Keep
-   `treasureLine` for the console/log or refactor into a `{type,guard}`-aware renderer.
-2. Optional (dungeon canvas): the 💰 marker has no tooltip today (canvas). A cheap win is to show the
-   type in the **room-select** flow already (the panel badge covers it). A true canvas hover tooltip
-   would need hit-testing on `dungeon-map.js` — defer unless wanted.
-
-**Tests.** None (rendering). Suite stays green.
-
-**Manual checklist.**
-```
-[ ] Open a dungeon/tower with treasure → a stocked room shows a [D]-style badge + guard text.
-[ ] The 💰 room marker still appears on treasure rooms.
-```
-
----
-
-## 12.6 — Legend polish (new marks) + lord marker
-
-**Goal.** Document the new marks in the legend and give lords a distinct map marker.
-
-**Current state.** `#legend` has `#legend-terrain`, `#legend-poi`, `#legend-factions` sections. Faction
-territory + seat are drawn on the map (`map.js`), rank-and-file and lords look the same. Encounter ★
-(9.7) has no legend entry.
-
-**Implementation.**
-1. **Encounter ★ legend entry** — add a static key row (a red ★ + "Wilderness encounter — roll on
-   your table") to the legend (a new small section or appended to `#legend-poi`). Populate wherever
-   the terrain/POI legend is built (search `legend-terrain`/`legend-poi` population in `app.js`).
-2. **Lord marker (12.6b).** Give a lord faction's **seat** a distinct glyph (e.g. a crown/skull) on
-   the map so a lich/dragon reads differently from a rank-and-file seat. Detect via
-   `LORD_ARCHETYPES.includes(faction.archetype)` (export `LORD_ARCHETYPES` is already in
-   `factions.js`). Draw it in the map's faction/seat rendering pass. Add a legend key entry for it.
-
-**Manual checklist.**
-```
-[ ] Legend shows a "Wilderness encounter ★" key.
-[ ] A lord's seat draws a distinct marker (crown/skull) vs a normal faction seat; legend documents it.
-```
-
----
-
-## 12.7 — Visual polish (no behaviour change)
-
-**Goal.** Prettify the surfaces this session leaned on. Pure CSS/markup structure; keep behaviour.
-
-- **Oracle tab** (`renderOraclePanel`, `panel.js:543`; CSS `.oracle-*`) — better section rhythm,
-  optional per-oracle icons, nicer result cards + empty states.
-- **Dungeon room view** (`renderDungeonPanel`, `panel.js:792`) — clearer hierarchy (monster / trap /
-  special / treasure-badge / dressing / light), tighter typography; align with the treasure badge (12.5).
-- **Tile & settlement detail** (`renderSelectionPanel`, `panel.js:707`) — a cleaner card: terrain
-  header, settlement line, POI list, the 12.4 taverns block, notes. Follow the existing parchment
-  token system in `css/app.css` / `js/ui/theme.js` (Phase 11) — don't introduce magic colours.
-
-**Manual checklist.**
-```
-[ ] Oracle tab, dungeon room, and tile/settlement cards look cleaner; light + dark parchment OK;
-    nothing functional regressed (rolls, room nav, notes, taverns still work).
-```
-
----
-
 ## Build order & tuning summary
 
-**Order (dependency-first):** 12.1 → 12.2 → 12.3 → 12.4 → 12.5 → 12.6 → 12.7. 12.3 / 12.5 / 12.6 are
+**Order (dependency-first):** 12.1 → 12.2 → 12.3 → 12.4 → 12.5 → 12.6 → 12.7. 12.3 / 12.4 / 12.5 are
 small and may be pulled earlier as quick wins.
 
 **New tunable consts (all retunable, flag as such):**
 - `CHRONICLE_CAP` ≈ 200, `TICKER_RADIUS` ≈ 10 (12.2)
-- `tavernCountForSize` ranges (12.4)
+- `tavernCountForSize` ranges (12.7)
 
 **Open questions (resolve when picked up):**
 - 12.1 popup style: floating panel near the legend (lean) vs a modal; keep the per-faction "Advance
   turn" or move it to a legend header (lean: legend header, since it's world-wide).
 - 12.2 does a **lord** awakening ticker even when distant? User answer: **no** — distance-gate
   everything.
-- 12.4 keep the Oracle-tab Tavern button for ad-hoc inns, or fold taverns fully into settlements?
+- 12.7 keep the Oracle-tab Tavern button for ad-hoc inns, or fold taverns fully into settlements?
 
 ## Cross-references
 - Phase 9 oracles: `docs/plans/phase-9-oracles.md`. Phase 11 visual system: `docs/plans/
