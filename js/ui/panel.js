@@ -13,7 +13,7 @@ const panel = () => document.getElementById("panel");
 // The panel shows one tab at a time; each region is built once (in showWorld)
 // and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", oracle: "oracle-panel" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", oracle: "oracle-panel", chronicle: "chronicle-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -32,7 +32,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "oracle"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "oracle" | "chronicle"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -632,6 +632,64 @@ function appendOracleResult(host, result, flash) {
   }
 }
 
+/**
+ * Render the Chronicle tab (Phase 12.2) into #chronicle-panel: the world's
+ * persisted, capped log of located world events (faction turns/emergence, travel
+ * recaps, encounters). Rendered NEWEST-FIRST by iterating the array in reverse —
+ * never sorted by `day`, so within a day insertion order is preserved. A row with
+ * an `at` (and an onCenter handler) is clickable to recentre the map there.
+ * @param {{ chronicle?: {day:number,text:string,kind?:string,at?:{q:number,r:number}|null}[],
+ *   onCenter?: (q:number, r:number)=>void }} model
+ */
+export function renderChroniclePanel(model) {
+  const host = document.getElementById("chronicle-panel");
+  if (!host) return;
+  host.innerHTML = "";
+  const entries = (model && model.chronicle) || [];
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "panel-hint";
+    empty.textContent = "Nothing has happened yet — travel, advance the clock, or advance a faction turn to fill the chronicle.";
+    host.appendChild(empty);
+    return;
+  }
+  const head = document.createElement("div");
+  head.className = "hooks-head";
+  head.textContent = `${entries.length} event${entries.length === 1 ? "" : "s"}`;
+  host.appendChild(head);
+
+  const onCenter = model && model.onCenter;
+  // Newest-first: walk the array backwards (do NOT sort — insertion order carries
+  // the sequence within a shared day).
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    const row = document.createElement("div");
+    row.className = "chron-row";
+
+    const tag = document.createElement("span");
+    tag.className = "chron-tag";
+    tag.textContent = `Day ${e.day}` + (e.kind && e.kind !== "event" ? ` · ${e.kind}` : "");
+    row.appendChild(tag);
+
+    const text = document.createElement("span");
+    text.className = "chron-text";
+    text.textContent = e.text;
+    row.appendChild(text);
+
+    if (e.at && onCenter) {
+      row.classList.add("clickable");
+      row.title = "Centre the map here";
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      row.addEventListener("click", () => onCenter(e.at.q, e.at.r));
+      row.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onCenter(e.at.q, e.at.r); }
+      });
+    }
+    host.appendChild(row);
+  }
+}
+
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
 // notes. Both commit on blur/Enter (change event) — the only editable bits left
 // in the otherwise read-only Detail tab.
@@ -923,6 +981,7 @@ export function showWorld(world, opts = {}) {
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
     mkTab("oracle", "Oracle"),
+    mkTab("chronicle", "Chronicle"),
   );
   el.appendChild(tabs);
   const region = (id, hidden) => {
@@ -937,6 +996,7 @@ export function showWorld(world, opts = {}) {
   region("global-hooks", true); // unpinned world hooks (renderGlobalHooks)
   region("pinned-hooks", true); // the party's pinned leads
   region("oracle-panel", true); // on-demand GM oracle rolls (renderOraclePanel)
+  region("chronicle-panel", true); // the world's located-event log (renderChroniclePanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.

@@ -99,6 +99,11 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     party: { q: 0, r: 0 },
     // Factions (Phase 8.1, reserved) — populated starting 8.7; empty until then.
     factions: [],
+    // World chronicle (Phase 12.2) — a capped, persisted log of located world
+    // events (faction turns/emergence, travel recaps, encounters) routed through
+    // recordEvent (js/ui/app.js). Additive/guard-on-read: no SCHEMA_VERSION bump,
+    // no migration — older worlds simply have none until the first event lands.
+    chronicle: [],
     // Auto-emergence accumulators (Phase 9.9) — reload-safe like the faction-turn
     // clock: `emergeTicks` is a monotonic per-day rng cursor; `emergeSince` counts
     // days since the last emergence (the cooldown). Reads guard with `|| 0`.

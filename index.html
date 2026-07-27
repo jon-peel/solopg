@@ -67,6 +67,10 @@
         <!-- Top-left: scale bar (a day's march, 12/18/24 mi); hover for rules. -->
         <div id="map-scale" hidden></div>
         <div id="travel-tip" hidden></div>
+        <!-- Bottom-centre event ticker (Phase 12.2): flashes a nearby world event,
+             then fades. Click it to open the Chronicle tab + recentre. Static +
+             hidden here; app.js wires the single click listener and toggles it. -->
+        <div id="event-ticker" hidden></div>
         <!-- Travel HUD (Phase 11): day clock + hours left, a day-progress bar,
              the persistent travel-unit toggle, and hour / next-dawn controls. -->
         <div id="hud-stack" hidden>

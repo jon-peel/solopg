@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc, neighbors, axialDistance } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors, axialDistance, isNearParty } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -48,7 +48,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, renderChroniclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
@@ -152,6 +152,18 @@ let draftKind = null;   // "river" | "road" — what the active draft builds
 // ONE per travelled day; 8.6 adds a manual "Progress N days" while stationary.
 let sessionDay = 0;
 
+// World chronicle (Phase 12.2) — the persisted, capped log of located world
+// events lives on `world.chronicle`; these two are the (retunable) knobs. The
+// cap keeps the array (and every save) bounded; TICKER_RADIUS gates which events
+// are close enough to the party to flash the bottom ticker.
+const CHRONICLE_CAP = 200;
+const TICKER_RADIUS = 10;
+// Bottom ticker (Phase 12.2) — a transient flash for a nearby event. The timer is
+// the auto-hide handle; tickerAt is the last-flashed event's coords (so a click on
+// the ticker can recentre there). Session-only, never persisted.
+let tickerTimer = null;
+let tickerAt = null;
+
 // Within-day time (Phase 11 travel model): fraction 0..1 of the current marching
 // day already spent. A marching day is DAY_HOURS long (retunable — like every
 // other travel constant). Travel spends `daysToCross` per hex against it; whole-
@@ -251,6 +263,7 @@ async function setCurrent(world) {
   refreshGlobalHooks();
   refreshFactions();
   refreshOracle();
+  refreshChronicle();
   refreshHookMarks();
   refreshHookFocus();
   refreshMapChrome();
@@ -581,26 +594,65 @@ async function advanceDays(n) {
   await advanceTime(n);
 }
 
+// The single world-event sink (Phase 12.2): append `text` to the persisted, capped
+// world.chronicle (tagged with the session day, a kind, and an optional {q,r}),
+// mirror it to the console (logLine), and flash the bottom ticker only when the
+// event is LOCATED near the party (within TICKER_RADIUS). Guards on read — an older
+// world simply grows a `chronicle` on its first event, no migration. With no world
+// loaded it degrades to a plain console line.
+function recordEvent(text, opts = {}) {
+  if (!current) { logLine(text); return; }
+  if (!Array.isArray(current.chronicle)) current.chronicle = [];
+  current.chronicle.push({ day: sessionDay, text, kind: opts.kind || "event", at: opts.at || null });
+  while (current.chronicle.length > CHRONICLE_CAP) current.chronicle.shift();
+  logLine(text);
+  if (opts.at && isNearParty(opts.at, current.party, TICKER_RADIUS)) showTicker(text, opts.at);
+}
+
+// Flash the bottom ticker with `text` (Phase 12.2): reveal it, remember the event's
+// coords (so a click recentres there), and schedule an auto-hide — a soft fade-out
+// unless the viewer prefers reduced motion, in which case it just hides. Re-arming
+// clears the prior timer, so a burst of events shows the latest without stacking.
+function showTicker(text, at = null) {
+  const el = $("event-ticker");
+  if (!el) return;
+  el.textContent = text; el.classList.remove("fading"); el.hidden = false;
+  tickerAt = at;
+  clearTimeout(tickerTimer);
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  tickerTimer = setTimeout(() => {
+    if (reduce) { el.hidden = true; }
+    else { el.classList.add("fading"); tickerTimer = setTimeout(() => { el.hidden = true; el.classList.remove("fading"); }, 400); }
+  }, 6000);
+}
+
 // Phase 8.15 (B) — narrate every faction event on the turn (both the day-tick and
 // the manual button route through here). One legible line per event; names resolve
-// via getFactions and a place label via destinationLabel.
+// via getFactions and a place label via destinationLabel. Since 12.2 each event is
+// routed through recordEvent (which mirrors to the console + chronicle + ticker),
+// tagged with its coords when it has any (the `eliminated` event has none → no
+// ticker) — the exact sentences are unchanged, only the sink.
 function logFactionEvents(events) {
   if (!Array.isArray(events) || !events.length) return;
   const factions = getFactions(current);
   const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
   const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
   for (const ev of events) {
-    if (ev.kind === "emerge") logLine(
+    let text = null;
+    if (ev.kind === "emerge") text =
       ev.lord ? `A dread power awakens — ${nameOf(ev.factionId)} (${ev.archetype}) stirs at ${placeOf(ev.q, ev.r)}.`
         : ev.internal ? `Unrest within ${nameOf(ev.fromFactionId)} — ${nameOf(ev.factionId)} rises in revolt at ${placeOf(ev.q, ev.r)}.`
-          : `A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`);
-    else if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
-    else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
-    else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
-    else if (ev.kind === "relocate") logLine(`${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`);
-    else if (ev.kind === "recede") logLine(`${nameOf(ev.factionId)} loses its grip on ${placeOf(ev.q, ev.r)}.`);
+          : `A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`;
+    else if (ev.kind === "claim") text = `${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`;
+    else if (ev.kind === "takeover") text = `${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`;
+    else if (ev.kind === "repelled") text = `${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`;
+    else if (ev.kind === "relocate") text = `${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`;
+    else if (ev.kind === "recede") text = `${nameOf(ev.factionId)} loses its grip on ${placeOf(ev.q, ev.r)}.`;
     // A destruction with a finisher is a conquest; without one it's a natural fade (8.20).
-    else if (ev.kind === "eliminated") logLine(ev.byFactionId ? `${nameOf(ev.factionId)} is destroyed.` : `${nameOf(ev.factionId)} fades into history.`);
+    else if (ev.kind === "eliminated") text = ev.byFactionId ? `${nameOf(ev.factionId)} is destroyed.` : `${nameOf(ev.factionId)} fades into history.`;
+    if (text == null) continue;
+    const at = Number.isFinite(ev.q) && Number.isFinite(ev.r) ? { q: ev.q, r: ev.r } : null;
+    recordEvent(text, { at, kind: ev.kind });
   }
 }
 
@@ -1042,10 +1094,15 @@ async function applyTravel(result, aimLabel, aimKind) {
   const origin = { q: current.party.q, r: current.party.r }; // before the move
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
   if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
-  logLine(travelHeadline(result, aimLabel, aimKind));
+  // Record the day's recap AND run the per-hex encounter checks BEFORE persisting
+  // (Phase 12.2): both append to world.chronicle via recordEvent, so they must land
+  // ahead of the save or they'd be dropped on the next load. setTravelPath /
+  // setEncounterMarks are pure map overlays, so they still run after the refresh.
+  recordEvent(travelHeadline(result, aimLabel, aimKind), { at: result.finalPos, kind: "travel" });
+  const hits = travelEncounterHexes(result); // star the hexes where an encounter came up (9.7)
   await persistAndRefresh();
   setTravelPath([origin, ...result.log.map((l) => ({ q: l.q, r: l.r }))]); // draw the trail (after the refresh's setWorld)
-  setEncounterMarks(travelEncounterHexes(result)); // star the hexes where an encounter came up (9.7)
+  setEncounterMarks(hits);
 }
 
 // Per-hex wilderness encounter checks over the hexes just entered (Phase 9.7).
@@ -1060,7 +1117,7 @@ function travelEncounterHexes(result) {
     const rng = subRng(current.seed, "encounter", step.q, step.r, sessionDay);
     if (rollEncounterCheck(step.terrain, rng).encounter) {
       hits.push({ q: step.q, r: step.r });
-      logLine(`⚔ Encounter in the ${step.terrain} at (${step.q}, ${step.r}) — roll on your encounter table.`);
+      recordEvent(`⚔ Encounter in the ${step.terrain} at (${step.q}, ${step.r}) — roll on your encounter table.`, { at: { q: step.q, r: step.r }, kind: "encounter" });
     }
   }
   return hits;
@@ -1721,6 +1778,16 @@ function refreshOracle(flashKind = null) {
     flashKind,
     onRoll: onOracleRoll,
     settlement: ctx ? { available: true, label: ctx.label } : { available: false },
+  });
+}
+
+// Refresh the Chronicle tab (Phase 12.2) — the world's located-event log, rendered
+// newest-first with click-to-recentre. Guards on read (`chronicle || []`) so an
+// older world without the field just shows the empty state.
+function refreshChronicle() {
+  renderChroniclePanel({
+    chronicle: current ? (current.chronicle || []) : [],
+    onCenter: (q, r) => recenterOn(q, r),
   });
 }
 
@@ -2455,6 +2522,7 @@ async function persistAndRefresh() {
   refreshGlobalHooks();
   refreshFactions();
   refreshOracle();
+  refreshChronicle();
   refreshHookFocus();
   refreshMapChrome();
 }
@@ -2929,6 +2997,13 @@ function wire() {
   $("btn-draw-cancel").addEventListener("click", onCancelDraft);
   $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
   $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
+  // Bottom ticker (Phase 12.2): wired ONCE against the static element — clicking it
+  // jumps to the Chronicle tab and recentres on the flashed event's hex (if located).
+  const ticker = $("event-ticker");
+  if (ticker) ticker.addEventListener("click", () => {
+    setPanelTab("chronicle");
+    if (tickerAt) recenterOn(tickerAt.q, tickerAt.r);
+  });
   $("help-overlay").addEventListener("click", (e) => {
     if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
   });

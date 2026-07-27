@@ -12,6 +12,7 @@ import {
   axialDistance,
   hexRing,
   hexDisc,
+  isNearParty,
 } from "../js/core/hexgeo.js";
 
 const S = 28;
@@ -126,6 +127,30 @@ test("axialKey/parseKey round-trip incl. negatives", () => {
   }
   assert.throws(() => parseKey("nope"));
   assert.throws(() => parseKey("1,"));
+});
+
+test("isNearParty: near cell is within radius", () => {
+  assert.equal(isNearParty({ q: 3, r: 0 }, { q: 0, r: 0 }, 10), true);
+  assert.equal(isNearParty({ q: 2, r: -1 }, { q: 0, r: 0 }, 5), true);
+});
+
+test("isNearParty: far cell is outside radius", () => {
+  assert.equal(isNearParty({ q: 20, r: 0 }, { q: 0, r: 0 }, 10), false);
+  assert.equal(isNearParty({ q: 0, r: 0 }, { q: 0, r: 0 }, -1), false);
+});
+
+test("isNearParty: distance exactly == radius is inclusive (true)", () => {
+  assert.equal(isNearParty({ q: 10, r: 0 }, { q: 0, r: 0 }, 10), true);
+});
+
+test("isNearParty: null at / null party → false", () => {
+  assert.equal(isNearParty(null, { q: 0, r: 0 }, 10), false);
+  assert.equal(isNearParty({ q: 1, r: 1 }, null, 10), false);
+});
+
+test("isNearParty: non-finite coord → false", () => {
+  assert.equal(isNearParty({ q: NaN, r: 0 }, { q: 0, r: 0 }, 10), false);
+  assert.equal(isNearParty({ q: 0, r: Infinity }, { q: 0, r: 0 }, 10), false);
 });
 
 test("hexCorners: 6 points at distance s, first at -30deg", () => {
