@@ -3,7 +3,7 @@
 import { glyphForPoi } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
-import { factionLabel, factionDescription } from "../gen/factions.js";
+import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
 
@@ -447,22 +447,19 @@ export function factionCard(faction, model) {
     box.appendChild(div);
   }
 
-  // Every holding gets a jump link (8.9) — click-to-centre like a hook's
-  // Target/Origin. One holding → a single "Jump to holding"; several → one link
-  // per site, each centring the map on that hex.
-  const holdings = faction.holdings || [];
-  if (holdings.length && model.onCenterFaction) {
+  // A single home jump link (12.1 refinement) — click-to-centre on the
+  // faction's seat, or the centroid of its holdings when seatless. Replaces
+  // the old per-holding link list, which grew unwieldy for large factions.
+  if (model.onCenterFactionHome && factionHome(faction)) {
     const legend = document.createElement("div");
     legend.className = "hook-legend";
-    holdings.forEach((h, i) => {
-      const a = document.createElement("button");
-      a.type = "button";
-      a.className = "legend-link";
-      a.title = "Centre the map on this holding";
-      a.textContent = holdings.length === 1 ? "Jump to holding" : `Holding ${i + 1} · (${h.q}, ${h.r})`;
-      a.addEventListener("click", () => model.onCenterFaction(faction.id, i));
-      legend.appendChild(a);
-    });
+    const a = document.createElement("button");
+    a.type = "button";
+    a.className = "legend-link";
+    a.title = "Centre the map on this faction";
+    a.textContent = faction.seat ? "Jump to seat" : "Jump to centre";
+    a.addEventListener("click", () => model.onCenterFactionHome(faction.id));
+    legend.appendChild(a);
     box.appendChild(legend);
   }
 

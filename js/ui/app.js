@@ -27,7 +27,7 @@ import {
   getFactions,
   removeFaction,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -1804,7 +1804,7 @@ function ensureFactionPopup() {
 function factionPopupModel() {
   return {
     factionColorFor: (id) => factionColor(getFactions(current).findIndex((f) => f.id === id)),
-    onCenterFaction, onDeleteFaction,
+    onCenterFaction, onCenterFactionHome, onDeleteFaction,
   };
 }
 function openFactionPopup(id) {
@@ -1819,7 +1819,7 @@ function openFactionPopup(id) {
   close.addEventListener("click", closeFactionPopup);
   el.append(close, factionCard(f, factionPopupModel()));
   el.hidden = false;
-  onCenterFaction(id, 0);
+  onCenterFactionHome(id);
   document.addEventListener("keydown", onFactionPopupKey);
   document.addEventListener("click", onFactionPopupOutside, true);
 }
@@ -2341,6 +2341,16 @@ function onCenterFaction(id, index = 0) {
   if (!f) return;
   const hold = (index === 0 && f.seat) ? f.seat : (f.holdings || [])[index];
   if (hold) recenterOn(hold.q, hold.r);
+}
+
+// Centre the map on a faction's "home" (Phase 12.1): its seat, or the rounded
+// centroid of its holdings when seatless. Backs the popup's single jump link
+// and the auto-centre on open, so both agree on the same point.
+function onCenterFactionHome(id) {
+  const f = getFactions(current).find((x) => x.id === id);
+  if (!f) return;
+  const home = factionHome(f);
+  if (home) recenterOn(home.q, home.r);
 }
 
 // Delete a faction (Phase 8.19) — a GM override, distinct from in-world

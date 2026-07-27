@@ -13,6 +13,7 @@ import {
   TURN_LENGTH_DAYS,
   factionLabel,
   factionDescription,
+  factionHome,
   eligibleLords,
   FACTION_BUILD,
   rollEmergences,
@@ -459,6 +460,24 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
   // A seated faction shows its HQ hex instead of "Seatless" (8.19).
   const f3 = { ...f, seat: { q: 4, r: -1 } };
   assert.ok(factionDescription(f3).includes("Seat: (4, -1)"));
+});
+
+test("factionHome: seat wins over holdings, else rounded centroid, else null", () => {
+  // Seat present → the seat, even when holdings exist and point elsewhere.
+  const seated = { seat: { q: 4, r: -1 }, holdings: [{ q: 0, r: 0 }, { q: 9, r: 9 }] };
+  assert.deepEqual(factionHome(seated), { q: 4, r: -1 });
+
+  // Seatless with several holdings → rounded centroid: (0,0),(2,0),(1,3) → (1,1).
+  const seatless = { holdings: [{ q: 0, r: 0 }, { q: 2, r: 0 }, { q: 1, r: 3 }] };
+  assert.deepEqual(factionHome(seatless), { q: 1, r: 1 });
+
+  // No seat and no (or empty) holdings → null.
+  assert.equal(factionHome({}), null);
+  assert.equal(factionHome({ holdings: [] }), null);
+
+  // Missing faction → null.
+  assert.equal(factionHome(null), null);
+  assert.equal(factionHome(undefined), null);
 });
 
 // --- Expansion engine: contention, seats, elimination (Phase 8.15 + 8.19) -
