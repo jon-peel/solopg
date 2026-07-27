@@ -5,6 +5,7 @@ import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
 import { factionLabel, factionDescription } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
+import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -12,7 +13,7 @@ const panel = () => document.getElementById("panel");
 // The panel shows one tab at a time; each region is built once (in showWorld)
 // and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", travel: "travel-panel", factions: "factions-panel" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", factions: "factions-panel", oracle: "oracle-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -31,7 +32,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "travel" | "factions"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "factions" | "oracle"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -529,111 +530,148 @@ export function renderFactionsPanel(model) {
   for (const faction of factions) host.appendChild(factionCard(faction, model));
 }
 
-// Encumbrance tier labels (Phase 8.4), matching ENCUMBRANCE_FACTOR's keys
-// (js/gen/travel.js) and the existing B/X travel-tip tooltip's phrasing.
-const ENCUMBRANCE_LABELS = {
-  unencumbered: "Unencumbered",
-  light: "Lightly loaded",
-  encumbered: "Encumbered",
-  heavy: "Heavily loaded",
-};
-
-// The 6 hex neighbour directions as compass labels (indexes match core
-// hexgeo.js NEIGHBOR_DIRS; derived from each delta's pixel bearing on a
-// pointy-top grid: E / NE / NW / W / SW / SE). Used to name a step in the log.
-export const DIR_LABELS = ["E", "NE", "NW", "W", "SW", "SE"];
-
-// The compass rose, laid out as a 3×3 grid (center empty). Each cell's `id` is
-// the bearing passed to onTravelDirection: a hex-direction index (0-5) for the
-// 6 true neighbours, or "N"/"S" for the pseudo-cardinals (which alternate their
-// two flanking directions hex-by-hex — see travel.js travelDayBearing).
-const ROSE_CELLS = [
-  { id: 2, label: "NW", arrow: "↖" }, { id: "N", label: "N", arrow: "↑" }, { id: 1, label: "NE", arrow: "↗" },
-  { id: 3, label: "W", arrow: "←" }, null, { id: 0, label: "E", arrow: "→" },
-  { id: 4, label: "SW", arrow: "↙" }, { id: "S", label: "S", arrow: "↓" }, { id: 5, label: "SE", arrow: "↘" },
-];
-
 /**
- * Render the Travel tab: the party's pace (encumbrance) setting, a 6-direction
- * compass rose (each button travels ONE day that way), and the LAST DAY's
- * report. Everything here is app.js-only ephemeral state (not persisted); the
- * report is replaced on every travel press.
- * @param {{ encumbrance?: string, onSetEncumbrance?: (tier:string)=>void,
- *   onTravelDirection?: (bearing:number|"N"|"S")=>void,
- *   lastDay: {headline:string, finalPos:{q:number,r:number},
- *     log:{terrain:string,road:boolean,lost:boolean,dir:number}[]}|null }} model
+ * Render the Oracle tab (Phase 9.2/9.3) into #oracle-panel: each oracle's controls
+ * followed by ITS OWN latest result block. The oracle is a transient GM aid —
+ * nothing is stored or exported; a page reload starts blank. The app owns the
+ * roll; this only draws the per-kind results + wires clicks back through
+ * model.onRoll(kind, odds). `model.flashKind` (set only to the kind that just
+ * rolled) replays that block's flash so a repeated answer still registers.
+ * @param {{ results?: Record<string,{tag?:string,line:string,note?:string|null}>,
+ *   flashKind?: string|null, onRoll?: (kind:string, odds?:string)=>void }} model
  */
-export function renderTravelPanel(model) {
-  const host = document.getElementById("travel-panel");
+export function renderOraclePanel(model) {
+  const host = document.getElementById("oracle-panel");
   if (!host) return;
   host.innerHTML = "";
+  const results = (model && model.results) || {};
+  const flashKind = model && model.flashKind;
+  const roll = model && model.onRoll;
 
-  host.appendChild(sectionLabel("Party pace"));
-  const select = document.createElement("select");
-  select.className = "encumbrance-select";
-  select.setAttribute("aria-label", "Party encumbrance");
-  for (const [value, label] of Object.entries(ENCUMBRANCE_LABELS)) {
-    const opt = document.createElement("option");
-    opt.value = value;
-    opt.textContent = label;
-    if (value === (model.encumbrance || "unencumbered")) opt.selected = true;
-    select.appendChild(opt);
-  }
-  if (model.onSetEncumbrance) {
-    select.addEventListener("change", () => model.onSetEncumbrance(select.value));
-  }
-  host.appendChild(select);
+  const head = document.createElement("div");
+  head.className = "hooks-head";
+  head.textContent = "Oracle";
+  host.appendChild(head);
 
-  // Compass rose — travel a day in a direction (into the unknown, generating
-  // terrain as the party goes). 8 points: the 6 hex neighbours + N/S (which
-  // zig-zag their flanking hexes).
-  host.appendChild(sectionLabel("Travel a day"));
-  const rose = document.createElement("div");
-  rose.className = "dir-rose";
-  for (const cell of ROSE_CELLS) {
-    if (!cell) {
-      const spacer = document.createElement("div");
-      spacer.className = "dir-spacer";
-      rose.appendChild(spacer);
-      continue;
+  // Yes/No fate oracle (9.2): pick the odds → roll. Each button both sets the
+  // likelihood and rolls, so it's one click. (9.4-9.6 add more oracle sections.)
+  host.appendChild(sectionLabel(ORACLE_LABELS.yesno));
+  const odds = document.createElement("div");
+  odds.className = "oracle-odds tile-actions";
+  if (roll) {
+    for (const o of ORACLE_ODDS) {
+      const b = actionButton(o.label, () => roll("yesno", o.key));
+      b.title = `Roll Yes / No at ${o.label.toLowerCase()} odds`;
+      odds.appendChild(b);
     }
-    const b = document.createElement("button");
-    b.className = "dir-btn";
-    b.textContent = `${cell.arrow} ${cell.label}`;
-    b.title = `Travel one day ${cell.label}`;
-    if (model.onTravelDirection) b.addEventListener("click", () => model.onTravelDirection(cell.id));
-    rose.appendChild(b);
   }
-  host.appendChild(rose);
+  host.appendChild(odds);
+  appendOracleResult(host, results.yesno, flashKind === "yesno");
 
-  host.appendChild(sectionLabel("Last day"));
-  const last = model.lastDay;
-  if (!last) {
+  // Meaning oracle (9.3): an action × subject pair to interpret an open question
+  // or a Yes/No's random-event flag.
+  host.appendChild(sectionLabel(ORACLE_LABELS.meaning));
+  const meaning = document.createElement("div");
+  meaning.className = "oracle-meaning tile-actions";
+  if (roll) {
+    const b = actionButton("Roll meaning", () => roll("meaning"));
+    b.title = "Roll an action + subject pair to read into the scene";
+    meaning.appendChild(b);
+  }
+  host.appendChild(meaning);
+  appendOracleResult(host, results.meaning, flashKind === "meaning");
+
+  // Complication oracle (9.4): a terse setback for a "yes, but…" / "no, and…"
+  // beat, or to spice a quiet scene.
+  host.appendChild(sectionLabel(ORACLE_LABELS.complication));
+  const complication = document.createElement("div");
+  complication.className = "oracle-complication tile-actions";
+  if (roll) {
+    const b = actionButton("Roll complication", () => roll("complication"));
+    b.title = "Roll a terse twist to drop into the scene";
+    complication.appendChild(b);
+  }
+  host.appendChild(complication);
+  appendOracleResult(host, results.complication, flashKind === "complication");
+
+  // Settlement situation (9.5): context-aware — it reads the selected town (its
+  // size/terrain + any faction presence). The button shows only when a settlement
+  // is selected; otherwise a hint points at the map.
+  host.appendChild(sectionLabel(ORACLE_LABELS.settlement));
+  const settlement = (model && model.settlement) || {};
+  if (roll && settlement.available) {
+    const row = document.createElement("div");
+    row.className = "oracle-settlement tile-actions";
+    const b = actionButton("Roll situation", () => roll("settlement"));
+    b.title = `What's stirring in ${settlement.label}?`;
+    row.appendChild(b);
+    host.appendChild(row);
+    appendOracleResult(host, results.settlement, flashKind === "settlement");
+  } else {
+    const hint = document.createElement("div");
+    hint.className = "panel-hint";
+    hint.textContent = "Select a town on the map to read what's stirring there.";
+    host.appendChild(hint);
+  }
+
+  // Tavern / shop (9.6): a sign × specialty × quirk to make a stop memorable.
+  // Context-free like Meaning; no proprietor NPC.
+  host.appendChild(sectionLabel(ORACLE_LABELS.tavern));
+  const tavern = document.createElement("div");
+  tavern.className = "oracle-tavern tile-actions";
+  if (roll) {
+    const b = actionButton("Roll tavern / shop", () => roll("tavern"));
+    b.title = "Roll a sign, specialty, and quirk for an establishment";
+    tavern.appendChild(b);
+  }
+  host.appendChild(tavern);
+  appendOracleResult(host, results.tavern, flashKind === "tavern");
+  // (Wilderness encounters live on the map now — starred along the travel route,
+  // not rolled from this panel. See applyTravel / drawEncounterMarks.)
+}
+
+// One oracle kind's latest result block (or an empty hint), appended to `host`.
+// `flash` replays the reveal animation for a just-happened roll.
+function appendOracleResult(host, result, flash) {
+  if (!result) {
     const empty = document.createElement("div");
     empty.className = "panel-hint";
-    empty.textContent = 'No travel yet — press a direction above, or "Travel toward this hex" on a selected hex.';
+    empty.textContent = "No roll yet.";
     host.appendChild(empty);
     return;
   }
+  const block = document.createElement("div");
+  block.className = "oracle-result" + (flash ? " oracle-flash" : "");
+  if (result.tag) {
+    const tag = document.createElement("span");
+    tag.className = "oracle-kind";
+    tag.textContent = result.tag;
+    block.appendChild(tag);
+  }
+  const ans = document.createElement("span");
+  ans.className = "oracle-answer";
+  ans.textContent = result.line != null ? String(result.line) : "";
+  block.appendChild(ans);
+  host.appendChild(block);
 
-  const summary = document.createElement("div");
-  summary.className = "log-line trip-summary";
-  summary.textContent = last.headline;
-  host.appendChild(summary);
-
-  for (const entry of last.log) {
-    const div = document.createElement("div");
-    div.className = "log-line trip-day" + (entry.lost ? " trip-lost" : "");
-    const road = entry.road ? " (road)" : "";
-    const bend = entry.lost ? `, drifted ${DIR_LABELS[entry.dir]}` : "";
-    div.textContent = `${entry.terrain}${road}${bend}`;
-    host.appendChild(div);
+  // Body lines (9.6) — normal-weight detail under the headline (e.g. a tavern's
+  // specialty + quirk).
+  if (Array.isArray(result.body)) {
+    for (const b of result.body) {
+      const line = document.createElement("div");
+      line.className = "oracle-body" + (flash ? " oracle-flash-note" : "");
+      line.textContent = b;
+      host.appendChild(line);
+    }
   }
 
-  const where = document.createElement("div");
-  where.className = "log-line";
-  where.textContent = `Now at (${last.finalPos.q}, ${last.finalPos.r}).`;
-  host.appendChild(where);
+  // Accent note (9.2 random event / 9.5 faction) — its own line under the result.
+  if (result.note) {
+    const note = document.createElement("div");
+    note.className = "oracle-note" + (flash ? " oracle-flash-note" : "");
+    note.textContent = result.note;
+    host.appendChild(note);
+  }
 }
 
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
@@ -744,14 +782,11 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
-// Coins read book-style as a dice expression, no weight ("Loose coins (2d6×10 gp)");
-// gems/idols/plate roll a concrete value + weight ("— 240 gp, 12 cn"); leads/magic
-// show neither. Guard is always appended.
+// The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X lair
+// Treasure Type LETTER + how it's guarded, and the GM rolls the contents on their
+// own tables — no invented gp. ("Treasure Type D, hidden — roll on your tables.")
 function treasureLine(t) {
-  let amount = "";
-  if (t.dice) amount = ` (${t.dice} gp)`;
-  else if (t.gp > 0) amount = ` — ${t.gp} gp${t.weight ? `, ${t.weight} cn` : ""}`;
-  return `Treasure: ${t.kind}${amount} (${t.guard})`;
+  return `Treasure Type ${t.type}, ${t.guard} — roll on your tables.`;
 }
 
 export function renderDungeonPanel({
@@ -929,8 +964,8 @@ export function showWorld(world, opts = {}) {
     mkTab("detail", "Selection"),
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
-    mkTab("travel", "Travel"),
     mkTab("factions", "Factions", "factions-tab-badge"),
+    mkTab("oracle", "Oracle"),
   );
   el.appendChild(tabs);
   const region = (id, hidden) => {
@@ -944,8 +979,8 @@ export function showWorld(world, opts = {}) {
   region("selection"); // selected hex / dungeon room details
   region("global-hooks", true); // unpinned world hooks (renderGlobalHooks)
   region("pinned-hooks", true); // the party's pinned leads
-  region("travel-panel", true); // encumbrance + last trip report (renderTravelPanel)
   region("factions-panel", true); // the world's factions (renderFactionsPanel)
+  region("oracle-panel", true); // on-demand GM oracle rolls (renderOraclePanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it
   // never goes stale). The old growing event log moved to the browser console.

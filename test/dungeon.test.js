@@ -13,7 +13,7 @@ function tables() {
     "dungeon-trap",
     "dungeon-special",
     "dungeon-dressing",
-    "dungeon-treasure",
+    "treasure-type",
     "dungeon-treasure-guard",
     "dungeon-monster-status",
     "dungeon-light",
@@ -110,7 +110,7 @@ test("each room carries content-appropriate detail", () => {
   const traps = new Set(t.get("dungeon-trap").entries.map((e) => e.value.name));
   const specials = new Set(t.get("dungeon-special").entries.map((e) => e.value));
   const dressings = new Set(t.get("dungeon-dressing").entries.map((e) => e.value));
-  const kinds = new Set(t.get("dungeon-treasure").entries.map((e) => e.value.kind));
+  const types = new Set(t.get("treasure-type").entries.map((e) => e.value.type));
   const guards = new Set(t.get("dungeon-treasure-guard").entries.map((e) => e.value));
   const statuses = new Set(t.get("dungeon-monster-status").entries.map((e) => e.value));
   for (let s = 0; s < 120; s++) {
@@ -132,20 +132,11 @@ test("each room carries content-appropriate detail", () => {
         if (room.content === "Empty") assert.ok(dressings.has(room.dressing));
         if (room.treasure) {
           const tr = room.treasure;
-          assert.ok(kinds.has(tr.kind) && guards.has(tr.guard));
-          if (tr.dice !== undefined) {
-            // Coins: a dice expression for value, no rolled gp, no weight.
-            assert.match(tr.dice, /^\d+d\d+(×\d+)?$/, "coin value is a dice expr");
-            assert.equal(tr.gp, undefined, "coins carry no rolled gp");
-            assert.equal(tr.weight, undefined, "coins carry no weight");
-          } else if (tr.gp !== undefined) {
-            // Gems/idols/plate: a rolled value with a carry weight.
-            assert.ok(Number.isInteger(tr.gp) && tr.gp > 0, "gp value");
-            assert.ok(Number.isInteger(tr.weight) && tr.weight >= 1, "cn weight");
-          } else {
-            // Leads / magic items: neither a value nor a weight.
-            assert.equal(tr.weight, undefined, "valueless treasure has no weight");
-          }
+          // A B/X Treasure Type letter + a guard — the GM rolls the contents (9.8).
+          assert.ok(types.has(tr.type), `valid treasure type "${tr.type}"`);
+          assert.ok(guards.has(tr.guard), "valid guard");
+          assert.equal(tr.gp, undefined, "the app invents no gp value");
+          assert.equal(tr.weight, undefined, "and no carry weight");
         }
       }
     }
@@ -438,14 +429,14 @@ test("monster difficulty rises with depth and with dungeon difficulty", () => {
   assert.ok(deadly[0] > soft[0], `deadly level-1 tougher than soft (${deadly[0].toFixed(2)} vs ${soft[0].toFixed(2)})`);
 });
 
-test("treasure value rises with depth", () => {
+test("treasure richness (type tier) rises with depth", () => {
   const t = tables();
-  const tierOf = new Map(t.get("dungeon-treasure").entries.map((e) => [e.value.kind, e.value.tier]));
+  const tierOf = new Map(t.get("treasure-type").entries.map((e) => [e.value.type, e.value.tier]));
   let shallow = 0, shallowN = 0, deep = 0, deepN = 0;
   for (let s = 0; s < 600; s++) {
     const d = generateDungeon(t, mulberry32(s), { size: "Sprawling" });
-    for (const r of d.levels[0].rooms) if (r.treasure) { shallow += tierOf.get(r.treasure.kind); shallowN++; }
-    for (const r of d.levels[d.levels.length - 1].rooms) if (r.treasure) { deep += tierOf.get(r.treasure.kind); deepN++; }
+    for (const r of d.levels[0].rooms) if (r.treasure) { shallow += tierOf.get(r.treasure.type); shallowN++; }
+    for (const r of d.levels[d.levels.length - 1].rooms) if (r.treasure) { deep += tierOf.get(r.treasure.type); deepN++; }
   }
   assert.ok(deep / deepN > shallow / shallowN + 0.3, `deep treasure richer: ${(deep / deepN).toFixed(2)} vs ${(shallow / shallowN).toFixed(2)}`);
 });

@@ -15,6 +15,9 @@ import {
   factionDescription,
   eligibleLords,
   FACTION_BUILD,
+  rollEmergences,
+  EMERGE_COOLDOWN_DAYS,
+  HEXES_PER_FACTION,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
 import { validateTable } from "../js/core/table.js";
@@ -871,4 +874,100 @@ test("rebellion is a rare rollable archetype in the table", () => {
   assert.ok(valuesOf("faction-archetype", t).has("rebellion"));
   const reb = t.get("faction-archetype").entries.find((e) => e.value === "rebellion");
   assert.ok(reb.weight <= 1, "low weight → rare");
+});
+
+// --- Automatic emergence gate (Phase 9.9, pressure model) ---
+
+// A world with `land` placed passable (Plains) hexes and optional preset factions.
+function landWorld(land, over = {}) {
+  const hexes = {};
+  for (let i = 0; i < land; i++) hexes[axialKey(i, 0)] = { placed: true, coords: { q: i, r: 0 }, terrain: "Plains" };
+  return { hexes, factions: [], emergeTicks: 0, emergeSince: EMERGE_COOLDOWN_DAYS, ...over };
+}
+// A faction holding a run of hexes [x0..x0+size) on row 0 (so they count as claimed).
+const heldRun = (id, size, x0 = 0) => ({
+  id, status: "active", seat: { q: x0, r: 0 },
+  holdings: Array.from({ length: size }, (_, k) => ({ q: x0 + k, r: 0 })),
+});
+
+test("rollEmergences: advances emergeTicks by the days walked", () => {
+  const w = landWorld(30);
+  rollEmergences(w, 4, 1);
+  assert.equal(w.emergeTicks, 4);
+});
+
+test("rollEmergences: no explored land → nothing emerges", () => {
+  const w = landWorld(0);
+  assert.deepEqual(rollEmergences(w, 500, 7), []);
+});
+
+test("rollEmergences: the cooldown blocks any emergence in its window", () => {
+  const w = landWorld(30, { emergeSince: 0 }); // fresh off an emergence
+  assert.deepEqual(rollEmergences(w, EMERGE_COOLDOWN_DAYS - 1, 12345), []);
+});
+
+test("rollEmergences: an open explored world spawns EXTERNAL powers over time", () => {
+  const w = landWorld(30);
+  const ems = rollEmergences(w, 400, 3);
+  assert.ok(ems.length >= 1, "at least one power rises over a long span");
+  assert.ok(ems.every((e) => e.type === "external"), "all external on open ground");
+});
+
+test("rollEmergences: a size-scaled ceiling caps the count", () => {
+  // 30 land → ceiling = max(3, round(30/6)) = 5. Over a huge span it must not exceed it.
+  const ceiling = Math.max(3, Math.round(30 / HEXES_PER_FACTION));
+  const ems = rollEmergences(landWorld(30), 20000, 5);
+  assert.ok(ems.length <= ceiling, `<= ceiling ${ceiling}, got ${ems.length}`);
+  // ...and a smaller map allows fewer than a bigger one.
+  const big = rollEmergences(landWorld(90), 20000, 5).length;
+  assert.ok(big > ceiling, `a bigger world supports more powers (${big} > ${ceiling})`);
+});
+
+test("rollEmergences: a claimed map ruled by one power breeds INTERNAL rebellions", () => {
+  // 40 land, one faction holds 38 (dominant, no open ground → external ~0).
+  const w = landWorld(40, { factions: [heldRun("faction:big", 38), heldRun("faction:small", 2, 38)] });
+  const ems = rollEmergences(w, 600, 4);
+  assert.ok(ems.length >= 1, "a rebellion eventually rises");
+  assert.ok(ems.every((e) => e.type === "internal" && e.targetId === "faction:big"),
+    "all internal, targeting the hegemon");
+});
+
+test("rollEmergences: a modest, non-dominant map breeds no rebellion", () => {
+  // Two even powers, plenty of open ground → no internal pressure.
+  const w = landWorld(40, { factions: [heldRun("faction:a", 4), heldRun("faction:b", 4, 20)] });
+  const ems = rollEmergences(w, 600, 4);
+  assert.ok(ems.every((e) => e.type === "external"), "no internal rebellion without a hegemon");
+});
+
+test("rollEmergences: no eligible lair → a lord never awakens", () => {
+  for (let s = 0; s < 40; s++) {
+    const ems = rollEmergences(landWorld(40), 5000, s); // bare hexes, no POIs
+    assert.ok(ems.every((e) => e.type !== "lord"), "no lair, no lord");
+  }
+});
+
+test("rollEmergences: a lord can awaken when an eligible lair exists", () => {
+  // A Mountains dungeon (dragon/lich/vampire-eligible) among open land.
+  const lairWorld = (over = {}) => {
+    const w = landWorld(30, over);
+    w.hexes[axialKey(-1, 0)] = { placed: true, coords: { q: -1, r: 0 }, terrain: "Mountains", pois: [{ id: "poi:lair", type: "dungeon", occupant: { kind: "none" } }] };
+    return w;
+  };
+  let sawLord = false;
+  for (let s = 0; s < 60 && !sawLord; s++) {
+    if (rollEmergences(lairWorld(), 4000, s).some((e) => e.type === "lord")) sawLord = true;
+  }
+  assert.ok(sawLord, "over many long spans a lord eventually wakes in its lair");
+});
+
+test("rollEmergences: deterministic for the same world state + seed", () => {
+  const a = landWorld(30), b = landWorld(30);
+  assert.deepEqual(rollEmergences(a, 300, 42), rollEmergences(b, 300, 42));
+  assert.equal(a.emergeTicks, b.emergeTicks);
+});
+
+test("rollEmergences: no-ops on junk input", () => {
+  assert.deepEqual(rollEmergences(null, 5, 1), []);
+  assert.deepEqual(rollEmergences(landWorld(30), 0, 1), []);
+  assert.deepEqual(rollEmergences(landWorld(30), -3, 1), []);
 });

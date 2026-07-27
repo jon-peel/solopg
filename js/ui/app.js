@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc, neighbors } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors, axialDistance } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -27,7 +27,7 @@ import {
   getFactions,
   removeFaction,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -48,8 +48,9 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderTravelPanel, renderFactionsPanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -63,6 +64,7 @@ import {
   setRiverDraft,
   setRoadDraft,
   setTravelPath,
+  setEncounterMarks,
   zoomStep,
   setZoom,
   getZoom,
@@ -92,7 +94,7 @@ const HEX_TABLE_IDS = [
   "dungeon-trap",
   "dungeon-special",
   "dungeon-dressing",
-  "dungeon-treasure",
+  "treasure-type",
   "dungeon-treasure-guard",
   "dungeon-monster-status",
   "dungeon-light",
@@ -157,9 +159,13 @@ let sessionDay = 0;
 let dayUsed = 0;
 const DAY_HOURS = 8;
 
-// Last day's travel report (Phase 8.4) — ephemeral, app.js-only, like
-// sessionDay: replaced by each travel press, reset on world switch.
-let lastDay = null;
+// Oracle (Phase 9.1) — the GM's on-demand rolls are a transient play aid, not
+// world data: the Oracle tab shows the latest result PER KIND, held in memory
+// here (never persisted or exported). `oracleSeq` is an in-memory cursor so
+// consecutive rolls draw a fresh seeded stream. Both reset on page reload and on
+// world switch, so a reload starts blank — fine, it's ephemeral.
+let oracleResults = {}; // { [kind]: { tag, line, note } } — latest result per oracle kind
+let oracleSeq = 0;
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -219,8 +225,11 @@ async function setCurrent(world) {
   current = world;
   selectedPoiId = null;
   selectedHookId = null; // clear any hook highlight from the previous world
-  lastDay = null; // the last day's travel report is ephemeral, per-world (Phase 8.4)
+  oracleResults = {}; // the oracle results are a transient per-session aid
+  oracleSeq = 0;
+  if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
   setTravelPath(null); // clear the previous world's movement trail
+  setEncounterMarks(null); // ...and its encounter stars
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) setLastWorldId(world.id);
@@ -235,7 +244,7 @@ async function setCurrent(world) {
   renderSelection();
   refreshGlobalHooks();
   refreshFactions();
-  refreshTravelPanel();
+  refreshOracle();
   refreshHookMarks();
   refreshHookFocus();
   refreshMapChrome();
@@ -390,8 +399,173 @@ async function advanceTime(days) {
     const events = advanceFactionDays(current, wholeCrossed, current.seed);
     logFactionEvents(events);
     applyFactionOccupancy(events);
+    await maybeEmergeFactions(wholeCrossed); // (9.9) a new power sometimes stirs on its own
   }
   renderDayReadout();
+}
+
+// Automatic faction emergence (Phase 9.9, pressure model): as days pass, new
+// powers rise on their own. The pure gate (rollEmergences) decides WHAT emerges —
+// external (open frontier) vs internal rebellion (dominance) — and advances the
+// world's reload-safe accumulators; here we pick the exact site + create each.
+// Narrated as subtext (an "emerge" event), no hooks; lords never auto-emerge.
+async function maybeEmergeFactions(days) {
+  if (!current) return;
+  const emergences = rollEmergences(current, days, current.seed);
+  if (!emergences.length) return;
+  const tables = await loadTables(FACTION_TABLE_IDS);
+  const events = [];
+  for (const em of emergences) {
+    const ev = em.type === "lord" ? emergeLord(tables)
+      : em.type === "internal" ? emergeRebellion(tables, em.targetId)
+      : emergeExternal(tables);
+    if (ev) events.push(ev);
+  }
+  if (events.length) {
+    logFactionEvents(events);
+    await persistAndRefresh(); // save the new faction(s) + accumulators, redraw territory
+  }
+}
+
+// A new EXTERNAL power on open ground (9.9), biased toward the party: promote an
+// unaffiliated occupied POI (a bandit camp becomes a bandit power), else seat a
+// fresh faction on a bare, unsettled land hex kept clear of existing seats. Near
+// the party is preferred so the living world is felt where you're exploring.
+function emergeExternal(tables) {
+  const site = pickExternalSite();
+  if (!site) return null;
+  const n = nextFactionId(current);
+  const rng = subRng(current.seed, "emerge-make", current.emergeTicks, n);
+  const hex = getHex(current, site.q, site.r);
+  const poi = hex && Array.isArray(hex.pois) ? hex.pois[0] : undefined;
+  let faction;
+  if (site.promote) {
+    faction = promoteFaction(tables, rng, { q: site.q, r: site.r, poiId: site.poiId, index: n, seed: current.seed, occupant: site.occupant });
+  } else {
+    faction = generateFaction(tables, rng, { q: site.q, r: site.r, index: n, seed: current.seed, poiId: poi && poi.id });
+    if (isValidSeat(current, faction.archetype, site.q, site.r)) {
+      faction.seat = { q: site.q, r: site.r, ...(poi ? { poiId: poi.id } : {}) };
+    }
+  }
+  addFaction(current, faction);
+  if (poi) occupyPoiForFaction(poi, faction); // a faction born on a site holds it (8.17)
+  return { kind: "emerge", factionId: faction.id, q: site.q, r: site.r };
+}
+
+// A rebellion rises INSIDE the dominant faction (9.9): one of its provinces (a
+// non-seat holding) defects to a fresh "rebellion" power, which then eats outward
+// via the normal contest engine — toward the seat (a coup) or crushed at the
+// border (fizzles). Returns an internal "emerge" event, or null if nothing to carve.
+function emergeRebellion(tables, targetId) {
+  const target = getFactions(current).find((f) => f.id === targetId);
+  if (!target) return null;
+  const seatKey = target.seat ? axialKey(target.seat.q, target.seat.r) : null;
+  const provinces = (target.holdings || []).filter((h) => axialKey(h.q, h.r) !== seatKey);
+  if (!provinces.length) return null;
+  const rng = subRng(current.seed, "emerge-rebel", current.emergeTicks);
+  provinces.sort((a, b) => a.q - b.q || a.r - b.r);
+  const cell = provinces[Math.floor(rng() * provinces.length)];
+  // The province defects — carve it out of the incumbent so the rebel holds it alone.
+  target.holdings = target.holdings.filter((h) => !(h.q === cell.q && h.r === cell.r));
+  const n = nextFactionId(current);
+  const mrng = subRng(current.seed, "emerge-make", current.emergeTicks, n);
+  const hex = getHex(current, cell.q, cell.r);
+  const poi = hex && Array.isArray(hex.pois) ? hex.pois[0] : undefined;
+  const rebel = generateFaction(tables, mrng, {
+    q: cell.q, r: cell.r, index: n, seed: current.seed, poiId: poi && poi.id,
+    archetype: "rebellion", disposition: "hostile",
+  });
+  if (isValidSeat(current, rebel.archetype, cell.q, cell.r)) {
+    rebel.seat = { q: cell.q, r: cell.r, ...(poi ? { poiId: poi.id } : {}) };
+  }
+  addFaction(current, rebel);
+  if (poi) occupyPoiForFaction(poi, rebel); // the province's site defects too
+  return { kind: "emerge", factionId: rebel.id, q: cell.q, r: cell.r, internal: true, fromFactionId: targetId };
+}
+
+// A lair-bound LORD awakens on its own (9.9) — the primary way a lich/dragon/…
+// arises. Wakes in an eligible empty lair (a dungeon/tower/shrine of its type +
+// terrain): a fresh lord faction seats there and its kin infuse the interior on
+// next open (via overlordFor). A lord SUPERSEDES whatever held the lair (even a
+// monster den), so its occupant is set directly. Returns a lord "emerge" event.
+function emergeLord(tables) {
+  const lair = pickLordLair();
+  if (!lair) return null;
+  const n = nextFactionId(current);
+  const rng = subRng(current.seed, "emerge-make", current.emergeTicks, n);
+  const faction = promoteFaction(tables, rng, {
+    q: lair.q, r: lair.r, poiId: lair.poiId, index: n, seed: current.seed, archetype: lair.archetype,
+  });
+  addFaction(current, faction);
+  const poi = poiAt(lair.q, lair.r);
+  if (poi) { // a lord claims its lair outright (occupyPoiForFaction leaves dens alone)
+    poi.occupant = { kind: "occupied", by: faction.name, factionId: faction.id };
+    poi.name = `${poiBaseName(poi)} — ${faction.name}`;
+  }
+  return { kind: "emerge", factionId: faction.id, q: lair.q, r: lair.r, lord: true, archetype: lair.archetype };
+}
+
+// Pick an eligible empty lair for a waking lord (9.9), party-biased like the rest:
+// an unclaimed POI of a lord's type + terrain (eligibleLords), preferring one near
+// the party, then any. Then a lord archetype the site allows. Deterministic.
+function pickLordLair() {
+  const rng = subRng(current.seed, "emerge-lair", current.emergeTicks);
+  const party = current.party || { q: 0, r: 0 };
+  const factions = getFactions(current);
+  const held = new Set();
+  for (const f of factions) for (const h of f.holdings || []) held.add(axialKey(h.q, h.r));
+  const cands = [];
+  for (const hex of Object.values(current.hexes || {})) {
+    if (!hex.placed || held.has(axialKey(hex.coords.q, hex.coords.r))) continue;
+    for (const poi of hex.pois || []) {
+      if (poi.occupant && poi.occupant.factionId) continue; // not another faction's site
+      const lords = eligibleLords(poi.type, hex.terrain, factions);
+      if (lords.length) cands.push({ q: hex.coords.q, r: hex.coords.r, poiId: poi.id, lords, near: axialDistance(hex.coords.q, hex.coords.r, party.q, party.r) <= PARTY_EMERGE_RADIUS });
+    }
+  }
+  const pool = cands.filter((c) => c.near).length ? cands.filter((c) => c.near) : cands;
+  if (!pool.length) return null;
+  pool.sort((a, b) => a.q - b.q || a.r - b.r);
+  const site = pool[Math.floor(rng() * pool.length)];
+  const archetype = site.lords[Math.floor(rng() * site.lords.length)].archetype;
+  return { q: site.q, r: site.r, poiId: site.poiId, archetype };
+}
+
+// Where an external power rises (9.9), preferring — in order — a near occupied POI,
+// a near bare hex, then any occupied POI / bare hex. "Near" = within
+// PARTY_EMERGE_RADIUS of the party (the bias). Bare hexes stay clear of existing
+// seats. Deterministic: each pool is coord-sorted before a seeded pick.
+const MIN_EMERGE_SEAT_DISTANCE = 3;
+const PARTY_EMERGE_RADIUS = 8;
+function pickExternalSite() {
+  const rng = subRng(current.seed, "emerge-site", current.emergeTicks);
+  const party = current.party || { q: 0, r: 0 };
+  const held = new Set();
+  const seats = [];
+  for (const f of getFactions(current)) {
+    for (const h of f.holdings || []) held.add(axialKey(h.q, h.r));
+    if (f.seat) seats.push(f.seat);
+  }
+  const promote = [], bare = [];
+  for (const hex of Object.values(current.hexes || {})) {
+    if (!hex.placed) continue;
+    const { q, r } = hex.coords;
+    if (held.has(axialKey(q, r))) continue; // not on another faction's ground
+    const near = axialDistance(q, r, party.q, party.r) <= PARTY_EMERGE_RADIUS;
+    const poi = (hex.pois || [])[0];
+    if (poi && poi.occupant && poi.occupant.kind === "occupied" && !poi.occupant.factionId) {
+      promote.push({ q, r, poiId: poi.id, occupant: poi.occupant, promote: true, near });
+    } else if ((TRAVEL_COST[hex.terrain] || 0) > 0 && !(hex.settlement && hex.settlement.present)) {
+      if (seats.every((s) => axialDistance(q, r, s.q, s.r) >= MIN_EMERGE_SEAT_DISTANCE)) bare.push({ q, r, near });
+    }
+  }
+  for (const pool of [promote.filter((x) => x.near), bare.filter((x) => x.near), promote, bare]) {
+    if (pool.length) {
+      pool.sort((a, b) => a.q - b.q || a.r - b.r);
+      return pool[Math.floor(rng() * pool.length)];
+    }
+  }
+  return null;
 }
 
 // Whole-day advance (the stationary "Progress N days" control) — keeps the
@@ -410,7 +584,11 @@ function logFactionEvents(events) {
   const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
   const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
   for (const ev of events) {
-    if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
+    if (ev.kind === "emerge") logLine(
+      ev.lord ? `A dread power awakens — ${nameOf(ev.factionId)} (${ev.archetype}) stirs at ${placeOf(ev.q, ev.r)}.`
+        : ev.internal ? `Unrest within ${nameOf(ev.fromFactionId)} — ${nameOf(ev.factionId)} rises in revolt at ${placeOf(ev.q, ev.r)}.`
+          : `A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`);
+    else if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
     else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
     else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
     else if (ev.kind === "relocate") logLine(`${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`);
@@ -715,6 +893,7 @@ function selectCell(q, r) {
   setSelected(selected);
   setPanelTab("detail"); // selecting a cell shows its detail
   renderSelection();
+  refreshOracle(); // keep the Settlement oracle's section in sync with the selection
 }
 
 // The panel is read-only now: it shows the selected cell's info and lets you
@@ -850,16 +1029,35 @@ function revealSightAlong(originTerrain, aq, ar, result, tables) {
 }
 
 // Apply a resolved travel day: move the party, advance the clock by one (only
-// if a day was actually spent), stash the report, and surface it on the Travel
-// tab (same "jump to the tab" convention as a new hook).
+// if a day was actually spent), and log the day's recap to the console. The
+// on-map movement trail is the visible record; the Travel tab was removed (its
+// pace control lives on the on-map HUD, its compass on the party's radial).
 async function applyTravel(result, aimLabel, aimKind) {
   const origin = { q: current.party.q, r: current.party.r }; // before the move
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
   if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
-  lastDay = { headline: travelHeadline(result, aimLabel, aimKind), finalPos: result.finalPos, log: result.log };
-  setPanelTab("travel");
+  logLine(travelHeadline(result, aimLabel, aimKind));
   await persistAndRefresh();
   setTravelPath([origin, ...result.log.map((l) => ({ q: l.q, r: l.r }))]); // draw the trail (after the refresh's setWorld)
+  setEncounterMarks(travelEncounterHexes(result)); // star the hexes where an encounter came up (9.7)
+}
+
+// Per-hex wilderness encounter checks over the hexes just entered (Phase 9.7).
+// Returns the coords that hit — drawn as star marks on the route. Skips settlement
+// hexes (no wilderness encounter in a town). The app only flags WHERE an encounter
+// is; the GM rolls WHAT it is on their own tables. Each hit also logs a prompt.
+function travelEncounterHexes(result) {
+  const hits = [];
+  for (const step of result.log || []) {
+    const hex = getHex(current, step.q, step.r);
+    if (hex && hex.settlement && hex.settlement.present) continue; // in a town — no wilderness check
+    const rng = subRng(current.seed, "encounter", step.q, step.r, sessionDay);
+    if (rollEncounterCheck(step.terrain, rng).encounter) {
+      hits.push({ q: step.q, r: step.r });
+      logLine(`⚔ Encounter in the ${step.terrain} at (${step.q}, ${step.r}) — roll on your encounter table.`);
+    }
+  }
+  return hits;
 }
 
 // One-line summary of a day's travel, composed here (app knows the day, the
@@ -906,16 +1104,6 @@ function buildTerrainByKey(world) {
   const terrainByKey = new Map();
   for (const h of placedHexes(world)) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
   return terrainByKey;
-}
-
-// Travel tab (Phase 8.4): pace setting, the direction rose, and the last day's report.
-function refreshTravelPanel() {
-  renderTravelPanel({
-    encumbrance: (current && current.party && current.party.encumbrance) || "unencumbered",
-    onSetEncumbrance,
-    onTravelDirection,
-    lastDay,
-  });
 }
 
 // GM annotations work on any selected cell. An empty cell is annotated by
@@ -1520,6 +1708,86 @@ function refreshFactions() {
   renderFactionLegend(factions);
 }
 
+// Refresh the Oracle tab (each oracle's controls + its own latest result).
+// `flashKind` is set only to the kind that just rolled, so only that block
+// animates on a real press (even if unchanged) — not on unrelated refreshes.
+// Passes the selected-settlement context so the Settlement oracle (9.5) reflects
+// the current selection.
+function refreshOracle(flashKind = null) {
+  const ctx = selectedSettlementContext();
+  renderOraclePanel({
+    results: oracleResults,
+    flashKind,
+    onRoll: onOracleRoll,
+    settlement: ctx ? { available: true, label: ctx.label } : { available: false },
+  });
+}
+
+// The currently-selected settlement's context for the Settlement oracle (9.5):
+// its display label + any faction presence. Null when the selected hex has no
+// settlement, so the oracle's button hides.
+function selectedSettlementContext() {
+  if (!current || !selected) return null;
+  const { q, r } = selected;
+  const hex = getHex(current, q, r);
+  if (!(hex && hex.placed && hex.settlement && hex.settlement.present)) return null;
+  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+  return { label: `${name} · ${hex.settlement.size}`, factionName: factionNameAt(q, r) };
+}
+
+// The faction holding (q,r), else one holding an adjacent hex, else null — so the
+// Settlement oracle can colour a town by the power that holds or borders it.
+function factionNameAt(q, r) {
+  const factions = getFactions(current);
+  const holds = (f, hq, hr) => (f.holdings || []).some((h) => h.q === hq && h.r === hr);
+  const here = factions.find((f) => holds(f, q, r));
+  if (here) return here.name;
+  for (const n of neighbors(q, r)) {
+    const border = factions.find((f) => holds(f, n.q, n.r));
+    if (border) return border.name;
+  }
+  return null;
+}
+
+// Roll one oracle (Phase 9.2/9.3). A transient GM aid: draw a fresh seeded stream
+// off the in-memory cursor, keep only the latest result (in memory — never saved
+// or exported), mirror it to the console, and re-render the tab. No persistence.
+// The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN. `odds` is the
+// GM's picked likelihood for the Yes/No oracle. Async because table-backed oracles
+// (Meaning) load their JSON on demand (cached after the first roll).
+async function onOracleRoll(kind, odds) {
+  if (!current) return;
+  const rng = subRng(current.seed, "oracle", kind, oracleSeq++);
+  let pick, tag = null, body = null, note = null;
+  if (kind === "yesno") {
+    pick = askYesNo(rng, { odds });
+    tag = pick.oddsLabel; // the odds it was rolled at
+    if (pick.event) note = "⚡ A random event intrudes — read it into the scene.";
+  } else if (kind === "meaning") {
+    const tables = await loadTables(ORACLE_TABLE_IDS);
+    pick = rollMeaning(tables, rng); // no tag — its section heading already names it
+  } else if (kind === "complication") {
+    const tables = await loadTables(ORACLE_TABLE_IDS);
+    pick = rollComplication(tables, rng);
+  } else if (kind === "settlement") {
+    const ctx = selectedSettlementContext();
+    if (!ctx) return; // the button only shows when a town is selected
+    const tables = await loadTables(ORACLE_TABLE_IDS);
+    pick = rollSettlement(tables, rng, { factionName: ctx.factionName });
+    tag = ctx.label; // the town this situation is for
+    if (pick.factionNote) note = "⚑ " + pick.factionNote;
+  } else if (kind === "tavern") {
+    const tables = await loadTables(ORACLE_TABLE_IDS);
+    pick = rollTavern(tables, rng);
+    body = [`Known for ${pick.specialty}.`, pick.quirk]; // the sign is the headline, these the detail
+  } else return; // unknown kind — 9.8+ register more
+  const line = oracleLine(pick);
+  oracleResults[kind] = { tag, line, body, note };
+  const parts = [line, ...(body || []), ...(note ? [note] : [])];
+  logLine(`🎲 Oracle (${kind}${odds ? " · " + odds : ""}): ${parts.join(" · ")}`);
+  refreshOracle(kind); // flash only this oracle's block so a repeated answer still reads as "rolled"
+}
+
 // The map-legend faction key (Phase 11.4): a clickable row per power — a colour
 // swatch hatched at the faction's angle + its name. Clicking opens its detail
 // (the Factions tab) and centres the map on its seat/first holding.
@@ -2105,7 +2373,7 @@ async function persistAndRefresh() {
   renderSelection();
   refreshGlobalHooks();
   refreshFactions();
-  refreshTravelPanel();
+  refreshOracle();
   refreshHookFocus();
   refreshMapChrome();
 }

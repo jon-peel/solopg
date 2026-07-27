@@ -14,14 +14,14 @@
 
 import { rollTable } from "../core/table.js";
 import { randInt, pick } from "../core/rng.js";
-import { rollDice } from "../core/dice.js";
 import { layoutLevel } from "./dungeon-layout.js";
 
 // Interior-shape version for the tower (parallels DUNGEON_BUILD). The UI rebuilds
 // a tower whose interior `build` differs, so old saves self-heal without a
 // world-schema migration. Bump whenever this object's shape changes.
 // 2: a rank-and-file faction garrisons a held tower with its own creatures (8.19).
-export const TOWER_BUILD = 2;
+// 3: treasure is a B/X Treasure Type LETTER the GM rolls, not invented gp (9.8).
+export const TOWER_BUILD = 3;
 
 const FLOORS_MIN = 2;
 const FLOORS_MAX = 5;
@@ -29,21 +29,16 @@ const ROOMS_PER_FLOOR_MIN = 1;
 const ROOMS_PER_FLOOR_MAX = 3;
 const GARRISON_NA = "1d4"; // defenders in a manned room
 
-// Weight (cn) per gp by bulk — mirrors js/gen/dungeon.js (gems/magic are light;
-// statues/plate are heavy). Coins show their dice, not a weight.
-const BULK_FACTOR = { light: 0.05, heavy: 1.5 };
 
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const stripArticle = (s) => (s ? s.replace(/^(a |an |the )/i, "") : s);
 
-// One room's treasure (or null), same convention as the dungeon.
+// One room's treasure (or null), same convention as the dungeon (9.8): a B/X
+// Treasure Type LETTER + how it's guarded; the GM rolls the contents.
 function rollTreasure(treasureTable, guardTable, rng) {
-  const kind = rollTable(treasureTable, rng).value;
+  const type = rollTable(treasureTable, rng).value.type;
   const guard = rollTable(guardTable, rng).value;
-  if (kind.bulk === "coin") return { kind: kind.kind, guard, dice: kind.gp.replace("*", "×") };
-  if (kind.gp === "0") return { kind: kind.kind, guard };
-  const gp = rollDice(kind.gp, rng).total;
-  return { kind: kind.kind, guard, gp, weight: Math.max(1, Math.round(gp * BULK_FACTOR[kind.bulk])) };
+  return { type, guard };
 }
 
 // Register a pin (a positioned room's rect) for the stair room on `target` floor.
@@ -66,7 +61,7 @@ export function generateTower(tables, rng, ctx = {}) {
   const trapTable = tables.get("dungeon-trap");
   const specialTable = tables.get("dungeon-special");
   const dressingTable = tables.get("dungeon-dressing");
-  const treasureTable = tables.get("dungeon-treasure");
+  const treasureTable = tables.get("treasure-type");
   const guardTable = tables.get("dungeon-treasure-guard");
   const statusTable = tables.get("dungeon-monster-status");
   const creatures = tables.get("creatures");

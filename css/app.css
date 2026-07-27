@@ -1369,37 +1369,93 @@ button:hover {
   color: var(--muted);
 }
 
-/* Travel tab (Phase 8.4): encumbrance select + direction rose + last-day log. */
-.encumbrance-select {
-  margin-bottom: 0.4rem;
-}
-/* 8-point compass rose (3×3, centre empty): NW N NE / W · E / SW S SE. */
-.dir-rose {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.3rem;
-  margin-bottom: 0.4rem;
-}
-.dir-btn {
-  padding: 0.35rem 0.4rem;
-}
-.dir-spacer {
-  /* empty centre cell of the rose */
-}
-.trip-summary {
-  color: var(--fg);
-  font-weight: 600;
-}
-.trip-lost {
-  color: #f5c45a; /* matches the amber hook-mark colour */
-}
-
 /* Muted hint pointing at the right-click menu (panel is read-only now). */
 .panel-hint {
   margin-top: 0.6rem;
   color: var(--muted);
   font-size: 0.75rem;
   font-style: italic;
+}
+
+/* Oracle tab (Phase 9.1) — the single latest roll result (no stored history). */
+.oracle-result {
+  margin-top: 0.6rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  background: var(--accent-wash);
+}
+.oracle-kind {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.oracle-answer {
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+/* Flash on a fresh roll so a repeated answer still registers the press: the box
+   briefly brightens and the answer fades from wax-seal red to ink. Collapses to
+   an instant swap under the global prefers-reduced-motion rule above. */
+.oracle-result.oracle-flash {
+  animation: oracle-pop 0.6s ease-out;
+}
+.oracle-result.oracle-flash .oracle-answer {
+  animation: oracle-answer-ink 0.6s ease-out;
+}
+@keyframes oracle-pop {
+  0% {
+    background: rgba(138, 51, 36, 0.32);
+    border-color: var(--accent);
+  }
+  100% {
+    background: var(--accent-wash);
+    border-color: var(--edge);
+  }
+}
+@keyframes oracle-answer-ink {
+  0%,
+  40% {
+    color: var(--accent);
+  }
+  100% {
+    color: var(--ink);
+  }
+}
+/* The odds ladder — a compact wrapping row of one-click roll buttons. */
+.oracle-odds {
+  margin-top: 0.2rem;
+}
+/* Normal-weight detail lines under a result headline (e.g. a tavern's specialty
+   and quirk); fade in with the result on a roll. */
+.oracle-body {
+  margin-top: 0.25rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+/* Random-event nudge under the answer; fades in with the result on a roll. */
+.oracle-note {
+  margin-top: 0.35rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.oracle-note.oracle-flash-note {
+  animation: oracle-note-in 0.6s ease-out;
+}
+@keyframes oracle-note-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* Text-link "Back" out of a POI's detail (navigation, not an action button). */

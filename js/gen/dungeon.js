@@ -14,12 +14,8 @@
 
 import { rollTable } from "../core/table.js";
 import { randInt, pick } from "../core/rng.js";
-import { rollDice } from "../core/dice.js";
 import { layoutLevel, deriveDoors } from "./dungeon-layout.js";
 
-// Weight (in coins/cn) per gp of value, by bulk: gems/magic are light (the smart
-// haul); statues/plate are heavy to haul out. Coins show their dice, not weight.
-const BULK_FACTOR = { light: 0.05, heavy: 1.5 };
 // Number appearing (a dice expression, book-style) by monster tier: weak swarm,
 // tough few. Used so a room reads "2d4 Goblins" rather than a fixed count.
 const NA_BY_TIER = { 1: "2d4", 2: "1d6", 3: "1d4", 4: "1d2" };
@@ -53,7 +49,8 @@ const INTERLOPER_CHANCE = 0.34; // a level sometimes hosts one outsider species
 // 20: a lair-bound lord infuses the interior (family + boss) (8.18).
 // 21: a rank-and-file faction GARRISONS a held dungeon — its people hold the
 //     entrance frontier and patrol as wandering monsters (8.19 follow-up).
-export const DUNGEON_BUILD = 21;
+// 22: treasure is a B/X Treasure Type LETTER the GM rolls, not invented gp (9.8).
+export const DUNGEON_BUILD = 22;
 
 // Index families by name -> { family, elite, members }.
 function familyIndex(tables) {
@@ -189,7 +186,7 @@ export function generateDungeon(tables, rng, ctx = {}) {
   const trapTable = tables.get("dungeon-trap");
   const specialTable = tables.get("dungeon-special");
   const dressingTable = tables.get("dungeon-dressing");
-  const treasureTable = tables.get("dungeon-treasure");
+  const treasureTable = tables.get("treasure-type");
   const guardTable = tables.get("dungeon-treasure-guard");
   const statusTable = tables.get("dungeon-monster-status");
   const lightTable = tables.get("dungeon-light");
@@ -247,9 +244,10 @@ export function generateDungeon(tables, rng, ctx = {}) {
     const roomCount = randInt(rng, size.rooms[0], size.rooms[1]);
     const { family, encounters } = buildLevelMonsters(tables, theme, isDeepest, rng, roomCount, monsterTier, depth, overlord, garrison);
     const encounterTable = { id: "dungeon-encounters", entries: encounters };
-    // Treasure for this level, re-weighted toward its target tier (depth scaling).
+    // Treasure-type letters for this level, re-weighted toward its target tier
+    // (depth scaling) — deeper levels lean toward richer B/X letters.
     const levelTreasure = {
-      id: "treasure",
+      id: "treasure-type",
       entries: treasureTable.entries.map((e) => ({
         value: e.value,
         weight: (("weight" in e ? e.weight : 1)) * tierAffinity(e.value.tier, treasureTier),
@@ -274,22 +272,16 @@ export function generateDungeon(tables, rng, ctx = {}) {
       } else {
         dressing = rollTable(dressingTable, rng).value;
       }
-      // Treasure (not in Special rooms — the feature is the point there).
-      // Value scales with depth via the level's tier-weighted treasure table.
-      // Coins are shown as a dice expression (book-style, GM rolls), no weight;
-      // gems/idols/plate roll a concrete value + weight (cn) by bulk.
+      // Treasure (not in Special rooms — the feature is the point there). The app
+      // is a referee's oracle, not a rulebook (Phase 9.8): a hoard is tagged with a
+      // B/X lair Treasure Type LETTER + how it's guarded, and the GM rolls the
+      // actual contents on their own tables — no invented gp. The letter's richness
+      // scales with depth via the level's tier-weighted treasure-type table.
       let treasure = null;
       if (content !== "Special" && rng() < treasureChance) {
-        const kind = rollTable(levelTreasure, rng).value;
+        const type = rollTable(levelTreasure, rng).value.type;
         const guard = rollTable(guardTable, rng).value;
-        if (kind.bulk === "coin") {
-          treasure = { kind: kind.kind, guard, dice: kind.gp.replace("*", "×") };
-        } else if (kind.gp === "0") {
-          treasure = { kind: kind.kind, guard }; // a lead or a magic item — no value
-        } else {
-          const gp = rollDice(kind.gp, rng).total;
-          treasure = { kind: kind.kind, guard, gp, weight: Math.max(1, Math.round(gp * BULK_FACTOR[kind.bulk])) };
-        }
+        treasure = { type, guard };
       }
       rooms.push({ n, content, monster, trap, special, dressing, treasure });
     }

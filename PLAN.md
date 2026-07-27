@@ -838,8 +838,9 @@ graph TD
 | 7 — QoL & UX (notes, nav, themes; ~~custom tables~~ dropped) | ✅ **done** | **7.1 radial menu ✅** [phase-7.1-radial-menu.md](docs/plans/phase-7.1-radial-menu.md) · **7.2 dungeon-view UX ✅** [phase-7.2-dungeon-view-ux.md](docs/plans/phase-7.2-dungeon-view-ux.md) · **7.3 panel tabs ✅** [phase-7.3-panel-tabs.md](docs/plans/phase-7.3-panel-tabs.md) · **7.4 pinned hooks + select-to-highlight ✅** [phase-7.4-hooks-pinned-focus.md](docs/plans/phase-7.4-hooks-pinned-focus.md) · **7.5 map notes & labels ✅** [phase-7.5-map-notes.md](docs/plans/phase-7.5-map-notes.md) · **7.6 map nav & onboarding ✅** [phase-7.6-map-nav-onboarding.md](docs/plans/phase-7.6-map-nav-onboarding.md) · **7.9 POI dot polish ✅** [phase-7.9-poi-dot-polish.md](docs/plans/phase-7.9-poi-dot-polish.md) · **7.14 radial right-click back ✅** (landed inside the 3R water-polish work). Remaining backlog items moved to **Phase 10**. |
 | **3R — World coherence** (terrain/water/settlements/roads/rivers) | ✅ **feature-complete** | [phase-3r-world-coherence.md](docs/plans/phase-3r-world-coherence.md) — revisit of Phase 3; pure-engine, node-tested. **3R.1 Generate Area ✅ · 3R.2 audit+research+model ✅ · 3R.3 terrain v2 ✅ · 3R.4 water v2 ✅ · 3R.5 rivers ✅ · 3R.6 settlements v2 ✅ · 3R.7 roads ✅ · 3R.8 integration ✅** (v13 terrain rewrite → neighbour-affinity hex ORACLE; Lake/Sea, emergent drainage rivers + manual draw, gravity-MST roads + spurs + bridges/fords, named regions, lock/regenerate, network LOD; schema **v15**). Only deferred item: **migration for pre-3R saves** (out of scope). |
 | 8 — Factions (+ Travel & Party Movement) | ✅ **done** (8.1–8.20) | **Arc A** (Travel 8.1–8.6 ✅) + **Arc B** (Factions: **8.7 generate ✅ · 8.8 promote ✅ · 8.9 holdings ✅ · 8.10 turns ✅**) + the **expansion arc 8.13–8.20 ✅**: faction turns are a **contested** spatial engine — every faction grows a **sphere of influence** around a **seat** (its HQ) at a **per-archetype expansion chance**, seizing rivals' hexes strength-weighted; a **seat is dug in** (×`SEAT_DEFENSE`) and a fallen seat **relocates + halves SOI + strength**, else **dissolves**; factions also **recede + disband naturally** (8.20). **Lair-bound lords** (8.16, Promote-only: necromancer/lich/vampire/dragon/hag + a rare **rebellion**) **infuse their own dungeon/tower interiors** (8.18), garrison POIs they hold (8.17/8.19), and never decline on their own. All **played as subtext** — every turn narrates what each faction did, on the map + a running log. **Every faction-driven hook (8.11/8.12 faction hooks, 8.15 expansion hooks, 8.14 region "stirring" hook) was built then removed** in favour of that subtext — factions emit no hooks. (Region *naming* stays for map labels.) UI: coloured-ring territory + a **"Run by"** owner picker + per-card **Delete** + a **manual reseat**. Still schema v16 (`FACTION_BUILD` 2). See [phase-8-factions.md](docs/plans/phase-8-factions.md) + [8.15](docs/plans/phase-8.15-faction-expansion.md) + [8.16](docs/plans/phase-8.16-more-faction-types.md) + [8.17](docs/plans/phase-8.17-poi-occupant-follows-faction.md) + [8.18](docs/plans/phase-8.18-lord-infused-interiors.md) + [8.19](docs/plans/phase-8.19-seats-soi-expansion.md) + [8.20](docs/plans/phase-8.20-natural-decline.md) |
-| 9 — Additional small oracles | ▶ **queued (2nd)** | see catalog below |
+| **9 — Small oracles & the living world** | ✅ **built (9.1–9.9)** | The app is a **referee's oracle, not a rulebook**. **Generative** oracles (Oracle tab): **9.1** surface · **9.2** Yes/No fate (odds ladder + six-outcome …and/…but + random-event flag) · **9.3** Meaning · **9.4** Complication · **9.5** Settlement situation (context-aware, faction-coloured) · **9.6** Tavern/shop. **Trigger-and-prompt** (GM rolls their own tables): **9.7** wilderness-encounter check → **stars on the travel route** (hover shows terrain); **9.8** treasure = a **B/X Treasure Type letter** in dungeons/towers (replaces rolled gp; `DUNGEON_BUILD 22`/`TOWER_BUILD 3`). **9.9** automatic faction **emergence** — a **pressure model** (external ∝ open frontier, internal **rebellions** ∝ dominance, **lords awaken** rarely at eligible lairs), party-biased, narrated as subtext. **Out:** weather / NPC / reaction-morale. See [phase-9-oracles.md](docs/plans/phase-9-oracles.md). *Follow-up UX in Phase 12.* |
 | 10 — Backlog | ▶ **queued (3rd)** | leftover QoL/UX items + misc ideas — see [Backlog](#backlog--other-ideas-queued-8-then-9-then-10) and [phase-10-backlog.md](docs/plans/phase-10-backlog.md) |
+| **12 — Living-world surfacing & UX polish** | ▶ **planned** | Surfaces Phase 9's living world on-screen (it currently narrates to the **console** only) + a panel polish pass. **12.1** Factions off the tab bar → clickable legend + faction popup (fixes tab overflow) · **12.2** persisted **Chronicle** + a near-party bottom **ticker** (distant events log silently) · **12.3** encounter-star **hover** · **12.4** persistent **settlement taverns** (saved/exported, close/add) · **12.5** treasure-type **badge** · **12.6** legend keys + **lord marker** · **12.7** visual polish (Oracle tab, dungeon room, tile/settlement detail). Full hand-off detail in [phase-12-ux.md](docs/plans/phase-12-ux.md). |
 | **11 — Visual & UX Overhaul** | ✅ **done (11.1–11.8)** | Cartographer's re-skin realized end-to-end: **11.1** design tokens + palette + serif typography (single-source `js/ui/theme.js`, pure contrast test) · **11.2** parchment terrain art & map surface · **11.3** map chrome & command bar (`data-tip` tooltips) · **11.4** faction **shaded + per-faction-hatched territory** with inked SOI outline + seat star + a clickable legend key → detail · **11.5** radial = the **single** hex-action surface (party/faction submenus, keyboard+ARIA) + selection card "⋯ Actions" + stats-chip sidebar · **11.6** parchment/inked dungeon restyle · **11.7** responsive drawer + touch (long-press radial, pinch-zoom, drag-pan) · **11.8** keyboard nav, ARIA roles, `prefers-reduced-motion`, contrast/colour-blind audit. Interleaved: a **travel-mechanic overhaul** — directional 3-ring travel compass (one hex / half day / full day), fractional within-day clock (`DAY_HOURS=8`), road ×2 pace + lost-suppression, movement-path trail, a narrow pace/encumbrance scale. **Supersedes** 10.6 (themes) + 10.8 (art) + touch half of 10.2. Presentation-only — **no schema bump**. See [phase-11-visual-overhaul.md](docs/plans/phase-11-visual-overhaul.md). *Deferred follow-up:* travel modes (mount/vehicle pace above base speed; boats over water). |
 
 Phases 0→1→2→3→4→5 are a hard chain; 6/9 need only the map + POIs; 7, 8 and 11 are done. **Remaining
@@ -875,19 +876,34 @@ name, distance in **miles**, and tile **terrain**. Generation is a **manual "Gen
 list** (→ Target / ↩ Origin / Follow-the-clue) and **amber map markers** tie it together. Type-2 "distant
 powers" (roaming/region/news-propagation) belong to **Phase 8 (Factions)**. See
 [phase-6-hooks.md](docs/plans/phase-6-hooks.md) and the
-[small-oracle catalog](#small-oracle-catalog-for-phase-9-selection).
+[small-oracle catalog](#small-oracle-catalog-phase-9-selection--decided).
 
 ---
 
-## Small-oracle catalog (for Phase 9 selection)
+## Small-oracle catalog (Phase 9 selection — **decided**)
 
-- **Solo core:** Yes/No fate oracle; random event / inspiration; plot/quest hook.
-- **World & travel:** weather; wilderness encounter; travel/journey events; region/realm;
-  calendar / time & travel tracker.
-- **Settlements & people:** settlement details; NPC; tavern/shop; name generators.
-- **Encounters & rewards:** reaction & morale; dungeon dressing; treasure/loot; magic item;
-  mishap/complication.
-- **Living world (stretch):** faction turn / doom clock.
+Selection confirmed with the user (see [phase-9-oracles.md](docs/plans/phase-9-oracles.md)). The
+governing decision: solopg is a **referee's oracle, not a rulebook**, so each item is either
+**generative** (app rolls, shows the answer — for fiction-level prompts no ruleset tables) or
+**trigger-and-prompt** (app makes the check, GM rolls on their **own** tables — for system-level
+rolls like encounters/treasure).
+
+- **Solo core:** ✅ Yes/No fate oracle *(generative)*; ✅ random event / inspiration = Meaning
+  tables *(generative)*; ✅ Complication/twist *(generative)*. ~~plot/quest hook~~ **dropped —
+  redundant** with Phase 6 hooks.
+- **World & travel:** ❌ weather *(system's job)*; ✅ wilderness encounter as a **check + prompt**
+  *(trigger — GM rolls the table)*; travel/journey events *(deferred — not selected)*; ~~region/realm~~
+  **dropped — redundant** with map region labels; calendar/time tracker *(deferred — a day clock
+  already exists)*.
+- **Settlements & people:** ✅ settlement **situation** *(generative, no NPCs)*; ❌ NPC generator
+  *(system's job)*; ✅ tavern/shop *(generative, no proprietor NPC)*; name generators *(deferred —
+  settlement names already exist)*.
+- **Encounters & rewards:** ❌ reaction & morale *(system's job)*; dungeon dressing *(already
+  embedded in dungeon gen)*; ✅ treasure/loot as a **Treasure-Type prompt** *(trigger — GM rolls
+  the contents)*; magic item *(deferred — folds into the treasure the GM rolls)*; ✅ Complication
+  = mishap/complication *(generative, above)*.
+- **Living world:** faction turn / doom clock ✅ **shipped in Phase 8**; ✅ **automatic faction
+  emergence** added here *(day-driven with a floor)*.
 
 ---
 
@@ -897,8 +913,11 @@ powers" (roaming/region/news-propagation) belong to **Phase 8 (Factions)**. See
   faction turns/doom clock) plus the **uncapped, contested expansion engine** played as subtext.
   Content follow-on left for later: new faction *types* (e.g. a death-cult) are pure data (an
   archetype row + a mobility mapping) with no engine change.
-- **Phase 9 — Additional small oracles (queued 1st)** — pick from the
-  [catalog above](#small-oracle-catalog-for-phase-9-selection).
+- **Phase 9 — Small oracles & the living world (queued 1st, now in planning)** — selection
+  **decided** (see [catalog above](#small-oracle-catalog-phase-9-selection--decided) and
+  [phase-9-oracles.md](docs/plans/phase-9-oracles.md)): generative solo/settlement oracles + a
+  wilderness-encounter check and treasure-type prompts (GM rolls their own tables) + automatic
+  faction emergence.
 - **Phase 10 — Backlog (queued 3rd)** — everything else: the remaining Phase 7 QoL/UX items
   (search/jump-to, undo/redo, print/GM-screen view, themes, radial keyboard/touch parity, hooks tab
   pop-out), plus the party position marker (needs travel rules first), art (pencil POI sketches,

@@ -99,6 +99,13 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     party: { q: 0, r: 0 },
     // Factions (Phase 8.1, reserved) — populated starting 8.7; empty until then.
     factions: [],
+    // Auto-emergence accumulators (Phase 9.9) — reload-safe like the faction-turn
+    // clock: `emergeTicks` is a monotonic per-day rng cursor; `emergeSince` counts
+    // days since the last emergence (the cooldown). Reads guard with `|| 0`.
+    emergeTicks: 0,
+    emergeSince: 0,
+    // (Oracle rolls are a transient per-session aid — the app keeps only the
+    // latest result in memory, never on the world; see js/ui/app.js.)
     createdAt: now,
     updatedAt: now,
   };

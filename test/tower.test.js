@@ -11,7 +11,7 @@ function tables() {
     "dungeon-trap",
     "dungeon-special",
     "dungeon-dressing",
-    "dungeon-treasure",
+    "treasure-type",
     "dungeon-treasure-guard",
     "dungeon-monster-status",
     "creatures",
