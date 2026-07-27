@@ -1844,7 +1844,7 @@ function onFactionPopupKey(e) {
 }
 function onFactionPopupOutside(e) {
   if (!factionPopupId) return;
-  if (e.target.closest("#faction-popup, .faction-row")) return;
+  if (e.target.closest("#faction-popup, .faction-row, .legend-advance")) return;
   closeFactionPopup();
 }
 
