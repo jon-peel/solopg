@@ -1341,6 +1341,23 @@ button:hover {
   display: none;
 }
 
+/* Treasure Type badge (12.4): the room panel's B/X lair letter (9.8), boxed in
+   the wax-seal accent — mirrors .panel-tabs .badge's pill styling. */
+.treasure-badge {
+  display: inline-block;
+  min-width: 1.1rem;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: bold;
+  font-size: 0.78rem;
+  background: var(--accent);
+  border: 1px solid var(--edge-strong);
+  border-radius: 999px;
+  padding: 0 0.3rem;
+  color: #f7ecd4;
+  margin-right: 0.3rem;
+}
+
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 
 /* Selected hook (its target/origin are ringed on the map). */

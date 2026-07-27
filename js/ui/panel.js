@@ -740,13 +740,6 @@ export function renderSelectionPanel(model) {
  * (theme/family + wandering monsters), and the selected room's contents.
  * @param {{ dungeon: object, level: object, room: object|null }} model
  */
-// The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X lair
-// Treasure Type LETTER + how it's guarded, and the GM rolls the contents on their
-// own tables — no invented gp. ("Treasure Type D, hidden — roll on your tables.")
-function treasureLine(t) {
-  return `Treasure Type ${t.type}, ${t.guard} — roll on your tables.`;
-}
-
 export function renderDungeonPanel({
   dungeon,
   level,
@@ -801,13 +794,23 @@ export function renderDungeonPanel({
       room.trap ? `Trap: ${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}` : null,
       room.special ? `Special: ${room.special}` : null,
       room.dressing || null,
-      room.treasure ? treasureLine(room.treasure) : null,
+      // The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X
+      // lair Treasure Type LETTER + how it's guarded, and the GM rolls the contents
+      // on their own tables — no invented gp. (badge "D" + "hidden — roll on your tables.")
+      room.treasure || null,
       room.light ? `Lit: ${room.light.source}` : null,
       ...surface, // "Dungeon entrance (surface)", "Exit to surface"
     ].filter(Boolean)) {
       const div = document.createElement("div");
       div.className = "log-line";
-      div.textContent = line;
+      if (typeof line === "string") {
+        div.textContent = line;
+      } else {
+        const badge = document.createElement("span");
+        badge.className = "treasure-badge";
+        badge.textContent = line.type;
+        div.append(badge, ` ${line.guard} — roll on your tables.`);
+      }
       sel.appendChild(div);
     }
     // Stair navigation buttons (switch level + select the connected room).
