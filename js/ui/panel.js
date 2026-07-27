@@ -13,7 +13,7 @@ const panel = () => document.getElementById("panel");
 // The panel shows one tab at a time; each region is built once (in showWorld)
 // and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", factions: "factions-panel", oracle: "oracle-panel" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", oracle: "oracle-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -32,7 +32,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "factions" | "oracle"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "oracle"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -424,7 +424,7 @@ export function renderGlobalHooks(model) {
 
 // One faction's card: name + archetype/disposition/goal prose, and — when it has
 // a holding — a click-to-centre link (mirrors a hook card's Target legend link).
-function factionCard(faction, model) {
+export function factionCard(faction, model) {
   const box = document.createElement("div");
   box.className = "hook"; // reuse the hook-card styling
   const dot = model.factionColorFor ? model.factionColorFor(faction.id) : null;
@@ -489,45 +489,6 @@ function factionCard(faction, model) {
     box.appendChild(row);
   }
   return box;
-}
-
-/**
- * Render the Factions tab (Phase 8.7) into #factions-panel — one card per
- * faction, with a count badge on the tab. Mirrors the Hooks tab (7.3).
- * @param {{ factions: object[], onCenterFaction?: (id:string)=>void,
- *   onAdvanceFactionTurn?: ()=>void, onDeleteFaction?: (id:string)=>void,
- *   factionColorFor?: (id:string)=>string }} model
- */
-export function renderFactionsPanel(model) {
-  const host = document.getElementById("factions-panel");
-  if (!host) return;
-  host.innerHTML = "";
-  const factions = (model && model.factions) || [];
-  setTabBadge("factions-tab-badge", factions.length);
-
-  if (!factions.length) {
-    const empty = document.createElement("div");
-    empty.className = "panel-hint";
-    empty.textContent = "No factions yet — right-click a placed hex → Faction → Generate here.";
-    host.appendChild(empty);
-    return;
-  }
-
-  const head = document.createElement("div");
-  head.className = "hooks-head";
-  head.textContent = `${factions.length} faction${factions.length === 1 ? "" : "s"}`;
-  host.appendChild(head);
-
-  // Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the
-  // day clock. Shown when at least one faction is active.
-  if (model.onAdvanceFactionTurn && factions.some((f) => (f.status || "active") === "active")) {
-    const row = document.createElement("div");
-    row.className = "tile-actions";
-    row.appendChild(actionButton("Advance faction turn", model.onAdvanceFactionTurn));
-    host.appendChild(row);
-  }
-
-  for (const faction of factions) host.appendChild(factionCard(faction, model));
 }
 
 /**
@@ -938,7 +899,7 @@ export function showWorld(world, opts = {}) {
     chips.appendChild(chip);
   }
   el.appendChild(chips);
-  // Tab bar: Selection (selected hex/room) | Hooks | Pinned | Travel | Factions.
+  // Tab bar: Selection (selected hex/room) | Hooks | Pinned | Oracle.
   // Switching just toggles which region shows.
   const tabs = document.createElement("div");
   tabs.className = "panel-tabs";
@@ -964,7 +925,6 @@ export function showWorld(world, opts = {}) {
     mkTab("detail", "Selection"),
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
-    mkTab("factions", "Factions", "factions-tab-badge"),
     mkTab("oracle", "Oracle"),
   );
   el.appendChild(tabs);
@@ -979,7 +939,6 @@ export function showWorld(world, opts = {}) {
   region("selection"); // selected hex / dungeon room details
   region("global-hooks", true); // unpinned world hooks (renderGlobalHooks)
   region("pinned-hooks", true); // the party's pinned leads
-  region("factions-panel", true); // the world's factions (renderFactionsPanel)
   region("oracle-panel", true); // on-demand GM oracle rolls (renderOraclePanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
   // Static world-metadata footer (seed & scale are immutable per world, so it

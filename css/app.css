@@ -904,11 +904,30 @@ button:hover {
   margin-bottom: 0;
 }
 .legend-sub {
+  display: flex;
+  align-items: center;
   color: var(--muted);
   text-transform: uppercase;
   font-size: 0.62rem;
   letter-spacing: 0.05em;
   margin: 0.15rem 0;
+}
+/* World-wide "Advance turn" button in the legend "Powers" header (Phase 12.1),
+   relocated from the removed Factions tab. Pushed to the row's right edge. */
+.legend-advance {
+  margin-left: auto;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.68rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  background: rgba(255, 250, 236, 0.55);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.legend-advance:hover {
+  background: rgba(255, 250, 236, 0.9);
 }
 .legend-row {
   display: flex;
@@ -960,6 +979,49 @@ button:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Floating faction detail popup (Phase 12.1): opened from a legend "Powers" row,
+   it floats over the map (top-centre of #stage) in place of the removed Factions
+   side-panel tab, reusing the same factionCard body. Sits above #legend (z 6). */
+#faction-popup {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  width: 18rem;
+  max-width: calc(100% - 1.2rem);
+  max-height: 70%;
+  overflow-y: auto;
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.98);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 0.6rem 0.7rem;
+}
+#faction-popup[hidden] {
+  display: none;
+}
+.faction-popup-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  z-index: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: rgba(255, 250, 236, 0.7);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.faction-popup-close:hover {
+  background: rgba(255, 250, 236, 1);
 }
 .lg-line {
   width: 1.6rem;

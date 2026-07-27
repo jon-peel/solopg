@@ -48,7 +48,7 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
@@ -167,6 +167,11 @@ const DAY_HOURS = 8;
 let oracleResults = {}; // { [kind]: { tag, line, note } } — latest result per oracle kind
 let oracleSeq = 0;
 
+// Faction detail popup (Phase 12.1) — the id of the faction whose floating card
+// is open over the map (via a legend "Powers" row), or null when closed. Replaces
+// the removed Factions side-panel tab.
+let factionPopupId = null;
+
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
 let dungeonLevelIndex = 0;
@@ -220,6 +225,7 @@ async function refreshWorldList() {
 
 async function setCurrent(world) {
   closeRadial(); // switching worlds dismisses any open radial menu
+  closeFactionPopup(); // ...and any open faction detail popup
   if (dungeonPoi) closeDungeonView(); // leave any open dungeon when switching worlds
   if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
@@ -1421,6 +1427,7 @@ function openDungeonView(poi) {
   const dungeon = poi.detail && poi.detail.dungeon;
   if (!dungeon) return; // nothing to show (build failed); stay on the hex map
   closeRadial(); // changing screens dismisses any open radial menu
+  closeFactionPopup(); // ...and any open faction detail popup
   dungeonPoi = poi;
   dungeonFrameBB = dungeonFrame(dungeon);
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
@@ -1698,14 +1705,8 @@ function refreshGlobalHooks() {
 // faction's order in the roster — same index the map marker uses.
 function refreshFactions() {
   const factions = getFactions(current);
-  renderFactionsPanel({
-    factions,
-    onCenterFaction,
-    onAdvanceFactionTurn,
-    onDeleteFaction,
-    factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
-  });
   renderFactionLegend(factions);
+  refreshFactionPopup();
 }
 
 // Refresh the Oracle tab (each oracle's controls + its own latest result).
@@ -1788,18 +1789,91 @@ async function onOracleRoll(kind, odds) {
   refreshOracle(kind); // flash only this oracle's block so a repeated answer still reads as "rolled"
 }
 
+// Faction detail popup (Phase 12.1) — a floating card over the map, opened from a
+// legend "Powers" row. Replaces the removed Factions side-panel tab: it reuses the
+// same factionCard(faction, model) the tab used, with a close ✕ and outside-click /
+// Escape dismissal. Lives inside #stage so it floats above the map + legend.
+function ensureFactionPopup() {
+  let el = $("faction-popup");
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "faction-popup"; el.hidden = true;
+  $("stage").appendChild(el);
+  return el;
+}
+function factionPopupModel() {
+  return {
+    factionColorFor: (id) => factionColor(getFactions(current).findIndex((f) => f.id === id)),
+    onCenterFaction, onDeleteFaction,
+  };
+}
+function openFactionPopup(id) {
+  const f = getFactions(current).find((x) => x.id === id);
+  if (!f) return;
+  factionPopupId = id;
+  const el = ensureFactionPopup();
+  el.innerHTML = "";
+  const close = document.createElement("button");
+  close.className = "faction-popup-close"; close.type = "button";
+  close.setAttribute("aria-label", "Close"); close.textContent = "✕";
+  close.addEventListener("click", closeFactionPopup);
+  el.append(close, factionCard(f, factionPopupModel()));
+  el.hidden = false;
+  onCenterFaction(id, 0);
+  document.addEventListener("keydown", onFactionPopupKey);
+  document.addEventListener("click", onFactionPopupOutside, true);
+}
+function closeFactionPopup() {
+  factionPopupId = null;
+  const el = $("faction-popup");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+  document.removeEventListener("keydown", onFactionPopupKey);
+  document.removeEventListener("click", onFactionPopupOutside, true);
+}
+function refreshFactionPopup() {
+  if (!factionPopupId) return;
+  const f = getFactions(current).find((x) => x.id === factionPopupId);
+  if (!f) return closeFactionPopup();
+  const el = ensureFactionPopup();
+  const card = el.querySelector(".hook");
+  if (card) card.replaceWith(factionCard(f, factionPopupModel()));
+}
+function onFactionPopupKey(e) {
+  if (e.key !== "Escape" || !factionPopupId) return;
+  closeFactionPopup(); e.stopImmediatePropagation();
+}
+function onFactionPopupOutside(e) {
+  if (!factionPopupId) return;
+  if (e.target.closest("#faction-popup, .faction-row")) return;
+  closeFactionPopup();
+}
+
 // The map-legend faction key (Phase 11.4): a clickable row per power — a colour
 // swatch hatched at the faction's angle + its name. Clicking opens its detail
-// (the Factions tab) and centres the map on its seat/first holding.
+// (a floating faction popup) and centres the map on its seat/first holding.
 function renderFactionLegend(factions) {
   const host = $("legend-factions");
   if (!host) return;
   host.hidden = !factions.length;
   host.innerHTML = "";
   if (!factions.length) return;
+  // "Powers" header row: the sub-label, plus a single world-wide "Advance turn"
+  // button (Phase 12.1 — relocated from the removed Factions tab) when at least
+  // one faction is active. Advancing runs a faction turn for the whole roster.
   const sub = document.createElement("div");
   sub.className = "legend-sub";
-  sub.textContent = "Powers";
+  const subLabel = document.createElement("span");
+  subLabel.textContent = "Powers";
+  sub.appendChild(subLabel);
+  if (factions.some((f) => (f.status || "active") === "active")) {
+    const adv = document.createElement("button");
+    adv.type = "button";
+    adv.className = "legend-advance";
+    adv.textContent = "Advance turn";
+    adv.title = "Advance all active factions one turn";
+    adv.addEventListener("click", (e) => { e.stopPropagation(); onAdvanceFactionTurn(); });
+    sub.appendChild(adv);
+  }
   host.appendChild(sub);
   factions.forEach((f, i) => {
     const row = document.createElement("button");
@@ -1814,10 +1888,7 @@ function renderFactionLegend(factions) {
     name.className = "faction-row-name";
     name.textContent = f.name || "Faction";
     row.append(sw, name);
-    row.addEventListener("click", () => {
-      setPanelTab("factions");
-      onCenterFaction(f.id, 0);
-    });
+    row.addEventListener("click", () => openFactionPopup(f.id));
     // Hover / keyboard-focus a row → brighten that faction's territory on the map.
     const on = () => setFactionHighlight(i);
     const off = () => setFactionHighlight(null);
@@ -2199,8 +2270,8 @@ async function onGenerateFaction() {
     }
     addFaction(current, faction);
     if (poi0) occupyPoiForFaction(poi0, faction); // seating on a POI takes it over (8.17)
-    setPanelTab("factions");
     await persistAndRefresh();
+    openFactionPopup(faction.id); // surface the new power's detail over the map
     logLine(`New faction — ${faction.name} (${faction.archetype}).`);
   } catch (err) {
     logLine(`Generate faction error: ${err.message}`);
@@ -2226,8 +2297,8 @@ async function onPromotePoi(poiId, archetype) {
     const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant, archetype });
     addFaction(current, faction);
     occupyPoiForFaction(poi, faction); // the POI is now held by its new faction (8.17)
-    setPanelTab("factions");
     await persistAndRefresh();
+    openFactionPopup(faction.id); // surface the new power's detail over the map
     logLine(`Promoted ${poi.occupant.by} → ${faction.name} (${faction.archetype}).`);
   } catch (err) {
     logLine(`Promote faction error: ${err.message}`);
