@@ -323,6 +323,8 @@ export function render() {
       if (primary) lines.push(primary);
       if (region && region !== primary) lines.push(region);
       if (fac) lines.push({ text: `⚑ ${fac.name}`, color: darkenRgba(fac.color, 0.25, 1) });
+      const enc = encounterMarks && encounterMarks.find((m) => m.q === hovered.q && m.r === hovered.r);
+      if (enc) lines.push({ text: `⚔ ${enc.terrain} encounter — roll on your table`, color: "#8a3324" });
       if (lines.length) drawHexLabel(c.x, c.y, lines);
     }
   }

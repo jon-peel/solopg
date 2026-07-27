@@ -1103,7 +1103,7 @@ function travelEncounterHexes(result) {
     if (hex && hex.settlement && hex.settlement.present) continue; // in a town — no wilderness check
     const rng = subRng(current.seed, "encounter", step.q, step.r, sessionDay);
     if (rollEncounterCheck(step.terrain, rng).encounter) {
-      hits.push({ q: step.q, r: step.r });
+      hits.push({ q: step.q, r: step.r, terrain: step.terrain });
       recordEvent(`⚔ Encounter in the ${step.terrain} at (${step.q}, ${step.r}) — roll on your encounter table.`, { at: { q: step.q, r: step.r }, kind: "encounter" });
     }
   }
