@@ -9,8 +9,11 @@ the GM the small tools to *run a session inside it*.
 > `node --test` → commit/push → manual checklist. One coherent sub-step per commit.
 
 > **Golden rule for this phase (confirmed with the user):** *no backward compatibility, no data
-> migration.* Old saves may be thrown away between tests. So where Phase 9 changes an existing
-> shape (notably treasure, 9.8), we change it outright — no `*_BUILD` self-heal, no migration path.
+> migration.* Old saves may be thrown away between tests. Where Phase 9 changes an existing shape
+> (notably treasure, 9.8), we change it outright with **no world-schema migration** — existing
+> interiors simply **regenerate on open** via the `DUNGEON_BUILD`/`TOWER_BUILD` build-stamp bump
+> (regeneration, not migration). Additive world fields (oracle state, emergence accumulators) go
+> straight into `createWorld` with guarded reads.
 
 ---
 

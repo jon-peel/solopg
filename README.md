@@ -6,7 +6,7 @@ generation + record-keeping tool for hex-crawl worlds.
 See **[PLAN.md](./PLAN.md)** for the master plan: architecture, phased build order, the data
 model, and the per-step sub-plans in [`docs/plans/`](./docs/plans).
 
-**Status:** Phases 0–8 + 11 complete. Seeded hex map with terrain/settlements/POIs, multi-level
+**Status:** Phases 0–9 + 11 complete (Phase 12 UX polish in planning). Seeded hex map with terrain/settlements/POIs, multi-level
 **dungeons** (+ towers), terrain-aware **shrine/camp/landmark** detail, **adventure hooks**
 (known/distant/treasure-map/breadcrumb-chain/opportunity/event/escort/return), and full **QoL & UX**
 polish (right-click radial menu, dungeon-view UX, panel tabs, pinned hooks, map notes/labels, map
@@ -32,8 +32,17 @@ dungeon view), **faction territory** shown as shaded + colour-blind-hatched hexe
 legend → detail, the **radial menu as the single hex-action surface** (keyboard + touch + ARIA), a
 **responsive/touch** layout, and a **directional travel** overhaul (a 3-ring compass — one hex / half
 day / full day — a fractional day-clock, roads that double pace and prevent getting lost, and a drawn
-movement path). Presentation-only, no schema change. See [PLAN.md](./PLAN.md) for what's next
-(Phase 9 small oracles, then the Phase 10 backlog). *Deferred:* travel modes (mounts/boats).
+movement path). Presentation-only, no schema change. **Phase 9 (Small Oracles & the Living World)** is
+also complete — an **Oracle** tab of on-demand referee's rolls (**Yes/No fate** with an odds ladder and
+six-outcome …and/…but, **Meaning**, **Complication**, a faction-aware **Settlement situation**, and
+**Tavern/shop**), plus **trigger-and-prompt** aids where the app decides *whether/what* and the GM
+rolls their **own** tables: a **wilderness-encounter check** that stars the hexes on your travel route,
+and dungeon/tower **treasure as a B/X Treasure Type letter** (no invented gp). And the living world
+turns on its own — **factions emerge** by a pressure model (new powers on the open frontier, **rebellions**
+inside a dominant power, and rare **lord awakenings** — a lich/dragon — at eligible lairs), narrated as
+subtext. See [PLAN.md](./PLAN.md) for what's next — **Phase 12** surfaces that living world on-screen
+(an event chronicle + ticker, a faction popup, hover/legend polish, persistent settlement taverns), then
+the Phase 10 backlog. *Deferred:* travel modes (mounts/boats).
 
 ## Running
 
