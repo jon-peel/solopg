@@ -55,22 +55,6 @@ export function logLine(text) {
   console.log(text);
 }
 
-/**
- * Format a hex as readable text lines (pure — no DOM).
- * @param {object} hex
- * @returns {string[]}
- */
-export function describeHex(hex) {
-  const terrain = hex.terrainFeature
-    ? `${hex.terrain} (${hex.terrainFeature})`
-    : hex.terrain;
-  const coords = hex.coords
-    ? `  Coords: (${hex.coords.q}, ${hex.coords.r})`
-    : null;
-  // Settlement and POIs have their own panel sections (with controls).
-  return [`Hex ${hex.key}`, coords, `  Terrain: ${terrain}`].filter(Boolean);
-}
-
 // At-a-glance counts of the world's contents for the overview header (11.5b).
 function worldStats(world) {
   let hexes = 0, settlements = 0, pois = 0, dungeons = 0;
@@ -596,7 +580,7 @@ export function renderOraclePanel(model) {
     appendOracleResult(host, results.settlement, flashKind === "settlement");
   } else {
     const hint = document.createElement("div");
-    hint.className = "panel-hint";
+    hint.className = "oracle-empty";
     hint.textContent = "Select a town on the map to read what's stirring there.";
     host.appendChild(hint);
   }
@@ -622,7 +606,7 @@ export function renderOraclePanel(model) {
 function appendOracleResult(host, result, flash) {
   if (!result) {
     const empty = document.createElement("div");
-    empty.className = "panel-hint";
+    empty.className = "oracle-empty";
     empty.textContent = "No roll yet.";
     host.appendChild(empty);
     return;
@@ -746,26 +730,44 @@ export function renderSelectionPanel(model) {
   sel.appendChild(head);
 
   if (hex) {
-    for (const line of describeHex(hex)) {
-      const div = document.createElement("div");
-      div.className = "log-line";
-      div.textContent = line;
-      sel.appendChild(div);
+    // Terrain header + a muted coord subline (replaces the old flat log-lines).
+    const terr = document.createElement("div");
+    terr.className = "sel-terrain";
+    const tname = document.createElement("span");
+    tname.className = "sel-terrain-name";
+    tname.textContent = hex.terrain;
+    terr.appendChild(tname);
+    if (hex.terrainFeature) {
+      const feat = document.createElement("span");
+      feat.className = "sel-feature";
+      feat.textContent = ` · ${hex.terrainFeature}`;
+      terr.appendChild(feat);
     }
-    // Settlement as a plain info line (controls are on the radial menu). The
+    sel.appendChild(terr);
+    const coords = document.createElement("div");
+    coords.className = "sel-coords";
+    coords.textContent = `(${coord.q}, ${coord.r})`;
+    sel.appendChild(coords);
+    // Settlement as a small accent callout (controls are on the radial menu). The
     // name is derived from the seed + coords (settlement-name.js), so it needs no
     // stored field; a GM hex `name` annotation, if set, still labels the map.
     if (hex.settlement && hex.settlement.present) {
-      const div = document.createElement("div");
-      div.className = "log-line";
       const name = settlementName(model.seed, coord.q, coord.r, hex.gen, {
         kind: hex.settlement.kind,
         terrain: hex.terrain,
       });
       const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
       const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];
-      div.textContent = `Settlement: ${name} (${kindLabel})${water ? ` · ${water}` : ""}`;
-      sel.appendChild(div);
+      const box = document.createElement("div");
+      box.className = "sel-settlement";
+      const nm = document.createElement("span");
+      nm.className = "sel-settle-name";
+      nm.textContent = name;
+      const meta = document.createElement("span");
+      meta.className = "sel-settle-meta";
+      meta.textContent = `${kindLabel}${water ? ` · ${water}` : ""}`;
+      box.appendChild(nm); box.appendChild(meta);
+      sel.appendChild(box);
     }
     renderPoiSection(sel, hex, model);
 

@@ -833,6 +833,17 @@ button:hover {
   background: #7a2c1f;
 }
 
+/* Selection-card hierarchy (Phase 12.6): terrain header, muted coord subline,
+   and the settlement as a small accent callout. */
+.sel-terrain { font-family: var(--font-display); font-size: 0.98rem; color: var(--ink); margin-top: 0.15rem; }
+.sel-terrain-name { text-transform: capitalize; font-weight: 600; }
+.sel-feature { color: var(--muted); font-weight: 400; }
+.sel-coords { margin-top: 0.15rem; font-size: 0.72rem; color: var(--muted); letter-spacing: 0.03em; }
+.sel-settlement { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin-top: 0.55rem;
+  padding: 0.4rem 0.55rem; background: var(--accent-wash); border-left: 3px solid var(--accent); border-radius: 3px; }
+.sel-settle-name { font-weight: 700; color: var(--ink); }
+.sel-settle-meta { font-size: 0.78rem; color: var(--muted); }
+
 #selection h3 {
   margin: 0.25rem 0;
   font-family: var(--font-display);
@@ -1234,9 +1245,9 @@ button:hover {
   padding: 0.25rem 0.4rem;
   font: inherit;
   font-size: 0.9rem;
-  color: var(--text, #e6e8ee);
-  background: #11131a;
-  border: 1px solid var(--border, #2b3140);
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--edge);
   border-radius: 4px;
 }
 .hex-name:focus {
@@ -1250,9 +1261,9 @@ button:hover {
   padding: 0.3rem 0.4rem;
   font: inherit;
   font-size: 0.85rem;
-  color: var(--text, #e6e8ee);
-  background: #11131a;
-  border: 1px solid var(--border, #2b3140);
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--edge);
   border-radius: 4px;
   resize: vertical;
 }
@@ -1261,6 +1272,9 @@ button:hover {
   outline: none;
   border-color: var(--accent);
 }
+
+.hex-name::placeholder,
+.room-note::placeholder { color: var(--muted); }
 
 /* "Add POI" disclosure dropdown. */
 .menu {
@@ -1527,6 +1541,10 @@ button:hover {
   font-size: 0.75rem;
   font-style: italic;
 }
+
+/* Oracle empty/placeholder state (Phase 12.6): a consistent dashed footprint. */
+.oracle-empty { margin-top: 0.4rem; padding: 0.4rem 0.55rem; border: 1px dashed var(--edge);
+  border-radius: 3px; color: var(--muted); font-size: 0.8rem; font-style: italic; }
 
 /* Oracle tab (Phase 9.1) — the single latest roll result (no stored history). */
 .oracle-result {
