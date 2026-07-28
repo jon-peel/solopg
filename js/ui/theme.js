@@ -91,7 +91,7 @@ const DARK = {
     Swamp: "#434b36",
     Desert: "#7e6f42",
     Lake: "#40607a",
-    Sea: "#2d4f68", // deeper than the lake in dark mode too
+    Sea: "#1e3850", // markedly deeper than the lake for a clear water-body contrast
   },
   unknown: "#352c1f",
   selected: "#e8805f",
