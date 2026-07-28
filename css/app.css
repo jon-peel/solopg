@@ -1693,7 +1693,14 @@ button:hover {
 .ring-node .label {
   font-size: 0.62rem;
   letter-spacing: 0.02em;
-  max-width: 4.6rem;
+  /* Fit the label inside the ~50–56px node circle: 4.6rem was wider than the
+     node, so a two-word label ("Household guard") stayed near one line and
+     spilled past the ring; overflow-wrap breaks a long single word rather than
+     letting it poke out the sides. */
+  max-width: 2.9rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 /* Travel-compass nodes are smaller (3 concentric rings) — trim glyph + label. */
 .ring-node.travel .glyph {
