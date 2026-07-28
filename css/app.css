@@ -768,6 +768,27 @@ button:hover {
   color: var(--accent);
 }
 
+/* Hover tooltip on the dungeon canvas (room / glyph / door / badge). Fixed,
+   cursor-anchored via clientX/clientY, appended to <body>. */
+.dungeon-tip {
+  position: fixed;
+  z-index: 25;
+  max-width: 15rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink);
+  background: rgba(239, 227, 200, 0.96);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.5rem;
+  box-shadow: var(--shadow-2);
+  pointer-events: none;
+}
+
+.dungeon-tip[hidden] {
+  display: none;
+}
+
 /* Overview stat chips at the top of the panel (Phase 11.5b). */
 .world-stats {
   display: flex;
