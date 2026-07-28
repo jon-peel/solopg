@@ -40,17 +40,24 @@ echo
 echo "Serving $URL  (Ctrl+C to stop)"
 # Serve with no-cache headers so the browser never holds onto a stale ES module
 # (plain `python3 -m http.server` sends none, which masks just-pushed JS/CSS).
+# Use a THREADING server + HTTP/1.1 keep-alive: a browser loading this app's
+# ES-module graph fires a burst of parallel requests, and a single-threaded
+# server serialises them and resets the ones that wait too long
+# (net::ERR_CONNECTION_RESET on random modules). ThreadingHTTPServer handles
+# them concurrently, like the stock `python3 -m http.server` does.
 python3 - "$PORT" <<'PYEOF'
-import sys, http.server, socketserver
+import sys, http.server
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"  # keep-alive → fewer connections to juggle
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
         super().end_headers()
 
-socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(("", int(sys.argv[1])), NoCacheHandler) as httpd:
+http.server.ThreadingHTTPServer.allow_reuse_address = True
+with http.server.ThreadingHTTPServer(("", int(sys.argv[1])), NoCacheHandler) as httpd:
     httpd.serve_forever()
 PYEOF
