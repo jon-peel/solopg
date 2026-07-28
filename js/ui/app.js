@@ -177,9 +177,10 @@ const DAY_HOURS = 8;
 // world switch, so a reload starts blank — fine, it's ephemeral.
 let oracleResults = {}; // { [kind]: { tag, line, note } } — latest result per oracle kind
 let oracleSeq = 0;
-// The selected town's latest "What's stirring?" situation (Phase 12.7): transient,
-// held in memory keyed to its hex, shown inline on the card, never persisted.
-let settlementSituation = null; // { q, r, line, note } | null
+// Towns' latest "What's stirring?" situations (Phase 12.7): transient, held in
+// memory keyed by "q,r", shown inline on each card, never persisted. A town card
+// auto-rolls one the first time it opens; re-opens keep the last (↻ re-rolls).
+let settlementSituations = {}; // { [`${q},${r}`]: { line, note } }
 
 // Faction detail popup (Phase 12.1) — the id of the faction whose floating card
 // is open over the map (via a legend "Powers" row), or null when closed. Replaces
@@ -260,7 +261,7 @@ async function setCurrent(world) {
   selectedHookId = null; // clear any hook highlight from the previous world
   oracleResults = {}; // the oracle results are a transient per-session aid
   oracleSeq = 0;
-  settlementSituation = null; // ...as is the town "What's stirring?" situation
+  settlementSituations = {}; // ...as are the town "What's stirring?" situations
   wanderingResult = null; // ...as is the wandering-encounter roll
   wanderingSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
@@ -957,12 +958,17 @@ function onImportFile(e) {
 function selectCell(q, r) {
   selected = { q, r };
   selectedPoiId = null; // reset drill-in when changing cell
-  settlementSituation = null; // a new selection drops the previous town's situation
   saveSelected(current, selected);
   setSelected(selected);
   setPanelTab("detail"); // selecting a cell shows its detail
   renderSelection();
   refreshOracle(); // keep the Settlement oracle's section in sync with the selection
+  // A town card auto-rolls "what's stirring?" the first time it opens (which also
+  // stocks the town's persistent taverns); a re-open keeps the last situation.
+  const shex = getHex(current, q, r);
+  if (shex && shex.placed && shex.settlement && shex.settlement.present && !settlementSituations[`${q},${r}`]) {
+    onRollSituation(q, r);
+  }
 }
 
 // The panel is read-only now: it shows the selected cell's info and lets you
@@ -1011,7 +1017,7 @@ function renderSelection() {
     onReseatFaction,
     // Persistent taverns + the transient "What's stirring?" situation (Phase 12.7).
     // The situation only belongs to the currently-selected hex.
-    situation: settlementSituation && settlementSituation.q === q && settlementSituation.r === r ? settlementSituation : null,
+    situation: settlementSituations[`${q},${r}`] || null,
     onRollSituation: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onRollSituation(q, r) : undefined,
     onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
     onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
@@ -1952,8 +1958,9 @@ async function onRollSituation(q, r) {
   await ensureTaverns(hex, q, r);
   const tables = await loadTables(ORACLE_TABLE_IDS);
   const pick = rollSettlement(tables, subRng(current.seed, "oracle", "settlement", oracleSeq++), { factionName: factionNameAt(q, r) });
-  settlementSituation = { q, r, line: oracleLine(pick), note: pick.factionNote ? "⚑ " + pick.factionNote : null };
-  logLine(`🎲 What's stirring: ${settlementSituation.line}${settlementSituation.note ? " · " + settlementSituation.note : ""}`);
+  const situation = { line: oracleLine(pick), note: pick.factionNote ? "⚑ " + pick.factionNote : null };
+  settlementSituations[`${q},${r}`] = situation;
+  logLine(`🎲 What's stirring: ${situation.line}${situation.note ? " · " + situation.note : ""}`);
   renderSelection();
 }
 

@@ -769,10 +769,44 @@ export function renderSelectionPanel(model) {
       box.appendChild(nm); box.appendChild(meta);
       sel.appendChild(box);
 
-      // Persistent taverns (Phase 12.7): saved fixtures of the town, each
-      // removable; "What's stirring?" rolls the transient situation and stocks
-      // them on first use. The situation line (if any) shows below, un-saved.
-      sel.appendChild(sectionLabel("Taverns"));
+      // The town's transient "what's stirring?" situation (auto-rolled when the
+      // card opens; ↻ re-rolls) sits ABOVE the tavern list. Persistent taverns
+      // follow — each removable, and "+" on the Taverns header adds one. (12.7)
+      if (model.situation) {
+        const s = document.createElement("div");
+        s.className = "sel-situation";
+        if (model.onRollSituation) {
+          const rf = document.createElement("button");
+          rf.className = "situation-refresh";
+          rf.textContent = "↻";
+          rf.title = "Roll a new situation";
+          rf.addEventListener("click", model.onRollSituation);
+          s.appendChild(rf);
+        }
+        const line = document.createElement("div");
+        line.className = "situation-line";
+        line.textContent = model.situation.line;
+        s.appendChild(line);
+        if (model.situation.note) {
+          const n = document.createElement("div");
+          n.className = "situation-note";
+          n.textContent = model.situation.note;
+          s.appendChild(n);
+        }
+        sel.appendChild(s);
+      }
+      const th = document.createElement("div");
+      th.className = "tavern-header";
+      th.appendChild(sectionLabel("Taverns"));
+      if (model.onAddTavern) {
+        const add = document.createElement("button");
+        add.className = "tavern-add";
+        add.textContent = "+";
+        add.title = "Add a tavern";
+        add.addEventListener("click", model.onAddTavern);
+        th.appendChild(add);
+      }
+      sel.appendChild(th);
       const taverns = Array.isArray(hex.settlement.taverns) ? hex.settlement.taverns : [];
       if (taverns.length) {
         const list = document.createElement("div");
@@ -799,34 +833,11 @@ export function renderSelectionPanel(model) {
           list.appendChild(row);
         });
         sel.appendChild(list);
-        const actions = document.createElement("div");
-        actions.className = "tile-actions";
-        if (model.onAddTavern) actions.appendChild(actionButton("Add tavern", model.onAddTavern));
-        if (model.onRollSituation) actions.appendChild(actionButton("What's stirring?", model.onRollSituation));
-        sel.appendChild(actions);
       } else {
         const hint = document.createElement("div");
         hint.className = "panel-hint";
         hint.textContent = "No taverns yet.";
         sel.appendChild(hint);
-        if (model.onRollSituation) {
-          const actions = document.createElement("div");
-          actions.className = "tile-actions";
-          actions.appendChild(actionButton("What's stirring?", model.onRollSituation));
-          sel.appendChild(actions);
-        }
-      }
-      if (model.situation) {
-        const s = document.createElement("div");
-        s.className = "sel-situation";
-        s.textContent = model.situation.line;
-        sel.appendChild(s);
-        if (model.situation.note) {
-          const n = document.createElement("div");
-          n.className = "sel-situation-note";
-          n.textContent = model.situation.note;
-          sel.appendChild(n);
-        }
       }
     }
     renderPoiSection(sel, hex, model);
