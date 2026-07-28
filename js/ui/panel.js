@@ -249,36 +249,33 @@ function sectionLabel(text) {
   return el;
 }
 
-// One labelled field in the room stat-block: a small uppercase muted label
-// with the value(s) below. `lines` is a string, a Node (inline markup like
-// the treasure badge), or an array of either — each array item is its own line.
-function roomField(label, lines) {
-  const field = document.createElement("div");
-  field.className = "room-field";
-  const lbl = document.createElement("div");
-  lbl.className = "room-field-label";
-  lbl.textContent = label;
-  field.appendChild(lbl);
-  const val = document.createElement("div");
-  val.className = "room-field-value";
-  for (const line of Array.isArray(lines) ? lines : [lines]) {
-    const row = document.createElement("div");
-    if (typeof line === "string") row.textContent = line;
-    else row.appendChild(line);
-    val.appendChild(row);
-  }
-  field.appendChild(val);
-  return field;
+// Thin rule separating the Dungeon / Level / Room sections of the panel.
+function panelRule() {
+  const hr = document.createElement("hr");
+  hr.className = "panel-rule";
+  return hr;
 }
 
-// Treasure field value: the existing Treasure Type badge (12.4) + guard text.
-function treasureValue(treasure) {
-  const row = document.createDocumentFragment();
-  const badge = document.createElement("span");
-  badge.className = "treasure-badge";
-  badge.textContent = treasure.type;
-  row.append(badge, ` ${treasure.guard} — roll on your tables.`);
-  return row;
+const DIFFICULTY_TIER = { soft: 1, standard: 2, deadly: 3 };
+const DIFFICULTY_LABEL = { soft: "Soft", standard: "Standard", deadly: "Deadly" };
+
+// 3 skull glyphs, N filled solid (rest faded) for the dungeon's difficulty tier.
+// Returns null when there's no difficulty (towers never set it).
+function difficultySkulls(difficulty) {
+  const n = DIFFICULTY_TIER[difficulty];
+  if (!n) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "difficulty";
+  const label = `${DIFFICULTY_LABEL[difficulty]} (${n}/3)`;
+  wrap.title = label;
+  wrap.setAttribute("aria-label", label);
+  for (let i = 1; i <= 3; i++) {
+    const s = document.createElement("span");
+    s.className = "skull" + (i <= n ? " filled" : "");
+    s.textContent = "☠";
+    wrap.appendChild(s);
+  }
+  return wrap;
 }
 
 // Overflow "…" menu for the wayfinding/destructive actions, so the card stays
@@ -788,14 +785,11 @@ export function renderDungeonPanel({
   sel.innerHTML = "";
 
   const h = document.createElement("h3");
-  h.textContent = `${dungeon.theme || "Dungeon"} — ${dungeon.size}`;
+  h.textContent = dungeon.theme || "Dungeon";
   sel.appendChild(h);
-  if (dungeon.difficulty) {
-    const diff = document.createElement("div");
-    diff.className = "log-line";
-    diff.textContent = `Difficulty: ${dungeon.difficulty}`;
-    sel.appendChild(diff);
-  }
+  const skulls = difficultySkulls(dungeon.difficulty);
+  if (skulls) sel.appendChild(skulls);
+  sel.appendChild(panelRule()); // rule A: dungeon-info | level
 
   // Towers ("up" orientation) are floors, not levels; their floors carry a
   // garrison rather than a family, and have no wandering-monster table.
@@ -817,21 +811,35 @@ export function renderDungeonPanel({
   }
 
   if (room) {
+    sel.appendChild(panelRule()); // rule B: level | room (only when a room is selected)
     sel.appendChild(sectionLabel(`Room ${room.n}`));
-    const occupants = [];
-    if (room.held) occupants.push(`Held by ${room.held}`);
-    if (room.monster) occupants.push(`${room.monster.na} ${room.monster.name} (${room.monster.status})`);
-
-    if (room.dressing) sel.appendChild(roomField("Description", room.dressing));
-    if (occupants.length) sel.appendChild(roomField("Occupants", occupants));
+    if (room.dressing) {
+      const flavor = document.createElement("div");
+      flavor.className = "room-flavor";
+      flavor.textContent = room.dressing;
+      sel.appendChild(flavor);
+    }
     // The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X
     // lair Treasure Type LETTER + how it's guarded, and the GM rolls the contents
-    // on their own tables — no invented gp. (badge "D" + "hidden — roll on your tables.")
-    if (room.treasure) sel.appendChild(roomField("Treasure", treasureValue(room.treasure)));
-    if (room.trap) sel.appendChild(roomField("Traps", `${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}`));
-    if (room.special) sel.appendChild(roomField("Special", room.special));
-    if (room.light) sel.appendChild(roomField("Light", room.light.source));
-    if (surface.length) sel.appendChild(roomField("Exits", surface));
+    // on their own tables — no invented gp.
+    const items = [];
+    if (room.held) items.push(`Held by ${room.held}`);
+    if (room.monster) items.push(`${room.monster.na} ${room.monster.name} (${room.monster.status})`);
+    if (room.treasure) items.push(`Treasure Type ${room.treasure.type} (${room.treasure.guard})`);
+    if (room.trap) items.push(`${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}`);
+    if (room.special) items.push(room.special);
+    if (room.light) items.push(room.light.source);
+    for (const s of surface) items.push(s);
+    if (items.length) {
+      const ul = document.createElement("ul");
+      ul.className = "room-contents";
+      for (const text of items) {
+        const li = document.createElement("li");
+        li.textContent = text;
+        ul.appendChild(li);
+      }
+      sel.appendChild(ul);
+    }
     // Stair navigation buttons (switch level + select the connected room).
     if (connections.length && onGoTo) {
       const row = document.createElement("div");
@@ -844,7 +852,6 @@ export function renderDungeonPanel({
     // Exploration tracking: toggles + a GM note (kept separate from generated
     // content, so it survives dungeon regeneration).
     if (roomState && onToggleRoom) {
-      sel.appendChild(sectionLabel("Tracking"));
       const row = document.createElement("div");
       row.className = "tile-actions";
       for (const field of ["explored", "cleared", "looted"]) {
@@ -960,15 +967,5 @@ export function showWorld(world, opts = {}) {
   region("pinned-hooks", true); // the party's pinned leads
   region("oracle-panel", true); // on-demand GM oracle rolls (renderOraclePanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
-  // Static world-metadata footer (seed & scale are immutable per world, so it
-  // never goes stale). The old growing event log moved to the browser console.
-  const meta = document.createElement("div");
-  meta.className = "world-meta";
-  for (const line of [`Seed: ${world.seed}`, `Hex scale: ${world.hexScale} miles`]) {
-    const div = document.createElement("div");
-    div.textContent = line;
-    meta.appendChild(div);
-  }
-  el.appendChild(meta);
   applyPanelTab(); // reflect the active tab (Detail) on the freshly built bar
 }

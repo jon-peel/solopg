@@ -1358,23 +1358,17 @@ button:hover {
   margin-right: 0.3rem;
 }
 
-/* Room detail stat-block (redesign): labelled fields replace the old flat
-   .log-line stack so Occupants/Treasure/Traps/etc. read as a scannable
-   stat-block instead of a uniform wall of lines. */
-.room-field { margin-top: 0.55rem; }
-.room-field-label {
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.room-field-value {
-  margin-top: 0.1rem;
-  font-size: 0.85rem;
-  color: var(--ink);
-}
-.room-field-value > div + div { margin-top: 0.15rem; }
+/* Thin rule separating the Dungeon / Level / Room sections (redesign). */
+.panel-rule { margin: 0.6rem 0; border: none; border-top: 1px solid var(--edge); }
+/* Difficulty as skulls: N filled (of 3). Monochrome ☠ so it takes CSS colour. */
+.difficulty { display: inline-flex; gap: 0.15rem; margin: 0.15rem 0 0.3rem; font-size: 0.95rem; line-height: 1; }
+.difficulty .skull { color: var(--accent); opacity: 0.25; }
+.difficulty .skull.filled { opacity: 1; }
+/* Empty-room dressing: a quiet italic flavour line under "Room N" (no label). */
+.room-flavor { margin-top: 0.3rem; font-size: 0.82rem; font-style: italic; color: var(--ink-soft); }
+/* Room contents as a plain bullet list. */
+.room-contents { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: var(--ink); }
+.room-contents li { margin-top: 0.2rem; }
 
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 
@@ -1478,15 +1472,6 @@ button:hover {
   padding: 0.15rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--muted);
-}
-
-/* Static world-metadata footer (replaces the old on-UI event log). */
-.world-meta {
-  margin-top: 0.6rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 0.78rem;
 }
 
 /* Empty-state hint shown when no world is loaded. */
