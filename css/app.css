@@ -28,6 +28,22 @@
   --accent-wash: rgba(138, 51, 36, 0.14);
   --gold-wash: rgba(176, 132, 43, 0.18);
 
+  /* Text/glyph on an accent- or ink-filled control, and the RGB channels of the
+     translucent parchment used by floating overlays (both flip in dark mode). */
+  --on-accent: #f4ead2;
+  --overlay-rgb: 239 227 200;
+
+  /* Dungeon-legend swatches — mirror the canvas content/door fills (theme.js
+     DUNGEON) so the legend flips with the dungeon map. */
+  --dgn-monster: #e4c1a9;
+  --dgn-trap: #e8d59e;
+  --dgn-empty: #efe4c6;
+  --dgn-special: #d2cadf;
+  --dgn-door: #c9a45f;
+  --dgn-locked: #b3402f;
+  --dgn-stuck: #c07a2a;
+  --dgn-secret: #7a5aa6;
+
   /* Elevation (warm shadows) */
   --shadow-1: 0 1px 2px rgba(60, 44, 18, 0.2);
   --shadow-2: 0 8px 24px rgba(60, 44, 18, 0.3);
@@ -140,7 +156,7 @@ button:hover {
   transform: translateX(-50%) translateY(-3px);
   white-space: nowrap;
   background: var(--ink);
-  color: #f4ead2;
+  color: var(--on-accent);
   font-size: 0.72rem;
   padding: 0.22rem 0.5rem;
   border-radius: var(--radius);
@@ -244,7 +260,7 @@ button:hover {
   bottom: 0.6rem;
   font-size: 0.75rem;
   color: var(--ink);
-  background: rgba(239, 227, 200, 0.82);
+  background: rgb(var(--overlay-rgb) /0.82);
   border: 1px solid var(--edge);
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius);
@@ -264,7 +280,7 @@ button:hover {
   align-items: center;
   font-size: 0.78rem;
   color: var(--ink);
-  background: rgba(239, 227, 200, 0.94);
+  background: rgb(var(--overlay-rgb) /0.94);
   padding: 0.35rem 0.55rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--accent-2);
@@ -302,7 +318,7 @@ button:hover {
   overflow: hidden;
   font-size: 0.65rem;
   color: var(--ink);
-  background: rgba(239, 227, 200, 0.82);
+  background: rgb(var(--overlay-rgb) /0.82);
   border: 1px solid var(--edge);
   padding: 0.3rem 0.4rem 0.15rem;
   border-radius: var(--radius);
@@ -405,7 +421,7 @@ button:hover {
 #travel-hud,
 #pace-panel {
   padding: 0.4rem 0.55rem;
-  background: rgba(239, 227, 200, 0.94);
+  background: rgb(var(--overlay-rgb) /0.94);
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
@@ -527,7 +543,7 @@ button:hover {
   transform: translateY(-50%) translateX(3px);
   white-space: nowrap;
   background: var(--ink);
-  color: #f4ead2;
+  color: var(--on-accent);
   font-size: 0.72rem;
   padding: 0.22rem 0.5rem;
   border-radius: var(--radius);
@@ -553,7 +569,7 @@ button:hover {
   align-items: center;
   gap: 0.3rem;
   padding: 0.3rem;
-  background: rgba(239, 227, 200, 0.85);
+  background: rgb(var(--overlay-rgb) /0.85);
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
@@ -591,7 +607,7 @@ button:hover {
   font-size: 1rem;
   line-height: 1;
   color: var(--ink);
-  background: rgba(239, 227, 200, 0.94);
+  background: rgb(var(--overlay-rgb) /0.94);
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-1);
@@ -733,7 +749,7 @@ button:hover {
   font-size: 0.72rem;
   line-height: 1.5;
   color: var(--ink);
-  background: rgba(239, 227, 200, 0.96);
+  background: rgb(var(--overlay-rgb) /0.96);
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
@@ -766,6 +782,27 @@ button:hover {
 }
 #dungeon-legend strong {
   color: var(--accent);
+}
+
+/* Hover tooltip on the dungeon canvas (room / glyph / door / badge). Fixed,
+   cursor-anchored via clientX/clientY, appended to <body>. */
+.dungeon-tip {
+  position: fixed;
+  z-index: 25;
+  max-width: 15rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink);
+  background: rgb(var(--overlay-rgb) /0.96);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.5rem;
+  box-shadow: var(--shadow-2);
+  pointer-events: none;
+}
+
+.dungeon-tip[hidden] {
+  display: none;
 }
 
 /* Overview stat chips at the top of the panel (Phase 11.5b). */
@@ -803,7 +840,7 @@ button:hover {
 .sel-actions {
   font-size: 0.78rem;
   padding: 0.2rem 0.5rem;
-  color: #f4ead2;
+  color: var(--on-accent);
   background: var(--accent);
   border-color: var(--edge-strong);
   white-space: nowrap;
@@ -811,6 +848,41 @@ button:hover {
 .sel-actions:hover {
   background: #7a2c1f;
 }
+
+/* Selection-card hierarchy (Phase 12.6): terrain header, muted coord subline,
+   and the settlement as a small accent callout. */
+.sel-terrain { font-family: var(--font-display); font-size: 0.98rem; color: var(--ink); margin-top: 0.15rem; }
+.sel-terrain-name { text-transform: capitalize; font-weight: 600; }
+.sel-feature { color: var(--muted); font-weight: 400; }
+.sel-coords { margin-top: 0.15rem; font-size: 0.72rem; color: var(--muted); letter-spacing: 0.03em; }
+.sel-settlement { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin-top: 0.55rem;
+  padding: 0.4rem 0.55rem; background: var(--accent-wash); border-left: 3px solid var(--accent); border-radius: 3px; }
+.sel-settle-name { font-weight: 700; color: var(--ink); }
+.sel-settle-meta { font-size: 0.78rem; color: var(--muted); }
+
+/* Persistent settlement taverns + the town's transient situation (Phase 12.7):
+   the situation is a gold callout (with a ↻ re-roll) above the list; each tavern
+   is a removable row; "+" on the Taverns header adds one. */
+.tavern-header { display: flex; align-items: center; justify-content: space-between; margin-top: 0.6rem; }
+.tavern-header .section-label { margin-top: 0; }
+.tavern-add { flex: 0 0 auto; padding: 0 0.4rem; font-size: 0.9rem; line-height: 1.3;
+  color: var(--muted); background: transparent; border: 1px solid var(--edge); border-radius: 3px; }
+.tavern-add:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
+.tavern-list { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.3rem; }
+.tavern-row { display: flex; align-items: baseline; gap: 0.4rem; }
+.tavern-text { flex: 1; font-size: 0.85rem; line-height: 1.35; }
+.tavern-sign { font-weight: 700; color: var(--ink); }
+.tavern-close { flex: 0 0 auto; padding: 0 0.35rem; font-size: 0.75rem; line-height: 1.4;
+  color: var(--muted); background: transparent; border: 1px solid var(--edge); border-radius: 3px; }
+.tavern-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
+.sel-situation { position: relative; margin-top: 0.5rem; padding: 0.4rem 1.9rem 0.4rem 0.55rem;
+  background: var(--gold-wash); border-left: 3px solid var(--gold); border-radius: 3px; }
+.situation-line { font-size: 0.85rem; font-style: italic; color: var(--ink); line-height: 1.35; }
+.situation-note { margin-top: 0.25rem; font-size: 0.8rem; font-weight: 600; color: var(--accent); }
+.situation-refresh { position: absolute; top: 0.3rem; right: 0.35rem; padding: 0 0.3rem;
+  font-size: 0.85rem; line-height: 1.4; color: var(--muted); background: transparent;
+  border: 1px solid var(--edge); border-radius: 3px; }
+.situation-refresh:hover { color: var(--accent); border-color: var(--accent); background: var(--gold-wash); }
 
 #selection h3 {
   margin: 0.25rem 0;
@@ -883,7 +955,7 @@ button:hover {
   overflow-y: auto;
   font-size: 0.74rem;
   color: var(--ink);
-  background: rgba(239, 227, 200, 0.96);
+  background: rgb(var(--overlay-rgb) /0.96);
   border: 1px solid var(--edge-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
@@ -904,11 +976,30 @@ button:hover {
   margin-bottom: 0;
 }
 .legend-sub {
+  display: flex;
+  align-items: center;
   color: var(--muted);
   text-transform: uppercase;
   font-size: 0.62rem;
   letter-spacing: 0.05em;
   margin: 0.15rem 0;
+}
+/* World-wide "Advance turn" button in the legend "Powers" header (Phase 12.1),
+   relocated from the removed Factions tab. Pushed to the row's right edge. */
+.legend-advance {
+  margin-left: auto;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.68rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  background: rgba(255, 250, 236, 0.55);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.legend-advance:hover {
+  background: rgba(255, 250, 236, 0.9);
 }
 .legend-row {
   display: flex;
@@ -927,6 +1018,15 @@ button:hover {
   flex: 0 0 auto;
   border-radius: 3px;
   border: 1px solid rgba(0, 0, 0, 0.35);
+}
+/* Fixed-width glyph swatch for the "Marks" legend rows (Phase 12.5) — aligns a
+   coloured Unicode mark to the same column as the colour swatches. */
+.lg-glyph {
+  width: 0.95rem;
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 /* Faction key rows (Phase 11.4): a clickable legend entry per power. The swatch
@@ -961,6 +1061,77 @@ button:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Floating faction detail popup (Phase 12.1): opened from a legend "Powers" row,
+   it floats over the map (top-centre of #stage) in place of the removed Factions
+   side-panel tab, reusing the same factionCard body. Sits above #legend (z 6). */
+#faction-popup {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  width: 18rem;
+  max-width: calc(100% - 1.2rem);
+  max-height: 70%;
+  overflow-y: auto;
+  color: var(--ink);
+  background: rgb(var(--overlay-rgb) /0.98);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 0.6rem 0.7rem;
+}
+#faction-popup[hidden] {
+  display: none;
+}
+.faction-popup-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  z-index: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: rgba(255, 250, 236, 0.7);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.faction-popup-close:hover {
+  background: rgba(255, 250, 236, 1);
+}
+
+/* Bottom-centre event ticker (Phase 12.2): a transient flash for a world event
+   near the party, then it fades. Sits above #legend (z 6), below #faction-popup
+   (z 8). Click it to recentre on the event. */
+#event-ticker {
+  position: absolute;
+  bottom: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  max-width: 60%;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--ink);
+  background: rgb(var(--overlay-rgb) /0.98);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.35s ease;
+}
+#event-ticker.fading {
+  opacity: 0;
+}
+#event-ticker[hidden] {
+  display: none;
+}
 .lg-line {
   width: 1.6rem;
   flex: 0 0 auto;
@@ -970,7 +1141,7 @@ button:hover {
 .lg-road { height: 3px; background: #c39a54; box-shadow: 0 0 0 1px #4a3a1f; }
 .lg-track { height: 0; border-top: 3px dashed #c69a58; }
 .lg-ancient { height: 0; border-top: 3px dotted #d8cba6; }
-.lg-river { height: 3px; background: #6fd0f0; }
+.lg-river { height: 3px; background: #8fb8d6; } /* mirrors theme.js Lake (rivers = lake water) */
 
 /* Thin separator between command-bar groups. */
 .bar-divider {
@@ -1114,9 +1285,9 @@ button:hover {
   padding: 0.25rem 0.4rem;
   font: inherit;
   font-size: 0.9rem;
-  color: var(--text, #e6e8ee);
-  background: #11131a;
-  border: 1px solid var(--border, #2b3140);
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--edge);
   border-radius: 4px;
 }
 .hex-name:focus {
@@ -1130,9 +1301,9 @@ button:hover {
   padding: 0.3rem 0.4rem;
   font: inherit;
   font-size: 0.85rem;
-  color: var(--text, #e6e8ee);
-  background: #11131a;
-  border: 1px solid var(--border, #2b3140);
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--edge);
   border-radius: 4px;
   resize: vertical;
 }
@@ -1141,6 +1312,9 @@ button:hover {
   outline: none;
   border-color: var(--accent);
 }
+
+.hex-name::placeholder,
+.room-note::placeholder { color: var(--muted); }
 
 /* "Add POI" disclosure dropdown. */
 .menu {
@@ -1251,6 +1425,46 @@ button:hover {
   display: none;
 }
 
+/* Treasure Type badge (12.4): the room panel's B/X lair letter (9.8), boxed in
+   the wax-seal accent — mirrors .panel-tabs .badge's pill styling. */
+.treasure-badge {
+  display: inline-block;
+  min-width: 1.1rem;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: bold;
+  font-size: 0.78rem;
+  background: var(--accent);
+  border: 1px solid var(--edge-strong);
+  border-radius: 999px;
+  padding: 0 0.3rem;
+  color: #f7ecd4;
+  margin-right: 0.3rem;
+}
+
+/* Thin rule separating the Dungeon / Level / Room sections (redesign). */
+.panel-rule { margin: 0.6rem 0; border: none; border-top: 1px solid var(--edge); }
+/* Difficulty as skulls: N filled (of 3). Monochrome ☠ so it takes CSS colour. */
+.difficulty { display: inline-flex; gap: 0.15rem; margin-left: 0.5rem; font-size: 0.75rem; line-height: 1; vertical-align: middle; }
+.difficulty .skull { color: var(--accent); opacity: 0.25; }
+.difficulty .skull.filled { opacity: 1; }
+/* Room flavour: empty-room dressing or Special-feature text, as a distinct callout under "Room N" (no label). */
+.room-flavor {
+  margin: 0.45rem 0 0.25rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--paper-raised);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+/* Room contents as a plain bullet list. */
+.room-contents { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: var(--ink); }
+.room-contents li { margin-top: 0.2rem; }
+/* Bestiary's inline foreshadowing hint (authored monsters only), under a name+floors li. */
+.bestiary-telegraph { margin-top: 0.15rem; font-style: italic; color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
+
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 
 /* Selected hook (its target/origin are ringed on the map). */
@@ -1355,15 +1569,6 @@ button:hover {
   color: var(--muted);
 }
 
-/* Static world-metadata footer (replaces the old on-UI event log). */
-.world-meta {
-  margin-top: 0.6rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
 /* Empty-state hint shown when no world is loaded. */
 .panel-empty {
   color: var(--muted);
@@ -1376,6 +1581,10 @@ button:hover {
   font-size: 0.75rem;
   font-style: italic;
 }
+
+/* Oracle empty/placeholder state (Phase 12.6): a consistent dashed footprint. */
+.oracle-empty { margin-top: 0.4rem; padding: 0.4rem 0.55rem; border: 1px dashed var(--edge);
+  border-radius: 3px; color: var(--muted); font-size: 0.8rem; font-style: italic; }
 
 /* Oracle tab (Phase 9.1) — the single latest roll result (no stored history). */
 .oracle-result {
@@ -1426,6 +1635,26 @@ button:hover {
   100% {
     color: var(--ink);
   }
+}
+/* Wandering-roll result: the monster in a red block (like .oracle-result) with
+   its surprise/reaction/distance detail lines stacked smaller inside it. */
+.wandering-result {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  background: var(--accent-wash);
+}
+.wandering-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.wandering-detail {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink);
 }
 /* The odds ladder — a compact wrapping row of one-click roll buttons. */
 .oracle-odds {
@@ -1522,7 +1751,14 @@ button:hover {
 .ring-node .label {
   font-size: 0.62rem;
   letter-spacing: 0.02em;
-  max-width: 4.6rem;
+  /* Fit the label inside the ~50–56px node circle: 4.6rem was wider than the
+     node, so a two-word label ("Household guard") stayed near one line and
+     spilled past the ring; overflow-wrap breaks a long single word rather than
+     letting it poke out the sides. */
+  max-width: 2.9rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 /* Travel-compass nodes are smaller (3 concentric rings) — trim glyph + label. */
 .ring-node.travel .glyph {
@@ -1683,4 +1919,58 @@ button:hover {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Automatic dark "grimoire" variant (Phase 12.8): follows the OS
+   prefers-color-scheme. Mirrors js/ui/theme.js DARK.palette — keep in sync.
+   Placed LAST so the surface re-declarations (map/legend/command-bar/hover)
+   win over their light counterparts at equal specificity. Most of the UI
+   re-themes from the token overrides alone; the map + dungeon canvases repaint
+   from theme.js on the OS-theme change. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #241d14;
+    --paper-panel: #2b2318;
+    --paper-bar: #1e1710;
+    --paper-raised: #372d1f;
+    --paper-sunk: #16100a;
+    --ink: #ece0c6;
+    --ink-soft: #b6a483;
+    --ink-faint: #8c7a5c;
+    --edge: #56472f;
+    --edge-strong: #7a6238;
+    --accent: #d97a61;
+    --accent-2: #63b3a6;
+    --gold: #d8a648;
+    --danger: #db6551;
+    --accent-wash: rgba(217, 122, 97, 0.16);
+    --gold-wash: rgba(216, 166, 72, 0.16);
+    --on-accent: #241d14;
+    --overlay-rgb: 32 26 18;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --dgn-monster: #4a3428;
+    --dgn-trap: #4d4326;
+    --dgn-empty: #38301f;
+    --dgn-special: #3b3648;
+    --dgn-door: #b8923f;
+    --dgn-locked: #cf5a48;
+    --dgn-stuck: #cf9440;
+    --dgn-secret: #9a7ec8;
+  }
+  #command-bar { background: linear-gradient(var(--paper-bar), #140f09); }
+  .bar-group { background: rgba(255, 245, 225, 0.04); box-shadow: inset 0 1px 0 rgba(255, 245, 225, 0.06); }
+  button:hover { background: linear-gradient(#42371f, var(--paper-raised)); }
+  .sel-actions:hover { background: #b25640; }
+  #map {
+    background-color: #241d14;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+      radial-gradient(130% 130% at 50% 28%, #2c2317 0%, #241d14 55%, #17110a 100%);
+  }
+  #legend { background: radial-gradient(130% 130% at 50% 30%, #2e2619 0%, #241d13 60%, #191309 100%); }
+  /* The dungeon canvas is transparent over this backdrop — flip it too. */
+  #dungeon-view { background: radial-gradient(130% 130% at 50% 30%, #2e2619 0%, #241d13 60%, #191309 100%); }
+  .lg-river { background: #40607a; } /* mirrors theme.js DARK Lake */
 }

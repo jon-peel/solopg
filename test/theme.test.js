@@ -5,6 +5,7 @@ import {
   TERRAIN_COLORS,
   UNKNOWN_COLOR,
   SELECTED_STROKE,
+  THEMES,
   parseHex,
   relativeLuminance,
   contrastRatio,
@@ -89,4 +90,20 @@ test("finished-skin contrast: key text/surface pairs meet WCAG AA", () => {
   }
   // The pale text used on accent-filled controls (buttons, tabs badge, tooltips).
   assert.ok(meetsAA("#f4ead2", PALETTE.accent), `parchment text on accent = ${contrastRatio("#f4ead2", PALETTE.accent).toFixed(2)}`);
+});
+
+test("dark palette meets WCAG AA on the same key text/surface pairs (12.8)", () => {
+  const d = THEMES.dark.palette;
+  // Body-size cream ink on each dark surface (4.5:1).
+  for (const bg of [d.paper, d.paperPanel, d.paperRaised, d.paperBar]) {
+    assert.ok(meetsAA(d.ink, bg), `dark ink on ${bg} = ${contrastRatio(d.ink, bg).toFixed(2)}`);
+  }
+  // Secondary text + accents at large/UI size (3:1).
+  for (const bg of [d.paper, d.paperPanel]) {
+    assert.ok(meetsAA(d.inkSoft, bg, true), `dark inkSoft on ${bg}`);
+    assert.ok(meetsAA(d.accent, bg, true), `dark accent on ${bg} = ${contrastRatio(d.accent, bg).toFixed(2)}`);
+    assert.ok(meetsAA(d.accent2, bg, true), `dark accent2 on ${bg}`);
+  }
+  // On the (now-lighter) accent fills, control text flips to the dark on-accent ink.
+  assert.ok(meetsAA(d.onAccent, d.accent, true), `dark on-accent on accent = ${contrastRatio(d.onAccent, d.accent).toFixed(2)}`);
 });

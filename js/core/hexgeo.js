@@ -135,6 +135,13 @@ export function axialDistance(aq, ar, bq, br) {
   return (Math.abs(aq - bq) + Math.abs(aq + ar - bq - br) + Math.abs(ar - br)) / 2;
 }
 
+/** True when `at` is within `radius` hexes of `party` (inclusive). Guards nulls/non-finite → false. */
+export function isNearParty(at, party, radius) {
+  if (!at || !party) return false;
+  if (!Number.isFinite(at.q) || !Number.isFinite(at.r)) return false;
+  return axialDistance(at.q, at.r, party.q, party.r) <= radius;
+}
+
 /**
  * The straight hex line from (aq,ar) to (bq,br), inclusive of both ends. Axial is
  * a linear projection of cube, so we lerp the axial coords and cube-round each

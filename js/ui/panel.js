@@ -3,7 +3,7 @@
 import { glyphForPoi } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
-import { factionLabel, factionDescription } from "../gen/factions.js";
+import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
 
@@ -13,7 +13,7 @@ const panel = () => document.getElementById("panel");
 // The panel shows one tab at a time; each region is built once (in showWorld)
 // and toggled via a class on #panel.
 let activeTab = "detail";
-const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", factions: "factions-panel", oracle: "oracle-panel" };
+const TAB_REGIONS = { detail: "selection", hooks: "global-hooks", pinned: "pinned-hooks", oracle: "oracle-panel" };
 
 function applyPanelTab() {
   const el = panel();
@@ -32,7 +32,7 @@ function applyPanelTab() {
   }
 }
 
-/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "factions" | "oracle"). */
+/** Switch the side panel to a tab ("detail" | "hooks" | "pinned" | "oracle"). */
 export function setPanelTab(tab) {
   activeTab = TAB_REGIONS[tab] ? tab : "detail";
   applyPanelTab();
@@ -53,22 +53,6 @@ export function occupantSummary(occupant) {
  */
 export function logLine(text) {
   console.log(text);
-}
-
-/**
- * Format a hex as readable text lines (pure — no DOM).
- * @param {object} hex
- * @returns {string[]}
- */
-export function describeHex(hex) {
-  const terrain = hex.terrainFeature
-    ? `${hex.terrain} (${hex.terrainFeature})`
-    : hex.terrain;
-  const coords = hex.coords
-    ? `  Coords: (${hex.coords.q}, ${hex.coords.r})`
-    : null;
-  // Settlement and POIs have their own panel sections (with controls).
-  return [`Hex ${hex.key}`, coords, `  Terrain: ${terrain}`].filter(Boolean);
 }
 
 // At-a-glance counts of the world's contents for the overview header (11.5b).
@@ -249,6 +233,35 @@ function sectionLabel(text) {
   return el;
 }
 
+// Thin rule separating the Dungeon / Level / Room sections of the panel.
+function panelRule() {
+  const hr = document.createElement("hr");
+  hr.className = "panel-rule";
+  return hr;
+}
+
+const DIFFICULTY_TIER = { soft: 1, standard: 2, deadly: 3 };
+const DIFFICULTY_LABEL = { soft: "Soft", standard: "Standard", deadly: "Deadly" };
+
+// 3 skull glyphs, N filled solid (rest faded) for the dungeon's difficulty tier.
+// Returns null when there's no difficulty (towers never set it).
+function difficultySkulls(difficulty) {
+  const n = DIFFICULTY_TIER[difficulty];
+  if (!n) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "difficulty";
+  const label = `${DIFFICULTY_LABEL[difficulty]} (${n}/3)`;
+  wrap.title = label;
+  wrap.setAttribute("aria-label", label);
+  for (let i = 1; i <= 3; i++) {
+    const s = document.createElement("span");
+    s.className = "skull" + (i <= n ? " filled" : "");
+    s.textContent = "☠";
+    wrap.appendChild(s);
+  }
+  return wrap;
+}
+
 // Overflow "…" menu for the wayfinding/destructive actions, so the card stays
 // tidy even when the map is large and you just need to find a hex.
 function hookKebab(hook, model) {
@@ -424,7 +437,7 @@ export function renderGlobalHooks(model) {
 
 // One faction's card: name + archetype/disposition/goal prose, and — when it has
 // a holding — a click-to-centre link (mirrors a hook card's Target legend link).
-function factionCard(faction, model) {
+export function factionCard(faction, model) {
   const box = document.createElement("div");
   box.className = "hook"; // reuse the hook-card styling
   const dot = model.factionColorFor ? model.factionColorFor(faction.id) : null;
@@ -447,22 +460,19 @@ function factionCard(faction, model) {
     box.appendChild(div);
   }
 
-  // Every holding gets a jump link (8.9) — click-to-centre like a hook's
-  // Target/Origin. One holding → a single "Jump to holding"; several → one link
-  // per site, each centring the map on that hex.
-  const holdings = faction.holdings || [];
-  if (holdings.length && model.onCenterFaction) {
+  // A single home jump link (12.1 refinement) — click-to-centre on the
+  // faction's seat, or the centroid of its holdings when seatless. Replaces
+  // the old per-holding link list, which grew unwieldy for large factions.
+  if (model.onCenterFactionHome && factionHome(faction)) {
     const legend = document.createElement("div");
     legend.className = "hook-legend";
-    holdings.forEach((h, i) => {
-      const a = document.createElement("button");
-      a.type = "button";
-      a.className = "legend-link";
-      a.title = "Centre the map on this holding";
-      a.textContent = holdings.length === 1 ? "Jump to holding" : `Holding ${i + 1} · (${h.q}, ${h.r})`;
-      a.addEventListener("click", () => model.onCenterFaction(faction.id, i));
-      legend.appendChild(a);
-    });
+    const a = document.createElement("button");
+    a.type = "button";
+    a.className = "legend-link";
+    a.title = "Centre the map on this faction";
+    a.textContent = faction.seat ? "Jump to seat" : "Jump to centre";
+    a.addEventListener("click", () => model.onCenterFactionHome(faction.id));
+    legend.appendChild(a);
     box.appendChild(legend);
   }
 
@@ -489,45 +499,6 @@ function factionCard(faction, model) {
     box.appendChild(row);
   }
   return box;
-}
-
-/**
- * Render the Factions tab (Phase 8.7) into #factions-panel — one card per
- * faction, with a count badge on the tab. Mirrors the Hooks tab (7.3).
- * @param {{ factions: object[], onCenterFaction?: (id:string)=>void,
- *   onAdvanceFactionTurn?: ()=>void, onDeleteFaction?: (id:string)=>void,
- *   factionColorFor?: (id:string)=>string }} model
- */
-export function renderFactionsPanel(model) {
-  const host = document.getElementById("factions-panel");
-  if (!host) return;
-  host.innerHTML = "";
-  const factions = (model && model.factions) || [];
-  setTabBadge("factions-tab-badge", factions.length);
-
-  if (!factions.length) {
-    const empty = document.createElement("div");
-    empty.className = "panel-hint";
-    empty.textContent = "No factions yet — right-click a placed hex → Faction → Generate here.";
-    host.appendChild(empty);
-    return;
-  }
-
-  const head = document.createElement("div");
-  head.className = "hooks-head";
-  head.textContent = `${factions.length} faction${factions.length === 1 ? "" : "s"}`;
-  host.appendChild(head);
-
-  // Manual "Advance faction turn" (Phase 8.10) — GM pacing, independent of the
-  // day clock. Shown when at least one faction is active.
-  if (model.onAdvanceFactionTurn && factions.some((f) => (f.status || "active") === "active")) {
-    const row = document.createElement("div");
-    row.className = "tile-actions";
-    row.appendChild(actionButton("Advance faction turn", model.onAdvanceFactionTurn));
-    host.appendChild(row);
-  }
-
-  for (const faction of factions) host.appendChild(factionCard(faction, model));
 }
 
 /**
@@ -609,7 +580,7 @@ export function renderOraclePanel(model) {
     appendOracleResult(host, results.settlement, flashKind === "settlement");
   } else {
     const hint = document.createElement("div");
-    hint.className = "panel-hint";
+    hint.className = "oracle-empty";
     hint.textContent = "Select a town on the map to read what's stirring there.";
     host.appendChild(hint);
   }
@@ -635,7 +606,7 @@ export function renderOraclePanel(model) {
 function appendOracleResult(host, result, flash) {
   if (!result) {
     const empty = document.createElement("div");
-    empty.className = "panel-hint";
+    empty.className = "oracle-empty";
     empty.textContent = "No roll yet.";
     host.appendChild(empty);
     return;
@@ -672,6 +643,35 @@ function appendOracleResult(host, result, flash) {
     note.textContent = result.note;
     host.appendChild(note);
   }
+}
+
+// A wandering-encounter roll (Phase 12 dungeon panel): the monster and its
+// surprise/reaction/distance detail lines all stacked inside one red block,
+// unlike appendOracleResult's headline + separate body lines.
+function appendWanderingResult(host, result) {
+  if (!result) return;
+  const block = document.createElement("div");
+  block.className = "wandering-result";
+  const head = document.createElement("div");
+  head.className = "wandering-head";
+  if (result.tag) {
+    const tag = document.createElement("span");
+    tag.className = "oracle-kind";
+    tag.textContent = result.tag;
+    head.appendChild(tag);
+  }
+  const ans = document.createElement("span");
+  ans.className = "oracle-answer";
+  ans.textContent = result.line != null ? String(result.line) : "";
+  head.appendChild(ans);
+  block.appendChild(head);
+  for (const b of result.body || []) {
+    const line = document.createElement("div");
+    line.className = "wandering-detail";
+    line.textContent = b;
+    block.appendChild(line);
+  }
+  host.appendChild(block);
 }
 
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
@@ -730,26 +730,115 @@ export function renderSelectionPanel(model) {
   sel.appendChild(head);
 
   if (hex) {
-    for (const line of describeHex(hex)) {
-      const div = document.createElement("div");
-      div.className = "log-line";
-      div.textContent = line;
-      sel.appendChild(div);
+    // Terrain header + a muted coord subline (replaces the old flat log-lines).
+    const terr = document.createElement("div");
+    terr.className = "sel-terrain";
+    const tname = document.createElement("span");
+    tname.className = "sel-terrain-name";
+    tname.textContent = hex.terrain;
+    terr.appendChild(tname);
+    if (hex.terrainFeature) {
+      const feat = document.createElement("span");
+      feat.className = "sel-feature";
+      feat.textContent = ` · ${hex.terrainFeature}`;
+      terr.appendChild(feat);
     }
-    // Settlement as a plain info line (controls are on the radial menu). The
+    sel.appendChild(terr);
+    const coords = document.createElement("div");
+    coords.className = "sel-coords";
+    coords.textContent = `(${coord.q}, ${coord.r})`;
+    sel.appendChild(coords);
+    // Settlement as a small accent callout (controls are on the radial menu). The
     // name is derived from the seed + coords (settlement-name.js), so it needs no
     // stored field; a GM hex `name` annotation, if set, still labels the map.
     if (hex.settlement && hex.settlement.present) {
-      const div = document.createElement("div");
-      div.className = "log-line";
       const name = settlementName(model.seed, coord.q, coord.r, hex.gen, {
         kind: hex.settlement.kind,
         terrain: hex.terrain,
       });
       const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
       const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];
-      div.textContent = `Settlement: ${name} (${kindLabel})${water ? ` · ${water}` : ""}`;
-      sel.appendChild(div);
+      const box = document.createElement("div");
+      box.className = "sel-settlement";
+      const nm = document.createElement("span");
+      nm.className = "sel-settle-name";
+      nm.textContent = name;
+      const meta = document.createElement("span");
+      meta.className = "sel-settle-meta";
+      meta.textContent = `${kindLabel}${water ? ` · ${water}` : ""}`;
+      box.appendChild(nm); box.appendChild(meta);
+      sel.appendChild(box);
+
+      // The town's transient "what's stirring?" situation (auto-rolled when the
+      // card opens; ↻ re-rolls) sits ABOVE the tavern list. Persistent taverns
+      // follow — each removable, and "+" on the Taverns header adds one. (12.7)
+      if (model.situation) {
+        const s = document.createElement("div");
+        s.className = "sel-situation";
+        if (model.onRollSituation) {
+          const rf = document.createElement("button");
+          rf.className = "situation-refresh";
+          rf.textContent = "↻";
+          rf.title = "Roll a new situation";
+          rf.addEventListener("click", model.onRollSituation);
+          s.appendChild(rf);
+        }
+        const line = document.createElement("div");
+        line.className = "situation-line";
+        line.textContent = model.situation.line;
+        s.appendChild(line);
+        if (model.situation.note) {
+          const n = document.createElement("div");
+          n.className = "situation-note";
+          n.textContent = model.situation.note;
+          s.appendChild(n);
+        }
+        sel.appendChild(s);
+      }
+      const th = document.createElement("div");
+      th.className = "tavern-header";
+      th.appendChild(sectionLabel("Taverns"));
+      if (model.onAddTavern) {
+        const add = document.createElement("button");
+        add.className = "tavern-add";
+        add.textContent = "+";
+        add.title = "Add a tavern";
+        add.addEventListener("click", model.onAddTavern);
+        th.appendChild(add);
+      }
+      sel.appendChild(th);
+      const taverns = Array.isArray(hex.settlement.taverns) ? hex.settlement.taverns : [];
+      if (taverns.length) {
+        const list = document.createElement("div");
+        list.className = "tavern-list";
+        taverns.forEach((t, i) => {
+          const row = document.createElement("div");
+          row.className = "tavern-row";
+          const text = document.createElement("div");
+          text.className = "tavern-text";
+          const sign = document.createElement("span");
+          sign.className = "tavern-sign";
+          sign.textContent = t.sign;
+          text.appendChild(sign);
+          text.appendChild(document.createTextNode(` — known for ${t.specialty}. ${t.quirk}`));
+          row.appendChild(text);
+          if (model.onCloseTavern) {
+            const x = document.createElement("button");
+            x.className = "tavern-close";
+            x.textContent = "✕";
+            x.title = "Remove this tavern";
+            x.addEventListener("click", () => model.onCloseTavern(i));
+            row.appendChild(x);
+          }
+          list.appendChild(row);
+        });
+        sel.appendChild(list);
+      } else {
+        const hint = document.createElement("div");
+        hint.className = "panel-hint";
+        hint.textContent = "No taverns yet.";
+        sel.appendChild(hint);
+      }
     }
     renderPoiSection(sel, hex, model);
 
@@ -779,16 +868,11 @@ export function renderSelectionPanel(model) {
 
 /**
  * Render the Dungeon View's side panel: the dungeon header, the current level
- * (theme/family + wandering monsters), and the selected room's contents.
- * @param {{ dungeon: object, level: object, room: object|null }} model
+ * (theme/family + wandering monsters, with a referee Roll button for a
+ * transient encounter), and the selected room's contents.
+ * @param {{ dungeon: object, level: object, room: object|null,
+ *   onRollWandering?: () => void, wanderingResult?: object|null }} model
  */
-// The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X lair
-// Treasure Type LETTER + how it's guarded, and the GM rolls the contents on their
-// own tables — no invented gp. ("Treasure Type D, hidden — roll on your tables.")
-function treasureLine(t) {
-  return `Treasure Type ${t.type}, ${t.guard} — roll on your tables.`;
-}
-
 export function renderDungeonPanel({
   dungeon,
   level,
@@ -799,20 +883,45 @@ export function renderDungeonPanel({
   roomState,
   onToggleRoom,
   onNoteRoom,
+  onRollWandering,
+  wanderingResult,
+  bestiary = [],
+  onRevealTreasure,
+  onRevealHook,
 }) {
   const sel = document.getElementById("selection");
   if (!sel) return;
   sel.innerHTML = "";
 
   const h = document.createElement("h3");
-  h.textContent = `${dungeon.theme || "Dungeon"} — ${dungeon.size}`;
+  h.textContent = dungeon.theme || "Dungeon";
+  const skulls = difficultySkulls(dungeon.difficulty);
+  if (skulls) h.appendChild(skulls); // inline with the title
   sel.appendChild(h);
-  if (dungeon.difficulty) {
-    const diff = document.createElement("div");
-    diff.className = "log-line";
-    diff.textContent = `Difficulty: ${dungeon.difficulty}`;
-    sel.appendChild(diff);
+
+  // Bestiary (Phase 12 overview): the monsters stocked dungeon-wide, each with
+  // the floors it's on; monsters with an AUTHORED telegraph (data/monster-
+  // telegraph.json) get a small italic foreshadowing hint underneath. No
+  // generic-fallback line for the rest — inline hints are authored-only.
+  if (bestiary.length) {
+    sel.appendChild(sectionLabel("Monsters"));
+    const bul = document.createElement("ul");
+    bul.className = "room-contents";
+    for (const m of bestiary) {
+      const li = document.createElement("li");
+      li.textContent = `${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}`;
+      if (m.telegraph) {
+        const tel = document.createElement("div");
+        tel.className = "bestiary-telegraph";
+        tel.textContent = m.telegraph;
+        li.appendChild(tel);
+      }
+      bul.appendChild(li);
+    }
+    sel.appendChild(bul);
   }
+
+  sel.appendChild(panelRule()); // rule A: dungeon-info | level
 
   // Towers ("up" orientation) are floors, not levels; their floors carry a
   // garrison rather than a family, and have no wandering-monster table.
@@ -827,30 +936,65 @@ export function renderDungeonPanel({
     sel.appendChild(occ);
   }
   if (level.encounters && level.encounters.length) {
-    const wandering = document.createElement("div");
-    wandering.className = "log-line";
-    wandering.textContent = "Wandering: " + level.encounters.map((e) => e.value).join(", ");
-    sel.appendChild(wandering);
+    const head = document.createElement("div");
+    head.className = "tile-actions";
+    const label = document.createElement("span");
+    label.className = "log-line";
+    label.textContent = "Wandering";
+    head.appendChild(label);
+    if (onRollWandering) head.appendChild(actionButton("Roll", onRollWandering));
+    sel.appendChild(head);
+    const ul = document.createElement("ul");
+    ul.className = "room-contents";
+    for (const e of level.encounters) {
+      const li = document.createElement("li");
+      li.textContent = e.value;
+      ul.appendChild(li);
+    }
+    sel.appendChild(ul);
+    if (wanderingResult) appendWanderingResult(sel, wanderingResult);
   }
 
   if (room) {
+    sel.appendChild(panelRule()); // rule B: level | room (only when a room is selected)
     sel.appendChild(sectionLabel(`Room ${room.n}`));
-    for (const line of [
-      room.held ? `Held by ${room.held}` : null,
-      room.monster
-        ? `Monster: ${room.monster.na} ${room.monster.name} (${room.monster.status})`
-        : `Content: ${room.content}`,
-      room.trap ? `Trap: ${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}` : null,
-      room.special ? `Special: ${room.special}` : null,
-      room.dressing || null,
-      room.treasure ? treasureLine(room.treasure) : null,
-      room.light ? `Lit: ${room.light.source}` : null,
-      ...surface, // "Dungeon entrance (surface)", "Exit to surface"
-    ].filter(Boolean)) {
-      const div = document.createElement("div");
-      div.className = "log-line";
-      div.textContent = line;
-      sel.appendChild(div);
+    const flavor = room.dressing || room.special;
+    if (flavor) {
+      const el = document.createElement("div");
+      el.className = "room-flavor";
+      el.textContent = flavor;
+      sel.appendChild(el);
+    }
+    // A Special room's feature can conceal a hoard and/or a hook — the GM
+    // clicks to reveal (Phase 12). Reveal-once + permanent: the button drops
+    // away once the room carries the corresponding field.
+    if (room.special) {
+      const revealRow = document.createElement("div");
+      revealRow.className = "tile-actions";
+      if (!room.treasure && onRevealTreasure) revealRow.appendChild(actionButton("Reveal treasure", onRevealTreasure));
+      if (!room.revealedHookId && onRevealHook) revealRow.appendChild(actionButton("Reveal hook", onRevealHook));
+      if (revealRow.children.length) sel.appendChild(revealRow);
+    }
+    // The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X
+    // lair Treasure Type LETTER + how it's guarded, and the GM rolls the contents
+    // on their own tables — no invented gp.
+    const items = [];
+    if (room.held) items.push(`Held by ${room.held}`);
+    if (room.monster) items.push(`${room.monster.na} ${room.monster.name} (${room.monster.status})`);
+    if (room.treasure) items.push(`Treasure Type ${room.treasure.type} (${room.treasure.guard})`);
+    if (room.revealedHookId) items.push("Hook revealed — see Hooks tab");
+    if (room.trap) items.push(`${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}`);
+    if (room.light) items.push(room.light.source);
+    for (const s of surface) items.push(s);
+    if (items.length) {
+      const ul = document.createElement("ul");
+      ul.className = "room-contents";
+      for (const text of items) {
+        const li = document.createElement("li");
+        li.textContent = text;
+        ul.appendChild(li);
+      }
+      sel.appendChild(ul);
     }
     // Stair navigation buttons (switch level + select the connected room).
     if (connections.length && onGoTo) {
@@ -864,7 +1008,14 @@ export function renderDungeonPanel({
     // Exploration tracking: toggles + a GM note (kept separate from generated
     // content, so it survives dungeon regeneration).
     if (roomState && onToggleRoom) {
-      sel.appendChild(sectionLabel("Tracking"));
+      const note = document.createElement("textarea");
+      note.className = "room-note";
+      note.rows = 2;
+      note.placeholder = "Notes…";
+      note.value = roomState.note || "";
+      if (onNoteRoom) note.addEventListener("change", () => onNoteRoom(note.value));
+      sel.appendChild(note);
+
       const row = document.createElement("div");
       row.className = "tile-actions";
       for (const field of ["explored", "cleared", "looted"]) {
@@ -875,14 +1026,6 @@ export function renderDungeonPanel({
         row.appendChild(b);
       }
       sel.appendChild(row);
-
-      const note = document.createElement("textarea");
-      note.className = "room-note";
-      note.rows = 2;
-      note.placeholder = "Notes…";
-      note.value = roomState.note || "";
-      if (onNoteRoom) note.addEventListener("change", () => onNoteRoom(note.value));
-      sel.appendChild(note);
     }
   } else {
     const hint = document.createElement("div");
@@ -938,7 +1081,7 @@ export function showWorld(world, opts = {}) {
     chips.appendChild(chip);
   }
   el.appendChild(chips);
-  // Tab bar: Selection (selected hex/room) | Hooks | Pinned | Travel | Factions.
+  // Tab bar: Selection (selected hex/room) | Hooks | Pinned | Oracle.
   // Switching just toggles which region shows.
   const tabs = document.createElement("div");
   tabs.className = "panel-tabs";
@@ -964,7 +1107,6 @@ export function showWorld(world, opts = {}) {
     mkTab("detail", "Selection"),
     mkTab("hooks", "Hooks", "hooks-tab-badge"),
     mkTab("pinned", "Pinned", "pinned-tab-badge"),
-    mkTab("factions", "Factions", "factions-tab-badge"),
     mkTab("oracle", "Oracle"),
   );
   el.appendChild(tabs);
@@ -979,18 +1121,7 @@ export function showWorld(world, opts = {}) {
   region("selection"); // selected hex / dungeon room details
   region("global-hooks", true); // unpinned world hooks (renderGlobalHooks)
   region("pinned-hooks", true); // the party's pinned leads
-  region("factions-panel", true); // the world's factions (renderFactionsPanel)
   region("oracle-panel", true); // on-demand GM oracle rolls (renderOraclePanel)
   activeTab = "detail"; // a freshly loaded world starts on Detail
-  // Static world-metadata footer (seed & scale are immutable per world, so it
-  // never goes stale). The old growing event log moved to the browser console.
-  const meta = document.createElement("div");
-  meta.className = "world-meta";
-  for (const line of [`Seed: ${world.seed}`, `Hex scale: ${world.hexScale} miles`]) {
-    const div = document.createElement("div");
-    div.textContent = line;
-    meta.appendChild(div);
-  }
-  el.appendChild(meta);
   applyPanelTab(); // reflect the active tab (Detail) on the freshly built bar
 }

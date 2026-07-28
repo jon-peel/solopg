@@ -67,6 +67,10 @@
         <!-- Top-left: scale bar (a day's march, 12/18/24 mi); hover for rules. -->
         <div id="map-scale" hidden></div>
         <div id="travel-tip" hidden></div>
+        <!-- Bottom-centre event ticker (Phase 12.2): flashes a nearby world event,
+             then fades. Click it to recentre on the event. Static + hidden here;
+             app.js wires the single click listener and toggles it. -->
+        <div id="event-ticker" hidden></div>
         <!-- Travel HUD (Phase 11): day clock + hours left, a day-progress bar,
              the persistent travel-unit toggle, and hour / next-dawn controls. -->
         <div id="hud-stack" hidden>
@@ -111,6 +115,11 @@
                hatch swatch + name) → opens its detail. Hidden when none. -->
           <div class="legend-section" id="legend-factions" hidden></div>
           <div class="legend-section">
+            <div class="legend-sub">Marks</div>
+            <div class="legend-row"><span class="lg-glyph" style="color:var(--accent)">★</span>Wilderness encounter — roll on your table</div>
+            <div class="legend-row"><span class="lg-glyph" style="color:var(--accent)">♚</span>Lord's seat</div>
+          </div>
+          <div class="legend-section">
             <div class="legend-sub">Routes</div>
             <div class="legend-row"><span class="lg-line lg-highway"></span>Highway</div>
             <div class="legend-row"><span class="lg-line lg-road"></span>Road</div>
@@ -148,16 +157,16 @@
           <div id="dungeon-legend" hidden>
             <strong>Legend</strong>
             <div class="legend-group">
-              <span><i class="sw" style="background:#e4c1a9"></i>👹 Monster</span>
-              <span><i class="sw" style="background:#e8d59e"></i>⚠️ Trap</span>
-              <span><i class="sw" style="background:#efe4c6"></i>Empty</span>
-              <span><i class="sw" style="background:#d2cadf"></i>✨ Special</span>
+              <span><i class="sw" style="background:var(--dgn-monster)"></i>👹 Monster</span>
+              <span><i class="sw" style="background:var(--dgn-trap)"></i>⚠️ Trap</span>
+              <span><i class="sw" style="background:var(--dgn-empty)"></i>Empty</span>
+              <span><i class="sw" style="background:var(--dgn-special)"></i>✨ Special</span>
             </div>
             <div class="legend-group">
-              <span><i class="sw" style="background:#c9a45f"></i>Door</span>
-              <span><i class="sw" style="background:#b3402f"></i>L locked</span>
-              <span><i class="sw" style="background:#c07a2a"></i>J stuck</span>
-              <span><i class="sw" style="background:#7a5aa6"></i>S secret</span>
+              <span><i class="sw" style="background:var(--dgn-door)"></i>Door</span>
+              <span><i class="sw" style="background:var(--dgn-locked)"></i>L locked</span>
+              <span><i class="sw" style="background:var(--dgn-stuck)"></i>J stuck</span>
+              <span><i class="sw" style="background:var(--dgn-secret)"></i>S secret</span>
             </div>
             <div class="legend-group">
               <span><b style="color:#2f8f5a">E</b> entrance</span>

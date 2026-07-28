@@ -21,10 +21,11 @@ import {
 } from "./terrain-style.js";
 import { glyphForPoi, poiDotColor, factionColor, factionHatchDeg } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
-import { MAP, parseHex } from "./theme.js";
+import { MAP, parseHex, watchTheme } from "./theme.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
+import { LORD_ARCHETYPES } from "../gen/factions.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -64,6 +65,10 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas = canvasEl;
   ctx = canvas.getContext("2d");
   handlers = { ...handlers, ...cbs };
+
+  // Repaint the map when the OS light/dark preference flips (Phase 12.8): the
+  // theme tokens are live bindings, so a re-render picks up the new palette.
+  watchTheme(() => render());
 
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);
@@ -323,6 +328,8 @@ export function render() {
       if (primary) lines.push(primary);
       if (region && region !== primary) lines.push(region);
       if (fac) lines.push({ text: `⚑ ${fac.name}`, color: darkenRgba(fac.color, 0.25, 1) });
+      const enc = encounterMarks && encounterMarks.find((m) => m.q === hovered.q && m.r === hovered.r);
+      if (enc) lines.push({ text: `⚔ ${enc.terrain} encounter — roll on your table`, color: "#8a3324" });
       if (lines.length) drawHexLabel(c.x, c.y, lines);
     }
   }
@@ -446,7 +453,6 @@ function regionNameAt(q, r) {
 // of the rework). Solid blue, rounded joins; a cheap bounding-box cull skips
 // rivers entirely off-screen, and the canvas clips the rest, so a long river
 // only really costs its visible span.
-const RIVER_COLOR = "#6fd0f0";
 const RIVER_WIDTH = 3.4; // constant screen px at the detail zoom
 const RIVER_WIDTH_FAR = 1.5; // thinner in the zoomed-out overview so it doesn't dominate tiny hexes
 
@@ -494,7 +500,7 @@ function drawRivers(minX, minY, maxX, maxY, margin, detail) {
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = RIVER_COLOR;
+  ctx.strokeStyle = colorForTerrain("Lake"); // rivers read as the same water as lakes (theme-aware)
   ctx.lineWidth = (detail ? RIVER_WIDTH : RIVER_WIDTH_FAR) / camera.scale;
   for (const river of world.rivers) {
     const path = river && river.path;
@@ -1080,14 +1086,15 @@ function drawFactionOutline(minX, minY, maxX, maxY, margin) {
     strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, color, w);
     if (f.seat) {
       const sc = axialToPixel(f.seat.q, f.seat.r, HEX_SIZE);
-      if (!offView(sc, minX, minY, maxX, maxY, margin)) drawSeatMark(sc.x, sc.y, color);
+      if (!offView(sc, minX, minY, maxX, maxY, margin))
+        drawSeatMark(sc.x, sc.y, color, LORD_ARCHETYPES.includes(f.archetype));
     }
   });
 }
 
 // The seat (HQ): a small coin with a star, in the top-right corner of the hex so
 // it doesn't cover a settlement/POI icon in the centre.
-function drawSeatMark(cx, cy, color) {
+function drawSeatMark(cx, cy, color, isLord = false) {
   const off = HEX_SIZE * 0.5;
   const x = cx + off, y = cy - off;
   const r = HEX_SIZE * 0.24;
@@ -1098,11 +1105,21 @@ function drawSeatMark(cx, cy, color) {
   ctx.lineWidth = 1.4 / camera.scale;
   ctx.strokeStyle = "rgba(40,28,10,0.65)";
   ctx.stroke();
+  if (isLord) {
+    // A wax-seal-red ring flags a lord seat (lich/dragon/hag…) as a boss power,
+    // distinct from a rank-and-file seat's plain coin. Ring is the primary
+    // signal (guaranteed to render); the crown glyph reinforces it.
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.32, 0, Math.PI * 2);
+    ctx.lineWidth = 2.2 / camera.scale;
+    ctx.strokeStyle = "#8a3324"; // matches the encounter-alert red
+    ctx.stroke();
+  }
   ctx.fillStyle = "#f4ead2";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `${r * 1.6}px serif`;
-  ctx.fillText("★", x, y + r * 0.08);
+  ctx.fillText(isLord ? "♚" : "★", x, y + r * 0.08);
 }
 
 // The last move's trail: a dark-cased gold dashed line through the hex centres

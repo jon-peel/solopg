@@ -3,7 +3,7 @@
 
 import { subRng } from "../core/rng.js";
 import { loadTables } from "../core/loader.js";
-import { axialKey, axialLine, hexDisc, neighbors, axialDistance } from "../core/hexgeo.js";
+import { axialKey, axialLine, hexDisc, neighbors, axialDistance, isNearParty } from "../core/hexgeo.js";
 import {
   generateHook,
   hookName,
@@ -27,14 +27,14 @@ import {
   getFactions,
   removeFaction,
 } from "../world/world.js";
-import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences } from "../gen/factions.js";
+import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
-import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
+import { generateDungeon, DUNGEON_BUILD, rollSpecialTreasure } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
 import { describeFeature, featureName, FEATURE_BUILD, FEATURE_TYPES } from "../gen/feature-detail.js";
 import { getRoomState, withRoomState } from "../world/dungeon-state.js";
@@ -48,9 +48,11 @@ import {
   setLastWorldId,
   getLastWorldId,
 } from "../data/db.js";
-import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, renderFactionsPanel, renderOraclePanel, setPanelTab } from "./panel.js";
+import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { rollWanderingEncounter } from "../gen/wandering.js";
+import { buildBestiary, telegraphFor } from "../gen/bestiary.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -99,6 +101,7 @@ const HEX_TABLE_IDS = [
   "dungeon-monster-status",
   "dungeon-light",
   "monster-families",
+  "monster-telegraph",
   "dungeon-family",
   "shrine-form",
   "shrine-dedication",
@@ -152,6 +155,14 @@ let draftKind = null;   // "river" | "road" — what the active draft builds
 // ONE per travelled day; 8.6 adds a manual "Progress N days" while stationary.
 let sessionDay = 0;
 
+// Bottom ticker (Phase 12.2) — a transient flash for a nearby event. TICKER_RADIUS
+// gates which events are close enough to the party to flash it; the timer is the
+// auto-hide handle; tickerAt is the last-flashed event's coords (so a click on the
+// ticker can recentre there). Session-only, never persisted.
+const TICKER_RADIUS = 10;
+let tickerTimer = null;
+let tickerAt = null;
+
 // Within-day time (Phase 11 travel model): fraction 0..1 of the current marching
 // day already spent. A marching day is DAY_HOURS long (retunable — like every
 // other travel constant). Travel spends `daysToCross` per hex against it; whole-
@@ -166,6 +177,15 @@ const DAY_HOURS = 8;
 // world switch, so a reload starts blank — fine, it's ephemeral.
 let oracleResults = {}; // { [kind]: { tag, line, note } } — latest result per oracle kind
 let oracleSeq = 0;
+// Towns' latest "What's stirring?" situations (Phase 12.7): transient, held in
+// memory keyed by "q,r", shown inline on each card, never persisted. A town card
+// auto-rolls one the first time it opens; re-opens keep the last (↻ re-rolls).
+let settlementSituations = {}; // { [`${q},${r}`]: { line, note } }
+
+// Faction detail popup (Phase 12.1) — the id of the faction whose floating card
+// is open over the map (via a legend "Powers" row), or null when closed. Replaces
+// the removed Factions side-panel tab.
+let factionPopupId = null;
 
 // Dungeon View state (the overlay shown when exploring a dungeon POI).
 let dungeonPoi = null; // the open dungeon POI, or null when in the hex map
@@ -173,6 +193,19 @@ let dungeonLevelIndex = 0;
 let dungeonRoomN = null; // selected room number within the current level
 let dungeonSizes = []; // size names from the dungeon-size table (for the add menu)
 let dungeonFrameBB = null; // shared bounding box for the open dungeon's levels
+// The dungeon-wide bestiary (monster name -> floors + seed-stable telegraph),
+// computed once when the dungeon opens (buildBestiary/telegraphFor are pure +
+// deterministic). Dungeon-wide, so it's left untouched across level/room
+// switches — only openDungeonView (re)computes it, closeDungeonView clears it.
+let dungeonBestiary = [];
+
+// Wandering encounter roll (referee aid, mirrors the Oracle's transience): the
+// latest draw for the level currently shown in the panel, held only in memory
+// — never persisted. `wanderingSeq` is the in-memory cursor for a fresh seeded
+// stream per roll. Both reset on world switch and cleared on level/room
+// navigation so a stale roll never survives a move.
+let wanderingResult = null;
+let wanderingSeq = 0;
 
 const $ = (id) => document.getElementById(id);
 
@@ -220,6 +253,7 @@ async function refreshWorldList() {
 
 async function setCurrent(world) {
   closeRadial(); // switching worlds dismisses any open radial menu
+  closeFactionPopup(); // ...and any open faction detail popup
   if (dungeonPoi) closeDungeonView(); // leave any open dungeon when switching worlds
   if (world) migrateWorld(world); // upgrade persisted older worlds (v2 -> v3 ...)
   current = world;
@@ -227,6 +261,9 @@ async function setCurrent(world) {
   selectedHookId = null; // clear any hook highlight from the previous world
   oracleResults = {}; // the oracle results are a transient per-session aid
   oracleSeq = 0;
+  settlementSituations = {}; // ...as are the town "What's stirring?" situations
+  wanderingResult = null; // ...as is the wandering-encounter roll
+  wanderingSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
   setTravelPath(null); // clear the previous world's movement trail
   setEncounterMarks(null); // ...and its encounter stars
@@ -575,26 +612,58 @@ async function advanceDays(n) {
   await advanceTime(n);
 }
 
+// The single world-event sink (Phase 12.2): narrate `text` to the console (logLine),
+// and flash the bottom ticker only when the event is LOCATED near the party (within
+// TICKER_RADIUS).
+function recordEvent(text, opts = {}) {
+  logLine(text);
+  if (opts.at && current && isNearParty(opts.at, current.party, TICKER_RADIUS)) showTicker(text, opts.at);
+}
+
+// Flash the bottom ticker with `text` (Phase 12.2): reveal it, remember the event's
+// coords (so a click recentres there), and schedule an auto-hide — a soft fade-out
+// unless the viewer prefers reduced motion, in which case it just hides. Re-arming
+// clears the prior timer, so a burst of events shows the latest without stacking.
+function showTicker(text, at = null) {
+  const el = $("event-ticker");
+  if (!el) return;
+  el.textContent = text; el.classList.remove("fading"); el.hidden = false;
+  tickerAt = at;
+  clearTimeout(tickerTimer);
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  tickerTimer = setTimeout(() => {
+    if (reduce) { el.hidden = true; }
+    else { el.classList.add("fading"); tickerTimer = setTimeout(() => { el.hidden = true; el.classList.remove("fading"); }, 400); }
+  }, 6000);
+}
+
 // Phase 8.15 (B) — narrate every faction event on the turn (both the day-tick and
 // the manual button route through here). One legible line per event; names resolve
-// via getFactions and a place label via destinationLabel.
+// via getFactions and a place label via destinationLabel. Since 12.2 each event is
+// routed through recordEvent (which mirrors to the console + ticker), tagged with
+// its coords when it has any (the `eliminated` event has none → no ticker) — the
+// exact sentences are unchanged, only the sink.
 function logFactionEvents(events) {
   if (!Array.isArray(events) || !events.length) return;
   const factions = getFactions(current);
   const nameOf = (id) => { const f = factions.find((x) => x.id === id); return f ? f.name : "A faction"; };
   const placeOf = (q, r) => destinationLabel(getHex(current, q, r), q, r);
   for (const ev of events) {
-    if (ev.kind === "emerge") logLine(
+    let text = null;
+    if (ev.kind === "emerge") text =
       ev.lord ? `A dread power awakens — ${nameOf(ev.factionId)} (${ev.archetype}) stirs at ${placeOf(ev.q, ev.r)}.`
         : ev.internal ? `Unrest within ${nameOf(ev.fromFactionId)} — ${nameOf(ev.factionId)} rises in revolt at ${placeOf(ev.q, ev.r)}.`
-          : `A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`);
-    else if (ev.kind === "claim") logLine(`${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`);
-    else if (ev.kind === "takeover") logLine(`${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`);
-    else if (ev.kind === "repelled") logLine(`${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`);
-    else if (ev.kind === "relocate") logLine(`${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`);
-    else if (ev.kind === "recede") logLine(`${nameOf(ev.factionId)} loses its grip on ${placeOf(ev.q, ev.r)}.`);
+          : `A new power stirs — ${nameOf(ev.factionId)} rises at ${placeOf(ev.q, ev.r)}.`;
+    else if (ev.kind === "claim") text = `${nameOf(ev.factionId)} ${ev.seated ? "makes its seat at" : "spreads into"} ${placeOf(ev.q, ev.r)}.`;
+    else if (ev.kind === "takeover") text = `${nameOf(ev.factionId)} seizes ${placeOf(ev.q, ev.r)} from ${nameOf(ev.fromFactionId)}.`;
+    else if (ev.kind === "repelled") text = `${nameOf(ev.factionId)} is driven back from ${placeOf(ev.q, ev.r)} (held by ${nameOf(ev.fromFactionId)}).`;
+    else if (ev.kind === "relocate") text = `${nameOf(ev.factionId)} is driven from its seat at ${placeOf(ev.from.q, ev.from.r)} and regroups at ${placeOf(ev.q, ev.r)} — its reach falters.`;
+    else if (ev.kind === "recede") text = `${nameOf(ev.factionId)} loses its grip on ${placeOf(ev.q, ev.r)}.`;
     // A destruction with a finisher is a conquest; without one it's a natural fade (8.20).
-    else if (ev.kind === "eliminated") logLine(ev.byFactionId ? `${nameOf(ev.factionId)} is destroyed.` : `${nameOf(ev.factionId)} fades into history.`);
+    else if (ev.kind === "eliminated") text = ev.byFactionId ? `${nameOf(ev.factionId)} is destroyed.` : `${nameOf(ev.factionId)} fades into history.`;
+    if (text == null) continue;
+    const at = Number.isFinite(ev.q) && Number.isFinite(ev.r) ? { q: ev.q, r: ev.r } : null;
+    recordEvent(text, { at, kind: ev.kind });
   }
 }
 
@@ -894,6 +963,12 @@ function selectCell(q, r) {
   setPanelTab("detail"); // selecting a cell shows its detail
   renderSelection();
   refreshOracle(); // keep the Settlement oracle's section in sync with the selection
+  // A town card auto-rolls "what's stirring?" the first time it opens (which also
+  // stocks the town's persistent taverns); a re-open keeps the last situation.
+  const shex = getHex(current, q, r);
+  if (shex && shex.placed && shex.settlement && shex.settlement.present && !settlementSituations[`${q},${r}`]) {
+    onRollSituation(q, r);
+  }
 }
 
 // The panel is read-only now: it shows the selected cell's info and lets you
@@ -940,6 +1015,12 @@ function renderSelection() {
       return { id: held.id, name: held.name };
     },
     onReseatFaction,
+    // Persistent taverns + the transient "What's stirring?" situation (Phase 12.7).
+    // The situation only belongs to the currently-selected hex.
+    situation: settlementSituations[`${q},${r}`] || null,
+    onRollSituation: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onRollSituation(q, r) : undefined,
+    onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
+    onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
 }
 
@@ -1036,10 +1117,14 @@ async function applyTravel(result, aimLabel, aimKind) {
   const origin = { q: current.party.q, r: current.party.r }; // before the move
   setPartyPosition(current, result.finalPos.q, result.finalPos.r);
   if (result.daysUsed > 0) await advanceTime(result.daysUsed); // spend the fractional time actually used
-  logLine(travelHeadline(result, aimLabel, aimKind));
+  // Record the day's recap AND run the per-hex encounter checks BEFORE persisting
+  // (Phase 12.2): both narrate via recordEvent (console + ticker). setTravelPath /
+  // setEncounterMarks are pure map overlays, so they still run after the refresh.
+  recordEvent(travelHeadline(result, aimLabel, aimKind), { at: result.finalPos, kind: "travel" });
+  const hits = travelEncounterHexes(result); // star the hexes where an encounter came up (9.7)
   await persistAndRefresh();
   setTravelPath([origin, ...result.log.map((l) => ({ q: l.q, r: l.r }))]); // draw the trail (after the refresh's setWorld)
-  setEncounterMarks(travelEncounterHexes(result)); // star the hexes where an encounter came up (9.7)
+  setEncounterMarks(hits);
 }
 
 // Per-hex wilderness encounter checks over the hexes just entered (Phase 9.7).
@@ -1053,8 +1138,8 @@ function travelEncounterHexes(result) {
     if (hex && hex.settlement && hex.settlement.present) continue; // in a town — no wilderness check
     const rng = subRng(current.seed, "encounter", step.q, step.r, sessionDay);
     if (rollEncounterCheck(step.terrain, rng).encounter) {
-      hits.push({ q: step.q, r: step.r });
-      logLine(`⚔ Encounter in the ${step.terrain} at (${step.q}, ${step.r}) — roll on your encounter table.`);
+      hits.push({ q: step.q, r: step.r, terrain: step.terrain });
+      recordEvent(`⚔ Encounter in the ${step.terrain} at (${step.q}, ${step.r}) — roll on your encounter table.`, { at: { q: step.q, r: step.r }, kind: "encounter" });
     }
   }
   return hits;
@@ -1343,10 +1428,12 @@ async function onSelectPoi(id) {
   if (!poi) return renderSelection();
 
   if (MAPPED_TYPES.has(poi.type)) {
+    let teleTable = null; // "monster-telegraph", for the bestiary's inline hints
     if (interiorNeedsBuild(poi)) {
       renderSelection(); // show the "Generating…" placeholder immediately
       try {
         const tables = await loadTables(HEX_TABLE_IDS);
+        teleTable = tables.get("monster-telegraph");
         const m = /^poi:(\d+)$/.exec(poi.id || "");
         const n = m ? Number(m[1]) : 0;
         poi.detail = poi.detail || {};
@@ -1377,8 +1464,19 @@ async function onSelectPoi(id) {
         logLine(`Interior error: ${err.message}`);
         return;
       }
+    } else {
+      // Revisiting an already-built dungeon normally opens with no table load at
+      // all — but the bestiary's inline telegraphs still need this one table. A
+      // cheap cache hit once anything has loaded it; on a fetch failure degrade
+      // to "no telegraphs" rather than block the open.
+      try {
+        const tables = await loadTables(["monster-telegraph"]);
+        teleTable = tables.get("monster-telegraph");
+      } catch {
+        teleTable = null;
+      }
     }
-    return openDungeonView(poi);
+    return openDungeonView(poi, teleTable);
   }
 
   // Tier-1 feature types (shrine, …) drill into the side panel. Self-heal the
@@ -1417,12 +1515,21 @@ function dungeonFrame(dungeon) {
   return { minX, minY, w: maxX - minX, h: maxY - minY };
 }
 
-function openDungeonView(poi) {
+// `teleTable` is the loaded "monster-telegraph" table (or null if it failed to
+// load) — the caller (onSelectPoi) guarantees it's ready before calling in.
+function openDungeonView(poi, teleTable) {
   const dungeon = poi.detail && poi.detail.dungeon;
   if (!dungeon) return; // nothing to show (build failed); stay on the hex map
   closeRadial(); // changing screens dismisses any open radial menu
+  closeFactionPopup(); // ...and any open faction detail popup
   dungeonPoi = poi;
   dungeonFrameBB = dungeonFrame(dungeon);
+  // The bestiary is dungeon-wide + deterministic (seeded per monster name), so
+  // it's computed once here rather than per level/room render.
+  dungeonBestiary = buildBestiary(dungeon).map((m) => ({
+    ...m,
+    telegraph: teleTable ? telegraphFor(m.name, teleTable, subRng(current.seed, "telegraph", selected.q, selected.r, m.name)) : null,
+  }));
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
   // the user looking at an unchanged map ("nothing happened").
   $("dungeon-view").hidden = false;
@@ -1435,6 +1542,7 @@ function closeDungeonView() {
   closeRadial(); // changing screens dismisses any open radial menu
   dungeonPoi = null;
   dungeonRoomN = null;
+  dungeonBestiary = []; // clear the dungeon-wide bestiary when leaving
   $("dungeon-view").hidden = true;
   $("dungeon-legend").hidden = true; // collapse the legend when leaving
   setLevel(null);
@@ -1540,13 +1648,14 @@ function marksFor(dungeon, i) {
 
 function showDungeonLevel(i) {
   if (!dungeonPoi) return;
+  wanderingResult = null; // a stale roll shouldn't survive a level switch
   dungeonLevelIndex = i;
   dungeonRoomN = null;
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[i];
   renderLevelSwitcher();
   setLevel(level, marksFor(dungeon, i), dungeonFrameBB);
-  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo });
+  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
 }
 
 // Render the side panel for one room (detail + stair nav + exploration tracking).
@@ -1565,16 +1674,57 @@ function renderRoomPanel(n) {
     roomState: getRoomState(dungeonPoi.detail.dungeonState, dungeonLevelIndex, n),
     onToggleRoom: (field) => toggleRoomState(dungeonLevelIndex, n, field),
     onNoteRoom: (text) => setRoomNote(dungeonLevelIndex, n, text),
+    onRollWandering,
+    wanderingResult,
+    bestiary: dungeonBestiary,
+    onRevealTreasure: () => onRevealTreasure(n),
+    onRevealHook: () => onRevealHook(n),
   });
 }
 
 function onRoomClick(n) {
   if (!dungeonPoi) return;
+  wanderingResult = null; // a stale roll shouldn't survive a room switch
   dungeonRoomN = n;
   setSelectedRoom(n);
   centerOnRoom(n); // bring it into view if it landed off-screen (e.g. via stairs)
   setPanelTab("detail"); // selecting a room shows its detail
   renderRoomPanel(n);
+}
+
+// Panel-only re-render of whichever dungeon-panel view is current (level or
+// room), picking up the just-rolled wanderingResult. Deliberately does NOT
+// call showDungeonLevel — that resets dungeonRoomN and re-renders the level
+// switcher + map, side effects a mere panel refresh shouldn't trigger.
+function refreshDungeonPanel() {
+  if (!dungeonPoi) return;
+  if (dungeonRoomN != null) {
+    renderRoomPanel(dungeonRoomN);
+    return;
+  }
+  const dungeon = dungeonPoi.detail.dungeon;
+  const level = dungeon.levels[dungeonLevelIndex];
+  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
+}
+
+// Roll a wandering encounter for the current level (referee aid, Phase 12): a
+// monster off the level's own table, surprise, reaction, and distance. A
+// transient GM aid like the Oracle rolls — kept only in memory, never saved.
+function onRollWandering() {
+  if (!dungeonPoi) return;
+  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  if (!level || !level.encounters || !level.encounters.length) return;
+  const rng = subRng(current.seed, "wandering", wanderingSeq++);
+  const pick = rollWanderingEncounter(level, rng);
+  const surprise = (n) => (n <= 2 ? `surprised (${n})` : `alert (${n})`);
+  const body = [
+    `Surprise: monster ${surprise(pick.surpriseMonster)}, party ${surprise(pick.surpriseParty)}`,
+    `Reaction: ${pick.reaction.roll} — ${pick.reaction.outcome}`,
+    `Distance: ${pick.distanceFt} ft`,
+  ];
+  wanderingResult = { tag: `Level ${level.depth}`, line: pick.monster, body };
+  logLine(`🎲 Wandering (L${level.depth}): ${[pick.monster, ...body].join(" · ")}`);
+  refreshDungeonPanel();
 }
 
 // Right-click a room: select it, then open the room radial at the cursor. Reuses
@@ -1649,6 +1799,39 @@ async function setRoomNote(level, n, text) {
   current = await saveWorld(current); // note has no map badge, so no re-render (keeps focus)
 }
 
+// A Special room's feature (a hollow altar, a false shelf...) can conceal a
+// hoard, a hook, or nothing — the GM decides by clicking to reveal (Phase 12).
+// Reveal-once + permanent: guarded by `room.treasure`/`room.revealedHookId`
+// already being set, and the panel hides the button once revealed.
+async function onRevealTreasure(n) {
+  if (!dungeonPoi) return;
+  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  const room = level.rooms.find((r) => r.n === n);
+  if (!room || !room.special || room.treasure) return;
+  const tables = await loadTables(["treasure-type", "dungeon-treasure-guard"]);
+  const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon-secret-treasure", dungeonLevelIndex, n);
+  room.treasure = rollSpecialTreasure(tables, rng);
+  current = await saveWorld(current);
+  setMarks(marksFor(dungeonPoi.detail.dungeon, dungeonLevelIndex)); // refresh 💰 marker
+  renderRoomPanel(n);
+  logLine(`Revealed treasure in room ${n}: Treasure Type ${room.treasure.type} (${room.treasure.guard}).`);
+}
+
+// The other half of a Special room's feature: it points to a hook instead of
+// (or alongside) treasure. Goes through onGenerateHook so it's a normal,
+// map-tracked hook — just one that originates at the dungeon's parent hex.
+async function onRevealHook(n) {
+  if (!dungeonPoi) return;
+  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  const room = level.rooms.find((r) => r.n === n);
+  if (!room || !room.special || room.revealedHookId) return;
+  await onGenerateHook({
+    origin: { q: selected.q, r: selected.r },
+    source: `A secret behind ${room.special[0].toLowerCase()}${room.special.slice(1)}`,
+    onCreated: (hook) => { room.revealedHookId = hook.id; },
+  });
+}
+
 async function onRemovePoi(id) {
   if (!current || !selected) return;
   const hex = getHex(current, selected.q, selected.r);
@@ -1698,14 +1881,8 @@ function refreshGlobalHooks() {
 // faction's order in the roster — same index the map marker uses.
 function refreshFactions() {
   const factions = getFactions(current);
-  renderFactionsPanel({
-    factions,
-    onCenterFaction,
-    onAdvanceFactionTurn,
-    onDeleteFaction,
-    factionColorFor: (id) => factionColor(factions.findIndex((f) => f.id === id)),
-  });
   renderFactionLegend(factions);
+  refreshFactionPopup();
 }
 
 // Refresh the Oracle tab (each oracle's controls + its own latest result).
@@ -1755,6 +1932,61 @@ function factionNameAt(q, r) {
 // The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN. `odds` is the
 // GM's picked likelihood for the Yes/No oracle. Async because table-backed oracles
 // (Meaning) load their JSON on demand (cached after the first roll).
+// --- Persistent settlement taverns (Phase 12.7) --------------------------
+// Taverns are a SAVED fixture of a town (persisted + exported on hex.settlement),
+// generated once — the first time the town's situation is read — with a count
+// that scales with size. The situation (mood/event) itself stays transient.
+async function ensureTaverns(hex, q, r) {
+  if (!hex || !hex.settlement || !hex.settlement.present || hex.settlement.taverns) return;
+  const tables = await loadTables(ORACLE_TABLE_IDS);
+  const n = tavernCountForSize(hex.settlement.size, subRng(current.seed, "taverns", q, r, "count"));
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, i));
+    list.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
+  }
+  hex.settlement.taverns = list;
+  current = await saveWorld(current);
+}
+
+// "What's stirring?" — roll the town's transient situation AND make sure its
+// persistent taverns exist. The situation is held in memory (never saved), keyed
+// to the hex, and shown inline on the card.
+async function onRollSituation(q, r) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !hex.settlement.present) return;
+  await ensureTaverns(hex, q, r);
+  const tables = await loadTables(ORACLE_TABLE_IDS);
+  const pick = rollSettlement(tables, subRng(current.seed, "oracle", "settlement", oracleSeq++), { factionName: factionNameAt(q, r) });
+  const situation = { line: oracleLine(pick), note: pick.factionNote ? "⚑ " + pick.factionNote : null };
+  settlementSituations[`${q},${r}`] = situation;
+  logLine(`🎲 What's stirring: ${situation.line}${situation.note ? " · " + situation.note : ""}`);
+  renderSelection();
+}
+
+// Add one more tavern (a fresh roll on a monotonic per-settlement counter, so
+// closing then adding never collides with an existing seed index).
+async function onAddTavern(q, r) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !hex.settlement.present) return;
+  await ensureTaverns(hex, q, r); // ensure the base set exists first
+  const tables = await loadTables(ORACLE_TABLE_IDS);
+  const seq = (hex.settlement.tavernAdds = (hex.settlement.tavernAdds || 0) + 1);
+  const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, "add", seq));
+  hex.settlement.taverns.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
+  current = await saveWorld(current);
+  renderSelection();
+}
+
+// Remove a tavern (the ✕ on its row).
+async function onCloseTavern(q, r, i) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !Array.isArray(hex.settlement.taverns)) return;
+  hex.settlement.taverns.splice(i, 1);
+  current = await saveWorld(current);
+  renderSelection();
+}
+
 async function onOracleRoll(kind, odds) {
   if (!current) return;
   const rng = subRng(current.seed, "oracle", kind, oracleSeq++);
@@ -1776,6 +2008,8 @@ async function onOracleRoll(kind, odds) {
     pick = rollSettlement(tables, rng, { factionName: ctx.factionName });
     tag = ctx.label; // the town this situation is for
     if (pick.factionNote) note = "⚑ " + pick.factionNote;
+    await ensureTaverns(getHex(current, selected.q, selected.r), selected.q, selected.r); // 12.7: reading a town's situation stocks its taverns
+    renderSelection(); // reflect the new taverns on the (possibly hidden) selection card
   } else if (kind === "tavern") {
     const tables = await loadTables(ORACLE_TABLE_IDS);
     pick = rollTavern(tables, rng);
@@ -1788,18 +2022,91 @@ async function onOracleRoll(kind, odds) {
   refreshOracle(kind); // flash only this oracle's block so a repeated answer still reads as "rolled"
 }
 
+// Faction detail popup (Phase 12.1) — a floating card over the map, opened from a
+// legend "Powers" row. Replaces the removed Factions side-panel tab: it reuses the
+// same factionCard(faction, model) the tab used, with a close ✕ and outside-click /
+// Escape dismissal. Lives inside #stage so it floats above the map + legend.
+function ensureFactionPopup() {
+  let el = $("faction-popup");
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "faction-popup"; el.hidden = true;
+  $("stage").appendChild(el);
+  return el;
+}
+function factionPopupModel() {
+  return {
+    factionColorFor: (id) => factionColor(getFactions(current).findIndex((f) => f.id === id)),
+    onCenterFaction, onCenterFactionHome, onDeleteFaction,
+  };
+}
+function openFactionPopup(id) {
+  const f = getFactions(current).find((x) => x.id === id);
+  if (!f) return;
+  factionPopupId = id;
+  const el = ensureFactionPopup();
+  el.innerHTML = "";
+  const close = document.createElement("button");
+  close.className = "faction-popup-close"; close.type = "button";
+  close.setAttribute("aria-label", "Close"); close.textContent = "✕";
+  close.addEventListener("click", closeFactionPopup);
+  el.append(close, factionCard(f, factionPopupModel()));
+  el.hidden = false;
+  onCenterFactionHome(id);
+  document.addEventListener("keydown", onFactionPopupKey);
+  document.addEventListener("click", onFactionPopupOutside, true);
+}
+function closeFactionPopup() {
+  factionPopupId = null;
+  const el = $("faction-popup");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+  document.removeEventListener("keydown", onFactionPopupKey);
+  document.removeEventListener("click", onFactionPopupOutside, true);
+}
+function refreshFactionPopup() {
+  if (!factionPopupId) return;
+  const f = getFactions(current).find((x) => x.id === factionPopupId);
+  if (!f) return closeFactionPopup();
+  const el = ensureFactionPopup();
+  const card = el.querySelector(".hook");
+  if (card) card.replaceWith(factionCard(f, factionPopupModel()));
+}
+function onFactionPopupKey(e) {
+  if (e.key !== "Escape" || !factionPopupId) return;
+  closeFactionPopup(); e.stopImmediatePropagation();
+}
+function onFactionPopupOutside(e) {
+  if (!factionPopupId) return;
+  if (e.target.closest("#faction-popup, .faction-row, .legend-advance")) return;
+  closeFactionPopup();
+}
+
 // The map-legend faction key (Phase 11.4): a clickable row per power — a colour
 // swatch hatched at the faction's angle + its name. Clicking opens its detail
-// (the Factions tab) and centres the map on its seat/first holding.
+// (a floating faction popup) and centres the map on its seat/first holding.
 function renderFactionLegend(factions) {
   const host = $("legend-factions");
   if (!host) return;
   host.hidden = !factions.length;
   host.innerHTML = "";
   if (!factions.length) return;
+  // "Powers" header row: the sub-label, plus a single world-wide "Advance turn"
+  // button (Phase 12.1 — relocated from the removed Factions tab) when at least
+  // one faction is active. Advancing runs a faction turn for the whole roster.
   const sub = document.createElement("div");
   sub.className = "legend-sub";
-  sub.textContent = "Powers";
+  const subLabel = document.createElement("span");
+  subLabel.textContent = "Powers";
+  sub.appendChild(subLabel);
+  if (factions.some((f) => (f.status || "active") === "active")) {
+    const adv = document.createElement("button");
+    adv.type = "button";
+    adv.className = "legend-advance";
+    adv.textContent = "Advance turn";
+    adv.title = "Advance all active factions one turn";
+    adv.addEventListener("click", (e) => { e.stopPropagation(); onAdvanceFactionTurn(); });
+    sub.appendChild(adv);
+  }
   host.appendChild(sub);
   factions.forEach((f, i) => {
     const row = document.createElement("button");
@@ -1814,10 +2121,7 @@ function renderFactionLegend(factions) {
     name.className = "faction-row-name";
     name.textContent = f.name || "Faction";
     row.append(sw, name);
-    row.addEventListener("click", () => {
-      setPanelTab("factions");
-      onCenterFaction(f.id, 0);
-    });
+    row.addEventListener("click", () => openFactionPopup(f.id));
     // Hover / keyboard-focus a row → brighten that faction's territory on the map.
     const on = () => setFactionHighlight(i);
     const off = () => setFactionHighlight(null);
@@ -2161,12 +2465,33 @@ async function onGenerateHook(opts = {}) {
     if (!hook) return logLine("Nothing to gossip about here.");
     if (opts.sourcePower) hook.sourcePower = opts.sourcePower; // tag a Type-2 (faction-emitted) hook (8.11)
     current.hooks.push(hook);
+    if (opts.onCreated) opts.onCreated(hook); // let the caller stash the hook id (e.g. a revealed-in-room link)
     // Surface the new lead: jump to the Hooks tab with it selected (and its
     // endpoints highlighted on the map) so it's never a silent "nothing happened".
     selectedHookId = hook.id;
-    setPanelTab("hooks");
-    await persistAndRefresh();
+    if (dungeonPoi) {
+      // Called from inside the Dungeon View (e.g. a revealed room hook): stay
+      // there. persistAndRefresh()'s renderSelection() renders the HEX panel into
+      // the shared #selection node, which would clobber the open room panel — so
+      // replicate its body here, minus that one call, and refresh the dungeon
+      // panel instead.
+      syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
+      syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
+      current = await saveWorld(current);
+      setWorld(current);
+      refreshHookMarks();
+      refreshGlobalHooks();
+      refreshFactions();
+      refreshOracle();
+      refreshHookFocus();
+      refreshMapChrome();
+      refreshDungeonPanel();
+    } else {
+      setPanelTab("hooks");
+      await persistAndRefresh();
+    }
     logLine(`New hook — ${hookName(hook)}${HOOK_NOTE[hook.pattern] || ""}.`);
+    return hook;
   } catch (err) {
     logLine(`Generate hook error: ${err.message}`);
   }
@@ -2199,8 +2524,8 @@ async function onGenerateFaction() {
     }
     addFaction(current, faction);
     if (poi0) occupyPoiForFaction(poi0, faction); // seating on a POI takes it over (8.17)
-    setPanelTab("factions");
     await persistAndRefresh();
+    openFactionPopup(faction.id); // surface the new power's detail over the map
     logLine(`New faction — ${faction.name} (${faction.archetype}).`);
   } catch (err) {
     logLine(`Generate faction error: ${err.message}`);
@@ -2226,8 +2551,8 @@ async function onPromotePoi(poiId, archetype) {
     const faction = promoteFaction(tables, rng, { q, r, poiId, index: n, seed: current.seed, occupant: poi.occupant, archetype });
     addFaction(current, faction);
     occupyPoiForFaction(poi, faction); // the POI is now held by its new faction (8.17)
-    setPanelTab("factions");
     await persistAndRefresh();
+    openFactionPopup(faction.id); // surface the new power's detail over the map
     logLine(`Promoted ${poi.occupant.by} → ${faction.name} (${faction.archetype}).`);
   } catch (err) {
     logLine(`Promote faction error: ${err.message}`);
@@ -2270,6 +2595,16 @@ function onCenterFaction(id, index = 0) {
   if (!f) return;
   const hold = (index === 0 && f.seat) ? f.seat : (f.holdings || [])[index];
   if (hold) recenterOn(hold.q, hold.r);
+}
+
+// Centre the map on a faction's "home" (Phase 12.1): its seat, or the rounded
+// centroid of its holdings when seatless. Backs the popup's single jump link
+// and the auto-centre on open, so both agree on the same point.
+function onCenterFactionHome(id) {
+  const f = getFactions(current).find((x) => x.id === id);
+  if (!f) return;
+  const home = factionHome(f);
+  if (home) recenterOn(home.q, home.r);
 }
 
 // Delete a faction (Phase 8.19) — a GM override, distinct from in-world
@@ -2848,6 +3183,12 @@ function wire() {
   $("btn-draw-cancel").addEventListener("click", onCancelDraft);
   $("map-scale").addEventListener("mouseenter", () => toggleTravelTip(true));
   $("map-scale").addEventListener("mouseleave", () => toggleTravelTip(false));
+  // Bottom ticker (Phase 12.2): wired ONCE against the static element — clicking it
+  // recentres on the flashed event's hex (if located).
+  const ticker = $("event-ticker");
+  if (ticker) ticker.addEventListener("click", () => {
+    if (tickerAt) recenterOn(tickerAt.q, tickerAt.r);
+  });
   $("help-overlay").addEventListener("click", (e) => {
     if (e.target.id === "help-overlay") toggleHelp(false); // click backdrop to close
   });

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { generateDungeon } from "../js/gen/dungeon.js";
+import { generateDungeon, rollSpecialTreasure } from "../js/gen/dungeon.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -140,6 +140,20 @@ test("each room carries content-appropriate detail", () => {
         }
       }
     }
+  }
+});
+
+test("rollSpecialTreasure yields a valid, deterministic type + guard", () => {
+  const t = tables();
+  const types = new Set(t.get("treasure-type").entries.map((e) => e.value.type));
+  const guards = new Set(t.get("dungeon-treasure-guard").entries.map((e) => e.value));
+  for (let s = 0; s < 100; s++) {
+    const a = rollSpecialTreasure(t, mulberry32(s));
+    const b = rollSpecialTreasure(t, mulberry32(s));
+    assert.deepEqual(a, b, "deterministic for a given rng stream");
+    assert.ok(types.has(a.type), `valid treasure type "${a.type}"`);
+    assert.ok(guards.has(a.guard), "valid guard");
+    assert.equal(a.gp, undefined, "the app invents no gp value");
   }
 });
 

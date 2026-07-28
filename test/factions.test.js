@@ -13,11 +13,13 @@ import {
   TURN_LENGTH_DAYS,
   factionLabel,
   factionDescription,
+  factionHome,
   eligibleLords,
   FACTION_BUILD,
   rollEmergences,
   EMERGE_COOLDOWN_DAYS,
   HEXES_PER_FACTION,
+  LORD_ARCHETYPES,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
 import { validateTable } from "../js/core/table.js";
@@ -461,6 +463,24 @@ test("factionLabel / factionDescription are pure functions of the picks", () => 
   assert.ok(factionDescription(f3).includes("Seat: (4, -1)"));
 });
 
+test("factionHome: seat wins over holdings, else rounded centroid, else null", () => {
+  // Seat present → the seat, even when holdings exist and point elsewhere.
+  const seated = { seat: { q: 4, r: -1 }, holdings: [{ q: 0, r: 0 }, { q: 9, r: 9 }] };
+  assert.deepEqual(factionHome(seated), { q: 4, r: -1 });
+
+  // Seatless with several holdings → rounded centroid: (0,0),(2,0),(1,3) → (1,1).
+  const seatless = { holdings: [{ q: 0, r: 0 }, { q: 2, r: 0 }, { q: 1, r: 3 }] };
+  assert.deepEqual(factionHome(seatless), { q: 1, r: 1 });
+
+  // No seat and no (or empty) holdings → null.
+  assert.equal(factionHome({}), null);
+  assert.equal(factionHome({ holdings: [] }), null);
+
+  // Missing faction → null.
+  assert.equal(factionHome(null), null);
+  assert.equal(factionHome(undefined), null);
+});
+
 // --- Expansion engine: contention, seats, elimination (Phase 8.15 + 8.19) -
 // These drive `expand` DIRECTLY (exported for this) with a controlled rng stream,
 // so the outcome is exact — no gate noise, no rival counter-turn. The gate + turn
@@ -846,6 +866,10 @@ test("eligibleLords maps sites → lords, and the dragon is singular", () => {
   // Singular: with a dragon already active, a mountain dungeon no longer offers it.
   const withDragon = [{ archetype: "dragon", status: "active" }];
   assert.ok(!arche("dungeon", "Mountains", withDragon).includes("dragon"));
+});
+
+test("LORD_ARCHETYPES pins the export the map's lord-seat marker depends on (12.5)", () => {
+  assert.ok(LORD_ARCHETYPES.includes("lich") && LORD_ARCHETYPES.length >= 5);
 });
 
 test("promoteFaction raises a hostile lord of the chosen archetype", () => {

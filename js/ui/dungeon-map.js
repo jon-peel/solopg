@@ -6,26 +6,29 @@
 // pan/zoom). Reports room clicks via a callback. The layout math lives in the
 // (tested) generator; this just paints.
 
-// Parchment dungeon palette (Phase 11.6): pale-vellum rooms with a light content
-// wash, inked sepia walls + text — the same cartographer's identity as the map.
-const CONTENT_FILL = {
-  Monster: "#e4c1a9", // warm red-tan
-  Trap: "#e8d59e", // amber
-  Empty: "#efe4c6", // plain vellum
-  Special: "#d2cadf", // pale violet
-};
+// Dungeon canvas palette (Phase 11.6 parchment; Phase 12.8 dark variant): the
+// colours now come from theme.js so they follow the OS light/dark setting.
+// syncDungeonColors() re-points them on a theme flip (render re-runs, wired in
+// attachDungeon); the glyph/letter maps below are constant.
+import { DUNGEON, watchTheme } from "./theme.js";
+
+let CONTENT_FILL, CORRIDOR_FILL, DOOR_FILL, ROOM_STROKE, WALL_INK, SELECTED_STROKE, INK_TEXT, GRID_INK, LIT_GLOW, CLEARED_DIM, BADGE_SHADOW;
+function syncDungeonColors() {
+  CONTENT_FILL = DUNGEON.contentFill; // Monster/Trap/Empty/Special room washes
+  CORRIDOR_FILL = DUNGEON.corridorFill; // passages
+  DOOR_FILL = DUNGEON.doorFill; // door / locked / stuck / secret
+  ROOM_STROKE = DUNGEON.roomStroke; // inked walls
+  WALL_INK = DUNGEON.wallInk; // door borders / heavy ink
+  SELECTED_STROKE = DUNGEON.selected; // oxblood selection (matches the world map)
+  INK_TEXT = DUNGEON.inkText; // room numbers, door symbols
+  GRID_INK = DUNGEON.gridInk; // faint ruled grid
+  LIT_GLOW = DUNGEON.litGlow;
+  CLEARED_DIM = DUNGEON.clearedDim;
+  BADGE_SHADOW = DUNGEON.badgeShadow;
+}
+syncDungeonColors();
 const CONTENT_GLYPH = { Monster: "👹", Trap: "⚠️", Special: "✨" }; // Empty: none
-const CORRIDOR_FILL = "#e3d4ac"; // passages (mid vellum)
-const DOOR_FILL = { door: "#c9a45f", locked: "#b3402f", stuck: "#c07a2a", secret: "#7a5aa6" };
 const DOOR_SYMBOL = { locked: "L", stuck: "J", secret: "S" }; // plain door: no letter
-const ROOM_STROKE = "#5b4a2a"; // inked walls (sepia)
-const WALL_INK = "#4a3a1e"; // door borders / heavy ink
-const SELECTED_STROKE = "#8a2418"; // oxblood (matches the world map)
-const INK_TEXT = "#3a2c14"; // room numbers, door symbols
-const GRID_INK = "rgba(90,74,42,0.14)"; // faint ruled grid on the page
-const LIT_GLOW = "rgba(255,190,90,0.33)";
-const CLEARED_DIM = "rgba(110,92,55,0.32)";
-const BADGE_SHADOW = "rgba(40,28,10,0.4)";
 const PAD = 16; // px border inside the canvas
 
 let canvas = null;
@@ -40,6 +43,8 @@ let onRoomContextMenu = () => {};
 let hitRects = []; // { n, x, y, w, h } in FITTED CSS px (pre-camera), for click testing
 let camera = { scale: 1, x: 0, y: 0 }; // user pan/zoom on top of the fit-to-view base
 let drag = null; // { x, y, moved } while a pointer is down
+let hoverTargets = []; // { x, y, w, h, text, priority } in FITTED CSS px (pre-camera)
+let tipEl = null; // lazily-created <div class="dungeon-tip">, appended to <body>
 
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 6;
@@ -58,6 +63,8 @@ export function attachDungeon(canvasEl, cbs = {}) {
   canvas.addEventListener("pointerleave", onPointerUp);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", onContextMenu);
+  // Repaint in the new palette when the OS light/dark preference flips (12.8).
+  watchTheme(() => { syncDungeonColors(); render(); });
   resize();
 }
 
@@ -67,6 +74,7 @@ export function attachDungeon(canvasEl, cbs = {}) {
  * @param {{entrance:Set,exit:Set,down:Set,up:Set}|null} [m] connector marks by room.
  */
 export function setLevel(lvl, m = null, f = null) {
+  hideTip();
   level = lvl;
   marks = m;
   frame = f; // shared dungeon-wide bounding box, so levels line up; null = per-level fit
@@ -155,6 +163,7 @@ export function render() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
   hitRects = [];
+  hoverTargets = [];
   if (!level || !level.layout) {
     ctx.fillStyle = "#6d5c3e";
     ctx.font = "14px sans-serif";
@@ -173,6 +182,7 @@ export function render() {
   const layout = level.layout;
   const litRooms = new Set((level.rooms || []).filter((r) => r.light).map((r) => r.n));
   const treasureRooms = new Set((level.rooms || []).filter((r) => r.treasure).map((r) => r.n));
+  const roomsByN = new Map((level.rooms || []).map((r) => [r.n, r]));
   // Use the shared dungeon-wide frame (so every level lines up) when given.
   const bb = frame || boundingBox(layout);
   const cell = Math.max(
@@ -213,6 +223,8 @@ export function render() {
   for (const r of layout.rooms) {
     const x = sx(r.x), y = sy(r.y), w = r.w * cell, h = r.h * cell;
     hitRects.push({ n: r.n, x, y, w, h });
+    const info = roomsByN.get(r.n);
+    hoverTargets.push({ x, y, w, h, priority: 0, text: (info && (info.dressing || info.special)) || `Room ${r.n}` });
 
     ctx.fillStyle = CONTENT_FILL[contentFor(r.n)] || CONTENT_FILL.Empty;
     ctx.fillRect(x, y, w, h);
@@ -251,6 +263,7 @@ export function render() {
       ctx.lineWidth = 1;
       ctx.strokeStyle = "#7a4a10";
       ctx.stroke();
+      hoverTargets.push({ x: lx - rad, y: ly - rad, w: rad * 2, h: rad * 2, priority: 1, text: info.light.source });
     }
   }
 
@@ -283,6 +296,9 @@ export function render() {
       ctx.textBaseline = "middle";
       ctx.fillText(sym, wx, wy);
     }
+
+    const doorText = d.type === "door" ? "Door" : `${d.type[0].toUpperCase()}${d.type.slice(1)} door`;
+    hoverTargets.push({ x: wx - w / 2, y: wy - h / 2, w, h, priority: 1, text: doorText });
   }
 
   // Connector badges (entrance/exit/stairs) in each room's top-left corner.
@@ -293,18 +309,19 @@ export function render() {
     ctx.font = `bold ${fs}px sans-serif`;
     for (const r of layout.rooms) {
       const badges = [];
-      if (marks.entrance.has(r.n)) badges.push(["E", "#2f8f5a"]);
-      if (marks.exit.has(r.n)) badges.push(["X", "#2f8f5a"]);
-      if (marks.down.has(r.n)) badges.push(["▼", "#2f7f92"]);
-      if (marks.up.has(r.n)) badges.push(["▲", "#2f7f92"]);
+      if (marks.entrance.has(r.n)) badges.push(["E", "#2f8f5a", "Dungeon entrance (surface)"]);
+      if (marks.exit.has(r.n)) badges.push(["X", "#2f8f5a", "Exit to surface"]);
+      if (marks.down.has(r.n)) badges.push(["▼", "#2f7f92", "Stairs down"]);
+      if (marks.up.has(r.n)) badges.push(["▲", "#2f7f92", "Stairs up"]);
       if (!badges.length) continue;
       let bx = sx(r.x) + 2;
       const by = sy(r.y) + 2;
-      for (const [chr, col] of badges) {
+      for (const [chr, col, text] of badges) {
         ctx.fillStyle = BADGE_SHADOW;
         ctx.fillText(chr, bx + 1, by + 1);
         ctx.fillStyle = col;
         ctx.fillText(chr, bx, by);
+        hoverTargets.push({ x: bx, y: by, w: fs * 0.85, h: fs, priority: 1, text });
         bx += fs * 0.85;
       }
     }
@@ -320,17 +337,18 @@ export function render() {
       const st = marks.state[r.n];
       if (!st) continue;
       const badges = [];
-      if (st.explored) badges.push(["•", "#2f7f92"]);
-      if (st.cleared) badges.push(["✓", "#2f8f5a"]);
-      if (st.looted) badges.push(["$", "#a8791f"]);
+      if (st.explored) badges.push(["•", "#2f7f92", "Explored"]);
+      if (st.cleared) badges.push(["✓", "#2f8f5a", "Cleared"]);
+      if (st.looted) badges.push(["$", "#a8791f", "Looted"]);
       if (!badges.length) continue;
       let bx = sx(r.x) + r.w * cell - 2;
       const by = sy(r.y) + r.h * cell - 2;
-      for (const [chr, col] of badges.reverse()) {
+      for (const [chr, col, text] of badges.reverse()) {
         ctx.fillStyle = BADGE_SHADOW;
         ctx.fillText(chr, bx + 1, by + 1);
         ctx.fillStyle = col;
         ctx.fillText(chr, bx, by);
+        hoverTargets.push({ x: bx - fs * 0.85, y: by - fs, w: fs * 0.85, h: fs, priority: 1, text });
         bx -= fs * 0.85;
       }
     }
@@ -345,6 +363,9 @@ export function render() {
     for (const r of layout.rooms) {
       if (!treasureRooms.has(r.n)) continue;
       ctx.fillText("💰", sx(r.x) + 2, sy(r.y) + r.h * cell - 2);
+      const info = roomsByN.get(r.n);
+      const ts = Math.max(9, Math.floor(cell * 0.8));
+      hoverTargets.push({ x: sx(r.x) + 2, y: sy(r.y) + r.h * cell - 2 - ts, w: ts, h: ts, priority: 1, text: `Treasure Type ${info.treasure.type} (${info.treasure.guard})` });
     }
   }
 
@@ -356,7 +377,16 @@ export function render() {
     ctx.font = `${Math.floor(cell * 0.7)}px sans-serif`;
     for (const r of layout.rooms) {
       const g = CONTENT_GLYPH[contentFor(r.n)];
-      if (g) ctx.fillText(g, sx(r.x) + (r.w * cell) / 2, sy(r.y) + 2);
+      if (g) {
+        const gx = sx(r.x) + (r.w * cell) / 2, gy = sy(r.y) + 2;
+        ctx.fillText(g, gx, gy);
+        const info = roomsByN.get(r.n);
+        const gs = Math.floor(cell * 0.7);
+        const text = info.content === "Monster" ? `${info.monster.na} ${info.monster.name} (${info.monster.status})`
+          : info.content === "Trap" ? `${info.trap.name} — ${info.trap.trigger}; ${info.trap.effect}`
+          : info.special;
+        hoverTargets.push({ x: gx - gs / 2, y: gy, w: gs, h: gs, priority: 1, text });
+      }
     }
   }
 }
@@ -367,6 +397,7 @@ function pointerPos(e) {
 }
 
 function onPointerDown(e) {
+  hideTip();
   if (e.button !== 0) return; // primary button pans; right button opens the room ring
   const p = pointerPos(e);
   drag = { x: p.x, y: p.y, moved: false };
@@ -384,19 +415,64 @@ function roomAtPointer(e) {
   return null;
 }
 
+// Hover target under a client point (same inverse-transform as roomAtPointer),
+// or null. Ties go to the higher-priority (tighter) target.
+function hoverTargetAtPointer(e) {
+  const p = pointerPos(e);
+  const fx = (p.x - camera.x) / camera.scale;
+  const fy = (p.y - camera.y) / camera.scale;
+  let best = null;
+  for (const t of hoverTargets) {
+    if (fx < t.x || fx > t.x + t.w || fy < t.y || fy > t.y + t.h) continue;
+    if (!best || t.priority > best.priority) best = t;
+  }
+  return best;
+}
+
+function ensureTip() {
+  if (tipEl) return tipEl;
+  tipEl = document.createElement("div");
+  tipEl.className = "dungeon-tip";
+  tipEl.hidden = true;
+  document.body.appendChild(tipEl);
+  return tipEl;
+}
+
+function showTip(text, clientX, clientY) {
+  const el = ensureTip();
+  el.textContent = text;
+  el.hidden = false;
+  const pad = 14;
+  let left = clientX + pad, top = clientY + pad;
+  const r = el.getBoundingClientRect();
+  if (left + r.width > window.innerWidth - 4) left = clientX - pad - r.width;
+  if (top + r.height > window.innerHeight - 4) top = clientY - pad - r.height;
+  el.style.left = `${Math.max(4, left)}px`;
+  el.style.top = `${Math.max(4, top)}px`;
+}
+
+function hideTip() {
+  if (tipEl) tipEl.hidden = true;
+}
+
 function onContextMenu(e) {
+  hideTip();
   e.preventDefault();
   const n = roomAtPointer(e);
   if (n != null) onRoomContextMenu({ n, clientX: e.clientX, clientY: e.clientY });
 }
 
 function onPointerMove(e) {
-  if (!drag) return;
+  if (!drag) {
+    onHoverMove(e);
+    return;
+  }
   const p = pointerPos(e);
   const dx = p.x - drag.x;
   const dy = p.y - drag.y;
   if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
   drag.moved = true;
+  hideTip();
   camera.x += dx;
   camera.y += dy;
   drag.x = p.x;
@@ -404,7 +480,18 @@ function onPointerMove(e) {
   render();
 }
 
+function onHoverMove(e) {
+  if (!level || !level.layout) {
+    hideTip();
+    return;
+  }
+  const t = hoverTargetAtPointer(e);
+  if (t && t.text) showTip(t.text, e.clientX, e.clientY);
+  else hideTip();
+}
+
 function onPointerUp(e) {
+  hideTip();
   if (!drag) return;
   const wasDrag = drag.moved;
   drag = null;
@@ -415,6 +502,7 @@ function onPointerUp(e) {
 
 function onWheel(e) {
   if (!level || !level.layout) return;
+  hideTip();
   e.preventDefault();
   const p = pointerPos(e);
   const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale * Math.exp(-e.deltaY * 0.0015)));

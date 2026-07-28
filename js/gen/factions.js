@@ -692,6 +692,22 @@ export function factionLabel(faction) {
 }
 
 /**
+ * The faction's "home" hex for map-centring links (Phase 12.1): its seat when
+ * it has one, else the rounded centroid of its holdings, else null (no seat,
+ * no holdings — nowhere to jump to).
+ * @param {object} faction
+ * @returns {{q: number, r: number} | null}
+ */
+export function factionHome(faction) {
+  if (!faction) return null;
+  if (faction.seat) return { q: faction.seat.q, r: faction.seat.r };
+  const holdings = Array.isArray(faction.holdings) ? faction.holdings : [];
+  if (!holdings.length) return null;
+  const sum = holdings.reduce((acc, h) => ({ q: acc.q + h.q, r: acc.r + h.r }), { q: 0, r: 0 });
+  return { q: Math.round(sum.q / holdings.length), r: Math.round(sum.r / holdings.length) };
+}
+
+/**
  * Composed description lines for the Factions panel (prose built from the picks).
  * Never stored — the compose-at-render rule from feature-detail.js/hooks.
  * @param {object} faction
