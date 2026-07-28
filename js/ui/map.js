@@ -25,6 +25,7 @@ import { MAP, parseHex } from "./theme.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
+import { LORD_ARCHETYPES } from "../gen/factions.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -1082,14 +1083,15 @@ function drawFactionOutline(minX, minY, maxX, maxY, margin) {
     strokeTerritoryEdges(holdings, owned, minX, minY, maxX, maxY, margin, color, w);
     if (f.seat) {
       const sc = axialToPixel(f.seat.q, f.seat.r, HEX_SIZE);
-      if (!offView(sc, minX, minY, maxX, maxY, margin)) drawSeatMark(sc.x, sc.y, color);
+      if (!offView(sc, minX, minY, maxX, maxY, margin))
+        drawSeatMark(sc.x, sc.y, color, LORD_ARCHETYPES.includes(f.archetype));
     }
   });
 }
 
 // The seat (HQ): a small coin with a star, in the top-right corner of the hex so
 // it doesn't cover a settlement/POI icon in the centre.
-function drawSeatMark(cx, cy, color) {
+function drawSeatMark(cx, cy, color, isLord = false) {
   const off = HEX_SIZE * 0.5;
   const x = cx + off, y = cy - off;
   const r = HEX_SIZE * 0.24;
@@ -1100,11 +1102,21 @@ function drawSeatMark(cx, cy, color) {
   ctx.lineWidth = 1.4 / camera.scale;
   ctx.strokeStyle = "rgba(40,28,10,0.65)";
   ctx.stroke();
+  if (isLord) {
+    // A wax-seal-red ring flags a lord seat (lich/dragon/hag…) as a boss power,
+    // distinct from a rank-and-file seat's plain coin. Ring is the primary
+    // signal (guaranteed to render); the crown glyph reinforces it.
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.32, 0, Math.PI * 2);
+    ctx.lineWidth = 2.2 / camera.scale;
+    ctx.strokeStyle = "#8a3324"; // matches the encounter-alert red
+    ctx.stroke();
+  }
   ctx.fillStyle = "#f4ead2";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `${r * 1.6}px serif`;
-  ctx.fillText("★", x, y + r * 0.08);
+  ctx.fillText(isLord ? "♚" : "★", x, y + r * 0.08);
 }
 
 // The last move's trail: a dark-cased gold dashed line through the hex centres

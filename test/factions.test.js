@@ -19,6 +19,7 @@ import {
   rollEmergences,
   EMERGE_COOLDOWN_DAYS,
   HEXES_PER_FACTION,
+  LORD_ARCHETYPES,
 } from "../js/gen/factions.js";
 import { factionName } from "../js/gen/faction-name.js";
 import { validateTable } from "../js/core/table.js";
@@ -865,6 +866,10 @@ test("eligibleLords maps sites → lords, and the dragon is singular", () => {
   // Singular: with a dragon already active, a mountain dungeon no longer offers it.
   const withDragon = [{ archetype: "dragon", status: "active" }];
   assert.ok(!arche("dungeon", "Mountains", withDragon).includes("dragon"));
+});
+
+test("LORD_ARCHETYPES pins the export the map's lord-seat marker depends on (12.5)", () => {
+  assert.ok(LORD_ARCHETYPES.includes("lich") && LORD_ARCHETYPES.length >= 5);
 });
 
 test("promoteFaction raises a hostile lord of the chosen archetype", () => {

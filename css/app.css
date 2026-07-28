@@ -968,6 +968,15 @@ button:hover {
   border-radius: 3px;
   border: 1px solid rgba(0, 0, 0, 0.35);
 }
+/* Fixed-width glyph swatch for the "Marks" legend rows (Phase 12.5) — aligns a
+   coloured Unicode mark to the same column as the colour swatches. */
+.lg-glyph {
+  width: 0.95rem;
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 0.9rem;
+  line-height: 1;
+}
 
 /* Faction key rows (Phase 11.4): a clickable legend entry per power. The swatch
    overlays the faction's hatch angle so the key matches the map territory. */
