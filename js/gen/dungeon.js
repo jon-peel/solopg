@@ -169,6 +169,14 @@ function buildLevelMonsters(families, theme, isDeepest, rng, roomCount, targetTi
   return { family: familyName, encounters };
 }
 
+/** Roll the hidden reward a Special room's feature conceals — flat weights
+ * (unlike a stocked hoard, it isn't depth-tiered). Reuses the treasure tables. */
+export function rollSpecialTreasure(tables, rng) {
+  const type = rollTable(tables.get("treasure-type"), rng).value.type;
+  const guard = rollTable(tables.get("dungeon-treasure-guard"), rng).value;
+  return { type, guard };
+}
+
 /**
  * Generate one dungeon interior.
  * @param {Map<string,object>} tables incl. dungeon-size, dungeon-theme,

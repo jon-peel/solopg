@@ -34,7 +34,7 @@ import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
 import { applyWaterBoosts, seedWaterSettlements, seedHamletClusters } from "../gen/settlement-water.js";
 import { generatePoi } from "../gen/poi.js";
-import { generateDungeon, DUNGEON_BUILD } from "../gen/dungeon.js";
+import { generateDungeon, DUNGEON_BUILD, rollSpecialTreasure } from "../gen/dungeon.js";
 import { generateTower, TOWER_BUILD } from "../gen/tower.js";
 import { describeFeature, featureName, FEATURE_BUILD, FEATURE_TYPES } from "../gen/feature-detail.js";
 import { getRoomState, withRoomState } from "../world/dungeon-state.js";
@@ -1660,6 +1660,8 @@ function renderRoomPanel(n) {
     onRollWandering,
     wanderingResult,
     bestiary: dungeonBestiary,
+    onRevealTreasure: () => onRevealTreasure(n),
+    onRevealHook: () => onRevealHook(n),
   });
 }
 
@@ -1778,6 +1780,39 @@ async function setRoomNote(level, n, text) {
   if (!dungeonPoi) return;
   dungeonPoi.detail.dungeonState = withRoomState(dungeonPoi.detail.dungeonState, level, n, { note: text });
   current = await saveWorld(current); // note has no map badge, so no re-render (keeps focus)
+}
+
+// A Special room's feature (a hollow altar, a false shelf...) can conceal a
+// hoard, a hook, or nothing — the GM decides by clicking to reveal (Phase 12).
+// Reveal-once + permanent: guarded by `room.treasure`/`room.revealedHookId`
+// already being set, and the panel hides the button once revealed.
+async function onRevealTreasure(n) {
+  if (!dungeonPoi) return;
+  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  const room = level.rooms.find((r) => r.n === n);
+  if (!room || !room.special || room.treasure) return;
+  const tables = await loadTables(["treasure-type", "dungeon-treasure-guard"]);
+  const rng = subRng(current.seed, "hex", selected.q, selected.r, "dungeon-secret-treasure", dungeonLevelIndex, n);
+  room.treasure = rollSpecialTreasure(tables, rng);
+  current = await saveWorld(current);
+  setMarks(marksFor(dungeonPoi.detail.dungeon, dungeonLevelIndex)); // refresh 💰 marker
+  renderRoomPanel(n);
+  logLine(`Revealed treasure in room ${n}: Treasure Type ${room.treasure.type} (${room.treasure.guard}).`);
+}
+
+// The other half of a Special room's feature: it points to a hook instead of
+// (or alongside) treasure. Goes through onGenerateHook so it's a normal,
+// map-tracked hook — just one that originates at the dungeon's parent hex.
+async function onRevealHook(n) {
+  if (!dungeonPoi) return;
+  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  const room = level.rooms.find((r) => r.n === n);
+  if (!room || !room.special || room.revealedHookId) return;
+  await onGenerateHook({
+    origin: { q: selected.q, r: selected.r },
+    source: `A secret behind ${room.special[0].toLowerCase()}${room.special.slice(1)}`,
+    onCreated: (hook) => { room.revealedHookId = hook.id; },
+  });
 }
 
 async function onRemovePoi(id) {
@@ -2356,12 +2391,33 @@ async function onGenerateHook(opts = {}) {
     if (!hook) return logLine("Nothing to gossip about here.");
     if (opts.sourcePower) hook.sourcePower = opts.sourcePower; // tag a Type-2 (faction-emitted) hook (8.11)
     current.hooks.push(hook);
+    if (opts.onCreated) opts.onCreated(hook); // let the caller stash the hook id (e.g. a revealed-in-room link)
     // Surface the new lead: jump to the Hooks tab with it selected (and its
     // endpoints highlighted on the map) so it's never a silent "nothing happened".
     selectedHookId = hook.id;
-    setPanelTab("hooks");
-    await persistAndRefresh();
+    if (dungeonPoi) {
+      // Called from inside the Dungeon View (e.g. a revealed room hook): stay
+      // there. persistAndRefresh()'s renderSelection() renders the HEX panel into
+      // the shared #selection node, which would clobber the open room panel — so
+      // replicate its body here, minus that one call, and refresh the dungeon
+      // panel instead.
+      syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
+      syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
+      current = await saveWorld(current);
+      setWorld(current);
+      refreshHookMarks();
+      refreshGlobalHooks();
+      refreshFactions();
+      refreshOracle();
+      refreshHookFocus();
+      refreshMapChrome();
+      refreshDungeonPanel();
+    } else {
+      setPanelTab("hooks");
+      await persistAndRefresh();
+    }
     logLine(`New hook — ${hookName(hook)}${HOOK_NOTE[hook.pattern] || ""}.`);
+    return hook;
   } catch (err) {
     logLine(`Generate hook error: ${err.message}`);
   }

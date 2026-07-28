@@ -813,6 +813,8 @@ export function renderDungeonPanel({
   onRollWandering,
   wanderingResult,
   bestiary = [],
+  onRevealTreasure,
+  onRevealHook,
 }) {
   const sel = document.getElementById("selection");
   if (!sel) return;
@@ -890,6 +892,16 @@ export function renderDungeonPanel({
       el.textContent = flavor;
       sel.appendChild(el);
     }
+    // A Special room's feature can conceal a hoard and/or a hook — the GM
+    // clicks to reveal (Phase 12). Reveal-once + permanent: the button drops
+    // away once the room carries the corresponding field.
+    if (room.special) {
+      const revealRow = document.createElement("div");
+      revealRow.className = "tile-actions";
+      if (!room.treasure && onRevealTreasure) revealRow.appendChild(actionButton("Reveal treasure", onRevealTreasure));
+      if (!room.revealedHookId && onRevealHook) revealRow.appendChild(actionButton("Reveal hook", onRevealHook));
+      if (revealRow.children.length) sel.appendChild(revealRow);
+    }
     // The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X
     // lair Treasure Type LETTER + how it's guarded, and the GM rolls the contents
     // on their own tables — no invented gp.
@@ -897,6 +909,7 @@ export function renderDungeonPanel({
     if (room.held) items.push(`Held by ${room.held}`);
     if (room.monster) items.push(`${room.monster.na} ${room.monster.name} (${room.monster.status})`);
     if (room.treasure) items.push(`Treasure Type ${room.treasure.type} (${room.treasure.guard})`);
+    if (room.revealedHookId) items.push("Hook revealed — see Hooks tab");
     if (room.trap) items.push(`${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}`);
     if (room.light) items.push(room.light.source);
     for (const s of surface) items.push(s);
