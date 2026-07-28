@@ -21,7 +21,7 @@ import {
 } from "./terrain-style.js";
 import { glyphForPoi, poiDotColor, factionColor, factionHatchDeg } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
-import { MAP, parseHex } from "./theme.js";
+import { MAP, parseHex, watchTheme } from "./theme.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions } from "../gen/regions.js";
@@ -65,6 +65,10 @@ export function attachMap(canvasEl, cbs = {}) {
   canvas = canvasEl;
   ctx = canvas.getContext("2d");
   handlers = { ...handlers, ...cbs };
+
+  // Repaint the map when the OS light/dark preference flips (Phase 12.8): the
+  // theme tokens are live bindings, so a re-render picks up the new palette.
+  watchTheme(() => render());
 
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);
