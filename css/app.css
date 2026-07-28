@@ -1364,12 +1364,14 @@ button:hover {
 .difficulty { display: inline-flex; gap: 0.15rem; margin-left: 0.5rem; font-size: 0.75rem; line-height: 1; vertical-align: middle; }
 .difficulty .skull { color: var(--accent); opacity: 0.25; }
 .difficulty .skull.filled { opacity: 1; }
-/* Empty-room dressing: a quiet italic flavour line under "Room N" (no label). */
+/* Room flavour: empty-room dressing or Special-feature text, as a distinct callout under "Room N" (no label). */
 .room-flavor {
-  margin: 0.35rem 0 0.15rem;
-  padding-left: 0.6rem;
-  border-left: 2px solid var(--edge);
-  font-size: 0.82rem;
+  margin: 0.45rem 0 0.25rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--paper-raised);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  font-size: 0.85rem;
   font-style: italic;
   color: var(--ink-soft);
 }

@@ -830,11 +830,12 @@ export function renderDungeonPanel({
   if (room) {
     sel.appendChild(panelRule()); // rule B: level | room (only when a room is selected)
     sel.appendChild(sectionLabel(`Room ${room.n}`));
-    if (room.dressing) {
-      const flavor = document.createElement("div");
-      flavor.className = "room-flavor";
-      flavor.textContent = room.dressing;
-      sel.appendChild(flavor);
+    const flavor = room.dressing || room.special;
+    if (flavor) {
+      const el = document.createElement("div");
+      el.className = "room-flavor";
+      el.textContent = flavor;
+      sel.appendChild(el);
     }
     // The app is a referee's oracle, not a rulebook (9.8): a hoard reads as a B/X
     // lair Treasure Type LETTER + how it's guarded, and the GM rolls the contents
@@ -844,7 +845,6 @@ export function renderDungeonPanel({
     if (room.monster) items.push(`${room.monster.na} ${room.monster.name} (${room.monster.status})`);
     if (room.treasure) items.push(`Treasure Type ${room.treasure.type} (${room.treasure.guard})`);
     if (room.trap) items.push(`${room.trap.name} — ${room.trap.trigger}; ${room.trap.effect}`);
-    if (room.special) items.push(room.special);
     if (room.light) items.push(room.light.source);
     for (const s of surface) items.push(s);
     if (items.length) {
