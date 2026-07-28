@@ -33,6 +33,17 @@
   --on-accent: #f4ead2;
   --overlay-rgb: 239 227 200;
 
+  /* Dungeon-legend swatches — mirror the canvas content/door fills (theme.js
+     DUNGEON) so the legend flips with the dungeon map. */
+  --dgn-monster: #e4c1a9;
+  --dgn-trap: #e8d59e;
+  --dgn-empty: #efe4c6;
+  --dgn-special: #d2cadf;
+  --dgn-door: #c9a45f;
+  --dgn-locked: #b3402f;
+  --dgn-stuck: #c07a2a;
+  --dgn-secret: #7a5aa6;
+
   /* Elevation (warm shadows) */
   --shadow-1: 0 1px 2px rgba(60, 44, 18, 0.2);
   --shadow-2: 0 8px 24px rgba(60, 44, 18, 0.3);
@@ -1939,6 +1950,14 @@ button:hover {
     --overlay-rgb: 32 26 18;
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --dgn-monster: #4a3428;
+    --dgn-trap: #4d4326;
+    --dgn-empty: #38301f;
+    --dgn-special: #3b3648;
+    --dgn-door: #b8923f;
+    --dgn-locked: #cf5a48;
+    --dgn-stuck: #cf9440;
+    --dgn-secret: #9a7ec8;
   }
   #command-bar { background: linear-gradient(var(--paper-bar), #140f09); }
   .bar-group { background: rgba(255, 245, 225, 0.04); box-shadow: inset 0 1px 0 rgba(255, 245, 225, 0.06); }
@@ -1951,4 +1970,6 @@ button:hover {
       radial-gradient(130% 130% at 50% 28%, #2c2317 0%, #241d14 55%, #17110a 100%);
   }
   #legend { background: radial-gradient(130% 130% at 50% 30%, #2e2619 0%, #241d13 60%, #191309 100%); }
+  /* The dungeon canvas is transparent over this backdrop — flip it too. */
+  #dungeon-view { background: radial-gradient(130% 130% at 50% 30%, #2e2619 0%, #241d13 60%, #191309 100%); }
 }

@@ -6,26 +6,29 @@
 // pan/zoom). Reports room clicks via a callback. The layout math lives in the
 // (tested) generator; this just paints.
 
-// Parchment dungeon palette (Phase 11.6): pale-vellum rooms with a light content
-// wash, inked sepia walls + text — the same cartographer's identity as the map.
-const CONTENT_FILL = {
-  Monster: "#e4c1a9", // warm red-tan
-  Trap: "#e8d59e", // amber
-  Empty: "#efe4c6", // plain vellum
-  Special: "#d2cadf", // pale violet
-};
+// Dungeon canvas palette (Phase 11.6 parchment; Phase 12.8 dark variant): the
+// colours now come from theme.js so they follow the OS light/dark setting.
+// syncDungeonColors() re-points them on a theme flip (render re-runs, wired in
+// attachDungeon); the glyph/letter maps below are constant.
+import { DUNGEON, watchTheme } from "./theme.js";
+
+let CONTENT_FILL, CORRIDOR_FILL, DOOR_FILL, ROOM_STROKE, WALL_INK, SELECTED_STROKE, INK_TEXT, GRID_INK, LIT_GLOW, CLEARED_DIM, BADGE_SHADOW;
+function syncDungeonColors() {
+  CONTENT_FILL = DUNGEON.contentFill; // Monster/Trap/Empty/Special room washes
+  CORRIDOR_FILL = DUNGEON.corridorFill; // passages
+  DOOR_FILL = DUNGEON.doorFill; // door / locked / stuck / secret
+  ROOM_STROKE = DUNGEON.roomStroke; // inked walls
+  WALL_INK = DUNGEON.wallInk; // door borders / heavy ink
+  SELECTED_STROKE = DUNGEON.selected; // oxblood selection (matches the world map)
+  INK_TEXT = DUNGEON.inkText; // room numbers, door symbols
+  GRID_INK = DUNGEON.gridInk; // faint ruled grid
+  LIT_GLOW = DUNGEON.litGlow;
+  CLEARED_DIM = DUNGEON.clearedDim;
+  BADGE_SHADOW = DUNGEON.badgeShadow;
+}
+syncDungeonColors();
 const CONTENT_GLYPH = { Monster: "👹", Trap: "⚠️", Special: "✨" }; // Empty: none
-const CORRIDOR_FILL = "#e3d4ac"; // passages (mid vellum)
-const DOOR_FILL = { door: "#c9a45f", locked: "#b3402f", stuck: "#c07a2a", secret: "#7a5aa6" };
 const DOOR_SYMBOL = { locked: "L", stuck: "J", secret: "S" }; // plain door: no letter
-const ROOM_STROKE = "#5b4a2a"; // inked walls (sepia)
-const WALL_INK = "#4a3a1e"; // door borders / heavy ink
-const SELECTED_STROKE = "#8a2418"; // oxblood (matches the world map)
-const INK_TEXT = "#3a2c14"; // room numbers, door symbols
-const GRID_INK = "rgba(90,74,42,0.14)"; // faint ruled grid on the page
-const LIT_GLOW = "rgba(255,190,90,0.33)";
-const CLEARED_DIM = "rgba(110,92,55,0.32)";
-const BADGE_SHADOW = "rgba(40,28,10,0.4)";
 const PAD = 16; // px border inside the canvas
 
 let canvas = null;
@@ -60,6 +63,8 @@ export function attachDungeon(canvasEl, cbs = {}) {
   canvas.addEventListener("pointerleave", onPointerUp);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("contextmenu", onContextMenu);
+  // Repaint in the new palette when the OS light/dark preference flips (12.8).
+  watchTheme(() => { syncDungeonColors(); render(); });
   resize();
 }
 
