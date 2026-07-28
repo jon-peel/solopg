@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS, ENCOUNTER_CHANCE } from "../js/gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS, ENCOUNTER_CHANCE } from "../js/gen/oracle.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -218,6 +218,22 @@ test("rollTavern is deterministic for a given stream", () => {
 test("oracleLine returns the tavern sign as the headline", () => {
   assert.equal(oracleLine({ kind: "tavern", sign: "The Rusty Tankard", specialty: "watered ale", quirk: "A cat rules the fire." }), "The Rusty Tankard");
   assert.equal(ORACLE_LABELS.tavern, "Tavern / shop");
+});
+
+test("tavernCountForSize stays in the per-size band across many seeds (12.7)", () => {
+  const bands = { Hamlet: [1, 1], Village: [1, 2], Town: [2, 3], City: [3, 4] };
+  for (const [size, [lo, hi]] of Object.entries(bands)) {
+    for (let s = 0; s < 200; s++) {
+      const n = tavernCountForSize(size, mulberry32(s));
+      assert.ok(n >= lo && n <= hi, `${size} seed ${s} → ${n} outside [${lo},${hi}]`);
+    }
+  }
+});
+
+test("tavernCountForSize is deterministic and falls back to 1 for unknown sizes (12.7)", () => {
+  assert.equal(tavernCountForSize("Town", mulberry32(9)), tavernCountForSize("Town", mulberry32(9)));
+  assert.equal(tavernCountForSize("keep", mulberry32(1)), 1);
+  assert.equal(tavernCountForSize(undefined, mulberry32(1)), 1);
 });
 
 // --- Wilderness encounter check (9.7) ---

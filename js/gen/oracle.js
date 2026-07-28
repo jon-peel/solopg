@@ -157,6 +157,15 @@ export function rollTavern(tables, rng) {
   return { kind: "tavern", sign, specialty, quirk };
 }
 
+// How many taverns a settlement keeps as a persistent fixture (Phase 12.7) — a
+// seeded range that scales with size. TUNING, not content: retune freely. A keep
+// or an unknown size falls back to a single establishment.
+const TAVERN_COUNTS = { Hamlet: [1, 1], Village: [1, 2], Town: [2, 3], City: [3, 4] };
+export function tavernCountForSize(size, rng) {
+  const [lo, hi] = TAVERN_COUNTS[size] || [1, 1];
+  return lo + Math.floor(rng() * (hi - lo + 1));
+}
+
 // --- Wilderness encounter check (Phase 9.7) -------------------------------
 //
 // A TRIGGER-AND-PROMPT oracle: the app decides WHETHER an encounter happens (a

@@ -50,7 +50,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { rollWanderingEncounter } from "../gen/wandering.js";
 import { buildBestiary, telegraphFor } from "../gen/bestiary.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
@@ -177,6 +177,9 @@ const DAY_HOURS = 8;
 // world switch, so a reload starts blank — fine, it's ephemeral.
 let oracleResults = {}; // { [kind]: { tag, line, note } } — latest result per oracle kind
 let oracleSeq = 0;
+// The selected town's latest "What's stirring?" situation (Phase 12.7): transient,
+// held in memory keyed to its hex, shown inline on the card, never persisted.
+let settlementSituation = null; // { q, r, line, note } | null
 
 // Faction detail popup (Phase 12.1) — the id of the faction whose floating card
 // is open over the map (via a legend "Powers" row), or null when closed. Replaces
@@ -257,6 +260,7 @@ async function setCurrent(world) {
   selectedHookId = null; // clear any hook highlight from the previous world
   oracleResults = {}; // the oracle results are a transient per-session aid
   oracleSeq = 0;
+  settlementSituation = null; // ...as is the town "What's stirring?" situation
   wanderingResult = null; // ...as is the wandering-encounter roll
   wanderingSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
@@ -953,6 +957,7 @@ function onImportFile(e) {
 function selectCell(q, r) {
   selected = { q, r };
   selectedPoiId = null; // reset drill-in when changing cell
+  settlementSituation = null; // a new selection drops the previous town's situation
   saveSelected(current, selected);
   setSelected(selected);
   setPanelTab("detail"); // selecting a cell shows its detail
@@ -1004,6 +1009,12 @@ function renderSelection() {
       return { id: held.id, name: held.name };
     },
     onReseatFaction,
+    // Persistent taverns + the transient "What's stirring?" situation (Phase 12.7).
+    // The situation only belongs to the currently-selected hex.
+    situation: settlementSituation && settlementSituation.q === q && settlementSituation.r === r ? settlementSituation : null,
+    onRollSituation: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onRollSituation(q, r) : undefined,
+    onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
+    onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
 }
 
@@ -1915,6 +1926,60 @@ function factionNameAt(q, r) {
 // The engine (js/gen/oracle.js) owns the WHAT; this owns the WHEN. `odds` is the
 // GM's picked likelihood for the Yes/No oracle. Async because table-backed oracles
 // (Meaning) load their JSON on demand (cached after the first roll).
+// --- Persistent settlement taverns (Phase 12.7) --------------------------
+// Taverns are a SAVED fixture of a town (persisted + exported on hex.settlement),
+// generated once — the first time the town's situation is read — with a count
+// that scales with size. The situation (mood/event) itself stays transient.
+async function ensureTaverns(hex, q, r) {
+  if (!hex || !hex.settlement || !hex.settlement.present || hex.settlement.taverns) return;
+  const tables = await loadTables(ORACLE_TABLE_IDS);
+  const n = tavernCountForSize(hex.settlement.size, subRng(current.seed, "taverns", q, r, "count"));
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, i));
+    list.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
+  }
+  hex.settlement.taverns = list;
+  current = await saveWorld(current);
+}
+
+// "What's stirring?" — roll the town's transient situation AND make sure its
+// persistent taverns exist. The situation is held in memory (never saved), keyed
+// to the hex, and shown inline on the card.
+async function onRollSituation(q, r) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !hex.settlement.present) return;
+  await ensureTaverns(hex, q, r);
+  const tables = await loadTables(ORACLE_TABLE_IDS);
+  const pick = rollSettlement(tables, subRng(current.seed, "oracle", "settlement", oracleSeq++), { factionName: factionNameAt(q, r) });
+  settlementSituation = { q, r, line: oracleLine(pick), note: pick.factionNote ? "⚑ " + pick.factionNote : null };
+  logLine(`🎲 What's stirring: ${settlementSituation.line}${settlementSituation.note ? " · " + settlementSituation.note : ""}`);
+  renderSelection();
+}
+
+// Add one more tavern (a fresh roll on a monotonic per-settlement counter, so
+// closing then adding never collides with an existing seed index).
+async function onAddTavern(q, r) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !hex.settlement.present) return;
+  await ensureTaverns(hex, q, r); // ensure the base set exists first
+  const tables = await loadTables(ORACLE_TABLE_IDS);
+  const seq = (hex.settlement.tavernAdds = (hex.settlement.tavernAdds || 0) + 1);
+  const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, "add", seq));
+  hex.settlement.taverns.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
+  current = await saveWorld(current);
+  renderSelection();
+}
+
+// Remove a tavern (the ✕ on its row).
+async function onCloseTavern(q, r, i) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !Array.isArray(hex.settlement.taverns)) return;
+  hex.settlement.taverns.splice(i, 1);
+  current = await saveWorld(current);
+  renderSelection();
+}
+
 async function onOracleRoll(kind, odds) {
   if (!current) return;
   const rng = subRng(current.seed, "oracle", kind, oracleSeq++);
@@ -1936,6 +2001,8 @@ async function onOracleRoll(kind, odds) {
     pick = rollSettlement(tables, rng, { factionName: ctx.factionName });
     tag = ctx.label; // the town this situation is for
     if (pick.factionNote) note = "⚑ " + pick.factionNote;
+    await ensureTaverns(getHex(current, selected.q, selected.r), selected.q, selected.r); // 12.7: reading a town's situation stocks its taverns
+    renderSelection(); // reflect the new taverns on the (possibly hidden) selection card
   } else if (kind === "tavern") {
     const tables = await loadTables(ORACLE_TABLE_IDS);
     pick = rollTavern(tables, rng);

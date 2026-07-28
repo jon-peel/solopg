@@ -768,6 +768,66 @@ export function renderSelectionPanel(model) {
       meta.textContent = `${kindLabel}${water ? ` · ${water}` : ""}`;
       box.appendChild(nm); box.appendChild(meta);
       sel.appendChild(box);
+
+      // Persistent taverns (Phase 12.7): saved fixtures of the town, each
+      // removable; "What's stirring?" rolls the transient situation and stocks
+      // them on first use. The situation line (if any) shows below, un-saved.
+      sel.appendChild(sectionLabel("Taverns"));
+      const taverns = Array.isArray(hex.settlement.taverns) ? hex.settlement.taverns : [];
+      if (taverns.length) {
+        const list = document.createElement("div");
+        list.className = "tavern-list";
+        taverns.forEach((t, i) => {
+          const row = document.createElement("div");
+          row.className = "tavern-row";
+          const text = document.createElement("div");
+          text.className = "tavern-text";
+          const sign = document.createElement("span");
+          sign.className = "tavern-sign";
+          sign.textContent = t.sign;
+          text.appendChild(sign);
+          text.appendChild(document.createTextNode(` — known for ${t.specialty}. ${t.quirk}`));
+          row.appendChild(text);
+          if (model.onCloseTavern) {
+            const x = document.createElement("button");
+            x.className = "tavern-close";
+            x.textContent = "✕";
+            x.title = "Remove this tavern";
+            x.addEventListener("click", () => model.onCloseTavern(i));
+            row.appendChild(x);
+          }
+          list.appendChild(row);
+        });
+        sel.appendChild(list);
+        const actions = document.createElement("div");
+        actions.className = "tile-actions";
+        if (model.onAddTavern) actions.appendChild(actionButton("Add tavern", model.onAddTavern));
+        if (model.onRollSituation) actions.appendChild(actionButton("What's stirring?", model.onRollSituation));
+        sel.appendChild(actions);
+      } else {
+        const hint = document.createElement("div");
+        hint.className = "panel-hint";
+        hint.textContent = "No taverns yet.";
+        sel.appendChild(hint);
+        if (model.onRollSituation) {
+          const actions = document.createElement("div");
+          actions.className = "tile-actions";
+          actions.appendChild(actionButton("What's stirring?", model.onRollSituation));
+          sel.appendChild(actions);
+        }
+      }
+      if (model.situation) {
+        const s = document.createElement("div");
+        s.className = "sel-situation";
+        s.textContent = model.situation.line;
+        sel.appendChild(s);
+        if (model.situation.note) {
+          const n = document.createElement("div");
+          n.className = "sel-situation-note";
+          n.textContent = model.situation.note;
+          sel.appendChild(n);
+        }
+      }
     }
     renderPoiSection(sel, hex, model);
 
