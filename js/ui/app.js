@@ -1669,9 +1669,9 @@ function onRollWandering() {
   const pick = rollWanderingEncounter(level, rng);
   const surprise = (n) => (n <= 2 ? `surprised (${n})` : `alert (${n})`);
   const body = [
-    `Surprise — monster ${surprise(pick.surpriseMonster)}, party ${surprise(pick.surpriseParty)}`,
-    `Reaction ${pick.reaction.roll}: ${pick.reaction.outcome}`,
-    `Distance ${pick.distanceFt} ft`,
+    `Surprise: monster ${surprise(pick.surpriseMonster)}, party ${surprise(pick.surpriseParty)}`,
+    `Reaction: ${pick.reaction.roll} — ${pick.reaction.outcome}`,
+    `Distance: ${pick.distanceFt} ft`,
   ];
   wanderingResult = { tag: `Level ${level.depth}`, line: pick.monster, body };
   logLine(`🎲 Wandering (L${level.depth}): ${[pick.monster, ...body].join(" · ")}`);

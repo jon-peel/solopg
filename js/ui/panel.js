@@ -661,6 +661,35 @@ function appendOracleResult(host, result, flash) {
   }
 }
 
+// A wandering-encounter roll (Phase 12 dungeon panel): the monster and its
+// surprise/reaction/distance detail lines all stacked inside one red block,
+// unlike appendOracleResult's headline + separate body lines.
+function appendWanderingResult(host, result) {
+  if (!result) return;
+  const block = document.createElement("div");
+  block.className = "wandering-result";
+  const head = document.createElement("div");
+  head.className = "wandering-head";
+  if (result.tag) {
+    const tag = document.createElement("span");
+    tag.className = "oracle-kind";
+    tag.textContent = result.tag;
+    head.appendChild(tag);
+  }
+  const ans = document.createElement("span");
+  ans.className = "oracle-answer";
+  ans.textContent = result.line != null ? String(result.line) : "";
+  head.appendChild(ans);
+  block.appendChild(head);
+  for (const b of result.body || []) {
+    const line = document.createElement("div");
+    line.className = "wandering-detail";
+    line.textContent = b;
+    block.appendChild(line);
+  }
+  host.appendChild(block);
+}
+
 // Editable GM annotations for a hex: a name (shown as a map label) + freeform
 // notes. Both commit on blur/Enter (change event) — the only editable bits left
 // in the otherwise read-only Detail tab.
@@ -824,7 +853,7 @@ export function renderDungeonPanel({
       ul.appendChild(li);
     }
     sel.appendChild(ul);
-    if (wanderingResult) appendOracleResult(sel, wanderingResult, false);
+    if (wanderingResult) appendWanderingResult(sel, wanderingResult);
   }
 
   if (room) {

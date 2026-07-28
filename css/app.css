@@ -1567,6 +1567,26 @@ button:hover {
     color: var(--ink);
   }
 }
+/* Wandering-roll result: the monster in a red block (like .oracle-result) with
+   its surprise/reaction/distance detail lines stacked smaller inside it. */
+.wandering-result {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  background: var(--accent-wash);
+}
+.wandering-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.wandering-detail {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
 /* The odds ladder — a compact wrapping row of one-click roll buttons. */
 .oracle-odds {
   margin-top: 0.2rem;
