@@ -381,6 +381,48 @@ coords → same taverns). `rollTavern` already tested.
 
 ---
 
+## 12.8 — Automatic dark mode (OS `prefers-color-scheme`)
+
+**Status:** planned (user-requested; a candidate to sequence **next**). **Goal.** Follow the OS light/dark
+setting automatically — the app currently ships a single **light** parchment palette.
+
+**Current state.** The palette is a set of `:root` tokens in `css/app.css` (`--paper*`, `--ink*`, `--edge*`,
+`--accent`, `--shadow-*`, …). Almost all DOM UI (panel, cards, buttons, tabs, the new room/flavour/wandering
+blocks) is token-driven, so it would re-theme "for free" from a token override. Phase 11 was a light-only
+reskin; there are **dark-theme leftovers** from the pre-parchment era still hardcoded in a few rules
+(`.log-line` border `rgba(255,255,255,0.04)`, `.room-note`/`.hex-name` `#11131a`/`#e6e8ee`) — clean these up
+here (or fold into 12.6).
+
+**Implementation.**
+1. **Token override.** Add a `@media (prefers-color-scheme: dark) { :root { … } }` block redefining the palette
+   tokens as a dark parchment/ink set (dark vellum grounds, light ink text, a legible accent). Verify contrast
+   (WCAG AA for text). Most of the UI flips from this alone.
+2. **Canvas is the real work.** The map + dungeon renderers (`js/ui/map.js`, `js/ui/dungeon-map.js`) paint with
+   **hardcoded hex colours** (`CONTENT_FILL`, `CORRIDOR_FILL`, `ROOM_STROKE`, `LIT_GLOW`, the `#8a3324` wax-seal
+   red, terrain art, faction fills, etc.) — canvas cannot read CSS variables. So each renderer needs a **JS
+   theme palette**: detect dark via `window.matchMedia("(prefers-color-scheme: dark)")`, select a dark colour
+   set, and **re-render on change** (`mql.addEventListener("change", …)` → `render()`). Consider a small shared
+   `js/ui/theme-colors.js` so map + dungeon-map agree. Check `js/ui/theme.js` (Phase 11) for any existing hook.
+3. **Emoji/glyph markers** (👹/⚠️/✨/💰 on the dungeon map) read oddly on dark too — pairs naturally with the
+   "monochrome, on-theme room markers" idea flagged under 12.6.
+4. **Optional (defer):** a manual Light/Dark/Auto toggle. v1 is **auto-only** (OS-driven).
+
+**Gotchas.** Canvas re-render must fire on the `matchMedia` change event (users flip OS theme live). Keep the
+seeded-generation colours out of the world data (palette is presentation-only — no schema change). The
+`#faction-popup`/`#event-ticker`/`.dungeon-tip` overlays use literal `rgba(239,227,200,…)` parchment
+backgrounds — tokenise those so they flip too.
+
+**Manual checklist.**
+```
+[ ] DevTools → Rendering → "Emulate prefers-color-scheme: dark": the whole DOM UI (panel, tabs, cards,
+    wandering/flavour blocks, overlays) reads as a coherent dark theme; text stays legible (AA).
+[ ] The world map AND the dungeon map both repaint in dark colours (not a light map on a dark page).
+[ ] Flip the OS/emulated setting live → both canvases re-render without a reload.
+[ ] Switch back to light → unchanged from today.
+```
+
+---
+
 ## Build order & tuning summary
 
 **Order (dependency-first):** 12.1 → 12.2 → 12.3 → 12.4 → 12.5 → 12.6 → 12.7. 12.3 / 12.4 / 12.5 are
