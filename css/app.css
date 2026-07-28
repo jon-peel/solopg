@@ -1141,7 +1141,7 @@ button:hover {
 .lg-road { height: 3px; background: #c39a54; box-shadow: 0 0 0 1px #4a3a1f; }
 .lg-track { height: 0; border-top: 3px dashed #c69a58; }
 .lg-ancient { height: 0; border-top: 3px dotted #d8cba6; }
-.lg-river { height: 3px; background: #6fd0f0; }
+.lg-river { height: 3px; background: #8fb8d6; } /* mirrors theme.js Lake (rivers = lake water) */
 
 /* Thin separator between command-bar groups. */
 .bar-divider {
@@ -1972,4 +1972,5 @@ button:hover {
   #legend { background: radial-gradient(130% 130% at 50% 30%, #2e2619 0%, #241d13 60%, #191309 100%); }
   /* The dungeon canvas is transparent over this backdrop — flip it too. */
   #dungeon-view { background: radial-gradient(130% 130% at 50% 30%, #2e2619 0%, #241d13 60%, #191309 100%); }
+  .lg-river { background: #40607a; } /* mirrors theme.js DARK Lake */
 }

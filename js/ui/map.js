@@ -453,7 +453,6 @@ function regionNameAt(q, r) {
 // of the rework). Solid blue, rounded joins; a cheap bounding-box cull skips
 // rivers entirely off-screen, and the canvas clips the rest, so a long river
 // only really costs its visible span.
-const RIVER_COLOR = "#6fd0f0";
 const RIVER_WIDTH = 3.4; // constant screen px at the detail zoom
 const RIVER_WIDTH_FAR = 1.5; // thinner in the zoomed-out overview so it doesn't dominate tiny hexes
 
@@ -501,7 +500,7 @@ function drawRivers(minX, minY, maxX, maxY, margin, detail) {
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = RIVER_COLOR;
+  ctx.strokeStyle = colorForTerrain("Lake"); // rivers read as the same water as lakes (theme-aware)
   ctx.lineWidth = (detail ? RIVER_WIDTH : RIVER_WIDTH_FAR) / camera.scale;
   for (const river of world.rivers) {
     const path = river && river.path;

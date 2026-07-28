@@ -39,7 +39,7 @@ const LIGHT = {
     Swamp: "#6f7c58", // grey-olive
     Desert: "#e3cd82", // sand
     Lake: "#8fb8d6", // soft fresh-water blue
-    Sea: "#6f9ec4", // deeper coastal blue
+    Sea: "#3f6f96", // deep coastal blue (clearly darker than the lake)
   },
   unknown: "#cdba8c", // blank vellum (a placed hex with no terrain)
   selected: "#8a2418", // oxblood selection ring
@@ -91,7 +91,7 @@ const DARK = {
     Swamp: "#434b36",
     Desert: "#7e6f42",
     Lake: "#40607a",
-    Sea: "#395d78",
+    Sea: "#2d4f68", // deeper than the lake in dark mode too
   },
   unknown: "#352c1f",
   selected: "#e8805f",
