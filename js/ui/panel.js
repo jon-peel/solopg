@@ -766,8 +766,10 @@ export function renderSelectionPanel(model) {
 
 /**
  * Render the Dungeon View's side panel: the dungeon header, the current level
- * (theme/family + wandering monsters), and the selected room's contents.
- * @param {{ dungeon: object, level: object, room: object|null }} model
+ * (theme/family + wandering monsters, with a referee Roll button for a
+ * transient encounter), and the selected room's contents.
+ * @param {{ dungeon: object, level: object, room: object|null,
+ *   onRollWandering?: () => void, wanderingResult?: object|null }} model
  */
 export function renderDungeonPanel({
   dungeon,
@@ -779,6 +781,8 @@ export function renderDungeonPanel({
   roomState,
   onToggleRoom,
   onNoteRoom,
+  onRollWandering,
+  wanderingResult,
 }) {
   const sel = document.getElementById("selection");
   if (!sel) return;
@@ -804,10 +808,23 @@ export function renderDungeonPanel({
     sel.appendChild(occ);
   }
   if (level.encounters && level.encounters.length) {
-    const wandering = document.createElement("div");
-    wandering.className = "log-line";
-    wandering.textContent = "Wandering: " + level.encounters.map((e) => e.value).join(", ");
-    sel.appendChild(wandering);
+    const head = document.createElement("div");
+    head.className = "tile-actions";
+    const label = document.createElement("span");
+    label.className = "log-line";
+    label.textContent = "Wandering";
+    head.appendChild(label);
+    if (onRollWandering) head.appendChild(actionButton("Roll", onRollWandering));
+    sel.appendChild(head);
+    const ul = document.createElement("ul");
+    ul.className = "room-contents";
+    for (const e of level.encounters) {
+      const li = document.createElement("li");
+      li.textContent = e.value;
+      ul.appendChild(li);
+    }
+    sel.appendChild(ul);
+    if (wanderingResult) appendOracleResult(sel, wanderingResult, false);
   }
 
   if (room) {

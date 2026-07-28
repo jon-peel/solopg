@@ -51,6 +51,7 @@ import {
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { rollWanderingEncounter } from "../gen/wandering.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -187,6 +188,14 @@ let dungeonRoomN = null; // selected room number within the current level
 let dungeonSizes = []; // size names from the dungeon-size table (for the add menu)
 let dungeonFrameBB = null; // shared bounding box for the open dungeon's levels
 
+// Wandering encounter roll (referee aid, mirrors the Oracle's transience): the
+// latest draw for the level currently shown in the panel, held only in memory
+// — never persisted. `wanderingSeq` is the in-memory cursor for a fresh seeded
+// stream per roll. Both reset on world switch and cleared on level/room
+// navigation so a stale roll never survives a move.
+let wanderingResult = null;
+let wanderingSeq = 0;
+
 const $ = (id) => document.getElementById(id);
 
 // --- selection persistence (per-world, localStorage; not in the world JSON) ---
@@ -241,6 +250,8 @@ async function setCurrent(world) {
   selectedHookId = null; // clear any hook highlight from the previous world
   oracleResults = {}; // the oracle results are a transient per-session aid
   oracleSeq = 0;
+  wanderingResult = null; // ...as is the wandering-encounter roll
+  wanderingSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
   setTravelPath(null); // clear the previous world's movement trail
   setEncounterMarks(null); // ...and its encounter stars
@@ -1591,13 +1602,14 @@ function marksFor(dungeon, i) {
 
 function showDungeonLevel(i) {
   if (!dungeonPoi) return;
+  wanderingResult = null; // a stale roll shouldn't survive a level switch
   dungeonLevelIndex = i;
   dungeonRoomN = null;
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[i];
   renderLevelSwitcher();
   setLevel(level, marksFor(dungeon, i), dungeonFrameBB);
-  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo });
+  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult });
 }
 
 // Render the side panel for one room (detail + stair nav + exploration tracking).
@@ -1616,16 +1628,54 @@ function renderRoomPanel(n) {
     roomState: getRoomState(dungeonPoi.detail.dungeonState, dungeonLevelIndex, n),
     onToggleRoom: (field) => toggleRoomState(dungeonLevelIndex, n, field),
     onNoteRoom: (text) => setRoomNote(dungeonLevelIndex, n, text),
+    onRollWandering,
+    wanderingResult,
   });
 }
 
 function onRoomClick(n) {
   if (!dungeonPoi) return;
+  wanderingResult = null; // a stale roll shouldn't survive a room switch
   dungeonRoomN = n;
   setSelectedRoom(n);
   centerOnRoom(n); // bring it into view if it landed off-screen (e.g. via stairs)
   setPanelTab("detail"); // selecting a room shows its detail
   renderRoomPanel(n);
+}
+
+// Panel-only re-render of whichever dungeon-panel view is current (level or
+// room), picking up the just-rolled wanderingResult. Deliberately does NOT
+// call showDungeonLevel — that resets dungeonRoomN and re-renders the level
+// switcher + map, side effects a mere panel refresh shouldn't trigger.
+function refreshDungeonPanel() {
+  if (!dungeonPoi) return;
+  if (dungeonRoomN != null) {
+    renderRoomPanel(dungeonRoomN);
+    return;
+  }
+  const dungeon = dungeonPoi.detail.dungeon;
+  const level = dungeon.levels[dungeonLevelIndex];
+  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult });
+}
+
+// Roll a wandering encounter for the current level (referee aid, Phase 12): a
+// monster off the level's own table, surprise, reaction, and distance. A
+// transient GM aid like the Oracle rolls — kept only in memory, never saved.
+function onRollWandering() {
+  if (!dungeonPoi) return;
+  const level = dungeonPoi.detail.dungeon.levels[dungeonLevelIndex];
+  if (!level || !level.encounters || !level.encounters.length) return;
+  const rng = subRng(current.seed, "wandering", wanderingSeq++);
+  const pick = rollWanderingEncounter(level, rng);
+  const surprise = (n) => (n <= 2 ? `surprised (${n})` : `alert (${n})`);
+  const body = [
+    `Surprise — monster ${surprise(pick.surpriseMonster)}, party ${surprise(pick.surpriseParty)}`,
+    `Reaction ${pick.reaction.roll}: ${pick.reaction.outcome}`,
+    `Distance ${pick.distanceFt} ft`,
+  ];
+  wanderingResult = { tag: `Level ${level.depth}`, line: pick.monster, body };
+  logLine(`🎲 Wandering (L${level.depth}): ${[pick.monster, ...body].join(" · ")}`);
+  refreshDungeonPanel();
 }
 
 // Right-click a room: select it, then open the room radial at the cursor. Reuses
