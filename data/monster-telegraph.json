@@ -1,0 +1,97 @@
+{
+  "id": "monster-telegraph",
+  "title": "Monster telegraphs",
+  "_note": "Foreshadowing hints for the dungeon bestiary (inline, no _default bucket — only these authored monsters get a hint). `monster` keys must EXACTLY match a member/elite name in data/monster-families.json or a lord boss name from js/ui/app.js's LORD_INTERIOR (Lich, Necromancer, Vampire, Dragon, Hag). Referenced by js/gen/bestiary.js.",
+  "entries": [
+    { "value": { "monster": "Skeletons", "telegraphs": [
+      "Dry, rattling stillness — as if the room is holding its breath, waiting to fall in on itself.",
+      "A film of bone-dust lies undisturbed across the floor, except where things stood.",
+      "Something clatters faintly behind the walls whenever you go quiet."
+    ] } },
+    { "value": { "monster": "Wights", "telegraphs": [
+      "An inscription over the door reads: \"A silver sword, or remain forever.\"",
+      "The torches burn a sickly blue here and give no warmth.",
+      "Your shadow lags a half-step behind you as you cross the threshold."
+    ] } },
+    { "value": { "monster": "Goblins", "telegraphs": [
+      "Crude tally-marks and a gnawed bone are nailed above the door — a trophy, or a warning.",
+      "Giggling echoes somewhere close, cut off the moment you listen for it.",
+      "The smell of woodsmoke and unwashed fur drifts from just ahead."
+    ] } },
+    { "value": { "monster": "Bugbears", "telegraphs": [
+      "Massive, silent footprints press deep into the dust — whatever made them didn't hurry.",
+      "A club-sized dent is punched clean through a nearby door.",
+      "The hairs on your neck rise before you hear anything at all."
+    ] } },
+    { "value": { "monster": "Wolves", "telegraphs": [
+      "Fresh tracks circle the passage twice before doubling back the way you came.",
+      "A low, chorus growl rolls through the dark just past the edge of your torchlight.",
+      "Bones, cracked for marrow, lie scattered in a loose ring."
+    ] } },
+    { "value": { "monster": "Owlbear", "telegraphs": [
+      "Deep gouges rake the stone at chest height, clawed through as if it were wood.",
+      "The reek of wet feathers and old blood thickens the air.",
+      "Something enormous shifts its weight beyond the door, and the floor answers."
+    ] } },
+    { "value": { "monster": "Giant spiders", "telegraphs": [
+      "Silk threads, thick as rope, span the ceiling in a loose, deliberate weave.",
+      "Husks — leathery, drained, and man-sized — hang wrapped in a corner.",
+      "A faint clicking keeps time somewhere just out of torchlight."
+    ] } },
+    { "value": { "monster": "Carrion crawler", "telegraphs": [
+      "A cloying, sweetish rot hangs in the air, thicker than the dungeon should allow.",
+      "Something glistens and slow-moving vanishes around the bend as you round the corner.",
+      "Half-dissolved bones lie in a puddle that has not dried in years."
+    ] } },
+    { "value": { "monster": "Cult leader", "telegraphs": [
+      "Candle wax pools thick beneath a black-draped altar, still warm.",
+      "Chanting, low and unhurried, carries from somewhere below — in a language you don't recognize.",
+      "A ring of ash marks the floor, swept clean at its center like a stage."
+    ] } },
+    { "value": { "monster": "Gelatinous cube", "telegraphs": [
+      "The walls and floors here are unnervingly clean — scrubbed bare of grime, bones, even dust.",
+      "A faint acid tang hangs in an otherwise empty passage.",
+      "A single boot, half-dissolved, sits abandoned in the middle of the corridor."
+    ] } },
+    { "value": { "monster": "Ochre jelly", "telegraphs": [
+      "A trail of etched, pitted stone marks a slow, wandering path down the hall.",
+      "The air smells faintly of vinegar where the passage narrows.",
+      "A discarded blade lies fused into the floor, its edge eaten to a nub."
+    ] } },
+    { "value": { "monster": "Medusa", "telegraphs": [
+      "Statues line the chamber in postures of sudden, frozen terror.",
+      "A veil hangs across the inner doorway, and no draft stirs it.",
+      "Something in the dark hisses softly, like dry grass in wind."
+    ] } },
+    { "value": { "monster": "Trolls", "telegraphs": [
+      "The stench of char and rot mingles here — old fire, older meat.",
+      "Claw-scored bones, snapped and regrown wrong, litter a crude nest.",
+      "A wound in the wall itself looks half-healed, knitting slowly closed."
+    ] } },
+    { "value": { "monster": "Lich", "telegraphs": [
+      "The cold here is not the dungeon's cold — it has a will, and it is watching.",
+      "Every candle in the chamber burns black, and the flames cast no light.",
+      "A voice, dry as parchment, seems to read your thoughts back to you in fragments."
+    ] } },
+    { "value": { "monster": "Necromancer", "telegraphs": [
+      "Fresh grave-dirt is tracked across otherwise ancient dust — someone, or something, was walked in recently.",
+      "Rows of bones lie sorted by size, awaiting purpose.",
+      "A ledger of names sits open on a lectern, half of them crossed out."
+    ] } },
+    { "value": { "monster": "Vampire", "telegraphs": [
+      "No mirror in the chamber holds a reflection of the room correctly.",
+      "Wine glasses, untouched, sit filled with something too dark and too thick.",
+      "The portraits on the wall are centuries old, and every face is the same."
+    ] } },
+    { "value": { "monster": "Dragon", "telegraphs": [
+      "The air shimmers with heat that has no visible source.",
+      "Coins, half-melted and fused together, glint at the passage's end.",
+      "A slow, rhythmic rumble vibrates up through the stone — breathing, if you listen."
+    ] } },
+    { "value": { "monster": "Hag", "telegraphs": [
+      "A cauldron bubbles somewhere unseen, and the smell is almost, but not quite, appetizing.",
+      "Strands of hair — human, and not — are woven into the door's hinges.",
+      "A child's toy sits pristine and out of place amid the filth."
+    ] } }
+  ]
+}

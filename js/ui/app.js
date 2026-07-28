@@ -52,6 +52,7 @@ import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlo
 import { settlementName } from "../gen/settlement-name.js";
 import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { rollWanderingEncounter } from "../gen/wandering.js";
+import { buildBestiary, telegraphFor } from "../gen/bestiary.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -100,6 +101,7 @@ const HEX_TABLE_IDS = [
   "dungeon-monster-status",
   "dungeon-light",
   "monster-families",
+  "monster-telegraph",
   "dungeon-family",
   "shrine-form",
   "shrine-dedication",
@@ -187,6 +189,11 @@ let dungeonLevelIndex = 0;
 let dungeonRoomN = null; // selected room number within the current level
 let dungeonSizes = []; // size names from the dungeon-size table (for the add menu)
 let dungeonFrameBB = null; // shared bounding box for the open dungeon's levels
+// The dungeon-wide bestiary (monster name -> floors + seed-stable telegraph),
+// computed once when the dungeon opens (buildBestiary/telegraphFor are pure +
+// deterministic). Dungeon-wide, so it's left untouched across level/room
+// switches — only openDungeonView (re)computes it, closeDungeonView clears it.
+let dungeonBestiary = [];
 
 // Wandering encounter roll (referee aid, mirrors the Oracle's transience): the
 // latest draw for the level currently shown in the panel, held only in memory
@@ -1404,10 +1411,12 @@ async function onSelectPoi(id) {
   if (!poi) return renderSelection();
 
   if (MAPPED_TYPES.has(poi.type)) {
+    let teleTable = null; // "monster-telegraph", for the bestiary's inline hints
     if (interiorNeedsBuild(poi)) {
       renderSelection(); // show the "Generating…" placeholder immediately
       try {
         const tables = await loadTables(HEX_TABLE_IDS);
+        teleTable = tables.get("monster-telegraph");
         const m = /^poi:(\d+)$/.exec(poi.id || "");
         const n = m ? Number(m[1]) : 0;
         poi.detail = poi.detail || {};
@@ -1438,8 +1447,19 @@ async function onSelectPoi(id) {
         logLine(`Interior error: ${err.message}`);
         return;
       }
+    } else {
+      // Revisiting an already-built dungeon normally opens with no table load at
+      // all — but the bestiary's inline telegraphs still need this one table. A
+      // cheap cache hit once anything has loaded it; on a fetch failure degrade
+      // to "no telegraphs" rather than block the open.
+      try {
+        const tables = await loadTables(["monster-telegraph"]);
+        teleTable = tables.get("monster-telegraph");
+      } catch {
+        teleTable = null;
+      }
     }
-    return openDungeonView(poi);
+    return openDungeonView(poi, teleTable);
   }
 
   // Tier-1 feature types (shrine, …) drill into the side panel. Self-heal the
@@ -1478,13 +1498,21 @@ function dungeonFrame(dungeon) {
   return { minX, minY, w: maxX - minX, h: maxY - minY };
 }
 
-function openDungeonView(poi) {
+// `teleTable` is the loaded "monster-telegraph" table (or null if it failed to
+// load) — the caller (onSelectPoi) guarantees it's ready before calling in.
+function openDungeonView(poi, teleTable) {
   const dungeon = poi.detail && poi.detail.dungeon;
   if (!dungeon) return; // nothing to show (build failed); stay on the hex map
   closeRadial(); // changing screens dismisses any open radial menu
   closeFactionPopup(); // ...and any open faction detail popup
   dungeonPoi = poi;
   dungeonFrameBB = dungeonFrame(dungeon);
+  // The bestiary is dungeon-wide + deterministic (seeded per monster name), so
+  // it's computed once here rather than per level/room render.
+  dungeonBestiary = buildBestiary(dungeon).map((m) => ({
+    ...m,
+    telegraph: teleTable ? telegraphFor(m.name, teleTable, subRng(current.seed, "telegraph", selected.q, selected.r, m.name)) : null,
+  }));
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
   // the user looking at an unchanged map ("nothing happened").
   $("dungeon-view").hidden = false;
@@ -1497,6 +1525,7 @@ function closeDungeonView() {
   closeRadial(); // changing screens dismisses any open radial menu
   dungeonPoi = null;
   dungeonRoomN = null;
+  dungeonBestiary = []; // clear the dungeon-wide bestiary when leaving
   $("dungeon-view").hidden = true;
   $("dungeon-legend").hidden = true; // collapse the legend when leaving
   setLevel(null);
@@ -1609,7 +1638,7 @@ function showDungeonLevel(i) {
   const level = dungeon.levels[i];
   renderLevelSwitcher();
   setLevel(level, marksFor(dungeon, i), dungeonFrameBB);
-  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult });
+  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
 }
 
 // Render the side panel for one room (detail + stair nav + exploration tracking).
@@ -1630,6 +1659,7 @@ function renderRoomPanel(n) {
     onNoteRoom: (text) => setRoomNote(dungeonLevelIndex, n, text),
     onRollWandering,
     wanderingResult,
+    bestiary: dungeonBestiary,
   });
 }
 
@@ -1655,7 +1685,7 @@ function refreshDungeonPanel() {
   }
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[dungeonLevelIndex];
-  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult });
+  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
 }
 
 // Roll a wandering encounter for the current level (referee aid, Phase 12): a

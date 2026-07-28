@@ -1399,6 +1399,8 @@ button:hover {
 /* Room contents as a plain bullet list. */
 .room-contents { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: var(--ink); }
 .room-contents li { margin-top: 0.2rem; }
+/* Bestiary's inline foreshadowing hint (authored monsters only), under a name+floors li. */
+.bestiary-telegraph { margin-top: 0.15rem; font-style: italic; color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
 
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 

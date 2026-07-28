@@ -812,6 +812,7 @@ export function renderDungeonPanel({
   onNoteRoom,
   onRollWandering,
   wanderingResult,
+  bestiary = [],
 }) {
   const sel = document.getElementById("selection");
   if (!sel) return;
@@ -822,6 +823,29 @@ export function renderDungeonPanel({
   const skulls = difficultySkulls(dungeon.difficulty);
   if (skulls) h.appendChild(skulls); // inline with the title
   sel.appendChild(h);
+
+  // Bestiary (Phase 12 overview): the monsters stocked dungeon-wide, each with
+  // the floors it's on; monsters with an AUTHORED telegraph (data/monster-
+  // telegraph.json) get a small italic foreshadowing hint underneath. No
+  // generic-fallback line for the rest — inline hints are authored-only.
+  if (bestiary.length) {
+    sel.appendChild(sectionLabel("Monsters"));
+    const bul = document.createElement("ul");
+    bul.className = "room-contents";
+    for (const m of bestiary) {
+      const li = document.createElement("li");
+      li.textContent = `${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}`;
+      if (m.telegraph) {
+        const tel = document.createElement("div");
+        tel.className = "bestiary-telegraph";
+        tel.textContent = m.telegraph;
+        li.appendChild(tel);
+      }
+      bul.appendChild(li);
+    }
+    sel.appendChild(bul);
+  }
+
   sel.appendChild(panelRule()); // rule A: dungeon-info | level
 
   // Towers ("up" orientation) are floors, not levels; their floors carry a
