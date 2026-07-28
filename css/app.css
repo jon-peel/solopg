@@ -1361,11 +1361,18 @@ button:hover {
 /* Thin rule separating the Dungeon / Level / Room sections (redesign). */
 .panel-rule { margin: 0.6rem 0; border: none; border-top: 1px solid var(--edge); }
 /* Difficulty as skulls: N filled (of 3). Monochrome ☠ so it takes CSS colour. */
-.difficulty { display: inline-flex; gap: 0.15rem; margin: 0.15rem 0 0.3rem; font-size: 0.95rem; line-height: 1; }
+.difficulty { display: inline-flex; gap: 0.15rem; margin-left: 0.5rem; font-size: 0.75rem; line-height: 1; vertical-align: middle; }
 .difficulty .skull { color: var(--accent); opacity: 0.25; }
 .difficulty .skull.filled { opacity: 1; }
 /* Empty-room dressing: a quiet italic flavour line under "Room N" (no label). */
-.room-flavor { margin-top: 0.3rem; font-size: 0.82rem; font-style: italic; color: var(--ink-soft); }
+.room-flavor {
+  margin: 0.35rem 0 0.15rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--edge);
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}
 /* Room contents as a plain bullet list. */
 .room-contents { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: var(--ink); }
 .room-contents li { margin-top: 0.2rem; }

@@ -786,9 +786,9 @@ export function renderDungeonPanel({
 
   const h = document.createElement("h3");
   h.textContent = dungeon.theme || "Dungeon";
-  sel.appendChild(h);
   const skulls = difficultySkulls(dungeon.difficulty);
-  if (skulls) sel.appendChild(skulls);
+  if (skulls) h.appendChild(skulls); // inline with the title
+  sel.appendChild(h);
   sel.appendChild(panelRule()); // rule A: dungeon-info | level
 
   // Towers ("up" orientation) are floors, not levels; their floors carry a
@@ -852,6 +852,14 @@ export function renderDungeonPanel({
     // Exploration tracking: toggles + a GM note (kept separate from generated
     // content, so it survives dungeon regeneration).
     if (roomState && onToggleRoom) {
+      const note = document.createElement("textarea");
+      note.className = "room-note";
+      note.rows = 2;
+      note.placeholder = "Notes…";
+      note.value = roomState.note || "";
+      if (onNoteRoom) note.addEventListener("change", () => onNoteRoom(note.value));
+      sel.appendChild(note);
+
       const row = document.createElement("div");
       row.className = "tile-actions";
       for (const field of ["explored", "cleared", "looted"]) {
@@ -862,14 +870,6 @@ export function renderDungeonPanel({
         row.appendChild(b);
       }
       sel.appendChild(row);
-
-      const note = document.createElement("textarea");
-      note.className = "room-note";
-      note.rows = 2;
-      note.placeholder = "Notes…";
-      note.value = roomState.note || "";
-      if (onNoteRoom) note.addEventListener("change", () => onNoteRoom(note.value));
-      sel.appendChild(note);
     }
   } else {
     const hint = document.createElement("div");
