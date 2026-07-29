@@ -32,6 +32,22 @@
     { "value": "A shipment has gone missing on the road nearby." },
     { "value": "An old feud has reignited." },
     { "value": "Someone is paying well for word of newcomers." },
-    { "value": "A holy day empties the streets by dusk." }
+    { "value": "A holy day empties the streets by dusk." },
+    { "value": "A fire has gutted a row of buildings, and the ash is still warm." },
+    { "value": "Livestock are dying of no clear cause." },
+    { "value": "A tax collector has arrived with an armed escort." },
+    { "value": "The council is meeting behind closed doors, and no one will say why." },
+    { "value": "A body was pulled from the water at dawn." },
+    { "value": "A troupe of players has set up in the square." },
+    { "value": "Broadsheets have appeared on doors overnight, and no one admits to posting them." },
+    { "value": "A sickness is spreading, and the healers cannot keep pace." },
+    { "value": "The harvest is in full swing, and every hand is needed in the fields." },
+    { "value": "A prisoner has escaped, and the gates are being searched." },
+    { "value": "Strange lights were seen over the hills, and half the town swears to it." },
+    { "value": "The river has risen, and the low streets stand in water." },
+    { "value": "A herald arrived at midday and has not yet delivered his message." },
+    { "value": "Bells have been ringing since dawn, and no two people agree why." },
+    { "value": "A great beast's carcass has been hauled into the square." },
+    { "value": "A press-gang is working the taverns for recruits." }
   ]
 }
