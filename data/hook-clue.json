@@ -8,6 +8,19 @@
     { "value": "a hidden marker shows the way on" },
     { "value": "a riddle on the wall names the next landmark" },
     { "value": "a torn page describes where to look next" },
-    { "value": "a keyed cipher gives the next bearing" }
+    { "value": "a keyed cipher gives the next bearing" },
+    { "value": "a scratched arrow points the way on" },
+    { "value": "a faded mural depicts the road ahead" },
+    { "value": "a runic tally counts off the stops to come" },
+    { "value": "a bloodstained note names a further ruin" },
+    { "value": "a merchant's ledger records where the goods went next" },
+    { "value": "a chalk sigil marks the onward path" },
+    { "value": "a star-chart fixes the place to seek" },
+    { "value": "a smuggler's mark blazes the trail on" },
+    { "value": "a mason's mark cut in stone points beyond" },
+    { "value": "a survivor's directions name a further hold" },
+    { "value": "a coded stanza points to the next shrine" },
+    { "value": "a broken signet bears the crest of a distant house" },
+    { "value": "a ferryman's directions name the next crossing" }
   ]
 }

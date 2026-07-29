@@ -9,6 +9,19 @@
     { "value": "an archmage's hidden spellhoard" },
     { "value": "a vault of antique coin and plate" },
     { "value": "the crown jewels of a fallen house" },
-    { "value": "a saint's tomb heaped with old offerings" }
+    { "value": "a saint's tomb heaped with old offerings" },
+    { "value": "a pirate king's sunken plunder" },
+    { "value": "the treasury of a drowned city" },
+    { "value": "a giant's chest of raw gold" },
+    { "value": "a lich's jewelled crown" },
+    { "value": "an emperor's lost regalia" },
+    { "value": "a temple's hoard of golden idols" },
+    { "value": "the ransom of three kings" },
+    { "value": "an elf-lord's cache of ancient jewels" },
+    { "value": "a smuggler-baron's buried fortune" },
+    { "value": "the fabled Ember Diadem" },
+    { "value": "the pay-hoard of a lost legion" },
+    { "value": "a queen's dowry, never delivered" },
+    { "value": "a merchant guild's hidden strongroom" }
   ]
 }

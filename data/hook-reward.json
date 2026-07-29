@@ -7,6 +7,19 @@
     { "value": "a heavy purse of gold" },
     { "value": "a small fortune" },
     { "value": "a modest reward" },
-    { "value": "land and title, if it's done" }
+    { "value": "land and title, if it's done" },
+    { "value": "a chest of old coin" },
+    { "value": "gold and a fine horse" },
+    { "value": "a year's honest wages" },
+    { "value": "a sack of minted crowns" },
+    { "value": "silver now, and more when it's done" },
+    { "value": "a knight's fee in gold" },
+    { "value": "your pick of the spoils" },
+    { "value": "a gem worth a manor" },
+    { "value": "free run of the storehouse" },
+    { "value": "a writ of pardon and a purse" },
+    { "value": "twenty gold a head" },
+    { "value": "a fat reward, no questions asked" },
+    { "value": "a share of all that's recovered" }
   ]
 }

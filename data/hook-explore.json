@@ -8,6 +8,19 @@
     { "value": "an ancient tomb has never been opened" },
     { "value": "something valuable was left behind in a hasty flight" },
     { "value": "a forgotten cache waits for a bold hand" },
-    { "value": "the last owner hid a fortune before they vanished" }
+    { "value": "the last owner hid a fortune before they vanished" },
+    { "value": "a rich seam of ore was never worked out" },
+    { "value": "a smuggler's stash was never reclaimed" },
+    { "value": "the treasury was walled up and forgotten" },
+    { "value": "a fortune in grave-goods lies undisturbed" },
+    { "value": "a hoard of old gold is rumoured to lie" },
+    { "value": "plunder from a dozen raids was stored and lost" },
+    { "value": "a paymaster's strongbox was never recovered" },
+    { "value": "a lord's ransom was hidden and never paid" },
+    { "value": "the last defenders buried their wealth" },
+    { "value": "a merchant prince's cache lies sealed" },
+    { "value": "a witch's treasure is said to lie unguarded" },
+    { "value": "a scholar's priceless library was left to moulder" },
+    { "value": "an idol of solid gold still stands unlooted" }
   ]
 }
