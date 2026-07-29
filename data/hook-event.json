@@ -9,6 +9,19 @@
     { "value": "a wandering troupe performs" },
     { "value": "the wedding of a local house is celebrated" },
     { "value": "a public hanging draws a crowd" },
-    { "value": "a relic is paraded through the streets" }
+    { "value": "a relic is paraded through the streets" },
+    { "value": "a hiring fair opens" },
+    { "value": "a cattle drive passes through" },
+    { "value": "a tourney is proclaimed" },
+    { "value": "a witch trial is convened" },
+    { "value": "the tax-collector holds court" },
+    { "value": "a new lord is installed" },
+    { "value": "a mummers' play is staged" },
+    { "value": "the militia musters for review" },
+    { "value": "a saint's day is observed" },
+    { "value": "the guilds hold their yearly moot" },
+    { "value": "a duel is fought at dawn" },
+    { "value": "a plague quarantine is lifted" },
+    { "value": "a fortune-teller draws a following" }
   ]
 }

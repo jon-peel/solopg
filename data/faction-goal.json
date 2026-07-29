@@ -9,6 +9,22 @@
     { "weight": 1, "value": "awaken something buried" },
     { "weight": 1, "value": "restore a fallen house" },
     { "weight": 1, "value": "control the trade roads" },
-    { "weight": 1, "value": "raid the frontier" }
+    { "weight": 1, "value": "raid the frontier" },
+    { "weight": 2, "value": "topple the ruling council" },
+    { "weight": 1, "value": "install a puppet ruler" },
+    { "weight": 1, "value": "recover a lost relic" },
+    { "weight": 1, "value": "avenge a fallen leader" },
+    { "weight": 1, "value": "bleed the caravans dry" },
+    { "weight": 1, "value": "seize the mines" },
+    { "weight": 1, "value": "open a sealed gate" },
+    { "weight": 1, "value": "raise a private army" },
+    { "weight": 1, "value": "bury a dangerous secret" },
+    { "weight": 1, "value": "reclaim ancestral land" },
+    { "weight": 1, "value": "corner the black market" },
+    { "weight": 1, "value": "crown a chosen heir" },
+    { "weight": 1, "value": "starve out a rival stronghold" },
+    { "weight": 1, "value": "purge the unbelievers" },
+    { "weight": 1, "value": "map the deep places" },
+    { "weight": 1, "value": "breed a monstrous host" }
   ]
 }

@@ -8,6 +8,19 @@
     { "value": "a child wandered off and didn't return" },
     { "value": "a scholar disappeared while poking about" },
     { "value": "a merchant and their guards never came back" },
-    { "value": "captives are said to be held" }
+    { "value": "captives are said to be held" },
+    { "value": "a hunting party never came home" },
+    { "value": "a young bride was carried off" },
+    { "value": "pilgrims were taken on the road" },
+    { "value": "a shepherd and his flock vanished" },
+    { "value": "a tax-collector disappeared with his escort" },
+    { "value": "the lord's son was seized" },
+    { "value": "a knight rode in and never rode out" },
+    { "value": "the miller's daughter was snatched away" },
+    { "value": "a survey team stopped sending word" },
+    { "value": "villagers are held for ransom" },
+    { "value": "an envoy vanished with his letters" },
+    { "value": "a woodcutter went in and never came out" },
+    { "value": "children have been going missing" }
   ]
 }

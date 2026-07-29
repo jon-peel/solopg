@@ -92,6 +92,301 @@
       "A cauldron bubbles somewhere unseen, and the smell is almost, but not quite, appetizing.",
       "Strands of hair — human, and not — are woven into the door's hinges.",
       "A child's toy sits pristine and out of place amid the filth."
+    ] } },
+    { "value": { "monster": "Zombies", "telegraphs": [
+      "A slow, dragging scuff comes and goes beyond the wall — one foot, then the other, in no hurry at all.",
+      "The stench of spoiled meat rolls out to meet you before the room does.",
+      "Muddy handprints smear the walls at shoulder height, all of them reaching the same way."
+    ] } },
+    { "value": { "monster": "Ghouls", "telegraphs": [
+      "Fresh-turned earth mounds in the corners, and something has been digging up, not down.",
+      "Bones lie cracked and sucked hollow, the tooth-marks too even to be an animal's.",
+      "A grave-cold hunger seems to wait in the dark, patient and very much awake."
+    ] } },
+    { "value": { "monster": "Shadows", "telegraphs": [
+      "Your torchlight falters here, guttering as if the dark itself leaned in to drink it.",
+      "The shadows on the wall do not quite match the things that cast them.",
+      "A creeping chill climbs your arms, and for a moment your own shadow will not follow."
+    ] } },
+    { "value": { "monster": "Wraiths", "telegraphs": [
+      "The air turns grave-cold, and your breath hangs grey though nothing else stirs.",
+      "The torches dim to embers here, and no coaxing will bring them back.",
+      "A thin, mourning wail threads through the stone, always from the room you have not yet entered."
+    ] } },
+    { "value": { "monster": "Mummies", "telegraphs": [
+      "Dry, spiced dust coats everything — embalming resin, gone stale over centuries.",
+      "Strips of ancient linen lie shed across the floor, trailing toward a sealed inner door.",
+      "A curse is carved above the threshold, and the letters look freshly cut."
+    ] } },
+    { "value": { "monster": "Spectres", "telegraphs": [
+      "A cold that sinks past skin and into the marrow settles the moment you enter.",
+      "Frost rimes the walls of a room that has never known winter.",
+      "Something passes through the torchlight without breaking it, there and gone."
+    ] } },
+    { "value": { "monster": "Death Knight", "telegraphs": [
+      "A suit of black plate stands at the room's end, and you cannot say whether it is empty.",
+      "The cold ring of a gauntlet closing on a hilt sounds once, deliberate, from the dark ahead.",
+      "Rotted banners hang on the walls, every one bearing a sigil scratched violently out."
+    ] } },
+    { "value": { "monster": "Kobolds", "telegraphs": [
+      "The floor ahead bristles with clumsy tripwires and half-hidden snares.",
+      "Tiny clawed footprints crisscross the dust, far more of them than their size should leave.",
+      "A yipping, chattering squabble echoes down the tunnel, then falls guiltily silent."
+    ] } },
+    { "value": { "monster": "Orcs", "telegraphs": [
+      "Crude weapons and cracked shields lean against the wall like a war-band's spare kit.",
+      "The reek of sweat, smoke, and rancid grease hangs thick in the passage.",
+      "A guttural, barking song drifts from ahead, kept to a marching beat."
+    ] } },
+    { "value": { "monster": "Hobgoblins", "telegraphs": [
+      "The camp ahead is ordered — bedrolls squared, weapons racked, a sentry-line drawn in chalk.",
+      "A watch-horn hangs by the door, and the floor is swept clear for a clean field of fire.",
+      "Bootsteps drill in unison somewhere close, then halt all at once."
+    ] } },
+    { "value": { "monster": "Gnolls", "telegraphs": [
+      "The gnawed remains of something — someone — hang from a hook, half-butchered.",
+      "A high, broken laughter yips and cackles just past the edge of the torchlight.",
+      "The smell of a slaughterhouse thickens, wet fur and old blood together."
+    ] } },
+    { "value": { "monster": "Thouls", "telegraphs": [
+      "Something here reeks at once of grave-rot and wet hound — two stenches that should not share a body.",
+      "Claw-scored bones lie heaped in a nest, and the wounds on them have begun, impossibly, to close.",
+      "A shape lopes just beyond the light, and it does not move like any one creature should."
+    ] } },
+    { "value": { "monster": "Bugbear chief", "telegraphs": [
+      "A crude throne of lashed bone and hide dominates the far wall, draped in stolen finery.",
+      "Trophies — helms, hands, teeth — hang in tallied rows, and the newest is still dripping.",
+      "The whole warren has gone silent, the way lesser things go quiet near something that eats them."
+    ] } },
+    { "value": { "monster": "Giant rats", "telegraphs": [
+      "The walls seethe faintly, a dry rustle of fur behind every crack and gap.",
+      "Droppings and gnawed leather carpet the floor in a reeking, shifting mass.",
+      "Red pinprick eyes catch your torchlight from the low dark, dozens of them at once."
+    ] } },
+    { "value": { "monster": "Giant shrews", "telegraphs": [
+      "A shrill, needling squeak stabs at the edge of hearing, then circles behind you.",
+      "The dust is churned by small, frantic tracks that never once hold still.",
+      "Something small and ravenous darts across the passage, too fast to count."
+    ] } },
+    { "value": { "monster": "Boars", "telegraphs": [
+      "The lower walls are scored with tusk-marks, gouged deep and waxy with old grease.",
+      "Rooting has torn the floor's debris into furrows and heaps.",
+      "A snuffling grunt and the stamp of a heavy hoof sound just past the bend."
+    ] } },
+    { "value": { "monster": "Mountain lions", "telegraphs": [
+      "A kill lies half-eaten and dragged into a corner, still faintly warm.",
+      "Deep claw-rakes streak a stone ledge worn smooth by a returning haunt.",
+      "The hair on your neck rises — something has been watching, unblinking, from above."
+    ] } },
+    { "value": { "monster": "Dire wolves", "telegraphs": [
+      "Tracks the size of your two hands press deep into the muck, spread in a hunting line.",
+      "A low, layered growl rolls out of the dark, too big and too many to place.",
+      "Bones lie splintered in a wide ring, cracked by jaws that could take a limb."
+    ] } },
+    { "value": { "monster": "Giant boars", "telegraphs": [
+      "Gouges rip along the wall at chest height, the tusk-marks a hand's-breadth apart.",
+      "The floor is churned to a ploughed ruin, stones flung aside like pebbles.",
+      "A deep, chuffing snort answers your torchlight, and the ground trembles with it."
+    ] } },
+    { "value": { "monster": "Cave bears", "telegraphs": [
+      "Claw-marks tower far above your reach, raked down through the living stone.",
+      "A rank, musky den-smell fills the passage, warm and animal and close.",
+      "Something vast shifts and settles in the dark ahead, and its breathing does not hurry."
+    ] } },
+    { "value": { "monster": "Giant centipedes", "telegraphs": [
+      "The cracks in the walls glisten with a slick, restless movement.",
+      "Cast skins, long and many-legged, lie curled and brittle in the corners.",
+      "A dry, chittering ripple of countless legs whispers over the stone."
+    ] } },
+    { "value": { "monster": "Giant fire beetles", "telegraphs": [
+      "A pair of dim red glows bob in the dark ahead, cold and unhurried, going nowhere.",
+      "Husks with faintly luminous glands lie cracked open and scavenged.",
+      "The click and scrape of hard shells on stone ticks steadily from the black."
+    ] } },
+    { "value": { "monster": "Stirges", "telegraphs": [
+      "The ceiling is crusted thick with dried droppings and crumpled, bat-like husks.",
+      "A shrill whine of wings needles the air, closing and fading and closing again.",
+      "Small drained carcasses hang wedged in the rafters, pale and puncture-marked."
+    ] } },
+    { "value": { "monster": "Crab spiders", "telegraphs": [
+      "The walls seem to shift colour where you look, as if the stone itself were crouching.",
+      "Near-invisible silk threads part against your face in the doorway.",
+      "A drained husk lies wedged in a crevice, wrapped and sucked dry."
+    ] } },
+    { "value": { "monster": "Insect swarm", "telegraphs": [
+      "A low, seething hum rises and falls from every crack in the walls at once.",
+      "The floor and ceiling crawl with a restless dark carpet that never holds still.",
+      "The air itself feels thick and prickling, alive against your skin."
+    ] } },
+    { "value": { "monster": "Giant scorpion", "telegraphs": [
+      "Deep, paired gouges drag a slow trail across the floor toward a crevice.",
+      "A dry, armoured clatter clicks somewhere close, then falls dead still.",
+      "A curled, barbed cast-off and chitinous husks lie shed in a dark alcove."
+    ] } },
+    { "value": { "monster": "Acolytes", "telegraphs": [
+      "Cheap tallow candles burn in rows before a crude, hand-daubed idol.",
+      "A murmured, half-learned prayer stumbles on from somewhere ahead, over and over.",
+      "Incense hangs sweet and cloying, not quite masking something underneath."
+    ] } },
+    { "value": { "monster": "Cultists", "telegraphs": [
+      "Hooded robes hang on pegs by the door, still warm and smelling of smoke.",
+      "A many-voiced chant rises and falls beyond the wall, all of it in step.",
+      "A symbol you do not know is painted in dried red over every doorway."
+    ] } },
+    { "value": { "monster": "Zealots", "telegraphs": [
+      "The walls are scrawled with feverish scripture, the same line a thousand times over.",
+      "Dried blood crusts a whipping-post, the stains layered years deep.",
+      "A single voice cries out ahead in ecstasy or agony — you cannot tell which."
+    ] } },
+    { "value": { "monster": "Berserkers", "telegraphs": [
+      "Weapons lie notched and blood-crusted, flung down where their rage burned out.",
+      "The walls bear dents at head height, punched by fists or by skulls.",
+      "A ragged, building roar answers your light, more beast than man."
+    ] } },
+    { "value": { "monster": "Robed adepts", "telegraphs": [
+      "Chalked circles and half-finished sigils cover the floor in careful, arcane rings.",
+      "The air prickles with a faint charge, and your hair lifts of its own accord.",
+      "Guttering candles burn in colours no honest flame should take."
+    ] } },
+    { "value": { "monster": "Cult fanatics", "telegraphs": [
+      "An altar is cluttered with self-inflicted offerings — teeth, fingers, locks of hair.",
+      "Figures kneel in perfect rows ahead, and it is not clear that all of them still breathe.",
+      "A whispered oath repeats from the dark, promising an eager, joyful death."
+    ] } },
+    { "value": { "monster": "Green slime", "telegraphs": [
+      "A patch of the ceiling glistens a wet, vivid green, and it drips.",
+      "The stone beneath a slow ooze is pitted and eaten hollow.",
+      "A cleared circle of bare floor lies below it, scoured of everything that fell."
+    ] } },
+    { "value": { "monster": "Grey ooze", "telegraphs": [
+      "A stretch of wall shines slick and wet, though the stone around it is bone-dry.",
+      "What looked like a puddle of grease lies too still, and faintly rippling.",
+      "A dropped blade lies half-eaten into slag where it fell."
+    ] } },
+    { "value": { "monster": "Rust monster", "telegraphs": [
+      "Every scrap of metal in the passage is pocked and flaking, crumbling to orange dust.",
+      "A discarded sword lies gnawed to a lace of rust, its edge gone entirely.",
+      "A feathery, questing feeler twitches from a crevice, tasting the air for iron."
+    ] } },
+    { "value": { "monster": "Cave fisher", "telegraphs": [
+      "A single strong filament, sticky and taut, stretches down from the dark above.",
+      "Drained husks hang wedged high on a ledge, wrapped and long since dry.",
+      "A faint clicking tracks your movement from somewhere overhead."
+    ] } },
+    { "value": { "monster": "Gargoyles", "telegraphs": [
+      "Stone figures crouch along the walls, and you cannot recall if that one faced you a moment ago.",
+      "Grit and stone-dust lie scattered beneath perches worn suspiciously smooth.",
+      "The statues' claws are chipped and scored, as though they had gripped and torn."
+    ] } },
+    { "value": { "monster": "Eye of Terror (Beholder)", "telegraphs": [
+      "The walls are riddled with holes bored clean through the stone, at every angle.",
+      "Figures stand frozen mid-flight, mid-scream, mid-crumble — each struck by a different doom.",
+      "A prickling sense of being watched settles over you, from everywhere, all at once."
+    ] } },
+    { "value": { "monster": "Tentacled Horror (Mind Flayer)", "telegraphs": [
+      "Skulls line a shelf, each cracked open cleanly at the crown and emptied.",
+      "A cold pressure builds behind your eyes, and a whisper that is not sound brushes your thoughts.",
+      "The air smells of brine and something colder, far deeper than any sea should reach."
+    ] } },
+    { "value": { "monster": "Black pudding", "telegraphs": [
+      "The passage narrows, and every surface — walls, floor, ceiling — is scoured unnaturally clean.",
+      "Acid-etched channels run down the stone, dissolving handholds and steps alike.",
+      "A vast, glistening blackness fills the far end, and it is slowly spreading your way."
+    ] } },
+    { "value": { "monster": "Bandits", "telegraphs": [
+      "A line strung across the passage is rigged with a clatter of tin cups.",
+      "Cold ashes and picked-clean bones mark a rough camp, hastily struck.",
+      "Low, wary voices count something in coin, then hush at your step."
+    ] } },
+    { "value": { "monster": "Brigands", "telegraphs": [
+      "Looted packs lie slashed open and rifled, their owners nowhere in sight.",
+      "Crude threats are gouged into the wall beside a leering, painted grin.",
+      "A jeer and a whistle carry down the passage, passed from man to man."
+    ] } },
+    { "value": { "monster": "Deserters", "telegraphs": [
+      "Army-issue gear lies dumped in a heap, its unit-marks scratched away.",
+      "A watch-fire burns low and unwatched, no sentry at the post.",
+      "Hushed, frightened arguing breaks off the moment your light appears."
+    ] } },
+    { "value": { "monster": "Cutthroats", "telegraphs": [
+      "A body lies slumped in the shadows, its purse cut and its throat cut with it.",
+      "The passage offers a dozen blind corners, and every one of them feels occupied.",
+      "A boot scrapes stone behind you, though the room ahead is where you were looking."
+    ] } },
+    { "value": { "monster": "Mercenaries", "telegraphs": [
+      "The camp is neat and paid-for — matched gear, a tally of coin, a contract nailed to the door.",
+      "A crossbow rests loaded on a bipod, angled down the only approach.",
+      "A bored, professional voice calls a challenge before you round the corner."
+    ] } },
+    { "value": { "monster": "Veterans", "telegraphs": [
+      "The gear here is old, mended, and cared-for, every blade honed to a working edge.",
+      "Scars are notched into a tally-post beside a row of well-kept helms.",
+      "A calm, unhurried order to hold is spoken once, and obeyed at once."
+    ] } },
+    { "value": { "monster": "Bandit captain", "telegraphs": [
+      "A high-backed chair sits atop a heap of plundered goods, lording over the room.",
+      "A map of ambush-sites is pinned to the wall, marked in a confident hand.",
+      "One voice silences all the others ahead, plainly used to being obeyed."
+    ] } },
+    { "value": { "monster": "Cave geckos", "telegraphs": [
+      "Clusters of leathery eggs are tucked into the warm cracks along the walls.",
+      "A sticky patter of climbing feet crosses the ceiling and stops directly overhead.",
+      "Shed skins, papery and translucent, snag in the crevices."
+    ] } },
+    { "value": { "monster": "Lizard men", "telegraphs": [
+      "Fish-bone fetishes and gutted river-catch litter a damp, muddy nest.",
+      "Webbed, clawed tracks lead in from a flooded passage and do not lead back out.",
+      "A low, hissing croak answers your torch, then another, spreading round the room."
+    ] } },
+    { "value": { "monster": "Troglodytes", "telegraphs": [
+      "An eye-watering reek, sharp as spoiled musk, floods the passage and will not lift.",
+      "The walls are smeared and daubed, and the stone itself seems to sweat the stench.",
+      "Pale, clammy handprints trail toward a crevice too dark to see into."
+    ] } },
+    { "value": { "monster": "Giant lizards", "telegraphs": [
+      "Wide, dragging belly-trails groove the dust between deep, splayed clawprints.",
+      "A shed skin the length of a man lies sloughed and curling in a corner.",
+      "A heavy, cold-blooded stillness holds the room, waiting for warmth to pass."
+    ] } },
+    { "value": { "monster": "Giant snakes", "telegraphs": [
+      "A broad, smooth furrow winds through the dust, looping back on itself.",
+      "A vast shed skin, translucent and seemingly endless, drapes from a high ledge.",
+      "Something thick slides over stone with a long, dry hiss that has no end."
+    ] } },
+    { "value": { "monster": "Serpentfolk (Yuan-ti)", "telegraphs": [
+      "Serpent-scale mosaics coil across the walls, worked with unsettling, patient care.",
+      "A dry, whispering hiss shapes itself almost into words just past understanding.",
+      "The air is close and hot, and something sweet and venomous hangs beneath it."
+    ] } },
+    { "value": { "monster": "Basilisk", "telegraphs": [
+      "Small creatures stand frozen mid-stride throughout the room, stone to the last whisker.",
+      "A cracked statue of a man lies toppled, his face locked in a final flinch.",
+      "A low, dragging hiss and the scrape of claws circle just beyond the light — do not meet its eyes."
+    ] } },
+    { "value": { "monster": "Ogres", "telegraphs": [
+      "A crude firepit ringed with cracked, man-sized bones dominates the room.",
+      "A reeking heap of hides and half-gnawed carcasses serves some brute for a bed.",
+      "A dull, heavy thud of footfalls shakes grit from the ceiling, slow and enormous."
+    ] } },
+    { "value": { "monster": "Minotaurs", "telegraphs": [
+      "The passages here fork and double back, scored with horn-marks at every turn.",
+      "A snorting, bellowing breath echoes from somewhere in the maze, impossible to place.",
+      "Gnawed bones and rusted arms lie heaped where the lost were run down."
+    ] } },
+    { "value": { "monster": "Ettins", "telegraphs": [
+      "Two sets of grunts argue from ahead, talking over one another in the same rough voice.",
+      "A crude, enormous double-headed club has gouged twin dents down the wall.",
+      "The stench of a thing that has never once washed rolls out ahead of it."
+    ] } },
+    { "value": { "monster": "Hill giants", "telegraphs": [
+      "Boulders lie stacked into a crude, house-high cairn against the far wall.",
+      "Footprints deep enough to trip in press into the stone floor.",
+      "A slow, rockslide rumble of movement answers your light, and dust sifts down."
+    ] } },
+    { "value": { "monster": "Cyclops", "telegraphs": [
+      "A single vast chair faces the door, flanked by a heap of skulls, all cracked open at the top.",
+      "A club the size of a tree-trunk leans by the wall, worn smooth with long use.",
+      "A booming, one-noted mutter carries from ahead, and something huge turns toward the light."
     ] } }
   ]
 }

@@ -19,12 +19,17 @@ const PREFIX = [
   "Green", "Hart", "Hollow", "Marsh", "Mel", "Oak", "Old", "Raven", "Red", "Rook",
   "Salt", "Stone", "Thorn", "Wester", "White", "Wolf", "Wyn", "Yarrow", "Ald", "Gorse",
   "Harrow", "Mire", "Nether", "Over", "Pyke", "Slate", "Tarn", "Umber", "Weir", "Wych",
+  "Briar", "Birch", "Willow", "Rowan", "Hazel", "Reed", "Heath", "Nettle", "Ember", "Flint",
+  "Iron", "Fox", "Hawk", "Boar", "Heron", "Otter", "Drake", "Storm", "Mist", "Bleak",
+  "Grey", "Fair", "Foul", "Glen", "Bryn", "Murk", "Rime", "Adder",
 ];
 
 // Common place-endings, joined onto the prefix as one word (Ashford, Blackwick).
 const COMMON_SUFFIX = [
   "ford", "ton", "bury", "dale", "wick", "field", "bridge", "gate", "mere", "combe",
   "stead", "cross", "ham", "by", "worth", "side", "leigh", "wold", "march",
+  "burn", "beck", "thorpe", "thwaite", "holm", "ness", "minster", "chester", "mouth", "pool",
+  "haven", "garth", "den", "hope", "cote",
 ];
 
 // Terrain-flavored endings — grounds a name in its landscape (a "-wood" in the
@@ -42,10 +47,12 @@ export const TERRAIN_SUFFIX = {
 const NOUN = [
   "Cross", "Bridge", "Barrow", "Hollow", "Watch", "Reach", "Ford", "Mill",
   "Gate", "Green", "End", "Rest", "Landing", "Market", "Hallow", "Fields",
+  "Ferry", "Wharf", "Quay", "Harbour", "Downs", "Moor", "Vale", "Grange",
+  "Court", "Hall", "Chapel", "Rise", "Knoll", "Warren",
 ];
 
 // Martial endings + patterns for a Keep/Fort.
-export const MARTIAL_SUFFIX = ["hold", "watch", "guard", "gard", "wall", "gate", "mote"];
+export const MARTIAL_SUFFIX = ["hold", "watch", "guard", "gard", "wall", "gate", "mote", "tower", "ward", "dyke", "rath", "burh"];
 
 /**
  * A seeded settlement name.

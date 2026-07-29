@@ -9,6 +9,21 @@
     { "value": "A drunk by the fire" },
     { "value": "A frightened farmer" },
     { "value": "A wandering pedlar" },
-    { "value": "A dying man's last words" }
+    { "value": "A dying man's last words" },
+    { "value": "A grizzled mercenary" },
+    { "value": "A one-eyed sailor" },
+    { "value": "A widow in mourning" },
+    { "value": "A ranting hedge-priest" },
+    { "value": "A ferryman at the crossing" },
+    { "value": "A retired sergeant" },
+    { "value": "A cloaked stranger" },
+    { "value": "An old crone at the well" },
+    { "value": "A shepherd down from the high pasture" },
+    { "value": "A caravan guard" },
+    { "value": "A footsore pilgrim" },
+    { "value": "A blind beggar at the gate" },
+    { "value": "A poacher who saw too much" },
+    { "value": "A river bargeman" },
+    { "value": "A gambler down to his last coin" }
   ]
 }

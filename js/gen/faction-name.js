@@ -19,47 +19,58 @@ import { subRng, pick } from "../core/rng.js";
 const ADJ = [
   "Ashen", "Iron", "Crimson", "Black", "Silent", "Broken", "Hollow", "Grey",
   "Gilded", "Pale", "Thorned", "Ninefold", "Wandering", "Sunken", "Bitter",
-  "Ember", "Salt", "Winter", "Shrouded", "Emberwrought",
+  "Ember", "Salt", "Winter", "Shrouded", "Emberwrought", "Sable", "Ivory",
+  "Onyx", "Molten", "Withered", "Scorched", "Umbral", "Blighted", "Fell",
+  "Gaunt", "Sunless", "Tarnished", "Riven", "Wrathful",
 ];
 const BODY = [
   "Hand", "Circle", "Fang", "Crown", "Banner", "Chain", "Veil", "Coin",
   "Blade", "Eye", "Order", "Pack", "Host", "Compact", "Lantern", "Wardens",
+  "Talon", "Gauntlet", "Sigil", "Wreath", "Mantle", "Spire", "Chalice",
+  "Cowl", "Wheel", "Brand", "Sceptre", "Choir",
 ];
 
 // "<Kin> of <Place>" — a wilder, tribal reading (Wolves of the Fen).
 const KIN = [
   "Wolves", "Crows", "Ravens", "Serpents", "Jackals", "Boars", "Adders",
-  "Kites", "Hounds", "Vultures", "Sons", "Daughters", "Reavers",
+  "Kites", "Hounds", "Vultures", "Sons", "Daughters", "Reavers", "Shrikes",
+  "Bears", "Wyverns", "Foxes", "Widows", "Orphans", "Exiles", "Cutthroats",
+  "Marauders",
 ];
 const OF_PLACE = [
   "the Fen", "the Reach", "the Waste", "the Deep", "the Mire", "the Hollow",
   "the Marches", "the Ash", "the Thorn", "the Barrows", "the Pale", "the Scar",
+  "the Moor", "the Weald", "the Bog", "the Fells", "the Gloom", "the Murk",
+  "the Blight", "the Crag",
 ];
 
 // Dynasty surnames for a noble house (House Umber).
 const HOUSE = [
   "Umber", "Corvin", "Vayle", "Mordane", "Blackwood", "Harrow", "Grael",
   "Ostrenne", "Falk", "Dree", "Wexford", "Ashcroft", "Ryker", "Valmont",
+  "Ravenhurst", "Greymark", "Fenmore", "Mourne", "Vandrel", "Halvorne",
+  "Thornbury", "Estaven", "Draymere",
 ];
 
 // --- Lair-bound lords + rebellion (Phase 8.16) ---------------------------
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 // A necromancer/lich reads as a crypt-cabal ("The Hollow Ossuary").
-const UNDEAD_BODY = ["Cabal", "Ossuary", "Sepulchre", "Barrow", "Pall", "Coven", "Circle", "Hand"];
+const UNDEAD_BODY = ["Cabal", "Ossuary", "Sepulchre", "Barrow", "Pall", "Coven", "Circle", "Hand", "Reliquary", "Requiem", "Mortuary", "Catacomb", "Dirge", "Necropolis"];
 // A vampire is a titled individual or a "court".
-const VAMP_TITLE = ["Count", "Countess", "Baron", "Baroness", "the Pale Lord", "the Crimson Lord"];
+const VAMP_TITLE = ["Count", "Countess", "Baron", "Baroness", "the Pale Lord", "the Crimson Lord", "Viscount", "Viscountess", "Margrave", "the Sable Lord", "the Grey Lady"];
 // A hag / coven of the wilds.
-const HAG_ADJ = ["Bog", "Fen", "Mire", "Bramble", "Withered", "Grinning", "Weeping"];
-const HAG_BODY = ["Crone", "Hag", "Coven", "Sisters", "Grandmother", "Witch"];
+const HAG_ADJ = ["Bog", "Fen", "Mire", "Bramble", "Withered", "Grinning", "Weeping", "Nettle", "Gnarled", "Muttering", "Peat"];
+const HAG_BODY = ["Crone", "Hag", "Coven", "Sisters", "Grandmother", "Witch", "Beldame", "Matron", "Godmother", "Grimalkin"];
 // A dragon is a NAMED individual wyrm ("Varethyx, the Ashen Wyrm").
 const DRAGON_NAMES = [
   "Varethyx", "Sarnoth", "Vharzul", "Ignareth", "Cindraxus", "Aurgloth",
-  "Malzureth", "Thraxion", "Ormraxis", "Zaltheryn",
+  "Malzureth", "Thraxion", "Ormraxis", "Zaltheryn", "Halvireth", "Morghaxus",
+  "Velthyrion", "Skarloth", "Voxareth", "Kaeldrax",
 ];
-const WYRM = ["Wyrm", "Drake", "Wyrm", "Great Wyrm", "Serpent"];
+const WYRM = ["Wyrm", "Drake", "Wyrm", "Great Wyrm", "Serpent", "Firedrake", "Linnorm", "Worm"];
 // Rebellion — a peasant rising or a breakaway banner.
-const REBEL_ADJ = ["Peasant", "Free", "Common", "Ragged", "Broken-Chain"];
-const REBEL_BODY = ["Free Banners", "Free Companies", "Peasants' Banner", "Ragged Host", "Sworn Commons"];
+const REBEL_ADJ = ["Peasant", "Free", "Common", "Ragged", "Broken-Chain", "Barefoot", "Hungry", "Landless"];
+const REBEL_BODY = ["Free Banners", "Free Companies", "Peasants' Banner", "Ragged Host", "Sworn Commons", "Bondbreakers", "Sickle Host", "Freeholders"];
 
 /**
  * A seeded faction name.

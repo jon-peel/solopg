@@ -18,6 +18,14 @@
     { "value": "An agent of {faction} watches the comings and goings." },
     { "value": "Gatherings after dark are forbidden by {faction}." },
     { "value": "Deserters from {faction} are being hunted here." },
-    { "value": "The town is being fortified for {faction} against a rival." }
+    { "value": "The town is being fortified for {faction} against a rival." },
+    { "value": "The shrine has been rededicated to {faction}." },
+    { "value": "New arrivals must register with the agents of {faction}." },
+    { "value": "A price hangs over anyone who speaks against {faction}." },
+    { "value": "The gallows stand ready for enemies of {faction}." },
+    { "value": "Trade here runs only with the blessing of {faction}." },
+    { "value": "Children are being schooled in the creed of {faction}." },
+    { "value": "Oaths of service to {faction} are demanded at the gate." },
+    { "value": "Bells are rung each dusk in honour of {faction}." }
   ]
 }

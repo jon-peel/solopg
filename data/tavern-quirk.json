@@ -32,6 +32,20 @@
     { "value": "A chalkboard lists the dead who still owe." },
     { "value": "The mead is watered, but the welcome isn't." },
     { "value": "Everyone here seems to be waiting for someone." },
-    { "value": "The signboard outside says a different name." }
+    { "value": "The signboard outside says a different name." },
+    { "value": "The fire never goes out, and no one is seen to feed it." },
+    { "value": "A row of keys hangs by the door, and none are labelled." },
+    { "value": "The ale is served in horns; there are no cups to be had." },
+    { "value": "Every clock in the room shows a different hour." },
+    { "value": "The guest book has names that were never crossed out." },
+    { "value": "The last stool at the bar is always left empty." },
+    { "value": "Someone has carved a warning into every tabletop." },
+    { "value": "The rooms upstairs are numbered, but not in order." },
+    { "value": "The bread is fresh; the news is a week stale." },
+    { "value": "Coins are bitten before they're taken." },
+    { "value": "The rafters are hung with boots no one has come back for." },
+    { "value": "No one here sits with their back to the door." },
+    { "value": "A single candle burns before an empty chair, always." },
+    { "value": "The mirror behind the bar shows the room a breath too late." }
   ]
 }
