@@ -11,6 +11,17 @@
     { "weight": 2, "value": "lizardfolk" },
     { "weight": 1, "value": "ogres" },
     { "weight": 1, "value": "beastmen" },
-    { "weight": 1, "value": "ratfolk" }
+    { "weight": 1, "value": "ratfolk" },
+    { "weight": 2, "value": "bugbears" },
+    { "weight": 2, "value": "troglodytes" },
+    { "weight": 1, "value": "trolls" },
+    { "weight": 1, "value": "minotaurs" },
+    { "weight": 1, "value": "serpentfolk" },
+    { "weight": 1, "value": "hill giants" },
+    { "weight": 1, "value": "harpies" },
+    { "weight": 1, "value": "grimlocks" },
+    { "weight": 1, "value": "fishmen" },
+    { "weight": 1, "value": "ape-men" },
+    { "weight": 1, "value": "toadfolk" }
   ]
 }
