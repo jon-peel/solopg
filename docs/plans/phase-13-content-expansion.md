@@ -1,6 +1,6 @@
 # Phase 13 — Content expansion (flavour tables & name pools)
 
-**Status:** planned. **Goal:** greatly widen the pool of random flavour text so the world stops repeating itself — dungeon rooms, specials, traps, shrines, landmarks, settlement/tavern colour, hooks, and the name generators. This is **content only**: no schema change, no new mechanics.
+**Status:** completed (2026-07-29) — all sections implemented; see [`phase-13-content-reference.md`](../phase-13-content-reference.md) for the full expanded contents. **Goal:** greatly widen the pool of random flavour text so the world stops repeating itself — dungeon rooms, specials, traps, shrines, landmarks, settlement/tavern colour, hooks, and the name generators. This is **content only**: no schema change, no new mechanics.
 
 ## For an implementer / agent picking up an item
 
