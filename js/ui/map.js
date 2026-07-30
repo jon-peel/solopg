@@ -667,15 +667,17 @@ function drawCultureOutline(visible) {
 
 const CULTURE_LABEL_MIN_SIZE = 4; // realms smaller than this stay unlabelled (noise)
 
-// The proper realm name for a culture, matching how its core was seeded: prefer
-// the terrain-region core's (terrain, anchor) so the name is stable; fall back to
-// the peak hex for an anchor-only (town-pinned) culture. "Realm of the Silvaal".
+// The proper name for a culture, matching how its core was seeded: prefer the
+// terrain-region core's (terrain, anchor) so the name is stable; fall back to the
+// peak hex for an anchor-only (town-pinned) culture. Just the place name ("the
+// Silvaal") — the "· Elf" suffix + the coloured tint already read as a realm, so a
+// "Realm of" prefix on every one is redundant noise.
 function cultureRealmName(cul) {
   const core = (cultureField.cores || []).find((c) => `core:${c.originKey}` === cul.srcId);
-  if (core) return `Realm of ${regionName(world.seed, core.terrain, core.anchor, cul.race)}`;
+  if (core) return regionName(world.seed, core.terrain, core.anchor, cul.race);
   const { q, r } = parseKey(cul.peakKey);
   const terrain = (world.hexes[axialKey(q, r)] || {}).terrain || "Plains";
-  return `Realm of ${regionName(world.seed, terrain, cul.originKey, cul.race)}`;
+  return regionName(world.seed, terrain, cul.originKey, cul.race);
 }
 
 // Engraved culture labels at each realm's peak ("Realm of the Silvaal · Elf").
