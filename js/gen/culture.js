@@ -21,9 +21,11 @@
 
 import { subRng } from "../core/rng.js";
 import { fbm2D } from "../core/noise.js";
+import { rollTable } from "../core/table.js";
 import { axialKey, parseKey, neighbors, axialDistance } from "../core/hexgeo.js";
 import { MinHeap } from "../core/minheap.js";
 import { computeRegions } from "./regions.js";
+import { profileFor, SIZE_ORDER } from "./terrain-profile.js";
 import {
   RACES,
   RACE_SET,
@@ -378,6 +380,25 @@ export const STAMP_CFG = Object.freeze({
   ENCLAVE_EPSILON: 0.02, // per-race weight for a different-race minority enclave
 });
 
+// The per-terrain "no large settlement here" cap (terrain-profile: Mountains &
+// Desert -> Hamlet, Hills & Swamp -> Town) is a HUMAN assumption — humans don't
+// raise cities on a peak. A demihuman culture adapted to its homeland isn't bound
+// by it: a dwarven hold carved into a mountain can absolutely be a city. When a
+// demihuman race is stamped on a hex the human cap holds below City, we re-roll the
+// size from this UNCAPPED table — skewed a little larger than the human default
+// (Hamlet 22 / Village 13 / Town 3 / City 1), because a culture's homeland
+// settlement is an established centre, not a frontier shack. So a mountain city is
+// uncommon but real. Tune freely.
+const CULTURE_UNCAP_SIZE_TABLE = Object.freeze({
+  id: "culture-uncap-size",
+  entries: [
+    { weight: 8, value: "Hamlet" },
+    { weight: 8, value: "Village" },
+    { weight: 5, value: "Town" },
+    { weight: 3, value: "City" },
+  ],
+});
+
 /**
  * Weighted pick of the stamped race once the roll fires: the field's dominant
  * race by far, with a small ENCLAVE_EPSILON chance of any other race (a minority
@@ -471,7 +492,17 @@ export function stampSettlements(seed, placedHexes, opts = {}) {
   const field = buildLivingField(seed, terrainByKey, { ...fieldOpts, anchors });
   for (const h of pending) {
     const race = stampSettlementRace(seed, h.coords.q, h.coords.r, h.gen ?? 0, field);
-    if (race) h.settlement.race = race; // demihuman -> store; Human stays absent
+    if (race) {
+      h.settlement.race = race; // demihuman -> store; Human stays absent
+      // Lift the human size cap for a demihuman homeland settlement (e.g. a dwarven
+      // mountain hold can be a city) — re-roll uncapped where the human cap held it
+      // below City. Own sub-stream, so the main generation rng is untouched.
+      const cap = profileFor(h.terrain).settlement?.maxSize;
+      if (cap && SIZE_ORDER.indexOf(cap) < SIZE_ORDER.indexOf("City")) {
+        const s = subRng(seed, "culture-size", h.coords.q, h.coords.r, h.gen ?? 0);
+        h.settlement.size = rollTable(CULTURE_UNCAP_SIZE_TABLE, s).value;
+      }
+    }
     h.settlement.raceStamped = true; // resolved — frozen, never re-rolled
   }
   return placedHexes;

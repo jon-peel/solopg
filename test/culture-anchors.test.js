@@ -205,3 +205,41 @@ test("stampSettlements: full pass stamps a culture, keeps the world mostly Human
   assert.equal(anchors.length, demi);
   assert.ok(anchors.every((a) => RACE_SET.has(a.race)));
 });
+
+// --- Demihuman settlements lift the human "no large settlement here" cap -------
+
+test("a demihuman homeland settlement lifts the terrain size cap (a dwarf mountain hold can be a city)", () => {
+  // The human cap pins Mountains to Hamlet; a dwarf culture there isn't bound by it.
+  const sizes = new Set();
+  let cityOrTown = 0;
+  for (let s = 0; s < 300; s++) {
+    const hex = { coords: { q: 0, r: 0 }, terrain: "Mountains", gen: 0, settlement: { present: true, size: "Hamlet" } };
+    stampSettlements(s, [hex], { extraAnchors: [{ q: 0, r: 0, race: "dwarf" }] });
+    if (hex.settlement.race === "dwarf") {
+      sizes.add(hex.settlement.size);
+      if (hex.settlement.size === "City" || hex.settlement.size === "Town") cityOrTown++;
+    }
+  }
+  assert.ok(sizes.has("City"), "a dwarf mountain hold can reach City");
+  assert.ok(cityOrTown > 0, "dwarf mountain holds are no longer pinned to Hamlet");
+});
+
+test("the uncap is deterministic and frozen, and never re-rolls a Human or an uncapped-terrain settlement", () => {
+  // Human mountain settlement: race null -> size untouched (stays as generated).
+  const human = { coords: { q: 5, r: 5 }, terrain: "Mountains", gen: 0, settlement: { present: true, size: "Hamlet" } };
+  stampSettlements(999, [human], {}); // no anchor, culture-free -> Human
+  assert.equal(human.settlement.race, undefined);
+  assert.equal(human.settlement.size, "Hamlet");
+
+  // Demihuman on Plains (human cap is already City) -> the uncap must NOT re-roll it.
+  const plains = { coords: { q: 0, r: 0 }, terrain: "Plains", gen: 0, settlement: { present: true, size: "Village" } };
+  stampSettlements(1, [plains], { extraAnchors: [{ q: 0, r: 0, race: "halfling" }] });
+  if (plains.settlement.race) assert.equal(plains.settlement.size, "Village", "uncapped terrain size is left alone");
+
+  // Deterministic + frozen: a re-stamp never changes a resolved size.
+  const hex = { coords: { q: 0, r: 0 }, terrain: "Mountains", gen: 0, settlement: { present: true, size: "Hamlet" } };
+  stampSettlements(7, [hex], { extraAnchors: [{ q: 0, r: 0, race: "dwarf" }] });
+  const size1 = hex.settlement.size;
+  stampSettlements(7, [hex], { extraAnchors: [{ q: 0, r: 0, race: "dwarf" }] }); // raceStamped -> skipped
+  assert.equal(hex.settlement.size, size1);
+});
