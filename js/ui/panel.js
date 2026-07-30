@@ -755,6 +755,7 @@ export function renderSelectionPanel(model) {
       const name = settlementName(model.seed, coord.q, coord.r, hex.gen, {
         kind: hex.settlement.kind,
         terrain: hex.terrain,
+        race: hex.settlement.race,
       });
       const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
       const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];

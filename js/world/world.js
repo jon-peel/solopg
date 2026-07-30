@@ -59,7 +59,12 @@ import { axialKey } from "../core/hexgeo.js";
 // reserved `factions` array (populated from 8.7 on). NOTE: the world clock
 // ("day") is deliberately NOT part of this — it's an in-memory session
 // counter (js/ui/app.js), always starts at 0, never persisted.
-export const SCHEMA_VERSION = 16;
+// v17: Phase 14.3 — settlements gained an optional demihuman culture stamp:
+// `settlement.race` ("elf"|"dwarf"|"halfling"|"gnome"; absent = Human/null,
+// never "human") plus an internal `settlement.raceStamped` flag so the race is
+// rolled exactly once and frozen (js/gen/culture.js stampSettlements). Additive,
+// pre-V1 — NO migration: a world without the field is simply (re)stamped on load.
+export const SCHEMA_VERSION = 17;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;

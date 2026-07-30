@@ -349,6 +349,127 @@ export function heritageAt(field, q, r) {
   return readAt(field, q, r);
 }
 
+// --- Anchors & settlement stamping (Phase 14.3) ------------------------------
+//
+// A culture is a tent: the field is the fabric, the SETTLEMENTS are the pegs
+// (§1.2). When a settlement first appears it is stamped with a race rolled
+// against the living field there (§1.4), stored on `settlement.race`, and never
+// re-rolled. Stored anchors then feed back into the living field as fixed
+// sources, so the field near towns is pinned by the pegs and only the town-less
+// frontier is free to breathe. Human is the null case: a Human town stores NO
+// race (§5 rule 4). `settlement.raceStamped` marks a settlement as resolved so
+// the roll happens exactly once, frozen thereafter.
+
+/**
+ * The settlement-stamp probability model (§1.4). `P(demihuman) = clamp(FLOOR +
+ * strength·GAIN, 0, P_MAX)`, evaluated only where the living field already claims
+ * the hex for a culture (strength >= THRESHOLD). P_MAX < 1 so even a strong-
+ * culture town is sometimes Human (the people moved in later); the fringe (near
+ * THRESHOLD) is mostly Human. ENCLAVE_EPSILON is the small chance the stamped
+ * race differs from the field's dominant one — a minority enclave.
+ */
+export const STAMP_CFG = Object.freeze({
+  FLOOR: 0.05, // base fire chance at the membership threshold
+  GAIN: 0.8, // how hard strength drives the fire chance
+  P_MAX: 0.85, // cap (< 1): fringe & some in-culture towns stay Human
+  ENCLAVE_EPSILON: 0.02, // per-race weight for a different-race minority enclave
+});
+
+/**
+ * Weighted pick of the stamped race once the roll fires: the field's dominant
+ * race by far, with a small ENCLAVE_EPSILON chance of any other race (a minority
+ * enclave). Iterates RACES in canonical order so the pick depends only on the rng.
+ */
+function pickStampRace(rng, dominant) {
+  const eps = STAMP_CFG.ENCLAVE_EPSILON;
+  const total = 1 + eps * RACES.length;
+  let t = rng() * total;
+  for (const race of RACES) {
+    t -= eps + (race === dominant ? 1 : 0);
+    if (t < 0) return race;
+  }
+  return dominant;
+}
+
+/**
+ * Roll the race for a settlement at (q,r) against a LIVING field (§1.4). Returns
+ * a race string, or null for Human (never "human"): null below the membership
+ * threshold (the field leaves the hex Human), and null when the capped
+ * strength-scaled roll doesn't fire. Uses its OWN sub-stream
+ * (`subRng(seed,"settlement-race",q,r,gen)`) so it never perturbs the hex
+ * generator's rng order.
+ *
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @param {number} [gen] the hex's regenerate counter (a re-rolled hex re-stamps)
+ * @param {{at:(q:number,r:number)=>{race:?string,strength:number}}} field a
+ *   living field from buildLivingField
+ * @returns {?string} race or null (Human)
+ */
+export function stampSettlementRace(seed, q, r, gen = 0, field) {
+  const { race, strength } = field.at(q, r);
+  if (!race) return null; // below THRESHOLD -> Human/null
+  const rng = subRng(seed, "settlement-race", q, r, gen);
+  const p = Math.min(STAMP_CFG.P_MAX, Math.max(0, STAMP_CFG.FLOOR + strength * STAMP_CFG.GAIN));
+  if (rng() >= p) return null; // fringe / moved-in-later -> stays Human
+  return pickStampRace(rng, race);
+}
+
+/**
+ * Extract living-field anchors from placed hexes: the stored `settlement.race`
+ * of every settled hex, as `[{q,r,race}]`. These pin the field (§1.2). Human
+ * towns (no stored race) contribute no anchor — Human is the null case.
+ *
+ * @param {{coords?:{q:number,r:number}, settlement?:{race?:string}}[]} placedHexes
+ * @returns {{q:number,r:number,race:string}[]}
+ */
+export function settlementAnchors(placedHexes) {
+  const anchors = [];
+  for (const hex of placedHexes || []) {
+    const race = hex && hex.settlement && hex.settlement.race;
+    if (race && RACE_SET.has(race) && hex.coords) {
+      anchors.push({ q: hex.coords.q, r: hex.coords.r, race });
+    }
+  }
+  return anchors;
+}
+
+/**
+ * Stamp every not-yet-resolved settlement in `placedHexes` in ONE pass, against
+ * the living field pinned by the already-resolved settlement anchors (§1.2/§1.4).
+ * Mutates the hexes (like seedWaterSettlements): a stamped demihuman town gets
+ * `settlement.race`; a Human town gets none; both get `settlement.raceStamped`
+ * so the roll is FROZEN — a later re-derive with more terrain/anchors never
+ * re-rolls a resolved town (§5, non-negotiable). Idempotent and cheap when there
+ * is nothing pending (no field is built). All pending towns read the SAME field,
+ * so the batch is order-independent within itself.
+ *
+ * @param {number|string} seed
+ * @param {{coords?:{q:number,r:number}, terrain?:string, gen?:number,
+ *   settlement?:object}[]} placedHexes
+ * @param {{minSize?:number}} [opts] forwarded to buildLivingField
+ * @returns {{coords?:object, settlement?:object}[]} the same array (mutated)
+ */
+export function stampSettlements(seed, placedHexes, opts = {}) {
+  const pending = (placedHexes || []).filter(
+    (h) => h.settlement && h.settlement.present && !h.settlement.raceStamped,
+  );
+  if (!pending.length) return placedHexes; // nothing to do — skip the field build
+  const terrainByKey = new Map();
+  for (const h of placedHexes) {
+    if (h.coords) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  }
+  const anchors = settlementAnchors(placedHexes);
+  const field = buildLivingField(seed, terrainByKey, { ...opts, anchors });
+  for (const h of pending) {
+    const race = stampSettlementRace(seed, h.coords.q, h.coords.r, h.gen ?? 0, field);
+    if (race) h.settlement.race = race; // demihuman -> store; Human stays absent
+    h.settlement.raceStamped = true; // resolved — frozen, never re-rolled
+  }
+  return placedHexes;
+}
+
 /**
  * Summarize a field's cultures for labels/legend: one entry per source (core or
  * anchor) that claims at least one hex at/above the field's THRESHOLD. Each entry

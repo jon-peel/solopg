@@ -29,6 +29,7 @@ import {
 } from "../world/world.js";
 import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
+import { stampSettlements } from "../gen/culture.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
@@ -269,6 +270,7 @@ async function setCurrent(world) {
   setEncounterMarks(null); // ...and its encounter stars
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
+  if (world) syncCultures(world); // ...then stamp culture races on any unstamped towns (loaded/imported worlds)
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -309,6 +311,7 @@ async function onNewWorld(fillRadius = null) {
     }
     syncRivers(current);
     syncRoads(current); // persist the derived overlays with the world
+    syncCultures(current); // stamp settlement races once all towns (incl. water) exist
   }
   const saved = await saveWorld(world);
   await setCurrent(saved);
@@ -1172,7 +1175,7 @@ function travelHeadline(result, aimLabel, aimKind) {
 function destinationLabel(hex, q, r) {
   if (hex && hex.name) return hex.name;
   if (hex && hex.settlement && hex.settlement.present) {
-    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
   }
   return `(${q}, ${r})`;
 }
@@ -1908,7 +1911,7 @@ function selectedSettlementContext() {
   const { q, r } = selected;
   const hex = getHex(current, q, r);
   if (!(hex && hex.placed && hex.settlement && hex.settlement.present)) return null;
-  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
   return { label: `${name} · ${hex.settlement.size}`, factionName: factionNameAt(q, r) };
 }
 
@@ -1942,7 +1945,7 @@ async function ensureTaverns(hex, q, r) {
   const n = tavernCountForSize(hex.settlement.size, subRng(current.seed, "taverns", q, r, "count"));
   const list = [];
   for (let i = 0; i < n; i++) {
-    const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, i));
+    const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, i), hex.settlement.race);
     list.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
   }
   hex.settlement.taverns = list;
@@ -1972,7 +1975,7 @@ async function onAddTavern(q, r) {
   await ensureTaverns(hex, q, r); // ensure the base set exists first
   const tables = await loadTables(ORACLE_TABLE_IDS);
   const seq = (hex.settlement.tavernAdds = (hex.settlement.tavernAdds || 0) + 1);
-  const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, "add", seq));
+  const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, "add", seq), hex.settlement.race);
   hex.settlement.taverns.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
   current = await saveWorld(current);
   renderSelection();
@@ -2318,6 +2321,17 @@ function syncRoads(world) {
     world.rivers,
     Array.isArray(world.roads) ? world.roads : [],
   );
+}
+
+// Stamp a demihuman culture race onto any freshly-appeared settlement (Phase
+// 14.3) — the tent-peg model: each new town rolls its race against the living
+// culture field (js/gen/culture.js), pinned by the towns already stamped, then
+// is FROZEN (raceStamped). Runs AFTER syncRivers/syncRoads so water-seeded ports
+// and hamlet clusters are stamped in the same pass. Idempotent and cheap when
+// nothing is pending (no field is built); Human towns store no race (the null
+// case). Recomputing the field never re-rolls a stored town.
+function syncCultures(world) {
+  if (world) stampSettlements(world.seed, placedHexes(world));
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
@@ -2702,6 +2716,7 @@ async function onFollowClue(id) {
 async function persistAndRefresh() {
   syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
   syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
+  syncCultures(current); // ...then stamp culture races onto any newly-revealed towns
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
