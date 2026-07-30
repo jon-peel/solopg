@@ -852,10 +852,6 @@ function buildLegendPoi() {
     row.append(sw, document.createTextNode(`${POI_GLYPHS[type] || "❖"} ${label}`));
     host.appendChild(row);
   }
-  const note = document.createElement("div");
-  note.className = "legend-note";
-  note.textContent = "Far zoom: dot = single POI (by type); numbered dot = several.";
-  host.appendChild(note);
 }
 function toggleLegend(force) {
   const el = $("legend");
@@ -2211,10 +2207,6 @@ function renderCultureLegend() {
     row.append(sw, document.createTextNode(label));
     host.appendChild(row);
   }
-  const note = document.createElement("div");
-  note.className = "legend-note";
-  note.textContent = "Tint = who lives here (bolder = heartland). Human areas are untinted.";
-  host.appendChild(note);
 }
 
 // Highlight the selected hook's target/origin on the map (clears if none/gone).

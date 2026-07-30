@@ -310,6 +310,7 @@ export function render() {
   // 2a⁗. Contested culture seams (14.5) — a two-tone dashed front line where two
   //      peoples meet, over the markers so the tension reads. Under the faction
   //      outline + labels below.
+  if (cultureEnabled) drawCultureOutline(visible);
   if (cultureEnabled) drawContestedBorders(visible);
 
   // 2a‴. Faction territory OUTLINE + seat (Phase 11.4) — the inked sphere-of-
@@ -624,6 +625,43 @@ function drawContestedBorders(visible) {
   }
   ctx.setLineDash([]);
   ctx.lineDashOffset = 0;
+  ctx.restore();
+}
+
+// A solid inked boundary around each culture's territory where it meets human /
+// unrevealed land — so the extent reads clearly even where the wash has faded to
+// nothing at the edge. Culture-vs-culture edges keep the two-tone contested seam
+// (drawContestedBorders) instead, so a rival border stays distinct from an outer
+// frontier. Each culture-vs-null edge belongs to only the culture hex, so no dedup
+// is needed.
+function drawCultureOutline(visible) {
+  if (!cultureField) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
+  const w = 2.6 / camera.scale;
+  const casing = w + 1.8 / camera.scale;
+  const seg = (a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+  for (const { hex } of visible) {
+    const { q, r } = hex.coords;
+    const here = cultureField.at(q, r).race;
+    if (!here) continue;
+    const c = axialToPixel(q, r, HEX_SIZE);
+    const corners = hexCorners(c.x, c.y, HEX_SIZE);
+    for (let dir = 0; dir < 6; dir++) {
+      const [dq, dr] = NEIGHBOR_DIRS[dir];
+      if (cultureField.at(q + dq, r + dr).race) continue; // only the edge against non-culture land
+      const e = (6 - dir) % 6; // neighbour dir -> shared hex edge
+      const a = corners[e], b = corners[(e + 1) % 6];
+      ctx.lineWidth = casing;
+      ctx.strokeStyle = "rgba(28,18,6,0.5)"; // dark casing (reads on any terrain)
+      seg(a, b);
+      ctx.lineWidth = w;
+      ctx.strokeStyle = darkenRgba(CULTURE_COLORS[here], 0.08, 0.98);
+      seg(a, b);
+    }
+  }
   ctx.restore();
 }
 
