@@ -194,7 +194,7 @@ level chosen per step's difficulty.
 ---
 
 ## 7. Progress
-- [ ] Step 1 — Foundations
+- [x] Step 1 — Foundations
 - [ ] Step 2 — Culture field engine
 - [ ] Step 3 — Anchors & generation
 - [ ] Step 4 — POI heritage & clustering
