@@ -206,5 +206,12 @@ export function migrateWorld(data) {
     // syncCultures -> stampSettlements) — just stamp the version.
     data.schemaVersion = 17;
   }
+  if (data.schemaVersion < 18) {
+    // Phase 14.6 — top-level `cultureAnchors` array (GM paint/remove overrides).
+    // Additive and pre-V1: no transform — getCultureAnchors defaults to `[]`
+    // when absent. Just stamp the version.
+    if (!Array.isArray(data.cultureAnchors)) data.cultureAnchors = [];
+    data.schemaVersion = 18;
+  }
   return data;
 }

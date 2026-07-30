@@ -1,6 +1,6 @@
 # Phase 14 — Cultures & Ancestry (demihuman regions + heritage POIs)
 
-**Status:** planning → in progress.
+**Status:** complete (Steps 1–6 + tuning). 612 tests green.
 
 **Prime Directive (pre-V1):** No backward compatibility. No data migration. We may
 throw out old saved worlds between test batches. So: reshape the schema freely, bump
@@ -200,4 +200,12 @@ level chosen per step's difficulty.
 - [x] Step 4 — POI heritage & clustering  *(mechanism done; heritage rate ~43% on a test world — TUNE DOWN in the post-Step-5 pass, alongside culture density)*
 - [x] Step 5 — Rendering & UI
 - [x] Step 5.5 — Tuning pass — cultures ~1.6 realms / 6.4% of hexes, heritage ~3.1% of POIs (measured over 80 seeds), "Meadowmeadows" stutter fixed. Per user: cultures "much rarer (1-2 realms, <8%)", heritage "a genuine rarity (~3%)".
-- [ ] Step 6 — GM paint / remove
+- [x] Step 6 — GM paint / remove — `world.cultureAnchors` (SCHEMA_VERSION 18) +
+  `setCultureAnchor`/`clearCultureAnchor`/`getCultureAnchors` accessors; a small
+  "Paint culture" picker in the selection panel (panel.js/app.js) calls them and
+  persists/refreshes like the other panel actions. Painted anchors thread into
+  `worldCultureAnchors(world)` (settlement anchors + paint) used by map.js's
+  render field, and into `stampSettlements`/`stampPois` via a new `extraAnchors`
+  option, so a paint both renders immediately and pins future stamps. Suppression
+  ("force back to Human") left as a TODO — the paint/clear pair is otherwise the
+  full ask.

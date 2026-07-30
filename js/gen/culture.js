@@ -451,7 +451,10 @@ export function settlementAnchors(placedHexes) {
  * @param {number|string} seed
  * @param {{coords?:{q:number,r:number}, terrain?:string, gen?:number,
  *   settlement?:object}[]} placedHexes
- * @param {{minSize?:number}} [opts] forwarded to buildLivingField
+ * @param {{minSize?:number, extraAnchors?:{q:number,r:number,race:string}[]}} [opts]
+ *   `minSize` forwards to buildLivingField; `extraAnchors` (Step 6, GM paint) are
+ *   additional fixed sources merged in alongside the settlement anchors — they
+ *   pin the field the same way, without being stored as settlements themselves.
  * @returns {{coords?:object, settlement?:object}[]} the same array (mutated)
  */
 export function stampSettlements(seed, placedHexes, opts = {}) {
@@ -459,18 +462,37 @@ export function stampSettlements(seed, placedHexes, opts = {}) {
     (h) => h.settlement && h.settlement.present && !h.settlement.raceStamped,
   );
   if (!pending.length) return placedHexes; // nothing to do — skip the field build
+  const { extraAnchors = [], ...fieldOpts } = opts;
   const terrainByKey = new Map();
   for (const h of placedHexes) {
     if (h.coords) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
   }
-  const anchors = settlementAnchors(placedHexes);
-  const field = buildLivingField(seed, terrainByKey, { ...opts, anchors });
+  const anchors = settlementAnchors(placedHexes).concat(extraAnchors);
+  const field = buildLivingField(seed, terrainByKey, { ...fieldOpts, anchors });
   for (const h of pending) {
     const race = stampSettlementRace(seed, h.coords.q, h.coords.r, h.gen ?? 0, field);
     if (race) h.settlement.race = race; // demihuman -> store; Human stays absent
     h.settlement.raceStamped = true; // resolved — frozen, never re-rolled
   }
   return placedHexes;
+}
+
+/**
+ * Combine every source that pins the culture field for `world` (Step 6): the
+ * derived settlement anchors (§1.2, `settlementAnchors`) plus the GM's manual
+ * `world.cultureAnchors` (§ Step 6, paint/remove). Order doesn't matter for
+ * correctness (collectSources re-sorts into a stable rank), but painted anchors
+ * are appended after settlement anchors for readability. Duck-types `world`
+ * (`world.hexes`, `world.cultureAnchors`) like the other generators do, rather
+ * than importing js/world/world.js.
+ *
+ * @param {{hexes?:object, cultureAnchors?:{q:number,r:number,race:string}[]}} world
+ * @returns {{q:number,r:number,race:string}[]}
+ */
+export function worldCultureAnchors(world) {
+  if (!world) return [];
+  const hexes = Object.values(world.hexes || {}).filter((h) => h && h.placed && h.coords);
+  return settlementAnchors(hexes).concat(world.cultureAnchors || []);
 }
 
 // --- POI heritage & clusters (Phase 14.4) ------------------------------------
@@ -686,7 +708,9 @@ function applyHeritageText(seed, q, r, poiId, race, poi) {
  *
  * @param {number|string} seed
  * @param {{coords?:{q:number,r:number}, terrain?:string, pois?:object[]}[]} placedHexes
- * @param {{minSize?:number}} [opts] forwarded to buildHeritageField
+ * @param {{minSize?:number, extraAnchors?:{q:number,r:number,race:string}[]}} [opts]
+ *   `minSize` forwards to buildHeritageField; `extraAnchors` (Step 6, GM paint)
+ *   are additional fixed sources merged in alongside the settlement anchors.
  * @returns {object[]} the same array (mutated)
  */
 export function stampPois(seed, placedHexes, opts = {}) {
@@ -700,12 +724,13 @@ export function stampPois(seed, placedHexes, opts = {}) {
   }
   if (!pending) return placedHexes; // nothing to do — skip the field build
 
+  const { extraAnchors = [], ...fieldOpts } = opts;
   const terrainByKey = new Map();
   for (const h of hexes) {
     if (h.coords) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
   }
-  const anchors = settlementAnchors(hexes);
-  const field = buildHeritageField(seed, terrainByKey, { ...opts, anchors });
+  const anchors = settlementAnchors(hexes).concat(extraAnchors);
+  const field = buildHeritageField(seed, terrainByKey, { ...fieldOpts, anchors });
 
   for (const h of hexes) {
     if (!h.coords || !h.pois || !h.pois.length) continue;

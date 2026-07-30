@@ -27,7 +27,7 @@ import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settl
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions, regionName } from "../gen/regions.js";
 import { LORD_ARCHETYPES } from "../gen/factions.js";
-import { buildLivingField, settlementAnchors, listCultures } from "../gen/culture.js";
+import { buildLivingField, worldCultureAnchors, listCultures } from "../gen/culture.js";
 import { CULTURE_COLORS, RACE_LABELS, RACES } from "../gen/culture-data.js";
 import { washOpacity, contestedEdge } from "./culture-style.js";
 
@@ -479,13 +479,15 @@ function regionNameAt(q, r) {
 
 // Build (or reuse) the living culture field for the current revealed set. Uses
 // buildLivingField's default minSize (8) so it matches syncCultures' stamping.
+// Anchors combine stamped settlements AND the GM's manual paint overrides
+// (worldCultureAnchors, Step 6) — a painted hex renders as that race immediately.
 function ensureCultureField() {
   if (!world) { cultureField = null; return null; }
   const hexes = placedHexes(world);
   if (!(cultureCache.seed === world.seed && cultureCache.count === hexes.length && cultureCache.field)) {
     const terrainByKey = new Map();
     for (const h of hexes) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
-    const anchors = settlementAnchors(hexes);
+    const anchors = worldCultureAnchors(world);
     const field = buildLivingField(world.seed, terrainByKey, { anchors });
     cultureCache = { seed: world.seed, count: hexes.length, field, cultures: listCultures(field) };
   }

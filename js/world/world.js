@@ -64,7 +64,14 @@ import { axialKey } from "../core/hexgeo.js";
 // never "human") plus an internal `settlement.raceStamped` flag so the race is
 // rolled exactly once and frozen (js/gen/culture.js stampSettlements). Additive,
 // pre-V1 — NO migration: a world without the field is simply (re)stamped on load.
-export const SCHEMA_VERSION = 17;
+// v18: Phase 14.6 — a top-level `cultureAnchors: [{q,r,race}]` array (GM paint/
+// remove overrides). A manual anchor is mechanically identical to a stamped
+// settlement anchor (§1.2): it feeds the living/heritage fields as a fixed
+// source at (q,r), so a painted hex reads as that race immediately and pins the
+// field near it; "clear" just removes the entry. Human is never stored here
+// either. Additive, pre-V1 — NO migration: an old world simply has none until
+// the GM paints one (getCultureAnchors defaults to `[]`).
+export const SCHEMA_VERSION = 18;
 
 // Default hex scale in miles (classic 6-mile hex). Configurable per world.
 const DEFAULT_HEX_SCALE = 6;
@@ -104,6 +111,12 @@ export function createWorld({ name = "Untitled World", seed } = {}) {
     party: { q: 0, r: 0 },
     // Factions (Phase 8.1, reserved) — populated starting 8.7; empty until then.
     factions: [],
+    // Manual culture anchors (Phase 14.6, GM paint/remove) — a top-level override
+    // list, `[{q,r,race}]`, mechanically identical to a stamped settlement anchor
+    // (see js/gen/culture.js). Empty by default; Human is never stored here (the
+    // null case) — clearing an entry just removes it, it does not add a "human"
+    // marker.
+    cultureAnchors: [],
     // Auto-emergence accumulators (Phase 9.9) — reload-safe like the faction-turn
     // clock: `emergeTicks` is a monotonic per-day rng cursor; `emergeSince` counts
     // days since the last emergence (the cooldown). Reads guard with `|| 0`.
@@ -206,6 +219,43 @@ export function getFactions(world) {
 export function removeFaction(world, id) {
   if (Array.isArray(world.factions)) {
     world.factions = world.factions.filter((f) => f.id !== id);
+  }
+  return world;
+}
+
+// --- Culture anchors (Phase 14.6, GM paint/remove) -----------------------
+// world.cultureAnchors[] is the manual override list (§1.2/§2 of the plan): a
+// painted anchor is mechanically identical to a stamped settlement anchor — it
+// feeds the living/heritage fields as a fixed source (js/gen/culture.js), so it
+// both renders immediately and pins future stamps near it. Human is the null
+// case here too: never stored as a race — "clear" just removes the entry.
+
+/** All manual culture anchors on the world (never null). */
+export function getCultureAnchors(world) {
+  return (world && world.cultureAnchors) || [];
+}
+
+/**
+ * Paint (q,r) with a demihuman race: upserts by (q,r) — a hex carries at most
+ * one manual anchor. Mutates and returns the world.
+ * @param {object} world
+ * @param {number} q
+ * @param {number} r
+ * @param {string} race one of RACES (js/gen/culture-data.js) — never "human"
+ */
+export function setCultureAnchor(world, q, r, race) {
+  if (!Array.isArray(world.cultureAnchors)) world.cultureAnchors = [];
+  const i = world.cultureAnchors.findIndex((a) => a.q === q && a.r === r);
+  const entry = { q, r, race };
+  if (i >= 0) world.cultureAnchors[i] = entry;
+  else world.cultureAnchors.push(entry);
+  return world;
+}
+
+/** Remove the manual culture anchor at (q,r), if any. Mutates and returns the world. */
+export function clearCultureAnchor(world, q, r) {
+  if (Array.isArray(world.cultureAnchors)) {
+    world.cultureAnchors = world.cultureAnchors.filter((a) => !(a.q === q && a.r === r));
   }
   return world;
 }

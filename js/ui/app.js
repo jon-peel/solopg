@@ -26,10 +26,14 @@ import {
   addFaction,
   getFactions,
   removeFaction,
+  setCultureAnchor,
+  clearCultureAnchor,
+  getCultureAnchors,
 } from "../world/world.js";
 import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { stampSettlements, stampPois } from "../gen/culture.js";
+import { RACE_SET } from "../gen/culture-data.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
@@ -990,6 +994,13 @@ function renderSelection() {
     // never shown). Read from the map's memoised render field so the panel agrees
     // with the tint. Settlement race + POI heritage come off the stored hex/poi.
     culture: hex && hex.placed ? cultureInfoAt(q, r) : null,
+    // GM paint override (Phase 14.6): the manually-anchored race at this hex, if
+    // any — drives the "Paint culture" picker's active state.
+    paintedRace: hex && hex.placed
+      ? (getCultureAnchors(current).find((a) => a.q === q && a.r === r) || {}).race || null
+      : null,
+    onPaintCulture: hex && hex.placed ? onPaintCulture : undefined,
+    onClearCulture: hex && hex.placed ? onClearCulture : undefined,
     onOpenActions, // "⋯ Actions" → open the radial on this hex (11.5b)
     seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
@@ -1236,6 +1247,35 @@ async function onNoteHex(text) {
   if (!hex) return;
   if (v) hex.note = v; else delete hex.note;
   pruneIfEmpty(hex, q, r);
+  await persistAndRefresh();
+}
+
+// GM paint / remove (Phase 14.6) — a manual culture override for the selected
+// hex, mechanically identical to a stamped settlement anchor (§1.2): it feeds
+// the living/heritage fields as a fixed source, so it both renders immediately
+// (map.js's culture wash) and pins future stamps near it (syncCultures). Human
+// is the null case — never stored; "clear" just removes the anchor, reverting
+// the hex to whatever the derived field says (NOT forced back to Human — see
+// the TODO on onClearCulture for the suppression stretch goal).
+async function onPaintCulture(race) {
+  if (!current || !selected || !RACE_SET.has(race)) return;
+  const { q, r } = selected;
+  setCultureAnchor(current, q, r, race);
+  await persistAndRefresh();
+}
+
+// Clears a painted anchor at the selected hex, if any. This is NOT "force to
+// Human" — a hex the derived field would still call demihuman (a nearby core,
+// or another anchor) can keep reading that way after clearing; it only removes
+// the GM's manual override. TODO(Phase 14.6 stretch): a real "suppress this hex
+// back to Human regardless of the derived field" override would need a distinct
+// marker (not a stored "human" race — §5 rule 4) that BLOCKS other sources from
+// claiming the hex in the flood, which is more invasive than the tent-peg model
+// as built; left undone per the plan's "only if clean" guidance.
+async function onClearCulture() {
+  if (!current || !selected) return;
+  const { q, r } = selected;
+  clearCultureAnchor(current, q, r);
   await persistAndRefresh();
 }
 
@@ -2368,12 +2408,15 @@ function syncRoads(world) {
 // (heritageStamped). Runs AFTER syncRivers/syncRoads so water-seeded ports and
 // hamlet clusters are stamped in the same pass. Idempotent and cheap when nothing
 // is pending (no field is built); neutral entities store no race (the null case).
-// Recomputing the fields never re-rolls a stored town or POI.
+// Recomputing the fields never re-rolls a stored town or POI. The GM's manual
+// paint anchors (Step 6, world.cultureAnchors) are threaded through as extra
+// fixed sources so a painted hex also pins future stamps, same as a real town.
 function syncCultures(world) {
   if (!world) return;
   const hexes = placedHexes(world);
-  stampSettlements(world.seed, hexes); // living-field town races (the tent pegs)...
-  stampPois(world.seed, hexes); // ...then heritage-field POI builder races + clusters
+  const extraAnchors = getCultureAnchors(world); // GM-painted overrides (Step 6)
+  stampSettlements(world.seed, hexes, { extraAnchors }); // living-field town races (the tent pegs)...
+  stampPois(world.seed, hexes, { extraAnchors }); // ...then heritage-field POI builder races + clusters
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
