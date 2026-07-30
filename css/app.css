@@ -948,6 +948,26 @@ button:hover {
   background: #2b3140;
   border-color: var(--accent);
 }
+/* Layers menu: sits at the right end of the command bar, so open it right-aligned
+   (not left, which would overflow off-screen / under the panel). */
+.layers-menu {
+  left: auto;
+  right: 0;
+}
+/* Layers menu: each item is a checkbox; a leading tick shows the layer is on. */
+.layers-menu button[role="menuitemcheckbox"] {
+  position: relative;
+  padding-left: 1.6em;
+}
+.layers-menu button[role="menuitemcheckbox"]::before {
+  content: "✓";
+  position: absolute;
+  left: 0.55em;
+  opacity: 0;
+}
+.layers-menu button[role="menuitemcheckbox"][aria-checked="true"]::before {
+  opacity: 1;
+}
 
 /* Map legend (bottom-left): opens above the 🗺 toggle button. */
 #legend {

@@ -48,10 +48,17 @@
       </div>
       <!-- View cluster: map display toggles. -->
       <div class="bar-group" role="group" aria-label="View">
-        <button id="btn-icons" data-tip="Show / hide terrain + settlement art">Icons: on</button>
-        <button id="btn-labels" data-tip="Show / hide hex name labels">Labels: on</button>
-        <button id="btn-cultures" data-tip="Show / hide the culture overlay">Cultures: on</button>
-        <button id="btn-factions" data-tip="Show / hide the faction territory overlay">Factions: on</button>
+        <span class="menu-wrap">
+          <button id="btn-layers" aria-haspopup="true" aria-expanded="false" data-tip="Show / hide map layers">Layers ▾</button>
+          <div id="layers-menu" class="dropdown-menu layers-menu" role="menu" hidden>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="icons">Terrain icons</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="labels">Hex labels</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="regions">Region names</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="cultures">Cultures</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="factions">Factions</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="hooks">Hooks</button>
+          </div>
+        </span>
       </div>
       <!-- Panel drawer toggle — only visible on narrow screens (Phase 11.7). -->
       <button id="btn-panel" class="panel-toggle" aria-label="Toggle info panel" title="Panel">☰</button>

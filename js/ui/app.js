@@ -68,6 +68,8 @@ import {
   setLabelsEnabled,
   setCultureOverlay,
   setFactionsOverlay,
+  setRegionLabels,
+  setHooksOverlay,
   setHookMarks,
   setHookFocus,
   setRiverDraft,
@@ -2139,9 +2141,9 @@ function onFactionPopupOutside(e) {
 function renderFactionLegend(factions) {
   const host = $("legend-factions");
   if (!host) return;
-  host.hidden = !factions.length || !factionsOn;
+  host.hidden = !factions.length || !layerState.factions;
   host.innerHTML = "";
-  if (!factions.length || !factionsOn) return;
+  if (!factions.length || !layerState.factions) return;
   // "Powers" header row: the sub-label, plus a single world-wide "Advance turn"
   // button (Phase 12.1 — relocated from the removed Factions tab) when at least
   // one faction is active. Advancing runs a faction turn for the whole roster.
@@ -2193,9 +2195,9 @@ function renderCultureLegend() {
   const host = $("legend-cultures");
   if (!host) return;
   const { races } = mapCultures();
-  host.hidden = !races.length || !culturesOn;
+  host.hidden = !races.length || !layerState.cultures;
   host.innerHTML = "";
-  if (!races.length || !culturesOn) return;
+  if (!races.length || !layerState.cultures) return;
   const sub = document.createElement("div");
   sub.className = "legend-sub";
   sub.textContent = "Cultures";
@@ -3256,10 +3258,7 @@ function wire() {
   $("btn-export").addEventListener("click", onExport);
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
-  $("btn-icons").addEventListener("click", onToggleIcons);
-  $("btn-labels").addEventListener("click", onToggleLabels);
-  $("btn-cultures").addEventListener("click", onToggleCultures);
-  $("btn-factions").addEventListener("click", onToggleFactions);
+  wireLayersMenu();
   $("btn-legend").addEventListener("click", () => toggleLegend());
   $("btn-progress").addEventListener("click", onProgressDays);
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
@@ -3319,34 +3318,39 @@ function syncZoomSlider() {
   s.value = String(zoomToSlider(scale, min, max));
 }
 
-let iconsOn = true;
-function onToggleIcons() {
-  iconsOn = !iconsOn;
-  setIconsEnabled(iconsOn);
-  $("btn-icons").textContent = `Icons: ${iconsOn ? "on" : "off"}`;
+// Map display layers, all toggled from the "Layers ▾" menu. The legend's culture /
+// faction sections read layerState so they hide when their overlay is switched off.
+const layerState = { icons: true, labels: true, regions: true, cultures: true, factions: true, hooks: true };
+
+function applyLayer(layer, on) {
+  layerState[layer] = on;
+  switch (layer) {
+    case "icons": setIconsEnabled(on); break;
+    case "labels": setLabelsEnabled(on); break;
+    case "regions": setRegionLabels(on); break;
+    case "cultures": setCultureOverlay(on); refreshFactions(); break; // legend section follows
+    case "factions": setFactionsOverlay(on); refreshFactions(); break;
+    case "hooks": setHooksOverlay(on); break;
+  }
 }
 
-let labelsOn = true;
-function onToggleLabels() {
-  labelsOn = !labelsOn;
-  setLabelsEnabled(labelsOn);
-  $("btn-labels").textContent = `Labels: ${labelsOn ? "on" : "off"}`;
-}
-
-let culturesOn = true;
-function onToggleCultures() {
-  culturesOn = !culturesOn;
-  setCultureOverlay(culturesOn);
-  $("btn-cultures").textContent = `Cultures: ${culturesOn ? "on" : "off"}`;
-  refreshFactions(); // re-render the legend (culture section respects the toggle)
-}
-
-let factionsOn = true;
-function onToggleFactions() {
-  factionsOn = !factionsOn;
-  setFactionsOverlay(factionsOn);
-  $("btn-factions").textContent = `Factions: ${factionsOn ? "on" : "off"}`;
-  refreshFactions(); // re-render the legend (faction section respects the toggle)
+// The "Layers ▾" dropdown (mirrors wireNewWorldMenu): each item is a checkbox
+// toggling one map overlay. aria-checked drives the CSS tick + the a11y state.
+function wireLayersMenu() {
+  const btn = $("btn-layers");
+  const menu = $("layers-menu");
+  const setOpen = (open) => { menu.hidden = !open; btn.setAttribute("aria-expanded", String(open)); };
+  btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(menu.hidden); });
+  menu.addEventListener("click", (e) => {
+    const item = e.target.closest("button[data-layer]");
+    if (!item) return;
+    const layer = item.dataset.layer;
+    const on = !layerState[layer];
+    item.setAttribute("aria-checked", String(on));
+    applyLayer(layer, on);
+  });
+  document.addEventListener("click", (e) => { if (!menu.hidden && !e.target.closest("#layers-menu, #btn-layers")) setOpen(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
 }
 
 async function init() {

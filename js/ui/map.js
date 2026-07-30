@@ -56,6 +56,8 @@ let iconsEnabled = true;
 let labelsEnabled = true; // show hex name labels on the map
 let cultureEnabled = true; // show the culture overlay (wash / seams / realm labels)
 let factionsEnabled = true; // show the faction territory overlay (fill / outline)
+let regionLabelsEnabled = true; // show engraved terrain-region names ("the Blackwood")
+let hooksEnabled = true; // show adventure-lead rings / pins
 let hovered = null; // { q, r } under the cursor | null
 let hoverKey = null; // axialKey of `hovered`, to skip redundant re-renders
 let lastPpm = null; // last pixels-per-mile emitted to onView (fire only on change)
@@ -292,8 +294,10 @@ export function render() {
     // Hook destinations: pinned leads (a distinct pin) take precedence over the
     // amber "a lead exists here" ring; both visible at all zooms.
     const hk = axialKey(hex.coords.q, hex.coords.r);
-    if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
-    else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
+    if (hooksEnabled) {
+      if (pinnedTargets.has(hk)) drawPinnedMark(c.x, c.y, detail);
+      else if (hookTargets.has(hk)) drawHookMark(c.x, c.y, detail);
+    }
     // A locked hex (protected from regenerate/delete) shows a small padlock.
     if (detail && hex.locked) {
       const off = HEX_SIZE * 0.52, sz = HEX_SIZE * 0.4;
@@ -314,7 +318,9 @@ export function render() {
   if (factionsEnabled) drawFactionOutline(minX, minY, maxX, maxY, margin);
 
   // 2a⁵. Engraved culture realm labels (14.5) at each realm's peak, over the
-  //      territory art but under the hover/selection/party chrome below.
+  //      territory art but under the hover/selection/party chrome below. Region
+  //      names engrave first (under the realm labels).
+  if (regionLabelsEnabled) drawRegionLabels(minX, minY, maxX, maxY, margin);
   if (cultureEnabled) drawCultureLabels(minX, minY, maxX, maxY, margin);
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on
@@ -422,6 +428,18 @@ export function setFactionsOverlay(on) {
   render();
 }
 
+/** Toggle the engraved terrain-region names; re-renders. */
+export function setRegionLabels(on) {
+  regionLabelsEnabled = !!on;
+  render();
+}
+
+/** Toggle the adventure-lead rings / pins; re-renders. */
+export function setHooksOverlay(on) {
+  hooksEnabled = !!on;
+  render();
+}
+
 /**
  * Mark hook destinations; re-renders. `open` = amber rings (available leads),
  * `pinned` = a distinct pin (the party's active leads).
@@ -468,19 +486,28 @@ function drawHookLine(a, b) {
 // Named regions (3R.8): memoise a hex -> region-name map per (seed, hex count) so
 // we only flood-fill when the world grows. The name shows on HOVER (see the hover
 // block in render) — no always-on labels cluttering the map.
-function regionNameAt(q, r) {
-  if (!world) return null;
+const REGION_LABEL_MIN_SIZE = 16; // a clump needs this many same-terrain hexes to earn a name
+
+// Memoise the named regions (+ a hex -> name map) per (seed, hex count) so we only
+// flood-fill when the world grows. Used by the hover readout AND the toggleable
+// engraved region-name overlay (drawRegionLabels).
+function ensureRegions() {
+  if (!world) return [];
   const hexes = placedHexes(world);
-  if (!(regionCache.seed === world.seed && regionCache.count === hexes.length)) {
+  if (!(regionCache.seed === world.seed && regionCache.count === hexes.length && regionCache.regions)) {
     const terrainByKey = new Map();
     for (const h of hexes) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+    const regions = computeRegions(world.seed, terrainByKey, { minSize: REGION_LABEL_MIN_SIZE });
     const byHex = new Map();
-    for (const reg of computeRegions(world.seed, terrainByKey, { minSize: 16 })) {
-      for (const k of reg.keys) byHex.set(k, reg.name);
-    }
-    regionCache = { seed: world.seed, count: hexes.length, byHex };
+    for (const reg of regions) for (const k of reg.keys) byHex.set(k, reg.name);
+    regionCache = { seed: world.seed, count: hexes.length, byHex, regions };
   }
-  return regionCache.byHex.get(axialKey(q, r)) || null;
+  return regionCache.regions;
+}
+
+function regionNameAt(q, r) {
+  ensureRegions();
+  return (regionCache.byHex && regionCache.byHex.get(axialKey(q, r))) || null;
 }
 
 // --- Culture layer (Phase 14.5) --------------------------------------------
@@ -644,6 +671,53 @@ function drawCultureLabels(minX, minY, maxX, maxY, margin) {
     ctx.strokeStyle = MAP.labelBg; // parchment halo for contrast
     ctx.strokeText(text, p.x, p.y);
     ctx.fillStyle = darkenRgba(CULTURE_COLORS[cul.race], 0.12, 0.96);
+    ctx.fillText(text, p.x, p.y);
+  }
+  ctx.restore();
+}
+
+// Engraved terrain-region names ("the Blackwood", "the Grey Peaks") at each
+// region's centroid — the faint atmosphere layer (toggleable via the Layers menu).
+// Skips a region already shown as a culture realm ("Realm of X") when the culture
+// overlay is on, so a region is never double-labelled. Same constant-size serif +
+// halo + overlap cull as the culture labels; larger regions placed first.
+const REGION_LABEL_COLOR = "rgba(74,58,31,0.72)"; // faded ink
+function drawRegionLabels(minX, minY, maxX, maxY, margin) {
+  const regions = ensureRegions();
+  if (!regions.length) return;
+  // Regions currently shown as a culture realm — don't also draw their plain name.
+  const skip = new Set();
+  if (cultureEnabled && cultureField) {
+    const cores = cultureField.cores || [];
+    for (const cul of cultureCache.cultures || []) {
+      if (cul.size < CULTURE_LABEL_MIN_SIZE) continue; // won't draw a realm label anyway
+      const core = cores.find((c) => `core:${c.originKey}` === cul.srcId);
+      if (core) skip.add(core.anchor);
+    }
+  }
+  const list = [...regions].sort((a, b) => b.size - a.size);
+  const fs = 12 / camera.scale;
+  ctx.save();
+  ctx.font = `italic ${fs}px "Iowan Old Style", Palatino, Georgia, serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  const placed = [];
+  for (const reg of list) {
+    if (skip.has(reg.anchor)) continue;
+    const p = axialToPixel(reg.cq, reg.cr, HEX_SIZE);
+    if (offView(p, minX, minY, maxX, maxY, margin)) continue;
+    const text = reg.name;
+    const w = ctx.measureText(text).width;
+    const box = { x: p.x - w / 2, y: p.y - fs * 0.7, w, h: fs * 1.4 };
+    if (placed.some((o) => box.x < o.x + o.w && box.x + box.w > o.x && box.y < o.y + o.h && box.y + box.h > o.y)) {
+      continue; // would collide with a bigger region's label already drawn
+    }
+    placed.push(box);
+    ctx.lineWidth = fs * 0.3;
+    ctx.strokeStyle = MAP.labelBg; // parchment halo
+    ctx.strokeText(text, p.x, p.y);
+    ctx.fillStyle = REGION_LABEL_COLOR;
     ctx.fillText(text, p.x, p.y);
   }
   ctx.restore();
