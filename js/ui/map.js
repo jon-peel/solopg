@@ -700,7 +700,7 @@ function drawCultureLabels(minX, minY, maxX, maxY, margin) {
     const { q, r } = parseKey(cul.peakKey);
     const p = axialToPixel(q, r, HEX_SIZE);
     if (offView(p, minX, minY, maxX, maxY, margin)) continue;
-    const text = `${cultureRealmName(cul)} · ${RACE_LABELS[cul.race]}`;
+    const text = `${stripThe(cultureRealmName(cul))} · ${RACE_LABELS[cul.race]}`;
     const w = ctx.measureText(text).width;
     const box = { x: p.x - w / 2, y: p.y - fs * 0.7, w, h: fs * 1.4 };
     if (placed.some((o) => box.x < o.x + o.w && box.x + box.w > o.x && box.y < o.y + o.h && box.y + box.h > o.y)) {
@@ -721,7 +721,25 @@ function drawCultureLabels(minX, minY, maxX, maxY, margin) {
 // Skips a region already shown as a culture realm ("Realm of X") when the culture
 // overlay is on, so a region is never double-labelled. Same constant-size serif +
 // halo + overlap cull as the culture labels; larger regions placed first.
-const REGION_LABEL_COLOR = "rgba(74,58,31,0.72)"; // faded ink
+const REGION_LABEL_COLOR = "rgba(58,44,26,0.92)"; // ink (darkened for legibility over art)
+const REGION_LABEL_BG = "rgba(242,232,208,0.66)"; // soft parchment chip behind the name
+
+// Drop a leading "the " from a place name — the culture "· Race" tag and the map
+// context already carry it, so "the Grey Tarn" reads cleaner as "Grey Tarn".
+function stripThe(name) {
+  return name.replace(/^the\s+/i, "");
+}
+
+// A rounded-rect path (no ctx.roundRect dependency) for label chips.
+function roundRectPath(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
 function drawRegionLabels(minX, minY, maxX, maxY, margin) {
   const regions = ensureRegions();
   if (!regions.length) return;
@@ -747,16 +765,18 @@ function drawRegionLabels(minX, minY, maxX, maxY, margin) {
     if (skip.has(reg.anchor)) continue;
     const p = axialToPixel(reg.cq, reg.cr, HEX_SIZE);
     if (offView(p, minX, minY, maxX, maxY, margin)) continue;
-    const text = reg.name;
+    const text = stripThe(reg.name);
     const w = ctx.measureText(text).width;
     const box = { x: p.x - w / 2, y: p.y - fs * 0.7, w, h: fs * 1.4 };
     if (placed.some((o) => box.x < o.x + o.w && box.x + box.w > o.x && box.y < o.y + o.h && box.y + box.h > o.y)) {
       continue; // would collide with a bigger region's label already drawn
     }
     placed.push(box);
-    ctx.lineWidth = fs * 0.3;
-    ctx.strokeStyle = MAP.labelBg; // parchment halo
-    ctx.strokeText(text, p.x, p.y);
+    // A soft parchment chip lifts the faint region ink off the busy terrain art.
+    const padX = fs * 0.45, padY = fs * 0.22;
+    roundRectPath(box.x - padX, box.y - padY, box.w + padX * 2, box.h + padY * 2, fs * 0.35);
+    ctx.fillStyle = REGION_LABEL_BG;
+    ctx.fill();
     ctx.fillStyle = REGION_LABEL_COLOR;
     ctx.fillText(text, p.x, p.y);
   }
