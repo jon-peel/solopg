@@ -20,6 +20,7 @@
 // therefore never cover the whole map, no matter how large.
 
 import { subRng } from "../core/rng.js";
+import { fbm2D } from "../core/noise.js";
 import { axialKey, parseKey, neighbors, axialDistance } from "../core/hexgeo.js";
 import { MinHeap } from "../core/minheap.js";
 import { computeRegions } from "./regions.js";
@@ -29,6 +30,8 @@ import {
   CULTURE_DENSITY,
   TERRAIN_RACE_WEIGHTS,
   CULTURE_COLORS,
+  RACE_NAME_POOLS,
+  RACE_JOIN,
 } from "./culture-data.js";
 
 // Re-export for the renderer's convenience (Step 5) — one import for tint + field.
@@ -466,6 +469,256 @@ export function stampSettlements(seed, placedHexes, opts = {}) {
     const race = stampSettlementRace(seed, h.coords.q, h.coords.r, h.gen ?? 0, field);
     if (race) h.settlement.race = race; // demihuman -> store; Human stays absent
     h.settlement.raceStamped = true; // resolved — frozen, never re-rolled
+  }
+  return placedHexes;
+}
+
+// --- POI heritage & clusters (Phase 14.4) ------------------------------------
+//
+// Every POI rolls a BUILDER-race against the HERITAGE field (§1.3/§1.4): who dug
+// or raised the thing, long before anyone moved in. The roll is deliberately
+// almost-always-neutral (FLOOR ≈ 0.0001 — a cultural artifact can surface
+// anywhere, but ~99.99% are plain), rising with heritage-field strength (near a
+// people's past extent) and capped BELOW 1 (even in a heartland some POIs stay
+// neutral — the people came after it was built). A fired POI stores
+// `poi.heritage = { race }`; absent = neutral (never "human", §5 rule 4).
+//
+// Clusters (§1.5, §5 non-negotiable #1) are STATELESS. A POI never influences the
+// next. Instead every POI independently samples two SHARED latent noise fields:
+//   • "heritage-patch" — thresholded so most of the map is flat but occasional
+//     coherent blobs are "hot": inside a blob the fire chance is raised
+//     (patchBump), so 2–5 nearby POIs surface together as one vanished outpost.
+//   • "heritage-race"  — a lower-frequency field that maps position -> a race, so
+//     the whole blob AGREES on which people built there — for free, no cross-POI
+//     communication. Because both are pure functions of (seed, position), the
+//     result is deterministic and order-independent (§5 rules 1 & 3).
+//
+// Everything below is frozen once stamped (`poi.heritageStamped`), mirroring the
+// settlement raceStamped anchor logic: a later re-derive never re-rolls a POI.
+
+// Latent field for the cluster "hot patches". octaves/frequency tuned so a hot
+// blob spans ~3–5 hexes; PATCH_HI (below) sets how rare hot blobs are.
+const PATCH_NOISE = Object.freeze({ octaves: 2, frequency: 0.28, persistence: 0.5 });
+
+// Lower-frequency latent field for the per-blob race pick — its regions are wider
+// than a patch, so a whole blob reads one race (high within-blob coherence).
+const RACE_NOISE = Object.freeze({ octaves: 1, frequency: 0.11 });
+
+/**
+ * POI heritage roll model (§1.4/§1.5).
+ *   P = clamp(FLOOR + heritageStrength·GAIN + patchBump, 0, P_MAX)
+ * FLOOR keeps the map ~99.99% neutral where there is neither culture nor a hot
+ * patch; GAIN lifts the chance with proximity to a people's past extent; a hot
+ * patch adds patchBump (a base step at the blob edge, ramping to PATCH_GAIN at a
+ * blob's core). P_MAX < 1 so even a strong heritage/patch leaves some POIs plain.
+ */
+export const POI_HERITAGE_CFG = Object.freeze({
+  FLOOR: 0.0001, // base fire chance anywhere — a rare artifact far from everything
+  GAIN: 0.9, // how hard heritage-field strength drives the fire chance
+  P_MAX: 0.85, // cap (< 1): even a heartland/hot-patch POI is sometimes neutral
+  PATCH_HI: 0.7, // heritage-patch value at/above which a hex is a "hot" blob
+  PATCH_BASE: 0.35, // fire-chance step the moment a hex is inside a hot blob
+  PATCH_GAIN: 0.4, // extra fire chance ramping from blob edge to blob core
+});
+
+/** Uniform fallback weights for terrains with no TERRAIN_RACE_WEIGHTS entry. */
+const EQUAL_WEIGHTS = Object.freeze({ elf: 1, dwarf: 1, halfling: 1, gnome: 1 });
+
+/** Pick a race from a weight map using a precomputed roll in [0,1) (canonical order). */
+function weightedPickByRoll(roll, weights) {
+  let total = 0;
+  for (const race of RACES) total += weights[race] || 0;
+  let t = roll * total;
+  for (const race of RACES) {
+    t -= weights[race] || 0;
+    if (t < 0) return race;
+  }
+  return RACES[RACES.length - 1];
+}
+
+/**
+ * The coherent per-position ("patch") builder race: a terrain-weighted pick whose
+ * "roll" is the spatially-smooth "heritage-race" noise, so neighbouring hexes
+ * (and thus a whole hot blob) agree on the race WITHOUT any cross-POI state.
+ * Terrain-aware (TERRAIN_RACE_WEIGHTS, already epsilon-floored, so every race is
+ * possible anywhere) with a uniform fallback for water/unknown terrain.
+ */
+function patchRaceAt(seed, q, r, terrain) {
+  const weights = TERRAIN_RACE_WEIGHTS[terrain] || EQUAL_WEIGHTS;
+  return weightedPickByRoll(fbm2D(seed, "heritage-race", q, r, RACE_NOISE), weights);
+}
+
+/** patchBump for the roll: 0 outside a hot blob, PATCH_BASE..PATCH_BASE+PATCH_GAIN inside. */
+function patchBumpAt(seed, q, r) {
+  const v = fbm2D(seed, "heritage-patch", q, r, PATCH_NOISE);
+  if (v < POI_HERITAGE_CFG.PATCH_HI) return 0;
+  const ramp = (v - POI_HERITAGE_CFG.PATCH_HI) / (1 - POI_HERITAGE_CFG.PATCH_HI);
+  return POI_HERITAGE_CFG.PATCH_BASE + POI_HERITAGE_CFG.PATCH_GAIN * ramp;
+}
+
+/**
+ * The POI-heritage FIRE probability at (q,r) — the pure §1.4 model, no rng draw:
+ * `clamp(FLOOR + heritageStrength·GAIN + patchBump, 0, P_MAX)`. Away from any
+ * culture (strength 0) and outside a hot patch (patchBump 0) this is exactly
+ * FLOOR — the ~99.99%-neutral guarantee. Exposed for tests/rendering.
+ *
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @param {{at:(q:number,r:number)=>{race:?string,strength:number}}} [field]
+ * @returns {number} probability in [0, P_MAX]
+ */
+export function poiHeritageChance(seed, q, r, field) {
+  const strength = field ? field.at(q, r).strength : 0;
+  return Math.min(
+    POI_HERITAGE_CFG.P_MAX,
+    Math.max(0, POI_HERITAGE_CFG.FLOOR + strength * POI_HERITAGE_CFG.GAIN + patchBumpAt(seed, q, r)),
+  );
+}
+
+/**
+ * Roll a POI's BUILDER race at (q,r) against a HERITAGE field (§1.4/§1.5). Returns
+ * a race string, or null for neutral (never "human"). Uses its OWN sub-stream
+ * (`subRng(seed,"poi-heritage",q,r,poiId)`) so it never perturbs the POI
+ * generator's rng order. When it fires the race is the heritage field's dominant
+ * race (with a small enclave epsilon) where the field reaches, else the coherent
+ * per-blob patch race — so far-from-culture clusters still agree on one people.
+ * Depends ONLY on (seed, position, poiId) and the shared fields — never on any
+ * other POI (§5 rule 1), so it is order-independent.
+ *
+ * @param {number|string} seed
+ * @param {number} q
+ * @param {number} r
+ * @param {string|number} poiId the POI's id (a hex may hold several POIs)
+ * @param {string} terrain the hex's terrain (for the terrain-weighted patch race)
+ * @param {{at:(q:number,r:number)=>{race:?string,strength:number}}} [field] a
+ *   heritage field from buildHeritageField; omitted/absent = no culture reach
+ * @returns {?string} race or null (neutral)
+ */
+export function rollPoiHeritage(seed, q, r, poiId, terrain, field) {
+  const p = poiHeritageChance(seed, q, r, field);
+  const rng = subRng(seed, "poi-heritage", q, r, poiId);
+  if (rng() >= p) return null; // neutral — the ~99.99% case away from culture/patch
+  const fieldRace = field ? field.at(q, r).race : null;
+  if (fieldRace) return pickStampRace(rng, fieldRace); // within a culture's high-water mark
+  return patchRaceAt(seed, q, r, terrain); // a coherent vanished-outpost cluster
+}
+
+// --- Heritage naming/flavour (§4) --------------------------------------------
+//
+// Pure, deterministic composers for a stamped POI's builder identity. Builder ≠
+// occupier (§1.3): the descriptor + proper name always name the BUILDER; the
+// flavour folds in the CURRENT occupant, so an elf ruin now held by goblins reads
+// "An elf-wrought tower, now held by goblins."
+
+/** The POI's plain base label (theme for a dungeon; the pre-occupant name else). */
+function poiBaseLabel(poi) {
+  if (poi.type === "dungeon" && poi.detail && poi.detail.theme) return poi.detail.theme;
+  const n = poi.name || "";
+  return n.split(" — ")[0] || n;
+}
+
+/** "a"/"an" for a descriptor by its leading sound (elf-wrought -> an, dwarf-delved -> a). */
+function articleFor(word) {
+  return /^[aeiou]/i.test(word) ? "an" : "a";
+}
+
+/** A deterministic heritage descriptor word for a POI (e.g. "elf-wrought"). */
+export function heritageDescriptor(seed, q, r, poiId, race) {
+  const pool = RACE_NAME_POOLS[race].heritage;
+  return pool[Math.floor(subRng(seed, "poi-heritage-desc", q, r, poiId)() * pool.length)];
+}
+
+/** A deterministic proper name for a heritage POI (e.g. "Kaelthar", "Karr-dûr"). */
+export function heritageProperName(seed, q, r, poiId, race) {
+  const pools = RACE_NAME_POOLS[race];
+  const rng = subRng(seed, "poi-heritage-name", q, r, poiId);
+  const prefix = pools.prefixes[Math.floor(rng() * pools.prefixes.length)];
+  const suffix = pools.suffixes[Math.floor(rng() * pools.suffixes.length)];
+  const join = RACE_JOIN[race];
+  const glyph = join && join.chance > 0 && rng() < join.chance ? join.glyph : "";
+  return prefix + glyph + suffix;
+}
+
+/**
+ * Compose a stamped POI's heritage display: a proper-named builder place plus an
+ * occupant-aware flavour line. Pure and idempotent for a given (seed,q,r,poiId,
+ * race,poi). Reads the POI's base label + current occupant; does NOT mutate.
+ *
+ * @returns {{name:string, descriptor:string, properName:string, flavor:string}}
+ *   e.g. name "Kaelthar, an elf-wrought tower", flavor "An elf-wrought tower,
+ *   now held by goblins."
+ */
+export function heritagePoiText(seed, q, r, poiId, race, poi) {
+  const descriptor = heritageDescriptor(seed, q, r, poiId, race);
+  const properName = heritageProperName(seed, q, r, poiId, race);
+  const base = poiBaseLabel(poi).toLowerCase();
+  const builder = `${descriptor} ${base}`; // "elf-wrought tower"
+  const art = articleFor(descriptor);
+  const name = `${properName}, ${art} ${builder}`;
+  const lead = `${art === "an" ? "An" : "A"} ${builder}`; // "An elf-wrought tower"
+  const occ = (poi && poi.occupant) || { kind: "none" };
+  let flavor;
+  if (occ.kind === "occupied") flavor = `${lead}, now held by ${String(occ.by).toLowerCase()}.`;
+  else if (occ.kind === "lair") flavor = `${lead}, now a lair of ${String(occ.creature).toLowerCase()}.`;
+  else flavor = `${lead}, its builders long gone.`;
+  return { name, descriptor, properName, flavor };
+}
+
+/** Bake the heritage builder identity into a POI's name + flavour (mutates once). */
+function applyHeritageText(seed, q, r, poiId, race, poi) {
+  const t = heritagePoiText(seed, q, r, poiId, race, poi);
+  poi.name = t.name;
+  poi.detail = poi.detail || {};
+  poi.detail.flavor = t.flavor;
+}
+
+/**
+ * Stamp every not-yet-resolved POI in `placedHexes` in ONE pass, against a single
+ * heritage field pinned by the settlement anchors (§1.3/§1.4/§1.5). Mutates the
+ * POIs: a fired POI gets `poi.heritage = { race }` and a heritage-composed
+ * name/flavour; a neutral POI gets neither; both get `poi.heritageStamped` so the
+ * roll is FROZEN — a later re-derive with more terrain/anchors never re-rolls a
+ * resolved POI (§5 non-negotiable). Idempotent and cheap when nothing is pending
+ * (no field is built). All pending POIs read the SAME field and roll from their
+ * own (q,r,poiId) sub-stream, so the batch is order-independent within itself; and
+ * clusters come only from the shared latent noise, never from POI-to-POI state.
+ *
+ * @param {number|string} seed
+ * @param {{coords?:{q:number,r:number}, terrain?:string, pois?:object[]}[]} placedHexes
+ * @param {{minSize?:number}} [opts] forwarded to buildHeritageField
+ * @returns {object[]} the same array (mutated)
+ */
+export function stampPois(seed, placedHexes, opts = {}) {
+  const hexes = placedHexes || [];
+  let pending = false;
+  for (const h of hexes) {
+    for (const poi of (h && h.pois) || []) {
+      if (!poi.heritageStamped) { pending = true; break; }
+    }
+    if (pending) break;
+  }
+  if (!pending) return placedHexes; // nothing to do — skip the field build
+
+  const terrainByKey = new Map();
+  for (const h of hexes) {
+    if (h.coords) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+  }
+  const anchors = settlementAnchors(hexes);
+  const field = buildHeritageField(seed, terrainByKey, { ...opts, anchors });
+
+  for (const h of hexes) {
+    if (!h.coords || !h.pois || !h.pois.length) continue;
+    const { q, r } = h.coords;
+    for (const poi of h.pois) {
+      if (poi.heritageStamped) continue;
+      const race = rollPoiHeritage(seed, q, r, poi.id, h.terrain, field);
+      if (race) {
+        poi.heritage = { race }; // fired -> store the builder race; neutral stays absent
+        applyHeritageText(seed, q, r, poi.id, race, poi);
+      }
+      poi.heritageStamped = true; // resolved — frozen, never re-rolled
+    }
   }
   return placedHexes;
 }

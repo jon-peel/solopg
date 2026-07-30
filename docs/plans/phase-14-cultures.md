@@ -197,6 +197,6 @@ level chosen per step's difficulty.
 - [x] Step 1 — Foundations
 - [x] Step 2 — Culture field engine
 - [x] Step 3 — Anchors & generation
-- [ ] Step 4 — POI heritage & clustering
+- [x] Step 4 — POI heritage & clustering  *(mechanism done; heritage rate ~43% on a test world — TUNE DOWN in the post-Step-5 pass, alongside culture density)*
 - [ ] Step 5 — Rendering & UI
 - [ ] Step 6 — GM paint / remove

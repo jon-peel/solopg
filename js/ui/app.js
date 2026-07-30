@@ -29,7 +29,7 @@ import {
 } from "../world/world.js";
 import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
-import { stampSettlements } from "../gen/culture.js";
+import { stampSettlements, stampPois } from "../gen/culture.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
@@ -2323,15 +2323,20 @@ function syncRoads(world) {
   );
 }
 
-// Stamp a demihuman culture race onto any freshly-appeared settlement (Phase
-// 14.3) — the tent-peg model: each new town rolls its race against the living
-// culture field (js/gen/culture.js), pinned by the towns already stamped, then
-// is FROZEN (raceStamped). Runs AFTER syncRivers/syncRoads so water-seeded ports
-// and hamlet clusters are stamped in the same pass. Idempotent and cheap when
-// nothing is pending (no field is built); Human towns store no race (the null
-// case). Recomputing the field never re-rolls a stored town.
+// Stamp demihuman culture onto any freshly-appeared entities (Phase 14.3/14.4) —
+// the tent-peg model. First each new SETTLEMENT rolls its race against the living
+// culture field, pinned by the towns already stamped, then is FROZEN (raceStamped).
+// Then each new POI rolls its BUILDER race against the heritage field + shared
+// latent noise (stateless clusters, §1.5), storing poi.heritage and freezing it
+// (heritageStamped). Runs AFTER syncRivers/syncRoads so water-seeded ports and
+// hamlet clusters are stamped in the same pass. Idempotent and cheap when nothing
+// is pending (no field is built); neutral entities store no race (the null case).
+// Recomputing the fields never re-rolls a stored town or POI.
 function syncCultures(world) {
-  if (world) stampSettlements(world.seed, placedHexes(world));
+  if (!world) return;
+  const hexes = placedHexes(world);
+  stampSettlements(world.seed, hexes); // living-field town races (the tent pegs)...
+  stampPois(world.seed, hexes); // ...then heritage-field POI builder races + clusters
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
