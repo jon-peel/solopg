@@ -35,14 +35,18 @@ test("RACE_LABELS: a display label for every race, and none for human", () => {
 // --- Density & weights (§3) -------------------------------------------------
 
 test("CULTURE_DENSITY: every land terrain sits in the low band the plan asks for; Water is zero", () => {
-  assert.equal(CULTURE_DENSITY.Forest, 0.25);
-  assert.equal(CULTURE_DENSITY.Hills, 0.20);
-  assert.equal(CULTURE_DENSITY.Mountains, 0.22);
-  assert.equal(CULTURE_DENSITY.Plains, 0.10);
-  assert.equal(CULTURE_DENSITY.Swamp, 0.05);
-  assert.equal(CULTURE_DENSITY.Desert, 0.05);
+  // Tuned low (Phase 14.5) so a Huge world averages ~1-2 realms over <8% of the
+  // map — assert the BAND and the intent, not brittle exact numbers.
   assert.equal(CULTURE_DENSITY.Water, 0);
-  for (const t of LAND_TERRAINS) assert.ok(CULTURE_DENSITY[t] > 0 && CULTURE_DENSITY[t] < 0.3);
+  for (const t of LAND_TERRAINS) {
+    assert.ok(
+      CULTURE_DENSITY[t] > 0 && CULTURE_DENSITY[t] <= 0.15,
+      `${t} density ${CULTURE_DENSITY[t]} should sit in the low band (0, 0.15]`,
+    );
+  }
+  // Favoured terrains are likelier hosts than the marginal ones.
+  assert.ok(CULTURE_DENSITY.Forest >= CULTURE_DENSITY.Plains);
+  assert.ok(CULTURE_DENSITY.Mountains >= CULTURE_DENSITY.Desert);
 });
 
 test("TERRAIN_RACE_WEIGHTS_BASE: matches the plan's per-terrain weights (§3)", () => {

@@ -76,11 +76,21 @@ export function regionName(seed, terrain, anchorKey, race) {
 // tract name does — the race itself is the flavour.
 function raceRegionName(rng, pools) {
   const prefix = pick(rng, pools.prefixes);
-  const noun = pick(rng, pools.regionNouns);
+  const plc = prefix.toLowerCase();
+  // Avoid a stem-stutter like "Meadow" + "Meadows" -> "Meadowmeadows"/"the
+  // Meadow Meadows": prefer a noun that doesn't share the prefix's opening stem.
+  const stem = plc.slice(0, 4);
+  const distinct = pools.regionNouns.filter((n) => {
+    const nl = n.toLowerCase();
+    return !nl.startsWith(stem) && !plc.startsWith(nl.slice(0, 4));
+  });
+  const noun = pick(rng, distinct.length ? distinct : pools.regionNouns);
+  const nl = noun.toLowerCase();
   const style = rng();
-  // Sometimes reads as one fused word ("the Silvaal"); avoid a stutter.
-  if (style < 0.4 && prefix.toLowerCase() !== noun.toLowerCase()) {
-    return `the ${prefix}${noun.toLowerCase()}`;
+  // Sometimes reads as one fused word ("the Silvaal"); only fuse when it reads
+  // cleanly (neither part is a prefix of the other).
+  if (style < 0.4 && !nl.startsWith(plc) && !plc.startsWith(nl)) {
+    return `the ${prefix}${nl}`;
   }
   return `the ${prefix} ${noun}`;
 }

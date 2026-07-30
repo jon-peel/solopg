@@ -514,11 +514,11 @@ const RACE_NOISE = Object.freeze({ octaves: 1, frequency: 0.11 });
  */
 export const POI_HERITAGE_CFG = Object.freeze({
   FLOOR: 0.0001, // base fire chance anywhere — a rare artifact far from everything
-  GAIN: 0.9, // how hard heritage-field strength drives the fire chance
-  P_MAX: 0.85, // cap (< 1): even a heartland/hot-patch POI is sometimes neutral
-  PATCH_HI: 0.7, // heritage-patch value at/above which a hex is a "hot" blob
-  PATCH_BASE: 0.35, // fire-chance step the moment a hex is inside a hot blob
-  PATCH_GAIN: 0.4, // extra fire chance ramping from blob edge to blob core
+  GAIN: 0.13, // how hard heritage-field strength drives the fire chance (in/near a culture)
+  P_MAX: 0.5, // cap (< 1): even a heartland/hot-patch POI is often neutral
+  PATCH_HI: 0.80, // heritage-patch value at/above which a hex is a "hot" blob (rare)
+  PATCH_BASE: 0.14, // fire-chance step the moment a hex is inside a hot blob (strong, so a blob makes a real cluster)
+  PATCH_GAIN: 0.20, // extra fire chance ramping from blob edge to blob core
 });
 
 /** Uniform fallback weights for terrains with no TERRAIN_RACE_WEIGHTS entry. */
@@ -543,7 +543,7 @@ function weightedPickByRoll(roll, weights) {
  * Terrain-aware (TERRAIN_RACE_WEIGHTS, already epsilon-floored, so every race is
  * possible anywhere) with a uniform fallback for water/unknown terrain.
  */
-function patchRaceAt(seed, q, r, terrain) {
+export function patchRaceAt(seed, q, r, terrain) {
   const weights = TERRAIN_RACE_WEIGHTS[terrain] || EQUAL_WEIGHTS;
   return weightedPickByRoll(fbm2D(seed, "heritage-race", q, r, RACE_NOISE), weights);
 }

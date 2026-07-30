@@ -199,5 +199,5 @@ level chosen per step's difficulty.
 - [x] Step 3 — Anchors & generation
 - [x] Step 4 — POI heritage & clustering  *(mechanism done; heritage rate ~43% on a test world — TUNE DOWN in the post-Step-5 pass, alongside culture density)*
 - [x] Step 5 — Rendering & UI
-- [ ] Step 5.5 — Tuning pass (culture density down, heritage rate down, fix "Meadowmeadows" region-name stutter)
+- [x] Step 5.5 — Tuning pass — cultures ~1.6 realms / 6.4% of hexes, heritage ~3.1% of POIs (measured over 80 seeds), "Meadowmeadows" stutter fixed. Per user: cultures "much rarer (1-2 realms, <8%)", heritage "a genuine rarity (~3%)".
 - [ ] Step 6 — GM paint / remove

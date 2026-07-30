@@ -33,12 +33,12 @@ export const RACE_LABELS = {
 // "mostly Human, with a few demihuman pockets"), not a patchwork. Water bodies
 // never seed a culture core.
 export const CULTURE_DENSITY = {
-  Forest: 0.25,
-  Hills: 0.20,
-  Mountains: 0.22,
-  Plains: 0.10,
-  Swamp: 0.05,
-  Desert: 0.05,
+  Forest: 0.13,
+  Hills: 0.10,
+  Mountains: 0.11,
+  Plains: 0.05,
+  Swamp: 0.025,
+  Desert: 0.025,
   Water: 0,
 };
 

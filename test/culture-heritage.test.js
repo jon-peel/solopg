@@ -28,6 +28,7 @@ import {
   heritagePoiText,
   heritageDescriptor,
   heritageProperName,
+  patchRaceAt,
   POI_HERITAGE_CFG,
 } from "../js/gen/culture.js";
 
@@ -99,7 +100,12 @@ test("the fire chance rises with heritage-field strength (proximity to a culture
   const c = 20;
   const field = buildHeritageField("prox", terrain, { anchors: [{ q: c, r: c, race: "elf" }] });
   const near = poiHeritageChance("prox", c, c, field); // strength ≈ 1 at the anchor
-  assert.ok(near >= 0.5, `chance at a strong anchor should be high, got ${near}`);
+  // strength ≈ 1 at the anchor, so the chance reflects (about) the full GAIN —
+  // assert relative to the tuned GAIN, not a brittle absolute.
+  assert.ok(
+    near >= POI_HERITAGE_CFG.FLOOR + 0.8 * POI_HERITAGE_CFG.GAIN,
+    `chance at a strong anchor should reflect GAIN, got ${near}`,
+  );
   // A hex well beyond the heritage reach has strength 0, so its chance is the
   // patch-only chance — find a patch-cold one and confirm near ≫ it.
   let coldFar = null;
@@ -107,7 +113,11 @@ test("the fire chance rises with heritage-field strength (proximity to a culture
     if (poiHeritageChance("prox", c + d, c + d, field) === POI_HERITAGE_CFG.FLOOR) coldFar = c + d;
   }
   assert.ok(coldFar !== null, "expected a patch-cold hex far from the anchor");
-  assert.ok(near > poiHeritageChance("prox", coldFar, coldFar, field) + 0.4, "proximity clearly lifts the chance");
+  const far = poiHeritageChance("prox", coldFar, coldFar, field);
+  assert.ok(
+    near > far + 0.5 * POI_HERITAGE_CFG.GAIN,
+    `proximity clearly lifts the chance (near ${near} vs far ${far})`,
+  );
 });
 
 test("P_MAX < 1: even at a strong heritage core some POIs stay neutral", () => {
@@ -134,34 +144,43 @@ test("clusters are coherent: adjacent POIs in one hot patch share a race, with N
   // Uniform Forest, culture-free (zero field): every fired POI's race comes purely
   // from the shared latent noise (patchRaceAt) — never from a neighbour. Each roll
   // below is an independent pure call, so any agreement is structural, not chained.
+  // Coherence is a property of the shared latent race field (patchRaceAt) — a pure
+  // function of position — so adjacent hexes agree WITHOUT any cross-POI state.
+  // Verifying it on the field directly is robust to how rarely a POI actually fires.
   const seed = "cluster";
-  const N = 60;
-  const race = new Map(); // key -> race|null (only for hot-patch hexes)
-  const hot = new Set();
+  const N = 100;
+  const hot = [];
   for (let q = 0; q < N; q++) {
     for (let r = 0; r < N; r++) {
-      if (poiHeritageChance(seed, q, r, ZERO_FIELD) <= POI_HERITAGE_CFG.FLOOR) continue; // cold
-      hot.add(axialKey(q, r));
-      race.set(axialKey(q, r), rollPoiHeritage(seed, q, r, "poi:0", "Forest", ZERO_FIELD));
+      if (poiHeritageChance(seed, q, r, ZERO_FIELD) > POI_HERITAGE_CFG.FLOOR) hot.push([q, r]);
     }
   }
+  assert.ok(hot.length > 20, `expected hot-patch hexes to exist, got ${hot.length}`);
+  const raceAt = new Map(hot.map(([q, r]) => [axialKey(q, r), patchRaceAt(seed, q, r, "Forest")]));
   let agree = 0;
   let pairs = 0;
-  for (const key of hot) {
-    const [q, r] = key.split(",").map(Number);
-    const a = race.get(key);
-    if (!a) continue; // this POI didn't fire
+  for (const [q, r] of hot) {
+    const a = raceAt.get(axialKey(q, r));
     for (const nb of neighbors(q, r)) {
       const nk = axialKey(nb.q, nb.r);
-      if (!hot.has(nk)) continue; // stay within one hot patch
-      const b = race.get(nk);
-      if (!b) continue;
+      if (!raceAt.has(nk)) continue; // stay within one hot patch
       pairs++;
-      if (a === b) agree++;
+      if (a === raceAt.get(nk)) agree++;
     }
   }
-  assert.ok(pairs > 40, `expected plenty of adjacent in-patch fired pairs, got ${pairs}`);
+  assert.ok(pairs > 20, `expected plenty of adjacent in-patch pairs, got ${pairs}`);
   assert.ok(agree / pairs >= 0.8, `in-patch race coherence should be high, got ${(agree / pairs).toFixed(3)}`);
+  // And the FIRE path draws from that same shared field, never from a neighbour:
+  // whenever rollPoiHeritage fires in the culture-free zone, its race equals
+  // patchRaceAt for that hex — independent of poiId (no chaining possible).
+  let checked = 0;
+  for (const [q, r] of hot) {
+    for (let i = 0; i < 12 && checked < 30; i++) {
+      const fired = rollPoiHeritage(seed, q, r, `poi:${i}`, "Forest", ZERO_FIELD);
+      if (fired) { assert.equal(fired, raceAt.get(axialKey(q, r))); checked++; }
+    }
+  }
+  assert.ok(checked > 0, "at least some POIs fired in hot patches to verify the fire path");
 });
 
 test("stamping in two different hex orders yields identical poi.heritage (order-independent)", () => {
@@ -298,6 +317,11 @@ test("stampPois: full pass surfaces heritage POIs, occasionally adjacent (a clus
   const n = 40;
   const hexes = [];
   for (let q = 0; q < n; q++) for (let r = 0; r < n; r++) hexes.push(makeHexWithPoi(q, r, "Forest", barePoi()));
+  // Seed a people so in-culture ruins reliably surface (and cluster) near them —
+  // a settlement anchor is how stampPois learns of a culture. (At the tuned-low
+  // rates, a culture-free map would surface only a handful world-wide.)
+  const center = hexes.find((h) => h.coords.q === 20 && h.coords.r === 20);
+  center.settlement = { present: true, size: "Town", race: "elf", raceStamped: true };
   stampPois("smoke", hexes);
   const byKey = new Map(hexes.map((h) => [h.key, h.pois[0]]));
 
