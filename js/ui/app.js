@@ -66,6 +66,8 @@ import {
   recenterOn,
   setIconsEnabled,
   setLabelsEnabled,
+  setCultureOverlay,
+  setFactionsOverlay,
   setHookMarks,
   setHookFocus,
   setRiverDraft,
@@ -2137,9 +2139,9 @@ function onFactionPopupOutside(e) {
 function renderFactionLegend(factions) {
   const host = $("legend-factions");
   if (!host) return;
-  host.hidden = !factions.length;
+  host.hidden = !factions.length || !factionsOn;
   host.innerHTML = "";
-  if (!factions.length) return;
+  if (!factions.length || !factionsOn) return;
   // "Powers" header row: the sub-label, plus a single world-wide "Advance turn"
   // button (Phase 12.1 — relocated from the removed Factions tab) when at least
   // one faction is active. Advancing runs a faction turn for the whole roster.
@@ -2191,9 +2193,9 @@ function renderCultureLegend() {
   const host = $("legend-cultures");
   if (!host) return;
   const { races } = mapCultures();
-  host.hidden = !races.length;
+  host.hidden = !races.length || !culturesOn;
   host.innerHTML = "";
-  if (!races.length) return;
+  if (!races.length || !culturesOn) return;
   const sub = document.createElement("div");
   sub.className = "legend-sub";
   sub.textContent = "Cultures";
@@ -3256,6 +3258,8 @@ function wire() {
   $("import-file").addEventListener("change", onImportFile);
   $("btn-icons").addEventListener("click", onToggleIcons);
   $("btn-labels").addEventListener("click", onToggleLabels);
+  $("btn-cultures").addEventListener("click", onToggleCultures);
+  $("btn-factions").addEventListener("click", onToggleFactions);
   $("btn-legend").addEventListener("click", () => toggleLegend());
   $("btn-progress").addEventListener("click", onProgressDays);
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
@@ -3327,6 +3331,22 @@ function onToggleLabels() {
   labelsOn = !labelsOn;
   setLabelsEnabled(labelsOn);
   $("btn-labels").textContent = `Labels: ${labelsOn ? "on" : "off"}`;
+}
+
+let culturesOn = true;
+function onToggleCultures() {
+  culturesOn = !culturesOn;
+  setCultureOverlay(culturesOn);
+  $("btn-cultures").textContent = `Cultures: ${culturesOn ? "on" : "off"}`;
+  refreshFactions(); // re-render the legend (culture section respects the toggle)
+}
+
+let factionsOn = true;
+function onToggleFactions() {
+  factionsOn = !factionsOn;
+  setFactionsOverlay(factionsOn);
+  $("btn-factions").textContent = `Factions: ${factionsOn ? "on" : "off"}`;
+  refreshFactions(); // re-render the legend (faction section respects the toggle)
 }
 
 async function init() {

@@ -54,6 +54,8 @@ let pinchPrev = null; // previous 2-finger distance, or null
 let longPressTimer = null;
 let iconsEnabled = true;
 let labelsEnabled = true; // show hex name labels on the map
+let cultureEnabled = true; // show the culture overlay (wash / seams / realm labels)
+let factionsEnabled = true; // show the faction territory overlay (fill / outline)
 let hovered = null; // { q, r } under the cursor | null
 let hoverKey = null; // axialKey of `hovered`, to skip redundant re-renders
 let lastPpm = null; // last pixels-per-mile emitted to onView (fire only on change)
@@ -260,7 +262,7 @@ export function render() {
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
     // Culture wash (14.5): a translucent race tint UNDER the terrain motif +
     // markers, opacity ramped by living-field strength. Human hexes get none.
-    drawCultureWash(c.x, c.y, q, r);
+    if (cultureEnabled) drawCultureWash(c.x, c.y, q, r);
     // Terrain motif is background (under the network); a settled tile skips it —
     // its settlement marker (drawn later, over the roads) stands in for it.
     if (detail && !(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
@@ -270,7 +272,7 @@ export function render() {
   // 2a⁰. Faction territory FILL + hatch (Phase 11.4) — a translucent colour wash
   //      per power, UNDER the roads/markers so those stay crisp on top. The
   //      inked border + seat marker come later (over everything).
-  drawFactionFill(minX, minY, maxX, maxY, margin, onScreen);
+  if (factionsEnabled) drawFactionFill(minX, minY, maxX, maxY, margin, onScreen);
 
   // 2a. Roads + rivers, UNDER the markers below. Draw order IS the bridge/ford:
   //     dashed tracks/spurs go UNDER the river (a ford — water runs over them),
@@ -304,16 +306,16 @@ export function render() {
   // 2a⁗. Contested culture seams (14.5) — a two-tone dashed front line where two
   //      peoples meet, over the markers so the tension reads. Under the faction
   //      outline + labels below.
-  drawContestedBorders(visible);
+  if (cultureEnabled) drawContestedBorders(visible);
 
   // 2a‴. Faction territory OUTLINE + seat (Phase 11.4) — the inked sphere-of-
   //      influence border, over the roads/markers but UNDER the labels, hover
   //      readout, selection, hooks and party so those all stay legible on top.
-  drawFactionOutline(minX, minY, maxX, maxY, margin);
+  if (factionsEnabled) drawFactionOutline(minX, minY, maxX, maxY, margin);
 
   // 2a⁵. Engraved culture realm labels (14.5) at each realm's peak, over the
   //      territory art but under the hover/selection/party chrome below.
-  drawCultureLabels(minX, minY, maxX, maxY, margin);
+  if (cultureEnabled) drawCultureLabels(minX, minY, maxX, maxY, margin);
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
@@ -405,6 +407,18 @@ export function setIconsEnabled(on) {
 /** Toggle hex name labels; re-renders. */
 export function setLabelsEnabled(on) {
   labelsEnabled = !!on;
+  render();
+}
+
+/** Toggle the culture overlay (wash / contested seams / realm labels); re-renders. */
+export function setCultureOverlay(on) {
+  cultureEnabled = !!on;
+  render();
+}
+
+/** Toggle the faction territory overlay (fill / outline); re-renders. */
+export function setFactionsOverlay(on) {
+  factionsEnabled = !!on;
   render();
 }
 
