@@ -10,6 +10,7 @@ import {
   pixelToAxialFractional,
   hexCorners,
   axialKey,
+  parseKey,
   NEIGHBOR_DIRS,
 } from "../core/hexgeo.js";
 import { hashString } from "../core/rng.js";
@@ -24,8 +25,11 @@ import { artFor, TERRAIN_ART } from "./terrain-art.js";
 import { MAP, parseHex, watchTheme } from "./theme.js";
 import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { computeRegions } from "../gen/regions.js";
+import { computeRegions, regionName } from "../gen/regions.js";
 import { LORD_ARCHETYPES } from "../gen/factions.js";
+import { buildLivingField, settlementAnchors, listCultures } from "../gen/culture.js";
+import { CULTURE_COLORS, RACE_LABELS, RACES } from "../gen/culture-data.js";
+import { washOpacity, contestedEdge } from "./culture-style.js";
 
 const HEX_SIZE = 28; // center-to-corner, world px
 const MIN_SCALE = 0.3;
@@ -58,6 +62,12 @@ let pinnedTargets = new Set(); // axial keys of PINNED (active-lead) hook destin
 let riverDraft = null; // in-progress manual river being drawn: [{q,r}, ...] | null
 let roadDraft = null;  // in-progress manual road being drawn: [{q,r}, ...] | null
 let regionCache = { seed: null, count: -1, byHex: new Map() }; // memoised hex -> region name (js/gen/regions.js)
+// Culture layer (Phase 14.5): the living field is memoised per (seed, hex count)
+// just like regionCache — rebuilt only when the revealed set grows — and read
+// per-hex for the tint / labels / contested seams. `field` is set at render time
+// (ensureCultureField); mapCultures()/cultureInfoAt() read it for the legend/panel.
+let cultureCache = { seed: null, count: -1, field: null, cultures: [] };
+let cultureField = null; // the current frame's living field (set in render)
 let handlers = { onHexClick: () => {}, onEmptyCellClick: () => {} };
 
 /** Attach the renderer to a canvas. Call once. */
@@ -90,6 +100,7 @@ export function setWorld(w) {
   world = w;
   highlightFaction = null; // a highlight from the old world's legend no longer applies
   regionCache = { seed: null, count: -1, byHex: new Map() }; // invalidate named regions for the new world
+  cultureCache = { seed: null, count: -1, field: null, cultures: [] }; // ...and the culture field
   render();
 }
 
@@ -206,6 +217,8 @@ export function render() {
 
   if (!world) return;
 
+  ensureCultureField(); // memoised living field for the tint / labels / seams
+
   // Visible world-space rect (canvas-local CSS coords 0..cssW/cssH inverted
   // through the camera), padded so partially-visible hexes still draw.
   const rect = canvas.getBoundingClientRect();
@@ -245,6 +258,9 @@ export function render() {
       continue;
     }
     drawHexFill(c.x, c.y, colorForTerrain(hex.terrain));
+    // Culture wash (14.5): a translucent race tint UNDER the terrain motif +
+    // markers, opacity ramped by living-field strength. Human hexes get none.
+    drawCultureWash(c.x, c.y, q, r);
     // Terrain motif is background (under the network); a settled tile skips it —
     // its settlement marker (drawn later, over the roads) stands in for it.
     if (detail && !(hex.settlement && hex.settlement.present)) drawTerrainIcon(c.x, c.y, hex.terrain, q, r);
@@ -285,10 +301,19 @@ export function render() {
     }
   }
 
+  // 2a⁗. Contested culture seams (14.5) — a two-tone dashed front line where two
+  //      peoples meet, over the markers so the tension reads. Under the faction
+  //      outline + labels below.
+  drawContestedBorders(visible);
+
   // 2a‴. Faction territory OUTLINE + seat (Phase 11.4) — the inked sphere-of-
   //      influence border, over the roads/markers but UNDER the labels, hover
   //      readout, selection, hooks and party so those all stay legible on top.
   drawFactionOutline(minX, minY, maxX, maxY, margin);
+
+  // 2a⁵. Engraved culture realm labels (14.5) at each realm's peak, over the
+  //      territory art but under the hover/selection/party chrome below.
+  drawCultureLabels(minX, minY, maxX, maxY, margin);
 
   // 2b. Annotations on un-generated cells: a name label / note badge float on
   //     the empty grid (detail tier only, to avoid clutter when zoomed out).
@@ -442,6 +467,170 @@ function regionNameAt(q, r) {
     regionCache = { seed: world.seed, count: hexes.length, byHex };
   }
   return regionCache.byHex.get(axialKey(q, r)) || null;
+}
+
+// --- Culture layer (Phase 14.5) --------------------------------------------
+// A translucent race-colour wash (opacity ∝ living-field strength) under the
+// terrain art, engraved realm labels at each culture's peak, and a contested
+// seam where two peoples meet. Presentation only: the field is rebuilt from the
+// revealed terrain + STORED settlement anchors (settlementAnchors) with the same
+// defaults the generator stamped against, so the render agrees with the stored
+// races and never mutates the world (§5: reading the fields at render is fine).
+
+// Build (or reuse) the living culture field for the current revealed set. Uses
+// buildLivingField's default minSize (8) so it matches syncCultures' stamping.
+function ensureCultureField() {
+  if (!world) { cultureField = null; return null; }
+  const hexes = placedHexes(world);
+  if (!(cultureCache.seed === world.seed && cultureCache.count === hexes.length && cultureCache.field)) {
+    const terrainByKey = new Map();
+    for (const h of hexes) terrainByKey.set(axialKey(h.coords.q, h.coords.r), h.terrain);
+    const anchors = settlementAnchors(hexes);
+    const field = buildLivingField(world.seed, terrainByKey, { anchors });
+    cultureCache = { seed: world.seed, count: hexes.length, field, cultures: listCultures(field) };
+  }
+  cultureField = cultureCache.field;
+  return cultureField;
+}
+
+/**
+ * The living culture at a hex, for the selection panel: {race, strength} or null
+ * (Human — never tinted or labelled). Reads the memoised render field.
+ */
+export function cultureInfoAt(q, r) {
+  const field = ensureCultureField();
+  if (!field) return null;
+  const { race, strength } = field.at(q, r);
+  return race ? { race, strength } : null;
+}
+
+/**
+ * The cultures present on the current map, for the legend: the distinct races
+ * present (canonical order, each with colour + label) plus the raw name-bearing
+ * culture list. Empty when the world is all-Human.
+ */
+export function mapCultures() {
+  ensureCultureField();
+  const cultures = cultureCache.cultures || [];
+  const present = new Set(cultures.map((c) => c.race));
+  const races = RACES.filter((r) => present.has(r)).map((race) => ({
+    race,
+    color: CULTURE_COLORS[race],
+    label: RACE_LABELS[race],
+  }));
+  return { races, cultures };
+}
+
+// A translucent race-colour tint on one hex, opacity ramped by living-field
+// strength (floored so a frontier hex still reads). Human hexes get none. Drawn
+// UNDER the terrain motif + markers so those stay legible on top.
+function drawCultureWash(cx, cy, q, r) {
+  if (!cultureField) return;
+  const { race, strength } = cultureField.at(q, r);
+  if (!race) return;
+  const a = washOpacity(strength);
+  if (a <= 0) return;
+  hexPath(cx, cy);
+  ctx.fillStyle = rgba(CULTURE_COLORS[race], a);
+  ctx.fill();
+}
+
+// Where two different cultures share an edge, draw a contested SEAM: a dark
+// casing under a two-tone dashed line (each people's colour interleaved), so the
+// border reads as a front line the GM can see (tension = a feature, §Step 5.3).
+// Each shared edge is drawn once (deduped by its canonical endpoint pair).
+function drawContestedBorders(visible) {
+  if (!cultureField) return;
+  const drawn = new Set();
+  ctx.save();
+  ctx.lineCap = "butt";
+  const w = 2.4 / camera.scale;
+  const dash = 5 / camera.scale;
+  const seg = (a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+  for (const { hex } of visible) {
+    const { q, r } = hex.coords;
+    const here = cultureField.at(q, r).race;
+    if (!here) continue;
+    const key = axialKey(q, r);
+    const c = axialToPixel(q, r, HEX_SIZE);
+    const corners = hexCorners(c.x, c.y, HEX_SIZE);
+    for (let dir = 0; dir < 6; dir++) {
+      const [dq, dr] = NEIGHBOR_DIRS[dir];
+      const nq = q + dq, nr = r + dr;
+      const nbRace = cultureField.at(nq, nr).race;
+      if (!contestedEdge(here, nbRace)) continue;
+      const nk = axialKey(nq, nr);
+      const ek = key < nk ? `${key}|${nk}` : `${nk}|${key}`;
+      if (drawn.has(ek)) continue;
+      drawn.add(ek);
+      const e = (6 - dir) % 6; // neighbour dir -> the hex edge it shares
+      const a = corners[e], b = corners[(e + 1) % 6];
+      ctx.setLineDash([]);
+      ctx.lineWidth = w + 1.6 / camera.scale;
+      ctx.strokeStyle = "rgba(28,18,6,0.6)"; // dark casing (reads on any terrain)
+      seg(a, b);
+      ctx.setLineDash([dash, dash]);
+      ctx.lineWidth = w;
+      ctx.lineDashOffset = 0;
+      ctx.strokeStyle = darkenRgba(CULTURE_COLORS[here], 0.05, 0.95);
+      seg(a, b);
+      ctx.lineDashOffset = dash; // interleave the rival's colour into the gaps
+      ctx.strokeStyle = darkenRgba(CULTURE_COLORS[nbRace], 0.05, 0.95);
+      seg(a, b);
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+  ctx.restore();
+}
+
+const CULTURE_LABEL_MIN_SIZE = 4; // realms smaller than this stay unlabelled (noise)
+
+// The proper realm name for a culture, matching how its core was seeded: prefer
+// the terrain-region core's (terrain, anchor) so the name is stable; fall back to
+// the peak hex for an anchor-only (town-pinned) culture. "Realm of the Silvaal".
+function cultureRealmName(cul) {
+  const core = (cultureField.cores || []).find((c) => `core:${c.originKey}` === cul.srcId);
+  if (core) return `Realm of ${regionName(world.seed, core.terrain, core.anchor, cul.race)}`;
+  const { q, r } = parseKey(cul.peakKey);
+  const terrain = (world.hexes[axialKey(q, r)] || {}).terrain || "Plains";
+  return `Realm of ${regionName(world.seed, terrain, cul.originKey, cul.race)}`;
+}
+
+// Engraved culture labels at each realm's peak ("Realm of the Silvaal · Elf").
+// Constant screen-size serif with a parchment halo so it reads over terrain at any
+// zoom; larger realms are placed first and a cheap box-overlap test drops labels
+// that would collide, so the map stays legible instead of a wall of text.
+function drawCultureLabels(minX, minY, maxX, maxY, margin) {
+  if (!cultureField) return;
+  const cultures = [...(cultureCache.cultures || [])].sort((a, b) => b.size - a.size);
+  if (!cultures.length) return;
+  const fs = 13 / camera.scale;
+  ctx.save();
+  ctx.font = `italic 600 ${fs}px "Iowan Old Style", Palatino, Georgia, serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  const placed = [];
+  for (const cul of cultures) {
+    if (cul.size < CULTURE_LABEL_MIN_SIZE) continue;
+    const { q, r } = parseKey(cul.peakKey);
+    const p = axialToPixel(q, r, HEX_SIZE);
+    if (offView(p, minX, minY, maxX, maxY, margin)) continue;
+    const text = `${cultureRealmName(cul)} · ${RACE_LABELS[cul.race]}`;
+    const w = ctx.measureText(text).width;
+    const box = { x: p.x - w / 2, y: p.y - fs * 0.7, w, h: fs * 1.4 };
+    if (placed.some((o) => box.x < o.x + o.w && box.x + box.w > o.x && box.y < o.y + o.h && box.y + box.h > o.y)) {
+      continue; // would collide with a bigger realm's label already drawn
+    }
+    placed.push(box);
+    ctx.lineWidth = fs * 0.3;
+    ctx.strokeStyle = MAP.labelBg; // parchment halo for contrast
+    ctx.strokeText(text, p.x, p.y);
+    ctx.fillStyle = darkenRgba(CULTURE_COLORS[cul.race], 0.12, 0.96);
+    ctx.fillText(text, p.x, p.y);
+  }
+  ctx.restore();
 }
 
 // Rivers (Phase 3R.5, "curated rivers"): each world.rivers[] entry is a full

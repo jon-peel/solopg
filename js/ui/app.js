@@ -74,6 +74,8 @@ import {
   setFactionHighlight,
   recenter,
   pixelsPerMile,
+  mapCultures,
+  cultureInfoAt,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
 import { POI_GLYPHS, POI_DOT_COLORS, factionColor, factionHatchDeg } from "./poi-style.js";
@@ -984,6 +986,10 @@ function renderSelection() {
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
+    // Living culture at this hex (Phase 14.5): {race, strength} or null (Human,
+    // never shown). Read from the map's memoised render field so the panel agrees
+    // with the tint. Settlement race + POI heritage come off the stored hex/poi.
+    culture: hex && hex.placed ? cultureInfoAt(q, r) : null,
     onOpenActions, // "⋯ Actions" → open the radial on this hex (11.5b)
     seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
@@ -1885,6 +1891,7 @@ function refreshGlobalHooks() {
 function refreshFactions() {
   const factions = getFactions(current);
   renderFactionLegend(factions);
+  renderCultureLegend();
   refreshFactionPopup();
 }
 
@@ -2134,6 +2141,36 @@ function renderFactionLegend(factions) {
     row.addEventListener("blur", off);
     host.appendChild(row);
   });
+}
+
+// The map-legend culture key (Phase 14.5): one colour swatch + race label per
+// demihuman people present on the current map. Reads the render field from map.js
+// (memoised there), so the key can never drift from the tint. Hidden when the
+// world is all-Human (the null case — never listed).
+function renderCultureLegend() {
+  const host = $("legend-cultures");
+  if (!host) return;
+  const { races } = mapCultures();
+  host.hidden = !races.length;
+  host.innerHTML = "";
+  if (!races.length) return;
+  const sub = document.createElement("div");
+  sub.className = "legend-sub";
+  sub.textContent = "Cultures";
+  host.appendChild(sub);
+  for (const { race, color, label } of races) {
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    const sw = document.createElement("span");
+    sw.className = "lg-swatch";
+    sw.style.background = color;
+    row.append(sw, document.createTextNode(label));
+    host.appendChild(row);
+  }
+  const note = document.createElement("div");
+  note.className = "legend-note";
+  note.textContent = "Tint = who lives here (bolder = heartland). Human areas are untinted.";
+  host.appendChild(note);
 }
 
 // Highlight the selected hook's target/origin on the map (clears if none/gone).

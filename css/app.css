@@ -859,6 +859,11 @@ button:hover {
   padding: 0.4rem 0.55rem; background: var(--accent-wash); border-left: 3px solid var(--accent); border-radius: 3px; }
 .sel-settle-name { font-weight: 700; color: var(--ink); }
 .sel-settle-meta { font-size: 0.78rem; color: var(--muted); }
+/* Living-culture callout (Phase 14.5): the demihuman people whose land this hex
+   is, with a heartland/frontier band. Only shown for cultured (non-Human) hexes. */
+.sel-culture { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin-top: 0.4rem; }
+.sel-culture-name { font-weight: 600; color: var(--ink); }
+.sel-culture-meta { font-size: 0.74rem; color: var(--muted); text-transform: capitalize; letter-spacing: 0.02em; }
 
 /* Persistent settlement taverns + the town's transient situation (Phase 12.7):
    the situation is a gold callout (with a ↻ re-roll) above the list; each tavern

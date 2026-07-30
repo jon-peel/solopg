@@ -198,5 +198,6 @@ level chosen per step's difficulty.
 - [x] Step 2 — Culture field engine
 - [x] Step 3 — Anchors & generation
 - [x] Step 4 — POI heritage & clustering  *(mechanism done; heritage rate ~43% on a test world — TUNE DOWN in the post-Step-5 pass, alongside culture density)*
-- [ ] Step 5 — Rendering & UI
+- [x] Step 5 — Rendering & UI
+- [ ] Step 5.5 — Tuning pass (culture density down, heritage rate down, fix "Meadowmeadows" region-name stutter)
 - [ ] Step 6 — GM paint / remove

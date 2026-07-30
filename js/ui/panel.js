@@ -6,6 +6,8 @@ import { hookName, hookDescription } from "../gen/hooks.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
+import { RACE_LABELS } from "../gen/culture-data.js";
+import { cultureBand } from "./culture-style.js";
 
 const panel = () => document.getElementById("panel");
 
@@ -128,6 +130,9 @@ function renderPoiSection(sel, hex, model) {
       : [selectedPoi.detail && selectedPoi.detail.flavor];
     for (const line of [
       `Type: ${selectedPoi.type}`,
+      // Heritage builder race (Phase 14.5) — who raised/dug this, long before any
+      // current occupant (builder ≠ occupier). Absent = neutral/standard.
+      selectedPoi.heritage ? `Built by: ${RACE_LABELS[selectedPoi.heritage.race] || selectedPoi.heritage.race}` : null,
       // A camp's description already names who holds it; hide the generic line.
       feature && (selectedPoi.type === "camp" || occ === "empty") ? null : `Occupant: ${occ}`,
       ...detailLines,
@@ -748,6 +753,20 @@ export function renderSelectionPanel(model) {
     coords.className = "sel-coords";
     coords.textContent = `(${coord.q}, ${coord.r})`;
     sel.appendChild(coords);
+    // Living culture (Phase 14.5): who lives here now — the race + whether this is
+    // its heartland or a frontier. Absent for Human hexes (the null case).
+    if (model.culture) {
+      const box = document.createElement("div");
+      box.className = "sel-culture";
+      const nm = document.createElement("span");
+      nm.className = "sel-culture-name";
+      nm.textContent = RACE_LABELS[model.culture.race] || model.culture.race;
+      const meta = document.createElement("span");
+      meta.className = "sel-culture-meta";
+      meta.textContent = `${cultureBand(model.culture.strength)} · ${Math.round(model.culture.strength * 100)}%`;
+      box.append(nm, meta);
+      sel.appendChild(box);
+    }
     // Settlement as a small accent callout (controls are on the radial menu). The
     // name is derived from the seed + coords (settlement-name.js), so it needs no
     // stored field; a GM hex `name` annotation, if set, still labels the map.
@@ -759,6 +778,9 @@ export function renderSelectionPanel(model) {
       });
       const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
       const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];
+      // A demihuman town carries a stamped race (Phase 14.3); a Human town has
+      // none (the null case) and reads plainly.
+      const townRace = hex.settlement.race ? RACE_LABELS[hex.settlement.race] || hex.settlement.race : null;
       const box = document.createElement("div");
       box.className = "sel-settlement";
       const nm = document.createElement("span");
@@ -766,7 +788,7 @@ export function renderSelectionPanel(model) {
       nm.textContent = name;
       const meta = document.createElement("span");
       meta.className = "sel-settle-meta";
-      meta.textContent = `${kindLabel}${water ? ` · ${water}` : ""}`;
+      meta.textContent = `${kindLabel}${townRace ? ` · ${townRace}` : ""}${water ? ` · ${water}` : ""}`;
       box.appendChild(nm); box.appendChild(meta);
       sel.appendChild(box);
 
