@@ -12,12 +12,12 @@ own cloth, makes its own tools and items. A **small** one depends on
 
 ## 1. Why (rationale)
 The current POI/settlement set is mostly *threats and ruins* (dungeons, camps, lairs,
-bandit-held sites). A monastery is a rare **welcome node** in hostile country —
-sanctuary, a signature export, a patron/quest-giver — which the map otherwise lacks.
-It is also a natural **hook engine** (relics, lore, a besieged order, a corrupted house)
-and it **synergises with the culture/deity system** built in Phase 14 (an order honours a
-race-appropriate god). Keep it **rare** and **distinct** from shrines (small, empty
-markers) and keeps (martial) and it adds flavour, not noise.
+bandit-held sites). A monastery is a distinct settlement type the map otherwise lacks — a
+**productive, self-sufficient religious house** with its own goods, a library, sometimes a
+famed relic or catacombs, and (rarely) a dark secret. It **synergises with the
+culture/deity system** built in Phase 14 (an order honours a race-appropriate god). Keep
+it **rare** and **distinct** from shrines (small, empty markers) and keeps (martial) so it
+adds flavour, not noise.
 
 ## 2. The model
 
@@ -81,15 +81,15 @@ several levels). Model as an optional `dungeon`-type interior hung off the settl
 a linked catacomb POI on the same hex) — do **not** write a new interior generator.
 
 ### 2.7 The welcoming face (rare, hidden)
-**By default a monastery is a genuine refuge — the design should actively encourage
-players to shelter there** (rest, healing, sanctuary). That welcome is the whole point;
-do not undercut it. **Very rarely** (a few percent), a house is welcoming on the surface
-but **hides a secret**: a heresy, a thing sealed in the catacombs, a corrupt abbot, a
-false order wearing monks' robes over something else. The darkness is **not visible from
-outside** — the surface always reads as safe. Because it is rare and concealed, the
-occasional betrayal lands hard while refuge stays the norm. A secret, where present,
-usually lives in the **catacombs** (§2.6). NOTE: this is the *living-but-tainted* house;
-the fully **ruined/abandoned** abbey is a separate thing — a dungeon theme (§5 bonus).
+**Most monasteries are exactly what they seem — a wholesome, welcoming house. That is the
+norm and must stay so.** **Very rarely** (a few percent), a house is welcoming on the
+surface but **hides a secret**: a heresy, a thing sealed in the catacombs, a corrupt
+abbot, a false order wearing monks' robes over something else. The darkness is **not
+visible from outside** — the surface always reads as safe. Because it is rare and
+concealed, the occasional betrayal lands hard while the wholesome house stays the norm. A
+secret, where present, usually lives in the **catacombs** (§2.6). NOTE: this is the
+*living-but-tainted* house; the fully **ruined/abandoned** abbey is a separate thing — a
+dungeon theme (§5 bonus).
 
 ### 2.8 Library & research (a knowledge service)
 Every house has a **library**, its size scaling with the monastery's size (a hermitage:
@@ -109,21 +109,10 @@ library size. This is a roll + prompt, not a content table of book titles.
 ### 2.9 Relics
 A house — especially a large or old one — may be **known for a relic** it keeps: the
 incorrupt remains of a saint, a holy weapon or text, a wonder-working icon, a sealed
-reliquary. This is a **headline feature** (panel: "Keeps: <relic>"), a natural
-quest-object / treasure / pilgrimage draw — and it can be **the very thing a secret house
-guards** (§2.7): sometimes the "relic" is what should have stayed sealed. Chance + fame
-scale with size/age. Needs a `monastery-relic` table (typed/named relics).
-
-### 2.10 Deliberately left to the GM (unwritten)
-Per the owner, these are intentionally NOT modelled — the GM adjudicates them, so the
-next agent should **not** build tables or mechanics for them:
-- **Healing** — the brothers are mostly clerics who heal **for a donation** (or free to
-  the same faith/alignment). A GM call; no table.
-- **Quest-givers** — the GM spins hooks from the location as needed (the existing hooks
-  system is there to hang them on).
-- **Refuge as a mechanic** — no rules needed. Because the tainted house (§2.7) is rare,
-  monasteries are safe havens **by default** — the "use them for refuge" behaviour emerges
-  naturally. The only job is to keep the twist uncommon; don't add a refuge mechanic.
+reliquary. This is a **headline feature** (panel: "Keeps: <relic>"), a treasure or
+pilgrimage draw — and it can be **the very thing a secret house guards** (§2.7):
+sometimes the "relic" is what should have stayed sealed. Chance + fame scale with
+size/age. Needs a `monastery-relic` table (typed/named relics).
 
 ## 3. Data shape (pre-V1 — additive, no migration)
 - `settlement.kind = "monastery"` (existing field, new value).
@@ -141,7 +130,7 @@ next agent should **not** build tables or mechanics for them:
 - `secret` — **present only on the rare secret house (§2.7)**, and the player-facing
   panel must **NOT** render it. It is GM/discovery-only: surfaced when the catacombs are
   explored, or behind a GM "reveal secret" control. The surface panel always reads as a
-  safe refuge.
+  safe, wholesome house.
 
 ## 4. New tables (author at "nice large" size, culture-aware where noted)
 1. `monastery-product` — the goods list (§2.5), ~40+. **CORE.**
@@ -180,7 +169,7 @@ codegen) to fill these to size.
   provisioning, library, "Keeps: <relic>" if any, and "has catacombs" if any) in the
   selected-settlement section (near the existing keep/water meta), plus a **"Research"**
   action gated by library size (§2.8). **Do NOT render `settlement.monastery.secret`** —
-  it is GM/discovery-only (§2.7); the panel must read as a welcoming refuge.
+  it is GM/discovery-only (§2.7); the panel must read as a wholesome, welcoming house.
 - **Research roll:** `js/gen/oracle.js` — an odds-ladder roll (exact / related / topical /
   nothing) by library size (§2.8), in the Phase-9 trigger-and-prompt style.
 - **Catacombs:** reuse the dungeon interior system (§2.6) — a lazily-built `dungeon`
@@ -217,8 +206,6 @@ codegen) to fill these to size.
   would spawn (truer to isolated abbeys, more work). **Recommend v1 first.**
 - Exact industries-count-by-size and the self-sufficient threshold (Town vs City).
 - Distinct map glyph now, or reuse the settlement marker with a small tag?
-- Do monasteries offer **services** (sanctuary / healing / lore) as adventure hooks in
-  v1, or defer?
 - Size rules: leave monasteries on the normal per-terrain size caps (a monastery can be
   any size), rather than the demihuman size-cap lift. **Recommend: normal size rules.**
 - **Catacombs** — an "age" notion (older houses likelier to have them), or derive the
@@ -238,9 +225,8 @@ codegen) to fill these to size.
 - Reuse the culture/deity system (`settlement.race` → `RACE_DEITIES`) — do NOT add a
   parallel deity list.
 - **Rarer than keeps** — must not turn every town into an abbey.
-- **Refuge by default** — most monasteries are genuine safe havens; the design should
-  encourage players to shelter there. The secret/tainted house (§2.7) is **rare** and its
-  `secret` is **never shown in the player-facing panel** (GM/discovery-only).
+- Most monasteries are exactly what they seem; the secret/tainted house (§2.7) is **rare**,
+  and its `secret` is **never shown in the player-facing panel** (GM/discovery-only).
 - Human = null culture still works (Human orders use the standard dedication table).
 - Every dev step runs the full `node --test` suite (no degradation) and adds tests for
   new pure logic.
