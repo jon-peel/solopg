@@ -11,6 +11,8 @@
 // own tables. See docs/plans/phase-9-oracles.md.
 
 import { rollTable } from "../core/table.js";
+import { pick as pickFrom } from "../core/rng.js";
+import { RACE_NAME_POOLS } from "./culture-data.js";
 
 // --- Yes/No fate oracle (Phase 9.2) ---------------------------------------
 //
@@ -148,13 +150,30 @@ export function rollSettlement(tables, rng, opts = {}) {
  * order (deterministic for a given rng stream).
  * @param {Map<string,object>} tables incl. tavern-sign / tavern-specialty / tavern-quirk
  * @param {() => number} rng
+ * @param {string} [race] (Phase 14.1 — "elf" | "dwarf" | "halfling" | "gnome")
+ *   composes the sign from that race's tavern-word pool instead of the curated
+ *   Human tavern-sign table; specialty/quirk are unaffected. Omitted/unknown
+ *   race = Human, byte-for-byte as before.
  * @returns {{ kind:"tavern", sign:string, specialty:string, quirk:string }}
  */
-export function rollTavern(tables, rng) {
-  const sign = rollTable(tables.get("tavern-sign"), rng).value;
+export function rollTavern(tables, rng, race) {
+  const racePools = race && RACE_NAME_POOLS[race];
+  const sign = racePools ? raceTavernSign(rng, racePools) : rollTable(tables.get("tavern-sign"), rng).value;
   const specialty = rollTable(tables.get("tavern-specialty"), rng).value;
   const quirk = rollTable(tables.get("tavern-quirk"), rng).value;
   return { kind: "tavern", sign, specialty, quirk };
+}
+
+// Race-flavored tavern sign (Phase 14.1) — composes "The <word> <word>" from the
+// race's own sign-word pool (culture-data.js) instead of the curated Human
+// tavern-sign.json table. A few retries avoid the same word twice ("The Cog
+// Cog"); a tiny pool (<2 words) just accepts the repeat rather than looping.
+function raceTavernSign(rng, pools) {
+  const words = pools.tavernWords;
+  const a = pickFrom(rng, words);
+  let b = pickFrom(rng, words);
+  for (let i = 0; i < 5 && b === a && words.length > 1; i++) b = pickFrom(rng, words);
+  return `The ${a} ${b}`;
 }
 
 // How many taverns a settlement keeps as a persistent fixture (Phase 12.7) — a

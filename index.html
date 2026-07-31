@@ -48,8 +48,17 @@
       </div>
       <!-- View cluster: map display toggles. -->
       <div class="bar-group" role="group" aria-label="View">
-        <button id="btn-icons" data-tip="Show / hide terrain + settlement art">Icons: on</button>
-        <button id="btn-labels" data-tip="Show / hide hex name labels">Labels: on</button>
+        <span class="menu-wrap">
+          <button id="btn-layers" aria-haspopup="true" aria-expanded="false" data-tip="Show / hide map layers">Layers ▾</button>
+          <div id="layers-menu" class="dropdown-menu layers-menu" role="menu" hidden>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="icons">Terrain icons</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="labels">Hex labels</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="regions">Region names</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="cultures">Cultures</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="factions">Factions</button>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" data-layer="hooks">Hooks</button>
+          </div>
+        </span>
       </div>
       <!-- Panel drawer toggle — only visible on narrow screens (Phase 11.7). -->
       <button id="btn-panel" class="panel-toggle" aria-label="Toggle info panel" title="Panel">☰</button>
@@ -114,6 +123,9 @@
           <!-- Faction key (Phase 11.4): one clickable row per power (colour +
                hatch swatch + name) → opens its detail. Hidden when none. -->
           <div class="legend-section" id="legend-factions" hidden></div>
+          <!-- Culture key (Phase 14.5): one swatch + race label per demihuman
+               people present on the map. Hidden when the world is all-Human. -->
+          <div class="legend-section" id="legend-cultures" hidden></div>
           <div class="legend-section">
             <div class="legend-sub">Marks</div>
             <div class="legend-row"><span class="lg-glyph" style="color:var(--accent)">★</span>Wilderness encounter — roll on your table</div>
@@ -131,7 +143,6 @@
             <div class="legend-sub">Settlements</div>
             <div class="legend-row">Icon grows Hamlet → City</div>
             <div class="legend-row">♜ &nbsp;Keep / fort</div>
-            <div class="legend-note">Hover a hex for its name · region.</div>
           </div>
         </div>
         <!-- Bottom-right map controls: zoom (＋ / slider / −), recenter, help. -->

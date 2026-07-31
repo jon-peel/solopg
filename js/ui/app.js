@@ -26,9 +26,14 @@ import {
   addFaction,
   getFactions,
   removeFaction,
+  setCultureAnchor,
+  clearCultureAnchor,
+  getCultureAnchors,
 } from "../world/world.js";
 import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
+import { stampSettlements, stampPois } from "../gen/culture.js";
+import { RACE_SET } from "../gen/culture-data.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
@@ -61,6 +66,10 @@ import {
   recenterOn,
   setIconsEnabled,
   setLabelsEnabled,
+  setCultureOverlay,
+  setFactionsOverlay,
+  setRegionLabels,
+  setHooksOverlay,
   setHookMarks,
   setHookFocus,
   setRiverDraft,
@@ -73,6 +82,8 @@ import {
   setFactionHighlight,
   recenter,
   pixelsPerMile,
+  mapCultures,
+  cultureInfoAt,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
 import { POI_GLYPHS, POI_DOT_COLORS, factionColor, factionHatchDeg } from "./poi-style.js";
@@ -269,6 +280,7 @@ async function setCurrent(world) {
   setEncounterMarks(null); // ...and its encounter stars
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
+  if (world) syncCultures(world); // ...then stamp culture races on any unstamped towns (loaded/imported worlds)
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -309,6 +321,7 @@ async function onNewWorld(fillRadius = null) {
     }
     syncRivers(current);
     syncRoads(current); // persist the derived overlays with the world
+    syncCultures(current); // stamp settlement races once all towns (incl. water) exist
   }
   const saved = await saveWorld(world);
   await setCurrent(saved);
@@ -839,10 +852,6 @@ function buildLegendPoi() {
     row.append(sw, document.createTextNode(`${POI_GLYPHS[type] || "❖"} ${label}`));
     host.appendChild(row);
   }
-  const note = document.createElement("div");
-  note.className = "legend-note";
-  note.textContent = "Far zoom: dot = single POI (by type); numbered dot = several.";
-  host.appendChild(note);
 }
 function toggleLegend(force) {
   const el = $("legend");
@@ -981,6 +990,17 @@ function renderSelection() {
   renderSelectionPanel({
     coord: { q, r },
     hex: hex && hex.placed ? hex : null,
+    // Living culture at this hex (Phase 14.5): {race, strength} or null (Human,
+    // never shown). Read from the map's memoised render field so the panel agrees
+    // with the tint. Settlement race + POI heritage come off the stored hex/poi.
+    culture: hex && hex.placed ? cultureInfoAt(q, r) : null,
+    // GM paint override (Phase 14.6): the manually-anchored race at this hex, if
+    // any — drives the "Paint culture" picker's active state.
+    paintedRace: hex && hex.placed
+      ? (getCultureAnchors(current).find((a) => a.q === q && a.r === r) || {}).race || null
+      : null,
+    onPaintCulture: hex && hex.placed ? onPaintCulture : undefined,
+    onClearCulture: hex && hex.placed ? onClearCulture : undefined,
     onOpenActions, // "⋯ Actions" → open the radial on this hex (11.5b)
     seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
@@ -1172,7 +1192,7 @@ function travelHeadline(result, aimLabel, aimKind) {
 function destinationLabel(hex, q, r) {
   if (hex && hex.name) return hex.name;
   if (hex && hex.settlement && hex.settlement.present) {
-    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
   }
   return `(${q}, ${r})`;
 }
@@ -1227,6 +1247,35 @@ async function onNoteHex(text) {
   if (!hex) return;
   if (v) hex.note = v; else delete hex.note;
   pruneIfEmpty(hex, q, r);
+  await persistAndRefresh();
+}
+
+// GM paint / remove (Phase 14.6) — a manual culture override for the selected
+// hex, mechanically identical to a stamped settlement anchor (§1.2): it feeds
+// the living/heritage fields as a fixed source, so it both renders immediately
+// (map.js's culture wash) and pins future stamps near it (syncCultures). Human
+// is the null case — never stored; "clear" just removes the anchor, reverting
+// the hex to whatever the derived field says (NOT forced back to Human — see
+// the TODO on onClearCulture for the suppression stretch goal).
+async function onPaintCulture(race) {
+  if (!current || !selected || !RACE_SET.has(race)) return;
+  const { q, r } = selected;
+  setCultureAnchor(current, q, r, race);
+  await persistAndRefresh();
+}
+
+// Clears a painted anchor at the selected hex, if any. This is NOT "force to
+// Human" — a hex the derived field would still call demihuman (a nearby core,
+// or another anchor) can keep reading that way after clearing; it only removes
+// the GM's manual override. TODO(Phase 14.6 stretch): a real "suppress this hex
+// back to Human regardless of the derived field" override would need a distinct
+// marker (not a stored "human" race — §5 rule 4) that BLOCKS other sources from
+// claiming the hex in the flood, which is more invasive than the tent-peg model
+// as built; left undone per the plan's "only if clean" guidance.
+async function onClearCulture() {
+  if (!current || !selected) return;
+  const { q, r } = selected;
+  clearCultureAnchor(current, q, r);
   await persistAndRefresh();
 }
 
@@ -1413,6 +1462,8 @@ function buildFeatureDetail(poi, terrain, q, r, n, tables) {
     type: poi.type,
     terrain,
     occupant: poi.occupant,
+    // Who holds/built the site (stamped by syncCultures) — flavours a shrine's deity.
+    race: (poi.heritage && poi.heritage.race) || poi.cultureRace,
   });
   const name = featureName(poi.detail.feature);
   if (name) poi.name = name;
@@ -1882,6 +1933,7 @@ function refreshGlobalHooks() {
 function refreshFactions() {
   const factions = getFactions(current);
   renderFactionLegend(factions);
+  renderCultureLegend();
   refreshFactionPopup();
 }
 
@@ -1908,7 +1960,7 @@ function selectedSettlementContext() {
   const { q, r } = selected;
   const hex = getHex(current, q, r);
   if (!(hex && hex.placed && hex.settlement && hex.settlement.present)) return null;
-  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain });
+  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
   return { label: `${name} · ${hex.settlement.size}`, factionName: factionNameAt(q, r) };
 }
 
@@ -1942,7 +1994,7 @@ async function ensureTaverns(hex, q, r) {
   const n = tavernCountForSize(hex.settlement.size, subRng(current.seed, "taverns", q, r, "count"));
   const list = [];
   for (let i = 0; i < n; i++) {
-    const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, i));
+    const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, i), hex.settlement.race);
     list.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
   }
   hex.settlement.taverns = list;
@@ -1972,7 +2024,7 @@ async function onAddTavern(q, r) {
   await ensureTaverns(hex, q, r); // ensure the base set exists first
   const tables = await loadTables(ORACLE_TABLE_IDS);
   const seq = (hex.settlement.tavernAdds = (hex.settlement.tavernAdds || 0) + 1);
-  const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, "add", seq));
+  const t = rollTavern(tables, subRng(current.seed, "taverns", q, r, "add", seq), hex.settlement.race);
   hex.settlement.taverns.push({ sign: t.sign, specialty: t.specialty, quirk: t.quirk });
   current = await saveWorld(current);
   renderSelection();
@@ -2087,9 +2139,9 @@ function onFactionPopupOutside(e) {
 function renderFactionLegend(factions) {
   const host = $("legend-factions");
   if (!host) return;
-  host.hidden = !factions.length;
+  host.hidden = !factions.length || !layerState.factions;
   host.innerHTML = "";
-  if (!factions.length) return;
+  if (!factions.length || !layerState.factions) return;
   // "Powers" header row: the sub-label, plus a single world-wide "Advance turn"
   // button (Phase 12.1 — relocated from the removed Factions tab) when at least
   // one faction is active. Advancing runs a faction turn for the whole roster.
@@ -2131,6 +2183,32 @@ function renderFactionLegend(factions) {
     row.addEventListener("blur", off);
     host.appendChild(row);
   });
+}
+
+// The map-legend culture key (Phase 14.5): one colour swatch + race label per
+// demihuman people present on the current map. Reads the render field from map.js
+// (memoised there), so the key can never drift from the tint. Hidden when the
+// world is all-Human (the null case — never listed).
+function renderCultureLegend() {
+  const host = $("legend-cultures");
+  if (!host) return;
+  const { races } = mapCultures();
+  host.hidden = !races.length || !layerState.cultures;
+  host.innerHTML = "";
+  if (!races.length || !layerState.cultures) return;
+  const sub = document.createElement("div");
+  sub.className = "legend-sub";
+  sub.textContent = "Cultures";
+  host.appendChild(sub);
+  for (const { race, color, label } of races) {
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    const sw = document.createElement("span");
+    sw.className = "lg-swatch";
+    sw.style.background = color;
+    row.append(sw, document.createTextNode(label));
+    host.appendChild(row);
+  }
 }
 
 // Highlight the selected hook's target/origin on the map (clears if none/gone).
@@ -2318,6 +2396,25 @@ function syncRoads(world) {
     world.rivers,
     Array.isArray(world.roads) ? world.roads : [],
   );
+}
+
+// Stamp demihuman culture onto any freshly-appeared entities (Phase 14.3/14.4) —
+// the tent-peg model. First each new SETTLEMENT rolls its race against the living
+// culture field, pinned by the towns already stamped, then is FROZEN (raceStamped).
+// Then each new POI rolls its BUILDER race against the heritage field + shared
+// latent noise (stateless clusters, §1.5), storing poi.heritage and freezing it
+// (heritageStamped). Runs AFTER syncRivers/syncRoads so water-seeded ports and
+// hamlet clusters are stamped in the same pass. Idempotent and cheap when nothing
+// is pending (no field is built); neutral entities store no race (the null case).
+// Recomputing the fields never re-rolls a stored town or POI. The GM's manual
+// paint anchors (Step 6, world.cultureAnchors) are threaded through as extra
+// fixed sources so a painted hex also pins future stamps, same as a real town.
+function syncCultures(world) {
+  if (!world) return;
+  const hexes = placedHexes(world);
+  const extraAnchors = getCultureAnchors(world); // GM-painted overrides (Step 6)
+  stampSettlements(world.seed, hexes, { extraAnchors }); // living-field town races (the tent pegs)...
+  stampPois(world.seed, hexes, { extraAnchors }); // ...then heritage-field POI builder races + clusters
 }
 
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
@@ -2702,6 +2799,7 @@ async function onFollowClue(id) {
 async function persistAndRefresh() {
   syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
   syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
+  syncCultures(current); // ...then stamp culture races onto any newly-revealed towns
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
@@ -3154,8 +3252,7 @@ function wire() {
   $("btn-export").addEventListener("click", onExport);
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", onImportFile);
-  $("btn-icons").addEventListener("click", onToggleIcons);
-  $("btn-labels").addEventListener("click", onToggleLabels);
+  wireLayersMenu();
   $("btn-legend").addEventListener("click", () => toggleLegend());
   $("btn-progress").addEventListener("click", onProgressDays);
   $("progress-days").addEventListener("keydown", (e) => { if (e.key === "Enter") onProgressDays(); });
@@ -3215,18 +3312,39 @@ function syncZoomSlider() {
   s.value = String(zoomToSlider(scale, min, max));
 }
 
-let iconsOn = true;
-function onToggleIcons() {
-  iconsOn = !iconsOn;
-  setIconsEnabled(iconsOn);
-  $("btn-icons").textContent = `Icons: ${iconsOn ? "on" : "off"}`;
+// Map display layers, all toggled from the "Layers ▾" menu. The legend's culture /
+// faction sections read layerState so they hide when their overlay is switched off.
+const layerState = { icons: true, labels: true, regions: true, cultures: true, factions: true, hooks: true };
+
+function applyLayer(layer, on) {
+  layerState[layer] = on;
+  switch (layer) {
+    case "icons": setIconsEnabled(on); break;
+    case "labels": setLabelsEnabled(on); break;
+    case "regions": setRegionLabels(on); break;
+    case "cultures": setCultureOverlay(on); refreshFactions(); break; // legend section follows
+    case "factions": setFactionsOverlay(on); refreshFactions(); break;
+    case "hooks": setHooksOverlay(on); break;
+  }
 }
 
-let labelsOn = true;
-function onToggleLabels() {
-  labelsOn = !labelsOn;
-  setLabelsEnabled(labelsOn);
-  $("btn-labels").textContent = `Labels: ${labelsOn ? "on" : "off"}`;
+// The "Layers ▾" dropdown (mirrors wireNewWorldMenu): each item is a checkbox
+// toggling one map overlay. aria-checked drives the CSS tick + the a11y state.
+function wireLayersMenu() {
+  const btn = $("btn-layers");
+  const menu = $("layers-menu");
+  const setOpen = (open) => { menu.hidden = !open; btn.setAttribute("aria-expanded", String(open)); };
+  btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(menu.hidden); });
+  menu.addEventListener("click", (e) => {
+    const item = e.target.closest("button[data-layer]");
+    if (!item) return;
+    const layer = item.dataset.layer;
+    const on = !layerState[layer];
+    item.setAttribute("aria-checked", String(on));
+    applyLayer(layer, on);
+  });
+  document.addEventListener("click", (e) => { if (!menu.hidden && !e.target.closest("#layers-menu, #btn-layers")) setOpen(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
 }
 
 async function init() {

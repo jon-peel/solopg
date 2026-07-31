@@ -10,6 +10,7 @@
 
 import { subRng, pick } from "../core/rng.js";
 import { neighbors, axialKey, parseKey } from "../core/hexgeo.js";
+import { RACE_NAME_POOLS } from "./culture-data.js";
 
 // Terrains worth naming as a region (Water bodies included; a river is its own
 // overlay). Small/among-others terrains still clump — the size threshold filters.
@@ -42,10 +43,20 @@ const REGION_NOUN = {
  * @param {string} terrain the region's terrain
  * @param {string} anchorKey canonical (lowest) axial key in the region — keeps
  *   the name stable as the clump grows
+ * @param {string} [race] (Phase 14.1 — "elf" | "dwarf" | "halfling" | "gnome")
+ *   swaps in that race's realm-name pools instead of the Human ones below.
+ *   Omitted/unknown race = Human, byte-for-byte as before.
  * @returns {string}
  */
-export function regionName(seed, terrain, anchorKey) {
+export function regionName(seed, terrain, anchorKey, race) {
   const rng = subRng(seed, "region", anchorKey);
+
+  // Phase 14.1: race-flavored path, entered only when a known race is passed —
+  // the Human path below is untouched so the default (no race) behaviour stays
+  // byte-for-byte identical to before.
+  const racePools = race && RACE_NAME_POOLS[race];
+  if (racePools) return raceRegionName(rng, racePools);
+
   const prefix = pick(rng, REGION_PREFIX);
   const noun = pick(rng, REGION_NOUN[terrain] || REGION_NOUN.Plains);
   const style = rng();
@@ -53,6 +64,33 @@ export function regionName(seed, terrain, anchorKey) {
   // A forest often reads as one compound word ("Blackwood"); avoid a stutter.
   if (terrain === "Forest" && style < 0.5 && prefix.toLowerCase() !== noun.toLowerCase()) {
     return `the ${prefix}${noun.toLowerCase()}`;
+  }
+  return `the ${prefix} ${noun}`;
+}
+
+// Race-flavored region/realm name (Phase 14.1) — draws from the race's shared
+// prefix pool (settlement prefixes double as region prefixes, per culture-data's
+// pool shape) and its own region/realm noun pool. Simpler than the Human path:
+// no per-terrain noun table and no Lake/Forest special-casing, since a
+// demihuman realm name doesn't key off the land's terrain the way a Human
+// tract name does — the race itself is the flavour.
+function raceRegionName(rng, pools) {
+  const prefix = pick(rng, pools.prefixes);
+  const plc = prefix.toLowerCase();
+  // Avoid a stem-stutter like "Meadow" + "Meadows" -> "Meadowmeadows"/"the
+  // Meadow Meadows": prefer a noun that doesn't share the prefix's opening stem.
+  const stem = plc.slice(0, 4);
+  const distinct = pools.regionNouns.filter((n) => {
+    const nl = n.toLowerCase();
+    return !nl.startsWith(stem) && !plc.startsWith(nl.slice(0, 4));
+  });
+  const noun = pick(rng, distinct.length ? distinct : pools.regionNouns);
+  const nl = noun.toLowerCase();
+  const style = rng();
+  // Sometimes reads as one fused word ("the Silvaal"); only fuse when it reads
+  // cleanly (neither part is a prefix of the other).
+  if (style < 0.4 && !nl.startsWith(plc) && !plc.startsWith(nl)) {
+    return `the ${prefix}${nl}`;
   }
   return `the ${prefix} ${noun}`;
 }

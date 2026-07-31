@@ -199,5 +199,19 @@ export function migrateWorld(data) {
     if (!Array.isArray(data.factions)) data.factions = [];
     data.schemaVersion = 16;
   }
+  if (data.schemaVersion < 17) {
+    // Phase 14.3 — optional `settlement.race` culture stamp + `raceStamped`
+    // flag. Additive and pre-V1: no transform. An old world's settlements are
+    // simply (re)stamped on load by the app's culture sync (js/ui/app.js
+    // syncCultures -> stampSettlements) — just stamp the version.
+    data.schemaVersion = 17;
+  }
+  if (data.schemaVersion < 18) {
+    // Phase 14.6 — top-level `cultureAnchors` array (GM paint/remove overrides).
+    // Additive and pre-V1: no transform — getCultureAnchors defaults to `[]`
+    // when absent. Just stamp the version.
+    if (!Array.isArray(data.cultureAnchors)) data.cultureAnchors = [];
+    data.schemaVersion = 18;
+  }
   return data;
 }

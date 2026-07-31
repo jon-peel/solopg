@@ -25,6 +25,7 @@ import {
   LANDMARK_SETTING_DEFAULT,
   biasKey,
 } from "./terrain-profile.js";
+import { RACE_DEITIES } from "./culture-data.js";
 
 // Detail-shape version, stamped on every generated feature. app.js rebuilds a
 // POI whose feature.build differs (or is missing) on next open, so changing the
@@ -46,9 +47,12 @@ const DESECRATED = new Set([
 ]);
 const WATCHER_CHANCE = 0.3;
 
-function describeShrine(tables, rng, terrain) {
+function describeShrine(tables, rng, terrain, race) {
   const form = rollTable(shrineFormTable(terrain), rng).value;
-  const dedication = rollTable(tables.get("shrine-dedication"), rng).value;
+  // A shrine held by a culture honours that people's gods (same "to …" phrasing,
+  // one rng draw either way so the stream stays stable); else the standard table.
+  const deities = race && RACE_DEITIES[race];
+  const dedication = deities ? pick(rng, deities) : rollTable(tables.get("shrine-dedication"), rng).value;
   const condition = rollTable(tables.get("shrine-condition"), rng).value;
   const detail = rollTable(tables.get("shrine-detail"), rng).value;
   const setting = pick(rng, SHRINE_SETTING[biasKey(terrain)] || SHRINE_SETTING_DEFAULT);
@@ -98,10 +102,11 @@ function describeLandmark(tables, rng, terrain) {
  * type that has none yet.
  * @param {Map<string,object>} tables incl. shrine-*, camp-*, landmark-*, creatures, occupiers.
  * @param {() => number} rng a dedicated sub-stream for this POI's feature.
- * @param {{ type: string, terrain: string, occupant?: object }} ctx
+ * @param {{ type: string, terrain: string, occupant?: object, race?: string }} ctx
+ *   `race` (a demihuman culture holding the site) flavours a shrine's dedication.
  */
-export function describeFeature(tables, rng, { type, terrain, occupant }) {
-  if (type === "shrine") return describeShrine(tables, rng, terrain);
+export function describeFeature(tables, rng, { type, terrain, occupant, race }) {
+  if (type === "shrine") return describeShrine(tables, rng, terrain, race);
   if (type === "camp") return describeCamp(tables, rng, terrain, occupant);
   if (type === "landmark") return describeLandmark(tables, rng, terrain);
   return null;
