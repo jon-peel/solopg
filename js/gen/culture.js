@@ -25,7 +25,6 @@ import { rollTable } from "../core/table.js";
 import { axialKey, parseKey, neighbors, axialDistance } from "../core/hexgeo.js";
 import { MinHeap } from "../core/minheap.js";
 import { computeRegions } from "./regions.js";
-import { profileFor, SIZE_ORDER } from "./terrain-profile.js";
 import {
   RACES,
   RACE_SET,
@@ -380,24 +379,31 @@ export const STAMP_CFG = Object.freeze({
   ENCLAVE_EPSILON: 0.02, // per-race weight for a different-race minority enclave
 });
 
-// The per-terrain "no large settlement here" cap (terrain-profile: Mountains &
-// Desert -> Hamlet, Hills & Swamp -> Town) is a HUMAN assumption — humans don't
-// raise cities on a peak. A demihuman culture adapted to its homeland isn't bound
-// by it: a dwarven hold carved into a mountain can absolutely be a city. When a
-// demihuman race is stamped on a hex the human cap holds below City, we re-roll the
-// size from this UNCAPPED table — skewed a little larger than the human default
-// (Hamlet 22 / Village 13 / Town 3 / City 1), because a culture's homeland
-// settlement is an established centre, not a frontier shack. So a mountain city is
-// uncommon but real. Tune freely.
-const CULTURE_UNCAP_SIZE_TABLE = Object.freeze({
-  id: "culture-uncap-size",
-  entries: [
-    { weight: 8, value: "Hamlet" },
-    { weight: 8, value: "Village" },
-    { weight: 5, value: "Town" },
-    { weight: 3, value: "City" },
-  ],
-});
+// A demihuman settlement's size follows its RACE, not the terrain's human size cap
+// (Mountains -> Hamlet, etc. — a human assumption). Each culture builds to its own
+// pattern, so a dwarven mountain hold can be a city while halflings stay pastoral
+// no matter the terrain. Terrain still governs whether a settlement exists at all;
+// only its size is race-driven here. Weights are the size distribution (omit a tier
+// to forbid it — halflings have no City). Rolled on a dedicated sub-stream and
+// frozen with the race stamp. Tune freely.
+const RACE_SIZE_TABLES = {
+  // Dwarves: renowned builders — grand holds, cities common.
+  dwarf: { id: "size:dwarf", entries: [
+    { weight: 5, value: "Hamlet" }, { weight: 7, value: "Village" }, { weight: 7, value: "Town" }, { weight: 5, value: "City" },
+  ] },
+  // Elves: cities exist but the folk are spread thin through the wood.
+  elf: { id: "size:elf", entries: [
+    { weight: 8, value: "Hamlet" }, { weight: 8, value: "Village" }, { weight: 5, value: "Town" }, { weight: 3, value: "City" },
+  ] },
+  // Gnomes: warrens & workshops; the rare deep-gnome city.
+  gnome: { id: "size:gnome", entries: [
+    { weight: 9, value: "Hamlet" }, { weight: 8, value: "Village" }, { weight: 5, value: "Town" }, { weight: 2, value: "City" },
+  ] },
+  // Halflings: pastoral — hamlets and villages, a rare market town, NEVER a city.
+  halfling: { id: "size:halfling", entries: [
+    { weight: 14, value: "Hamlet" }, { weight: 10, value: "Village" }, { weight: 2, value: "Town" },
+  ] },
+};
 
 /**
  * Weighted pick of the stamped race once the roll fires: the field's dominant
@@ -494,13 +500,13 @@ export function stampSettlements(seed, placedHexes, opts = {}) {
     const race = stampSettlementRace(seed, h.coords.q, h.coords.r, h.gen ?? 0, field);
     if (race) {
       h.settlement.race = race; // demihuman -> store; Human stays absent
-      // Lift the human size cap for a demihuman homeland settlement (e.g. a dwarven
-      // mountain hold can be a city) — re-roll uncapped where the human cap held it
-      // below City. Own sub-stream, so the main generation rng is untouched.
-      const cap = profileFor(h.terrain).settlement?.maxSize;
-      if (cap && SIZE_ORDER.indexOf(cap) < SIZE_ORDER.indexOf("City")) {
+      // Size follows the race, not the terrain's human cap: a dwarf hold can be a
+      // city, halflings stay pastoral. Own sub-stream, so the main generation rng
+      // is untouched; frozen with the race stamp.
+      const sizeTable = RACE_SIZE_TABLES[race];
+      if (sizeTable) {
         const s = subRng(seed, "culture-size", h.coords.q, h.coords.r, h.gen ?? 0);
-        h.settlement.size = rollTable(CULTURE_UNCAP_SIZE_TABLE, s).value;
+        h.settlement.size = rollTable(sizeTable, s).value;
       }
     }
     h.settlement.raceStamped = true; // resolved — frozen, never re-rolled

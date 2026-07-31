@@ -208,33 +208,38 @@ test("stampSettlements: full pass stamps a culture, keeps the world mostly Human
 
 // --- Demihuman settlements lift the human "no large settlement here" cap -------
 
-test("a demihuman homeland settlement lifts the terrain size cap (a dwarf mountain hold can be a city)", () => {
+test("a dwarf mountain hold can be a city (size follows the race, not the terrain's human cap)", () => {
   // The human cap pins Mountains to Hamlet; a dwarf culture there isn't bound by it.
   const sizes = new Set();
-  let cityOrTown = 0;
   for (let s = 0; s < 300; s++) {
     const hex = { coords: { q: 0, r: 0 }, terrain: "Mountains", gen: 0, settlement: { present: true, size: "Hamlet" } };
     stampSettlements(s, [hex], { extraAnchors: [{ q: 0, r: 0, race: "dwarf" }] });
-    if (hex.settlement.race === "dwarf") {
-      sizes.add(hex.settlement.size);
-      if (hex.settlement.size === "City" || hex.settlement.size === "Town") cityOrTown++;
-    }
+    if (hex.settlement.race === "dwarf") sizes.add(hex.settlement.size);
   }
   assert.ok(sizes.has("City"), "a dwarf mountain hold can reach City");
-  assert.ok(cityOrTown > 0, "dwarf mountain holds are no longer pinned to Hamlet");
+  assert.ok(sizes.size > 1, "dwarf mountain holds are no longer pinned to a single size");
 });
 
-test("the uncap is deterministic and frozen, and never re-rolls a Human or an uncapped-terrain settlement", () => {
+test("per-race size caps: halflings stay pastoral (never a city) on any terrain, and the roll is frozen", () => {
   // Human mountain settlement: race null -> size untouched (stays as generated).
   const human = { coords: { q: 5, r: 5 }, terrain: "Mountains", gen: 0, settlement: { present: true, size: "Hamlet" } };
   stampSettlements(999, [human], {}); // no anchor, culture-free -> Human
   assert.equal(human.settlement.race, undefined);
   assert.equal(human.settlement.size, "Hamlet");
 
-  // Demihuman on Plains (human cap is already City) -> the uncap must NOT re-roll it.
-  const plains = { coords: { q: 0, r: 0 }, terrain: "Plains", gen: 0, settlement: { present: true, size: "Village" } };
-  stampSettlements(1, [plains], { extraAnchors: [{ q: 0, r: 0, race: "halfling" }] });
-  if (plains.settlement.race) assert.equal(plains.settlement.size, "Village", "uncapped terrain size is left alone");
+  // Halflings never build a city — even on Plains (where the human cap allows one).
+  let halflingCity = 0;
+  let halflingCount = 0;
+  for (let s = 0; s < 300; s++) {
+    const hex = { coords: { q: 0, r: 0 }, terrain: "Plains", gen: 0, settlement: { present: true, size: "City" } };
+    stampSettlements(s, [hex], { extraAnchors: [{ q: 0, r: 0, race: "halfling" }] });
+    if (hex.settlement.race === "halfling") {
+      halflingCount++;
+      if (hex.settlement.size === "City") halflingCity++;
+    }
+  }
+  assert.ok(halflingCount > 0, "the halfling anchor stamps halfling towns");
+  assert.equal(halflingCity, 0, "halflings never build a city, whatever the terrain");
 
   // Deterministic + frozen: a re-stamp never changes a resolved size.
   const hex = { coords: { q: 0, r: 0 }, terrain: "Mountains", gen: 0, settlement: { present: true, size: "Hamlet" } };
