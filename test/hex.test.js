@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { generateHex } from "../js/gen/hex.js";
 import { TERRAINS } from "../js/gen/affinity.js";
 import { validateTable } from "../js/core/table.js";
-import { mulberry32 } from "../js/core/rng.js";
+import { mulberry32, subRng } from "../js/core/rng.js";
+import { profileFor } from "../js/gen/terrain-profile.js";
 
 const FULL_SIZE = {
   id: "settlement-size",
@@ -127,4 +128,85 @@ test("shipped weighted tables are valid", () => {
     validateTable(table);
     assert.equal(table.id, id);
   }
+});
+
+// --- Settlement kind roll: keep vs monastery (Phase 15, Step 2) -------------
+// The two overlays are mutually exclusive (a hex has at most one kind); keep is
+// rolled first and always wins, monastery only when no keep fired. Both roll from
+// their own coord-keyed sub-streams, so neither ever perturbs the main rng /
+// downstream POI rolls. `settled` forces a settlement present (main rng 0 → present,
+// 0 → smallest size, 0.99 → no POI) so the kind roll actually fires.
+const settled = (q, r, seed, gen = 0) =>
+  generateHex(makeTables(), forced([0, 0, 0.99]), opts({ key: `${q},${r}`, coords: { q, r }, seed, gen, terrain: "Hills" }));
+
+test("settlement.kind is deterministic for a given seed + coords", () => {
+  for (let q = 0; q < 12; q++) for (let r = 0; r < 12; r++) {
+    assert.equal(settled(q, r, 4242).settlement.kind, settled(q, r, 4242).settlement.kind, `kind differs at ${q},${r}`);
+  }
+});
+
+test("the monastery kind roll never perturbs the main rng (its own sub-stream)", () => {
+  // A counting forced stream: records how many MAIN-rng draws generateHex makes.
+  const counting = (vals) => {
+    let i = 0;
+    const state = { n: 0 };
+    const fn = () => { state.n++; return i < vals.length ? vals[i++] : 0; };
+    fn.state = state;
+    return fn;
+  };
+  // Find a coord whose kind is "monastery" and one with no kind (same seed/terrain).
+  const seed = 55;
+  let monCoord = null;
+  let plainCoord = null;
+  for (let q = 0; q < 60 && (!monCoord || !plainCoord); q++) {
+    for (let r = 0; r < 60 && (!monCoord || !plainCoord); r++) {
+      const kind = settled(q, r, seed).settlement.kind;
+      if (kind === "monastery" && !monCoord) monCoord = { q, r };
+      if (kind === undefined && !plainCoord) plainCoord = { q, r };
+    }
+  }
+  assert.ok(monCoord && plainCoord, "sweep must find both a monastery and a plain settled hex");
+  const gen = (c) => {
+    const rng = counting([0, 0, 0.99]); // present, size, no POI
+    const hex = generateHex(makeTables(), rng, opts({ key: `${c.q},${c.r}`, coords: c, seed, gen: 0, terrain: "Hills" }));
+    return { hex, draws: rng.state.n };
+  };
+  const m = gen(monCoord);
+  const p = gen(plainCoord);
+  assert.equal(m.hex.settlement.kind, "monastery");
+  assert.equal(p.hex.settlement.kind, undefined);
+  // Identical main-rng draw count whether or not a monastery fired, and identical
+  // main-rng-driven fields (present, size, POI count) — the kind roll is off-stream.
+  assert.equal(m.draws, p.draws, "monastery firing changed the main-rng draw count");
+  assert.equal(m.hex.settlement.present, p.hex.settlement.present);
+  assert.equal(m.hex.settlement.size, p.hex.settlement.size);
+  assert.equal(m.hex.pois.length, p.hex.pois.length);
+});
+
+test("a hex is never both keep and monastery; keep always wins the kind roll", () => {
+  const prof = profileFor("Hills").settlement;
+  let sawKeep = false;
+  let sawMon = false;
+  for (let q = 0; q < 40; q++) for (let r = 0; r < 40; r++) {
+    const kind = settled(q, r, 7).settlement.kind;
+    assert.ok(kind === undefined || kind === "keep" || kind === "monastery", `unexpected kind ${kind} at ${q},${r}`);
+    // Recompute the independent keep roll; if it fires, the kind MUST be keep.
+    if (subRng(7, "keep", q, r, 0)() < prof.keepChance) assert.equal(kind, "keep", `keep fired at ${q},${r} but kind=${kind}`);
+    if (kind === "keep") sawKeep = true;
+    if (kind === "monastery") sawMon = true;
+  }
+  assert.ok(sawKeep, "expected some keeps in the sweep");
+  assert.ok(sawMon, "expected some monasteries in the sweep");
+});
+
+test("monasteries are rarer than keeps over a large Hills sweep (kind roll bias)", () => {
+  let keep = 0;
+  let mon = 0;
+  for (let q = 0; q < 60; q++) for (let r = 0; r < 60; r++) {
+    const kind = settled(q, r, 31).settlement.kind;
+    if (kind === "keep") keep++;
+    else if (kind === "monastery") mon++;
+  }
+  assert.ok(keep > 0 && mon > 0, `expected both kinds (keep=${keep}, mon=${mon})`);
+  assert.ok(mon < keep, `monastery count ${mon} should stay below keep count ${keep}`);
 });

@@ -33,6 +33,7 @@ import {
 import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { stampSettlements, stampPois } from "../gen/culture.js";
+import { stampMonasteries } from "../gen/monastery.js";
 import { RACE_SET } from "../gen/culture-data.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -153,6 +154,10 @@ const HOOK_TABLE_IDS = [
 
 // Tables the faction generator rolls on (Phase 8.7; + monster kind 8.16), loaded on demand.
 const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition", "faction-monster-kind"];
+
+// Tables the monastery bake rolls on (Phase 15, loaded on demand when a monastery
+// settlement needs its `settlement.monastery` filled — see syncMonasteries).
+const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -281,6 +286,7 @@ async function setCurrent(world) {
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) syncCultures(world); // ...then stamp culture races on any unstamped towns (loaded/imported worlds)
+  if (world) await syncMonasteries(world); // ...then bake monastery houses (needs the final race+size from syncCultures)
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -322,6 +328,7 @@ async function onNewWorld(fillRadius = null) {
     syncRivers(current);
     syncRoads(current); // persist the derived overlays with the world
     syncCultures(current); // stamp settlement races once all towns (incl. water) exist
+    await syncMonasteries(current); // ...then bake monastery houses (needs the final race+size from syncCultures)
   }
   const saved = await saveWorld(world);
   await setCurrent(saved);
@@ -2417,6 +2424,22 @@ function syncCultures(world) {
   stampPois(world.seed, hexes, { extraAnchors }); // ...then heritage-field POI builder races + clusters
 }
 
+// Bake `settlement.monastery` (Phase 15) onto any monastery-kind settlement that
+// hasn't been resolved yet. MUST run AFTER syncCultures: the bake reads each town's
+// FINAL race + size (a demihuman house honours its gods / leans its crafts, and
+// size drives self-sufficiency). Idempotent and cheap when nothing is pending — no
+// tables are loaded unless a monastery actually needs filling. Async (loads the
+// flavour tables on demand); every call site already awaits inside an async fn.
+async function syncMonasteries(world) {
+  if (!world) return;
+  const hexes = placedHexes(world);
+  const pending = hexes.some(h => h.settlement && h.settlement.present
+    && h.settlement.kind === "monastery" && !h.settlement.monastery);
+  if (!pending) return;
+  const tables = await loadTables(MONASTERY_STAMP_TABLE_IDS);
+  stampMonasteries(world.seed, hexes, tables);
+}
+
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
 // carries a forced dungeon POI as the hook's subject. Marked unexplored.
@@ -2800,6 +2823,7 @@ async function persistAndRefresh() {
   syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
   syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
   syncCultures(current); // ...then stamp culture races onto any newly-revealed towns
+  await syncMonasteries(current); // ...then bake monastery houses (needs the final race+size from syncCultures)
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();

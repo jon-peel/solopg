@@ -27,29 +27,35 @@ export const SIZE_ORDER = ["Hamlet", "Village", "Town", "City"];
 // higher on frontier/harsh terrain (fortified passes, borderland forts), low in
 // the settled heartland. It's conditional on the already-rare settlement roll,
 // so keeps stay uncommon (~0–2 per Huge fill).
+// `monasteryChance` (Phase 15) is the parallel chance, GIVEN a settlement, that
+// it's a MONASTIC house (`settlement.kind = "monastery"`) instead. It is rolled
+// ONLY when no keep fired — a hex has at most one kind, the two are mutually
+// exclusive — and is deliberately RARER than the same terrain's keepChance
+// (strictly less on every terrain). It favours remote/wild country (highest in
+// the Mountains, lowest on the settled Plains), where lonely abbeys belong.
 export const TERRAIN_PROFILE = {
   Forest: {
-    settlement: { chance: 0.014, maxSize: "City", keepChance: 0.12 },
+    settlement: { chance: 0.014, maxSize: "City", keepChance: 0.12, monasteryChance: 0.08 },
     poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, camp: 2, landmark: 1, tower: 1 } },
   },
   Plains: {
-    settlement: { chance: 0.022, maxSize: "City", keepChance: 0.1 },
+    settlement: { chance: 0.022, maxSize: "City", keepChance: 0.1, monasteryChance: 0.03 },
     poi: { chance: 0.4, weights: { dungeon: 4, camp: 3, shrine: 2, landmark: 2, tower: 1 } },
   },
   Hills: {
-    settlement: { chance: 0.016, maxSize: "Town", keepChance: 0.35 },
+    settlement: { chance: 0.016, maxSize: "Town", keepChance: 0.35, monasteryChance: 0.08 },
     poi: { chance: 0.55, weights: { dungeon: 8, tower: 2, shrine: 1 } },
   },
   Mountains: {
-    settlement: { chance: 0.007, maxSize: "Hamlet", keepChance: 0.4 },
+    settlement: { chance: 0.007, maxSize: "Hamlet", keepChance: 0.4, monasteryChance: 0.1 },
     poi: { chance: 0.6, weights: { dungeon: 9, tower: 2, shrine: 1 } },
   },
   Swamp: {
-    settlement: { chance: 0.007, maxSize: "Hamlet", keepChance: 0.2 },
+    settlement: { chance: 0.007, maxSize: "Hamlet", keepChance: 0.2, monasteryChance: 0.05 },
     poi: { chance: 0.55, weights: { dungeon: 8, shrine: 2, landmark: 1 } },
   },
   Desert: {
-    settlement: { chance: 0.006, maxSize: "Town", keepChance: 0.35 },
+    settlement: { chance: 0.006, maxSize: "Town", keepChance: 0.35, monasteryChance: 0.07 },
     poi: { chance: 0.45, weights: { dungeon: 7, shrine: 3, landmark: 2, tower: 1 } },
   },
   Water: {
@@ -62,7 +68,7 @@ export const TERRAIN_PROFILE = {
 };
 
 const DEFAULT_PROFILE = {
-  settlement: { chance: 0.014, maxSize: "City", keepChance: 0.12 },
+  settlement: { chance: 0.014, maxSize: "City", keepChance: 0.12, monasteryChance: 0.05 },
   poi: { chance: 0.4, weights: { dungeon: 2, landmark: 1 } },
 };
 
