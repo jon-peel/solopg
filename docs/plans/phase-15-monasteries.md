@@ -91,13 +91,51 @@ occasional betrayal lands hard while refuge stays the norm. A secret, where pres
 usually lives in the **catacombs** (§2.6). NOTE: this is the *living-but-tainted* house;
 the fully **ruined/abandoned** abbey is a separate thing — a dungeon theme (§5 bonus).
 
+### 2.8 Library & research (a knowledge service)
+Every house has a **library**, its size scaling with the monastery's size (a hermitage:
+a few shelves; a great mother-house: a renowned library). Library size drives a
+**research roll** — an Oracle-style *trigger-and-prompt* aid in the spirit of Phase 9:
+**the app decides the tier of result, the GM supplies the actual book/answer** (it does
+NOT invent titles, just as it never invents gp/loot). When a PC researches a topic, roll
+against library size for one of:
+- **the exact source** — the precise book/answer,
+- **a closely related source** — a partial or adjacent answer,
+- **something on the topic** — a hint / general lore,
+- **nothing useful**.
+Bigger libraries shift the odds toward "exact"; small ones toward "topical / nothing".
+Surface it as a "Research" action on the monastery (panel or Oracle tab), gated by
+library size. This is a roll + prompt, not a content table of book titles.
+
+### 2.9 Relics
+A house — especially a large or old one — may be **known for a relic** it keeps: the
+incorrupt remains of a saint, a holy weapon or text, a wonder-working icon, a sealed
+reliquary. This is a **headline feature** (panel: "Keeps: <relic>"), a natural
+quest-object / treasure / pilgrimage draw — and it can be **the very thing a secret house
+guards** (§2.7): sometimes the "relic" is what should have stayed sealed. Chance + fame
+scale with size/age. Needs a `monastery-relic` table (typed/named relics).
+
+### 2.10 Deliberately left to the GM (unwritten)
+Per the owner, these are intentionally NOT modelled — the GM adjudicates them, so the
+next agent should **not** build tables or mechanics for them:
+- **Healing** — the brothers are mostly clerics who heal **for a donation** (or free to
+  the same faith/alignment). A GM call; no table.
+- **Quest-givers** — the GM spins hooks from the location as needed (the existing hooks
+  system is there to hang them on).
+- **Refuge as a mechanic** — no rules needed. Because the tainted house (§2.7) is rare,
+  monasteries are safe havens **by default** — the "use them for refuge" behaviour emerges
+  naturally. The only job is to keep the twist uncommon; don't add a refuge mechanic.
+
 ## 3. Data shape (pre-V1 — additive, no migration)
 - `settlement.kind = "monastery"` (existing field, new value).
 - `settlement.monastery = { dedication, selfSufficient: boolean, industries: string[],
-  provisioning?: string, trait?: string, catacombs?: boolean, secret?: string }` — baked
-  deterministically at generation / in the settlement stamp pass (recommended, so it's
-  stable and the panel just reads it), the same way the keep's martial name is derived
-  and settlement culture is stamped.
+  library: string, provisioning?: string, trait?: string, catacombs?: boolean,
+  relic?: string, secret?: string }` — baked deterministically at generation / in the
+  settlement stamp pass (recommended, so it's stable and the panel just reads it), the
+  same way the keep's martial name is derived and settlement culture is stamped.
+- `library` — a size tier (e.g. "a few shelves" … "a renowned library"), derived from the
+  monastery's size; drives the research roll (§2.8).
+- `relic` — the notable relic the house keeps (§2.9), when present; may coincide with the
+  `secret` (the guarded thing).
 - `catacombs` — present on big/old houses (§2.6); the interior itself is a lazily-built
   `dungeon` (attached to the settlement or a linked catacomb POI), NOT stored inline.
 - `secret` — **present only on the rare secret house (§2.7)**, and the player-facing
@@ -115,10 +153,16 @@ the fully **ruined/abandoned** abbey is a separate thing — a dungeon theme (§
    seems", "a thing lies sealed in the deepest crypt", "the order worships an older,
    darker power", "the wine is pressed from more than grapes", "the brothers feed what
    breeds in the catacombs", "the whole house is a lure for travellers". GM/discovery-only.
-6. Dedication — **REUSE** `RACE_DEITIES` + `data/shrine-dedication.json` (no new table).
-7. Catacombs — **REUSE** the dungeon interior generator (§2.6); a "Catacombs" theme entry
+6. `monastery-relic` — the notable relics a house may keep (§2.9), ~24: "the incorrupt
+   body of the founder", "a saint's hand in a gilded reliquary", "a wonder-working icon",
+   "a holy blade", "a fragment of the first temple", "a codex no living tongue can read".
+7. Library **research odds** by library size (§2.8) — NOT a content table; an odds ladder
+   (exact / related / topical / nothing) per library tier, authored oracle-style in
+   `js/gen/oracle.js`. Library tier itself derives from monastery size.
+8. Dedication — **REUSE** `RACE_DEITIES` + `data/shrine-dedication.json` (no new table).
+9. Catacombs — **REUSE** the dungeon interior generator (§2.6); a "Catacombs" theme entry
    may be added to `DUNGEON_THEME_BIAS` / the dungeon family tables.
-8. Optional `RACE_MONASTERY_PRODUCTS` bias map (per-race product leanings).
+10. Optional `RACE_MONASTERY_PRODUCTS` bias map (per-race product leanings).
 
 Follow the Phase-14 content-expansion approach (parallel research agents → curate →
 codegen) to fill these to size.
@@ -133,9 +177,12 @@ codegen) to fill these to size.
   `opts.kind === "keep"` martial branch, culture-aware via `opts.race`.
 - **Rendering:** `js/ui/map.js` — a distinct glyph (chapel/steeple) vs the keep's ♜;
   `js/ui/panel.js` — a monastery block (dedication, self-sufficiency, industries/exports,
-  provisioning, and "has catacombs" if any) in the selected-settlement section (near the
-  existing keep/water meta). **Do NOT render `settlement.monastery.secret`** here — it is
-  GM/discovery-only (§2.7); the panel must read as a welcoming refuge.
+  provisioning, library, "Keeps: <relic>" if any, and "has catacombs" if any) in the
+  selected-settlement section (near the existing keep/water meta), plus a **"Research"**
+  action gated by library size (§2.8). **Do NOT render `settlement.monastery.secret`** —
+  it is GM/discovery-only (§2.7); the panel must read as a welcoming refuge.
+- **Research roll:** `js/gen/oracle.js` — an odds-ladder roll (exact / related / topical /
+  nothing) by library size (§2.8), in the Phase-9 trigger-and-prompt style.
 - **Catacombs:** reuse the dungeon interior system (§2.6) — a lazily-built `dungeon`
   attached to the settlement (or a linked catacomb POI opened like any dungeon).
 - **Culture:** reuse `RACE_DEITIES` / `settlement.race` — a monastery in a demihuman
@@ -152,12 +199,17 @@ codegen) to fill these to size.
    size→self-sufficiency mapping, keep/monastery mutual exclusion, rarity bounds.
 3. **Naming** — monastic name mode, culture-aware. Tests: Human default unchanged.
 4. **Rendering + panel** (never showing `secret`). Screenshot-verify.
-5. **Catacombs** — attach a lazily-built "Catacombs" dungeon to big/old houses (reuse
+5. **Library + research** — derive a `library` tier from size; a "Research" odds-ladder
+   roll (exact / related / topical / nothing) in `oracle.js`. Tests: bigger library skews
+   toward "exact"; determinism.
+6. **Relics** — a `relic` on big/old houses from `monastery-relic`; shown as "Keeps: …".
+   Tests: rarity by size, may coincide with a secret.
+7. **Catacombs** — attach a lazily-built "Catacombs" dungeon to big/old houses (reuse
    `js/gen/dungeon.js`); chance/depth scale with size. Tests: determinism, size scaling.
-6. **The secret house** — a rare `secret` flag + `monastery-secret` table; surfaced only
+8. **The secret house** — a rare `secret` flag + `monastery-secret` table; surfaced only
    via catacomb discovery / a GM reveal, never the player panel. Tests: rarity bound,
    secret never leaks into the public panel model.
-7. *(Optional)* fully-ruined-monastery dungeon theme.
+9. *(Optional)* fully-ruined-monastery dungeon theme.
 
 ## 7. Open questions for the next agent
 - **Placement:** v1 = overlay on a placed settlement (simplest, reuses machinery) vs.
@@ -175,6 +227,11 @@ codegen) to fill these to size.
 - **Secret** — how is it surfaced to the GM without leaking to players? (Revealed by
   exploring the catacombs, a GM-only "reveal" control, or an export-only field?) Pick one
   and keep the public panel/model clean of it.
+- **Library** — is the tier purely size-derived, or its own roll with a size bias? Does
+  the "Research" action live in the settlement panel, the Oracle tab, or both? Tune the
+  per-tier odds ladder against play.
+- **Relic ↔ secret** — how often does a secret house's `secret` *be* its `relic` (the
+  guarded thing)? Set a linkage probability; otherwise they're independent.
 
 ## 8. Non-negotiables
 - Deterministic (dedicated sub-streams), frozen once generated.
