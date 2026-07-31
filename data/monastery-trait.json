@@ -1,0 +1,19 @@
+{
+  "id": "monastery-trait",
+  "title": "Monastery traits",
+  "_note": "Optional descriptive flavour for a monastery (see phase-15 §2.4). Purely cosmetic; 'fortified' covers the fortress-abbey without needing kind:\"keep\". Common, wholesome traits weight 2; ominous or rare ones weight 1.",
+  "entries": [
+    { "weight": 2, "value": "renowned" },
+    { "weight": 2, "value": "welcoming to travellers" },
+    { "weight": 2, "value": "reclusive and silent" },
+    { "weight": 2, "value": "scholarly" },
+    { "weight": 2, "value": "fortified" },
+    { "weight": 2, "value": "austere and poor" },
+    { "weight": 2, "value": "pilgrim-thronged" },
+    { "weight": 1, "value": "wealthy and worldly" },
+    { "weight": 1, "value": "militant, its monks trained to arms" },
+    { "weight": 1, "value": "slowly decaying" },
+    { "weight": 1, "value": "ancient and half-ruined" },
+    { "weight": 1, "value": "plague-touched" }
+  ]
+}

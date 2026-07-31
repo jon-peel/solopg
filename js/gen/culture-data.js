@@ -542,3 +542,14 @@ export const RACE_DUNGEON_THEMES = {
   gnome: { "Abandoned mine": 4, "Cave complex": 3, "Wizard's sanctum": 3, "Prison vaults": 2, "Flooded cistern": 2 },
   halfling: { Ruin: 2, "Forgotten tomb": 2, "Flooded cistern": 2 },
 };
+
+// Product preference by builder race — a weight MULTIPLIER applied to the
+// monastery-product roll (parallels RACE_DUNGEON_THEMES). Keys MUST be exact
+// values from data/monastery-product.json (test-enforced). Only products the
+// table already offers are affected, so a race just leans its output mix.
+export const RACE_MONASTERY_PRODUCTS = {
+  dwarf:    { "iron tools": 4, "stonework": 4, "strong ale": 3 },
+  elf:      { "wine": 4, "fine woodwork": 3, "illuminated manuscripts": 3 },
+  halfling: { "cheese": 4, "beer": 3, "preserves": 3 },
+  gnome:    { "beeswax candles": 3, "inks": 3, "clockwork trinkets": 4 },
+};
