@@ -136,6 +136,8 @@ function renderPoiSection(sel, hex, model) {
       // A camp's description already names who holds it; hide the generic line.
       feature && (selectedPoi.type === "camp" || occ === "empty") ? null : `Occupant: ${occ}`,
       ...detailLines,
+      // Racial inscription (Phase 15) — a line of the builder culture's script.
+      selectedPoi.detail && selectedPoi.detail.inscription ? `Inscription: ${selectedPoi.detail.inscription}.` : null,
     ].filter(Boolean)) {
       const div = document.createElement("div");
       div.className = "log-line";
@@ -809,6 +811,14 @@ export function renderSelectionPanel(model) {
       meta.className = "sel-settle-meta";
       meta.textContent = `${kindLabel}${townRace ? ` · ${townRace}` : ""}${water ? ` · ${water}` : ""}`;
       box.appendChild(nm); box.appendChild(meta);
+      // Racial appearance (Phase 15) — how a demihuman town is built (baked by
+      // syncCultures). Absent for Human towns.
+      if (hex.settlement.appearance) {
+        const look = document.createElement("span");
+        look.className = "sel-settle-look";
+        look.textContent = hex.settlement.appearance;
+        box.appendChild(look);
+      }
       sel.appendChild(box);
 
       // The town's transient "what's stirring?" situation (auto-rolled when the

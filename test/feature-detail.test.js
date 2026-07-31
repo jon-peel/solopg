@@ -16,6 +16,7 @@ import {
 } from "../js/gen/terrain-profile.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
+import { RACE_DEITIES } from "../js/gen/culture-data.js";
 
 function tables() {
   const ids = [
@@ -234,4 +235,20 @@ test("describeFeature is deterministic for a landmark seed + terrain", () => {
 
 test("describeFeature returns null for a type with no Tier-1 detail yet", () => {
   assert.equal(describeFeature(tables(), mulberry32(1), { type: "tower", terrain: "Hills" }), null);
+});
+
+test("a shrine held by a culture honours that people's gods (Phase 15)", () => {
+  const t = tables();
+  const dwarfDeities = new Set(RACE_DEITIES.dwarf);
+  for (let s = 0; s < 60; s++) {
+    const f = describeFeature(t, mulberry32(s), { type: "shrine", terrain: "Mountains", race: "dwarf" });
+    assert.ok(dwarfDeities.has(f.dedication), `dwarf shrine dedication "${f.dedication}" should be a dwarf deity`);
+  }
+  // Human (no race) still draws from the standard table — never a race deity.
+  let humanFromTable = 0;
+  for (let s = 0; s < 20; s++) {
+    const f = describeFeature(t, mulberry32(s), { type: "shrine", terrain: "Plains" });
+    if (!dwarfDeities.has(f.dedication)) humanFromTable++;
+  }
+  assert.equal(humanFromTable, 20, "Human shrines use the standard dedication table");
 });

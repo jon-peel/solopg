@@ -19,12 +19,13 @@
 // every source's flood is additionally hard-capped at MAX_R hexes. A culture can
 // therefore never cover the whole map, no matter how large.
 
-import { subRng } from "../core/rng.js";
+import { subRng, pick } from "../core/rng.js";
 import { fbm2D } from "../core/noise.js";
 import { rollTable } from "../core/table.js";
 import { axialKey, parseKey, neighbors, axialDistance } from "../core/hexgeo.js";
 import { MinHeap } from "../core/minheap.js";
 import { computeRegions } from "./regions.js";
+import { dungeonThemeTable } from "./terrain-profile.js";
 import {
   RACES,
   RACE_SET,
@@ -33,7 +34,42 @@ import {
   CULTURE_COLORS,
   RACE_NAME_POOLS,
   RACE_JOIN,
+  RACE_APPEARANCE,
+  RACE_INSCRIPTIONS,
+  RACE_DUNGEON_THEMES,
 } from "./culture-data.js";
+
+// --- Cultural detail helpers (deterministic picks + theme reweighting) --------
+
+/** A demihuman settlement's physical look ("carved into the mountainside"), or null. */
+export function raceAppearance(seed, q, r, race) {
+  const pool = RACE_APPEARANCE[race];
+  return pool ? pick(subRng(seed, "appearance", q, r), pool) : null;
+}
+
+/** A line of racial script/language for a POI ("angular dwarf-runes …"), or null. */
+export function raceInscription(seed, q, r, poiId, race) {
+  const pool = RACE_INSCRIPTIONS[race];
+  return pool ? pick(subRng(seed, "inscription", q, r, poiId), pool) : null;
+}
+
+/** A terrain's dungeon-theme table reweighted toward a race's works (or the base). */
+function raceThemeTable(base, race) {
+  const boosts = RACE_DUNGEON_THEMES[race];
+  if (!boosts) return base;
+  return {
+    id: `${base.id}:${race}`,
+    entries: base.entries.map((e) => ({ weight: e.weight * (boosts[e.value] || 1), value: e.value })),
+  };
+}
+
+/** The base (non-heritage) dungeon name for a theme + occupant (mirrors poi.js nameFor). */
+function dungeonNameFrom(theme, occupant) {
+  const occ = occupant || { kind: "none" };
+  if (occ.kind === "lair") return `${theme} — ${occ.creature} lair`;
+  if (occ.kind === "occupied") return `${theme} — ${occ.by}`;
+  return theme;
+}
 
 // Re-export for the renderer's convenience (Step 5) — one import for tint + field.
 export { CULTURE_COLORS };
@@ -508,6 +544,9 @@ export function stampSettlements(seed, placedHexes, opts = {}) {
         const s = subRng(seed, "culture-size", h.coords.q, h.coords.r, h.gen ?? 0);
         h.settlement.size = rollTable(sizeTable, s).value;
       }
+      // Racial appearance (tree-city, mountain hold, burrow-town) for the panel.
+      const look = raceAppearance(seed, h.coords.q, h.coords.r, race);
+      if (look) h.settlement.appearance = look;
     }
     h.settlement.raceStamped = true; // resolved — frozen, never re-rolled
   }
@@ -768,16 +807,34 @@ export function stampPois(seed, placedHexes, opts = {}) {
   }
   const anchors = settlementAnchors(hexes).concat(extraAnchors);
   const field = buildHeritageField(seed, terrainByKey, { ...fieldOpts, anchors });
+  // The LIVING field too — a POI's local culture (who lives here now) drives its
+  // shrine's deity, its dungeon's theme, and its inscriptions, even without heritage.
+  const living = buildLivingField(seed, terrainByKey, { ...fieldOpts, anchors });
 
   for (const h of hexes) {
     if (!h.coords || !h.pois || !h.pois.length) continue;
     const { q, r } = h.coords;
+    const localRace = living.at(q, r).race; // who lives here now (or null = Human)
     for (const poi of h.pois) {
       if (poi.heritageStamped) continue;
+      if (localRace) poi.cultureRace = localRace; // for shrine deity / inscription fallback
       const race = rollPoiHeritage(seed, q, r, poi.id, h.terrain, field);
-      if (race) {
-        poi.heritage = { race }; // fired -> store the builder race; neutral stays absent
-        applyHeritageText(seed, q, r, poi.id, race, poi);
+      if (race) poi.heritage = { race }; // fired -> store the builder race; neutral stays absent
+      const builderRace = race || localRace; // who made/holds it, for theme + inscription
+      // Racial dungeon theme: a dungeon in a culture leans toward that people's works
+      // (dwarf -> mine/vault, elf -> tomb/sanctum). Re-roll BEFORE heritage naming so
+      // the composed name uses the new theme; own sub-stream, main rng untouched.
+      if (poi.type === "dungeon" && poi.detail && poi.detail.theme && builderRace && RACE_DUNGEON_THEMES[builderRace]) {
+        const s = subRng(seed, "culture-theme", q, r, poi.id);
+        const theme = rollTable(raceThemeTable(dungeonThemeTable(h.terrain), builderRace), s).value;
+        poi.detail.theme = theme;
+        poi.name = dungeonNameFrom(theme, poi.occupant); // heritage naming overwrites below if it fired
+      }
+      if (race) applyHeritageText(seed, q, r, poi.id, race, poi); // uses the (possibly re-themed) label
+      // Inscription (racial script) for any POI a culture built or holds.
+      if (builderRace) {
+        const insc = raceInscription(seed, q, r, poi.id, builderRace);
+        if (insc) { poi.detail = poi.detail || {}; poi.detail.inscription = insc; }
       }
       poi.heritageStamped = true; // resolved — frozen, never re-rolled
     }

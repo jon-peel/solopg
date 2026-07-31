@@ -287,3 +287,97 @@ export const RACE_NAME_POOLS = {
   halfling: HALFLING,
   gnome: GNOME,
 };
+
+// --- Cultural detail pools ----------------------------------------------------
+// Flavour keyed by race, baked onto settlements/POIs in the culture stamp passes
+// (js/gen/culture.js) or read lazily (shrine dedication). Human = null, so a
+// missing race here simply means "use the standard/human tables".
+
+// How a demihuman settlement physically looks (a tree-city, a mountain hold, a
+// burrow-town) — shown in the selection panel under the town's name.
+export const RACE_APPEARANCE = {
+  elf: [
+    "grown into the living boughs", "slender spires among the great trunks",
+    "walkways strung high between the trees", "terraces of pale carved wood",
+    "half-hidden but for its lantern-light", "wound about a sacred glade",
+    "airy galleries open to the canopy", "roots and archways woven together",
+  ],
+  dwarf: [
+    "carved deep into the mountain's flank", "a great gated hall in the living rock",
+    "smoke rising from cliff-face forges", "stone bastions astride the pass",
+    "tiered galleries above a lamplit chasm", "delved beneath the roots of the peak",
+    "ringed by dressed-stone ramparts", "its doors sealed with graven adamant",
+  ],
+  halfling: [
+    "snug burrows dug into a green hillside", "round doors and neat garden rows",
+    "thatched cottages along a winding lane", "smoke from a hundred cook-fires",
+    "holes tucked comfortably into the banks", "a rambling sprawl of farmsteads",
+    "hedgerows and orchards on every side", "a market green ringed with stalls",
+  ],
+  gnome: [
+    "a warren of round doors and crooked chimneys", "brass pipes and turning cogs everywhere",
+    "burrows lit by softly glowing globes", "workshops venting coloured steam",
+    "a hillside honeycombed with tinkers' hollows", "clockwork gates and whirring vanes",
+    "lantern-strung tunnels full of clatter", "half machine and half burrow",
+  ],
+};
+
+// Shrine dedications ("to …" phrases, matching data/shrine-dedication.json) for a
+// race-appropriate god where a culture holds the shrine.
+export const RACE_DEITIES = {
+  elf: [
+    "to the Moon-Mother", "to the Star-Kindler", "to a god of the deep wood",
+    "to the Dawn-Singer", "to an elf-lord of old", "to the Keeper of Ages",
+    "to a spirit of the grove", "to the Twilight Queen",
+  ],
+  dwarf: [
+    "to the Forge-Father", "to a god of stone and delving", "to the Oathkeeper",
+    "to an ancestor-lord", "to the Maker Under the Mountain", "to a war-god of the holds",
+    "to the Hammer-Lord", "to the Deep Wardens",
+  ],
+  halfling: [
+    "to the Hearth-Mother", "to a god of the harvest", "to the Green Grandmother",
+    "to a saint of the open road", "to the keeper of home and larder", "to a luck-spirit",
+    "to the Well-Wisher", "to the Old Gaffer of legend",
+  ],
+  gnome: [
+    "to the Great Tinker", "to a god of cogs and springs", "to the Spark-Bringer",
+    "to a keeper of hidden things", "to the Deep Delver", "to the Clockwork Maker",
+    "to a trickster of the warrens", "to the Lantern-Lighter",
+  ],
+};
+
+// A line of racial script/language on a POI or heritage ruin.
+export const RACE_INSCRIPTIONS = {
+  elf: [
+    "flowing Elvish script curls across the arch", "a verse in a fair tongue, half worn away",
+    "silver letters catch what light there is", "graceful runes naming the long-dead",
+    "a song rendered in looping glyphs",
+  ],
+  dwarf: [
+    "angular dwarf-runes cut deep and sure", "a graven oath in the dwarvish tongue",
+    "rune-rows tally names and old grievances", "hammer-struck glyphs ring the lintel",
+    "a maker's mark stamped into the stone",
+  ],
+  halfling: [
+    "a homely rhyme scratched beside the door", "names and harvest-dates in a round hand",
+    "a proverb about pies and patience", "chalk-marks of some long-settled account",
+    "a child's alphabet worn nearly smooth",
+  ],
+  gnome: [
+    "tiny cramped glyphs packed with footnotes", "a schematic more than a script",
+    "cipher-runes that seem to shift as you read", "labels in a busy tinker's shorthand",
+    "a diagram annotated in three colours of ink",
+  ],
+};
+
+// Dungeon-theme preference by builder race — a weight MULTIPLIER applied to the
+// terrain's theme table (js/gen/terrain-profile.js DUNGEON_THEME_BIAS). Only
+// themes the terrain already offers are affected, so a race just leans the mix
+// toward its own works (dwarves -> mines/vaults, elves -> tombs/sanctums).
+export const RACE_DUNGEON_THEMES = {
+  dwarf: { "Abandoned mine": 5, "Prison vaults": 4, "Ruined fort": 3, "Cave complex": 2, Mausoleum: 2 },
+  elf: { "Forgotten tomb": 4, Ruin: 3, "Wizard's sanctum": 3, "Cult shrine": 2, Mausoleum: 2, "Beast den": 2 },
+  gnome: { "Abandoned mine": 4, "Cave complex": 3, "Wizard's sanctum": 3, "Prison vaults": 2, "Flooded cistern": 2 },
+  halfling: { Ruin: 2, "Forgotten tomb": 2, "Flooded cistern": 2 },
+};

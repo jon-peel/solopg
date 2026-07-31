@@ -1462,6 +1462,8 @@ function buildFeatureDetail(poi, terrain, q, r, n, tables) {
     type: poi.type,
     terrain,
     occupant: poi.occupant,
+    // Who holds/built the site (stamped by syncCultures) — flavours a shrine's deity.
+    race: (poi.heritage && poi.heritage.race) || poi.cultureRace,
   });
   const name = featureName(poi.detail.feature);
   if (name) poi.name = name;
