@@ -1055,6 +1055,10 @@ function renderSelection() {
     // and the button-only roller, offered only when this hex is a monastery.
     research: researchResults[`${q},${r}`] || null,
     onResearch: hex && hex.settlement && hex.settlement.monastery ? () => onResearch(q, r) : undefined,
+    // Monastery catacombs (Phase 15, Step 7): offered only when the house sits over
+    // an explorable underground. The handler lazily creates a "Catacombs" dungeon
+    // POI on this hex and opens it, reusing the existing dungeon interior system.
+    onExploreCatacombs: hex && hex.settlement && hex.settlement.monastery && hex.settlement.monastery.catacombs ? () => onExploreCatacombs(q, r) : undefined,
     onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
     onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
@@ -2044,6 +2048,33 @@ async function onResearch(q, r) {
   researchResults[`${q},${r}`] = { line };
   logLine(`📚 Research (${hex.settlement.monastery.library}): ${line}`);
   renderSelection();
+}
+
+// "Explore the catacombs" — a monastery with an underground opens into the
+// Dungeon View, REUSING the existing dungeon interior system (no new generator).
+// On first explore we materialise a persistent "Catacombs" dungeon POI on the
+// hex (its size taken from the baked catacombs decision); thereafter the same POI
+// is reopened. onSelectPoi does the lazy interior build + openDungeonView. The
+// POI also shows in the hex's normal POI list — that's fine.
+async function onExploreCatacombs(q, r) {
+  const hex = current && getHex(current, q, r);
+  const mon = hex && hex.settlement && hex.settlement.monastery;
+  if (!mon || !mon.catacombs) return;
+  hex.pois = hex.pois || [];
+  let poi = hex.pois.find((p) => p.detail && p.detail.catacombs);
+  if (!poi) {
+    const n = nextPoiId(hex);
+    poi = {
+      id: `poi:${n}`,
+      type: "dungeon",
+      name: "Catacombs",
+      occupant: { kind: "none" },
+      detail: { theme: "Catacombs", sizeHint: mon.catacombs.size, catacombs: true },
+    };
+    hex.pois.push(poi);
+    await persistAndRefresh();
+  }
+  await onSelectPoi(poi.id); // reuses the lazy build + openDungeonView
 }
 
 // Add one more tavern (a fresh roll on a monotonic per-settlement counter, so

@@ -17,8 +17,10 @@
 // (RACE_DEITIES) and leans its output toward its people's crafts
 // (RACE_MONASTERY_PRODUCTS); a Human house (no `settlement.race`) rolls the plain
 // shrine-dedication / product tables. A big/old house is more often KNOWN FOR a
-// notable relic (size-scaled RELIC_CHANCE). A later step (8) fills secret/
-// catacombs onto the same object — this bake deliberately leaves those absent.
+// notable relic (size-scaled RELIC_CHANCE) and more often sits over an explorable
+// CATACOMBS (size-scaled CATACOMBS_CHANCE) — the underground REUSES the existing
+// dungeon interior system (no new generator; built lazily on first explore). A
+// later step (8) fills `secret` onto the same object — this bake leaves it absent.
 
 import { subRng, pick, randInt } from "../core/rng.js";
 import { rollTable } from "../core/table.js";
@@ -60,6 +62,17 @@ const LIBRARY_LABEL = {
 // sub-stream stays position-stable regardless of size; only a passing gate then
 // draws the relic table. Unknown size falls back to Village.
 const RELIC_CHANCE = { Hamlet: 0.05, Village: 0.12, Town: 0.30, City: 0.55 };
+
+// Size -> chance the house has an explorable CATACOMBS beneath it (Phase 15,
+// Step 7), and the dungeon SIZE that underground reuses. A big/old house is far
+// likelier to sit over a warren of crypts and undercrofts, so rarity scales off
+// the effective SIZE. The gate is rolled UNCONDITIONALLY in the stamp stream (see
+// below) so the sub-stream stays position-stable regardless of size; the size ->
+// dungeon-size lookup consumes NO rng. Unknown size falls back to Village. The
+// underground REUSES the existing dungeon interior system (no new generator): a
+// "Catacombs"-themed dungeon of the mapped size, built lazily on first explore.
+const CATACOMBS_CHANCE = { Hamlet: 0.08, Village: 0.20, Town: 0.45, City: 0.75 };
+const CATACOMBS_DUNGEON_SIZE = { Hamlet: "Cramped", Village: "Modest", Town: "Sizable", City: "Sprawling" };
 
 /**
  * Sample `count` DISTINCT entries from a weighted list WITHOUT replacement,
@@ -143,8 +156,9 @@ export function monasteryName(rng, nameTable, { race } = {}) {
  * flag, so a later re-derive with the same inputs never re-rolls it. Idempotent and
  * cheap when nothing is pending. Each hex rolls from its own
  * `subRng(seed,"monastery-stamp",q,r,gen)` sub-stream in a FIXED order (count →
- * dedication → industries → provisioning → trait → name → relic), so the batch is
- * order-independent and byte-deterministic in (seed,q,r,gen,size,race)+tables.
+ * dedication → industries → provisioning → trait → name → relic → catacombs), so
+ * the batch is order-independent and byte-deterministic in
+ * (seed,q,r,gen,size,race)+tables.
  *
  * @param {number|string} seed
  * @param {{coords?:{q:number,r:number}, gen?:number, settlement?:object}[]} placedHexes
@@ -213,8 +227,19 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       ? rollTable(tables.get("monastery-relic"), rng).value
       : null;
 
+    // 9. Catacombs — whether a big/old house has an explorable underground, rolled
+    //    AFTER the relic at a documented, fixed position (Step 8's `secret` slots
+    //    in after this). Gate is size-scaled but drawn UNCONDITIONALLY (one rng()
+    //    either way) so the stream position is stable across sizes; the size ->
+    //    dungeon-size lookup uses no rng. When present, only the dungeon SIZE is
+    //    stored here — the interior itself REUSES the existing dungeon system and
+    //    is built lazily on first explore (js/ui/app.js onExploreCatacombs).
+    const catacombs = rng() < (CATACOMBS_CHANCE[size] ?? CATACOMBS_CHANCE.Village)
+      ? { size: CATACOMBS_DUNGEON_SIZE[size] ?? CATACOMBS_DUNGEON_SIZE.Village }
+      : null;
+
     // Freeze — omit absent optional fields so the object stays clean. Step 8 adds
-    // secret/catacombs onto this same object later.
+    // secret onto this same object later.
     h.settlement.monastery = {
       name,
       dedication,
@@ -224,6 +249,7 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       ...(provisioning ? { provisioning } : {}),
       ...(trait ? { trait } : {}),
       ...(relic ? { relic } : {}),
+      ...(catacombs ? { catacombs } : {}),
     };
   }
   return placedHexes;

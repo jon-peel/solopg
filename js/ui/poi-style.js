@@ -34,6 +34,10 @@ export const THEME_GLYPHS = {
   "Ghoul warren": "💀",
   "Troglodyte caves": "🦎",
   "Ogre lair": "👹",
+  // Catacombs (Phase 15, Step 7) — a monastery's explorable underground. NOT a
+  // rollable wilderness theme (absent from data/dungeon-theme.json on purpose);
+  // this glyph serves the catacombs POI a monastery creates on first explore.
+  Catacombs: "🪦",
 };
 
 export const SETTLEMENT_GLYPH = "🏠";

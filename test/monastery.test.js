@@ -225,6 +225,70 @@ test("a plain settlement and a keep never receive a relic", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Catacombs (Step 7) — an explorable underground on big/old houses, size-scaled
+// rarity; when present it stores the dungeon SIZE the interior reuses.
+// ---------------------------------------------------------------------------
+
+// Size -> the dungeon size the catacombs reuse (mirrors CATACOMBS_DUNGEON_SIZE).
+const CATACOMBS_SIZE = { Hamlet: "Cramped", Village: "Modest", Town: "Sizable", City: "Sprawling" };
+
+test("catacombs is deterministic and idempotent like the other baked fields", () => {
+  // Use a City so the field is very likely present for the reproducibility check.
+  const a = bake("catadet", 3, 7, "City", "dwarf");
+  const b = bake("catadet", 3, 7, "City", "dwarf");
+  assert.equal("catacombs" in a, "catacombs" in b, "catacombs presence not reproducible");
+  assert.deepEqual(a.catacombs, b.catacombs, "catacombs not reproducible");
+  // Idempotent — a re-run must not change the stored catacombs (or its absence).
+  const h = monHex(4, 4, "City", "elf");
+  stampMonasteries("cataidem", [h], tables);
+  const first = JSON.parse(JSON.stringify(h.settlement.monastery));
+  stampMonasteries("cataidem", [h], tables);
+  assert.deepEqual(h.settlement.monastery, first, "catacombs changed on re-run");
+});
+
+test("catacombs, when present, store the dungeon size mapped from the monastery size", () => {
+  for (const [size, dungeonSize] of Object.entries(CATACOMBS_SIZE)) {
+    let withCata = 0;
+    for (let q = 0; q < 120; q++) {
+      const m = bake("cataval", q, q * 5 + 3, size);
+      if ("catacombs" in m) {
+        assert.equal(m.catacombs.size, dungeonSize, `${size} catacombs should reuse dungeon size "${dungeonSize}"`);
+        withCata++;
+      }
+    }
+    assert.ok(withCata > 0, `${size} sweep should produce at least some catacombs`);
+  }
+});
+
+test("catacombs rarity scales strictly by size: City > Town > Village > Hamlet", () => {
+  // Count how many single-monastery hexes of each size land catacombs across a
+  // large sample of DISTINCT coords (each its own sub-stream). The fraction must be
+  // strictly monotonic in size, matching CATACOMBS_CHANCE (0.08/0.20/0.45/0.75).
+  const N = 1500;
+  const rate = {};
+  for (const size of ["Hamlet", "Village", "Town", "City"]) {
+    let withCata = 0;
+    for (let i = 0; i < N; i++) {
+      // Vary q AND r so every hex draws its own distinct sub-stream.
+      const m = bake("catararity", i, 20000 - i, size);
+      if ("catacombs" in m) withCata++;
+    }
+    rate[size] = withCata / N;
+  }
+  assert.ok(rate.City > rate.Town, `City rate ${rate.City} must exceed Town ${rate.Town}`);
+  assert.ok(rate.Town > rate.Village, `Town rate ${rate.Town} must exceed Village ${rate.Village}`);
+  assert.ok(rate.Village > rate.Hamlet, `Village rate ${rate.Village} must exceed Hamlet ${rate.Hamlet}`);
+});
+
+test("a plain settlement and a keep never receive catacombs", () => {
+  const plain = { coords: { q: 1, r: 0 }, gen: 0, settlement: { present: true, size: "City" } };
+  const keep = { coords: { q: 2, r: 0 }, gen: 0, settlement: { present: true, kind: "keep", size: "City" } };
+  stampMonasteries("nocata", [plain, keep], tables);
+  assert.equal(plain.settlement.monastery, undefined, "a plain settlement must not be baked (no catacombs)");
+  assert.equal(keep.settlement.monastery, undefined, "a keep must not be baked (no catacombs)");
+});
+
+// ---------------------------------------------------------------------------
 // gen re-bake independence: each `gen` is its own deterministic sub-stream.
 // ---------------------------------------------------------------------------
 

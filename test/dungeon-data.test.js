@@ -34,3 +34,14 @@ test("every family referenced by a theme exists in monster-families", () => {
     }
   }
 });
+
+test("Catacombs is a glyphed, family-mapped theme but NOT a rollable wilderness theme", () => {
+  // Step 7: a monastery's underground reuses the dungeon interior with theme
+  // "Catacombs". It needs a glyph and a family spread, but must NOT be added to
+  // dungeon-theme.json — it must never surface as a rollable wilderness dungeon.
+  assert.ok(THEME_GLYPHS.Catacombs, "Catacombs has a THEME_GLYPHS entry");
+  const mapped = new Set(read("dungeon-family").entries.map((e) => e.value.theme));
+  assert.ok(mapped.has("Catacombs"), "Catacombs has a dungeon-family mapping");
+  const wildernessThemes = new Set(read("dungeon-theme").entries.map((e) => e.value));
+  assert.equal(wildernessThemes.has("Catacombs"), false, "Catacombs is intentionally absent from dungeon-theme.json");
+});

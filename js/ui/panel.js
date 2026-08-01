@@ -845,6 +845,9 @@ export function renderSelectionPanel(model) {
         monLine(`Produces: ${m.industries.join(", ")}`);
         monLine(`Library: ${m.library}`);
         if (m.trait) monLine(m.trait, true);
+        // Catacombs (Step 7) — signal an explorable underground beneath the house.
+        // Emphasised like the relic/trait headline. Never surfaces `secret`.
+        if (m.catacombs) monLine("Has catacombs beneath", true);
         box.appendChild(mon);
         // Library research (Phase 15) — a button-only GM roll under the house's
         // facts: the app reports only the RESULT TIER, the GM names the actual
@@ -869,6 +872,20 @@ export function renderSelectionPanel(model) {
             res.appendChild(line);
             box.appendChild(res);
           }
+        }
+        // Explore the catacombs (Step 7) — a button-only affordance that opens the
+        // house's underground in the Dungeon View (reusing the dungeon interior
+        // system). Offered only when the house has catacombs. Mirrors the research
+        // row; never reads `secret`. The created POI also lists below normally.
+        if (m.catacombs && model.onExploreCatacombs) {
+          const row = document.createElement("div");
+          row.className = "sel-research";
+          const label = document.createElement("span");
+          label.className = "sel-mon-line";
+          label.textContent = "Descend below:";
+          row.appendChild(label);
+          row.appendChild(actionButton("Explore the catacombs", () => model.onExploreCatacombs()));
+          box.appendChild(row);
         }
       }
       sel.appendChild(box);
