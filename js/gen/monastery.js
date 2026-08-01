@@ -39,6 +39,19 @@ const MONASTERY_SIZE_RULES = {
 // uniform whether or not a trait lands.
 const TRAIT_CHANCE = 0.5;
 
+// Size -> the house's LIBRARY tier (Phase 15, Step 5) — a bigger house keeps a
+// bigger collection. A PURE lookup off the effective size (consumes NO rng), so
+// it never perturbs the stamp stream and can be baked anywhere in the object. The
+// tier LABEL is player-facing flavour; the research odds it drives live in the
+// oracle (RESEARCH_ODDS), keyed by the same size. Unknown size falls back to
+// Village.
+const LIBRARY_LABEL = {
+  Hamlet: "a few shelves",
+  Village: "a modest library",
+  Town: "a fine library",
+  City: "a renowned library",
+};
+
 /**
  * Sample `count` DISTINCT entries from a weighted list WITHOUT replacement,
  * returning their `value`s as a string[]. Running-subtraction weighted pick (like
@@ -188,6 +201,7 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       dedication,
       selfSufficient: rule.selfSufficient,
       industries,
+      library: LIBRARY_LABEL[size] ?? LIBRARY_LABEL.Village,
       ...(provisioning ? { provisioning } : {}),
       ...(trait ? { trait } : {}),
     };

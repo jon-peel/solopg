@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS, ENCOUNTER_CHANCE } from "../js/gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, rollResearch, oracleLine, ORACLE_LABELS, ORACLE_ODDS, DEFAULT_ODDS, ORACLE_TABLE_IDS, ENCOUNTER_CHANCE, RESEARCH_ODDS } from "../js/gen/oracle.js";
 import { validateTable } from "../js/core/table.js";
 import { mulberry32 } from "../js/core/rng.js";
 
@@ -275,4 +275,75 @@ test("oracleLine composes an encounter hit and a miss; label present", () => {
   assert.equal(oracleLine({ kind: "encounter", terrain: "Forest", encounter: true }), "Encounter! Roll a Forest wilderness encounter on your table.");
   assert.equal(oracleLine({ kind: "encounter", terrain: "Hills", encounter: false }), "No encounter (Hills).");
   assert.equal(ORACLE_LABELS.encounter, "Wilderness encounter");
+});
+
+// --- Library research check (Phase 15) ---
+
+const RESEARCH_SIZES = ["Hamlet", "Village", "Town", "City"];
+const RESEARCH_TIERS = ["exact", "related", "topical", "nothing"];
+
+test("rollResearch is deterministic for a given seed + size", () => {
+  for (const size of RESEARCH_SIZES) {
+    for (const s of [1, 7, 42, 1000]) {
+      const a = rollResearch(mulberry32(s), size);
+      const b = rollResearch(mulberry32(s), size);
+      assert.deepEqual(a, b, `${size} seed ${s} not reproducible`);
+      assert.equal(a.kind, "research");
+      assert.equal(a.size, size);
+      assert.ok(RESEARCH_TIERS.includes(a.result), `result "${a.result}" is a known tier`);
+    }
+  }
+});
+
+test("every RESEARCH_ODDS ladder sums to ~1", () => {
+  for (const size of RESEARCH_SIZES) {
+    const sum = RESEARCH_ODDS[size].reduce((acc, [, p]) => acc + p, 0);
+    assert.ok(Math.abs(sum - 1) <= 1e-9, `${size} ladder sums to ${sum}, not 1`);
+  }
+});
+
+test("research skews monotonically by size: P(exact) up, P(nothing) down City>Town>Village>Hamlet", () => {
+  const N = 5000;
+  const rate = (size) => {
+    const rng = mulberry32(2024);
+    let exact = 0, nothing = 0;
+    for (let i = 0; i < N; i++) {
+      const res = rollResearch(rng, size).result;
+      if (res === "exact") exact++;
+      else if (res === "nothing") nothing++;
+    }
+    return { exact: exact / N, nothing: nothing / N };
+  };
+  const h = rate("Hamlet"), v = rate("Village"), t = rate("Town"), c = rate("City");
+  // P(exact) strictly increases with size.
+  assert.ok(h.exact < v.exact, `exact Hamlet ${h.exact} !< Village ${v.exact}`);
+  assert.ok(v.exact < t.exact, `exact Village ${v.exact} !< Town ${t.exact}`);
+  assert.ok(t.exact < c.exact, `exact Town ${t.exact} !< City ${c.exact}`);
+  // P(nothing) strictly decreases with size.
+  assert.ok(h.nothing > v.nothing, `nothing Hamlet ${h.nothing} !> Village ${v.nothing}`);
+  assert.ok(v.nothing > t.nothing, `nothing Village ${v.nothing} !> Town ${t.nothing}`);
+  assert.ok(t.nothing > c.nothing, `nothing Town ${t.nothing} !> City ${c.nothing}`);
+});
+
+test("rollResearch falls back to Village odds for an unknown size", () => {
+  // Same rng stream + fallback ladder must yield the same tier as an explicit Village.
+  for (const s of [3, 11, 99, 7777]) {
+    const unknown = rollResearch(mulberry32(s), "Keep");
+    const village = rollResearch(mulberry32(s), "Village");
+    assert.equal(unknown.result, village.result, `seed ${s}: unknown size did not use Village odds`);
+    assert.equal(unknown.size, "Keep", "the reported size echoes the requested size");
+  }
+});
+
+test("oracleLine returns a non-empty prompt for every research tier; label present", () => {
+  for (const size of RESEARCH_SIZES) {
+    for (const result of RESEARCH_TIERS) {
+      const line = oracleLine({ kind: "research", size, result });
+      assert.ok(typeof line === "string" && line.length > 0, `${size}/${result} produced no prompt`);
+    }
+  }
+  // Each tier's prompt is distinct (the GM is cued differently per outcome).
+  const lines = RESEARCH_TIERS.map((result) => oracleLine({ kind: "research", size: "Town", result }));
+  assert.equal(new Set(lines).size, RESEARCH_TIERS.length, "research prompts are not all distinct");
+  assert.equal(ORACLE_LABELS.research, "Library research");
 });

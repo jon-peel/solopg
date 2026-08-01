@@ -294,6 +294,40 @@ test("monasteryName: a demihuman (dwarf) house can take its own people's name-st
 // stampMonasteries now stores a proper `name` (Step 3).
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Library tier (Step 5) — a pure size->label lookup baked onto the house.
+// ---------------------------------------------------------------------------
+
+test("stampMonasteries bakes a library label that maps by size", () => {
+  const expected = {
+    Hamlet: "a few shelves",
+    Village: "a modest library",
+    Town: "a fine library",
+    City: "a renowned library",
+  };
+  for (const [size, label] of Object.entries(expected)) {
+    // Sweep coords so the value is a stable property of size, not one lucky roll.
+    for (let q = 0; q < 8; q++) {
+      const m = bake("lib", q, q * 2 + 1, size);
+      assert.equal(m.library, label, `${size} library should be "${label}"`);
+    }
+  }
+});
+
+test("library is deterministic and idempotent like the other baked fields", () => {
+  const a = bake("libdet", 3, 7, "Town", "dwarf");
+  const b = bake("libdet", 3, 7, "Town", "dwarf");
+  assert.equal(a.library, "a fine library");
+  assert.equal(b.library, a.library, "library not reproducible");
+  // Idempotent — a re-run must not change the stored label.
+  const h = monHex(4, 4, "City", "elf");
+  stampMonasteries("libidem", [h], tables);
+  const first = h.settlement.monastery.library;
+  assert.equal(first, "a renowned library");
+  stampMonasteries("libidem", [h], tables);
+  assert.equal(h.settlement.monastery.library, first, "library changed on re-run");
+});
+
 test("stampMonasteries stores a non-empty proper name, deterministic and idempotent", () => {
   for (const size of ["Hamlet", "Village", "Town", "City"]) {
     const a = bake("nm", 4, 9, size, "dwarf");

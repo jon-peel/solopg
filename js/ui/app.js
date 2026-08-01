@@ -56,7 +56,7 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, rollResearch, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { rollWanderingEncounter } from "../gen/wandering.js";
 import { buildBestiary, telegraphFor } from "../gen/bestiary.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
@@ -197,6 +197,10 @@ let oracleSeq = 0;
 // memory keyed by "q,r", shown inline on each card, never persisted. A town card
 // auto-rolls one the first time it opens; re-opens keep the last (↻ re-rolls).
 let settlementSituations = {}; // { [`${q},${r}`]: { line, note } }
+// Monastery library-research results (Phase 15): a transient, in-memory GM aid
+// like the situations — keyed by "q,r", shown inline on the monastery card,
+// never persisted or exported. Button-only (no auto-roll); ↻ re-rolls.
+let researchResults = {}; // { [`${q},${r}`]: { line } }
 
 // Faction detail popup (Phase 12.1) — the id of the faction whose floating card
 // is open over the map (via a legend "Powers" row), or null when closed. Replaces
@@ -278,6 +282,7 @@ async function setCurrent(world) {
   oracleResults = {}; // the oracle results are a transient per-session aid
   oracleSeq = 0;
   settlementSituations = {}; // ...as are the town "What's stirring?" situations
+  researchResults = {}; // ...as are the monastery library-research results
   wanderingResult = null; // ...as is the wandering-encounter roll
   wanderingSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
@@ -1046,6 +1051,10 @@ function renderSelection() {
     // The situation only belongs to the currently-selected hex.
     situation: settlementSituations[`${q},${r}`] || null,
     onRollSituation: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onRollSituation(q, r) : undefined,
+    // Monastery library research (Phase 15): the last result for this hex (or null)
+    // and the button-only roller, offered only when this hex is a monastery.
+    research: researchResults[`${q},${r}`] || null,
+    onResearch: hex && hex.settlement && hex.settlement.monastery ? () => onResearch(q, r) : undefined,
     onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
     onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
@@ -2020,6 +2029,20 @@ async function onRollSituation(q, r) {
   const situation = { line: oracleLine(pick), note: pick.factionNote ? "⚑ " + pick.factionNote : null };
   settlementSituations[`${q},${r}`] = situation;
   logLine(`🎲 What's stirring: ${situation.line}${situation.note ? " · " + situation.note : ""}`);
+  renderSelection();
+}
+
+// "Research the library" — roll the monastery's library odds by its size and show
+// only the RESULT TIER as a GM prompt (the GM names the actual book/answer). A
+// transient, in-memory aid keyed to the hex (never saved). Button-only — no
+// auto-roll — and each press re-rolls. No table load: research is const-based.
+async function onResearch(q, r) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !hex.settlement.monastery) return;
+  const pick = rollResearch(subRng(current.seed, "oracle", "research", oracleSeq++), hex.settlement.size);
+  const line = oracleLine(pick);
+  researchResults[`${q},${r}`] = { line };
+  logLine(`📚 Research (${hex.settlement.monastery.library}): ${line}`);
   renderSelection();
 }
 

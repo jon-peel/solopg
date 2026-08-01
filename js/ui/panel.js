@@ -840,8 +840,33 @@ export function renderSelectionPanel(model) {
         monLine(`Dedicated ${m.dedication}`);
         monLine(m.selfSufficient ? "Self-sufficient" : `Dependent — ${m.provisioning}`);
         monLine(`Produces: ${m.industries.join(", ")}`);
+        monLine(`Library: ${m.library}`);
         if (m.trait) monLine(m.trait, true);
         box.appendChild(mon);
+        // Library research (Phase 15) — a button-only GM roll under the house's
+        // facts: the app reports only the RESULT TIER, the GM names the actual
+        // book/answer (it never invents a title). The last result renders below
+        // as a gold callout, styled like the town situation. A monastery's hidden
+        // `secret` is never surfaced here (kept the discipline).
+        if (model.onResearch) {
+          const row = document.createElement("div");
+          row.className = "sel-research";
+          const label = document.createElement("span");
+          label.className = "sel-mon-line";
+          label.textContent = "Consult the stacks:";
+          row.appendChild(label);
+          row.appendChild(actionButton("Research the library", () => model.onResearch()));
+          box.appendChild(row);
+          if (model.research) {
+            const res = document.createElement("div");
+            res.className = "research-result";
+            const line = document.createElement("div");
+            line.className = "research-line";
+            line.textContent = model.research.line;
+            res.appendChild(line);
+            box.appendChild(res);
+          }
+        }
       }
       sel.appendChild(box);
 
