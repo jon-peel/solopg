@@ -5,6 +5,7 @@ import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
+import { publicMonasteryFields } from "../gen/monastery.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
 import { RACES, RACE_LABELS } from "../gen/culture-data.js";
 import { cultureBand } from "./culture-style.js";
@@ -827,8 +828,11 @@ export function renderSelectionPanel(model) {
       // Monastery detail (Phase 15) — the wholesome, player-facing facts of a
       // religious house (baked by syncCultures). A sequence of appended lines so
       // later steps can extend it; it must NEVER read any hidden `secret` field.
+      // The block builds from publicMonasteryFields, which STRIPS the GM-only
+      // `secret`/`secretGuardsRelic` (Step 8) — so those fields are structurally
+      // absent here and the panel physically cannot render them (§2.7).
       if (hex.settlement.monastery) {
-        const m = hex.settlement.monastery;
+        const m = publicMonasteryFields(hex.settlement.monastery);
         const mon = document.createElement("div");
         mon.className = "sel-monastery";
         const monLine = (text, emphasis) => {
@@ -885,6 +889,21 @@ export function renderSelectionPanel(model) {
           label.textContent = "Descend below:";
           row.appendChild(label);
           row.appendChild(actionButton("Explore the catacombs", () => model.onExploreCatacombs()));
+          box.appendChild(row);
+        }
+        // GM reveal (Step 8) — a UNIFORM "Reveal the truth" control present on EVERY
+        // monastery (NOT gated on a secret existing: its presence must not signal
+        // which houses are tainted, §2.7). The result is spoken into the log via
+        // model.onRevealSecret (a wholesome all-clear when the house hides nothing).
+        // This block never references `secret` — impossible via the sanitized `m`.
+        if (model.onRevealSecret) {
+          const row = document.createElement("div");
+          row.className = "sel-research";
+          const label = document.createElement("span");
+          label.className = "sel-mon-line";
+          label.textContent = "GM only:";
+          row.appendChild(label);
+          row.appendChild(actionButton("Reveal the truth", () => model.onRevealSecret()));
           box.appendChild(row);
         }
       }

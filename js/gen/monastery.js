@@ -19,8 +19,12 @@
 // shrine-dedication / product tables. A big/old house is more often KNOWN FOR a
 // notable relic (size-scaled RELIC_CHANCE) and more often sits over an explorable
 // CATACOMBS (size-scaled CATACOMBS_CHANCE) — the underground REUSES the existing
-// dungeon interior system (no new generator; built lazily on first explore). A
-// later step (8) fills `secret` onto the same object — this bake leaves it absent.
+// dungeon interior system (no new generator; built lazily on first explore). A RARE
+// few houses (a few percent) also hide a `secret` — a GM/discovery-only darkness
+// (Phase 15, Step 8) rolled LAST. The secret (and its `secretGuardsRelic` linkage)
+// is NEVER in the player-facing panel: publicMonasteryFields strips it, so the
+// surface (and even the EXISTENCE of a secret, §2.7) stays invisible; it surfaces
+// only on catacomb descent or a uniform GM reveal (monasterySecretReveal).
 
 import { subRng, pick, randInt } from "../core/rng.js";
 import { rollTable } from "../core/table.js";
@@ -73,6 +77,15 @@ const RELIC_CHANCE = { Hamlet: 0.05, Village: 0.12, Town: 0.30, City: 0.55 };
 // "Catacombs"-themed dungeon of the mapped size, built lazily on first explore.
 const CATACOMBS_CHANCE = { Hamlet: 0.08, Village: 0.20, Town: 0.45, City: 0.75 };
 const CATACOMBS_DUNGEON_SIZE = { Hamlet: "Cramped", Village: "Modest", Town: "Sizable", City: "Sprawling" };
+
+// Chance a house hides a GM/discovery-only `secret` (Phase 15, Step 8). Flat and
+// RARE — a few percent — so most houses are exactly what they seem; the secret is
+// NOT size-scaled (a humble priory can hide the worst of all). Rolled LAST in the
+// stamp order. The secret is NEVER player-facing (publicMonasteryFields strips it).
+const SECRET_CHANCE = 0.06;              // a few percent — most houses are wholesome
+// When a house has BOTH a secret and a relic, the secret often IS the relic — the
+// treasure they venerate is the very thing that should have stayed sealed (§2.9).
+const SECRET_GUARDS_RELIC_CHANCE = 0.5;  // when both exist, the secret often IS the relic
 
 /**
  * Sample `count` DISTINCT entries from a weighted list WITHOUT replacement,
@@ -156,15 +169,15 @@ export function monasteryName(rng, nameTable, { race } = {}) {
  * flag, so a later re-derive with the same inputs never re-rolls it. Idempotent and
  * cheap when nothing is pending. Each hex rolls from its own
  * `subRng(seed,"monastery-stamp",q,r,gen)` sub-stream in a FIXED order (count →
- * dedication → industries → provisioning → trait → name → relic → catacombs), so
- * the batch is order-independent and byte-deterministic in
+ * dedication → industries → provisioning → trait → name → relic → catacombs →
+ * secret), so the batch is order-independent and byte-deterministic in
  * (seed,q,r,gen,size,race)+tables.
  *
  * @param {number|string} seed
  * @param {{coords?:{q:number,r:number}, gen?:number, settlement?:object}[]} placedHexes
  * @param {Map<string,object>} tables must include monastery-product,
  *   monastery-provisioning, monastery-trait, shrine-dedication, monastery-name,
- *   monastery-relic.
+ *   monastery-relic, monastery-secret.
  * @param {object} [opts] reserved for later steps; unused here.
  * @returns {object[]} the same array (mutated)
  */
@@ -238,8 +251,22 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       ? { size: CATACOMBS_DUNGEON_SIZE[size] ?? CATACOMBS_DUNGEON_SIZE.Village }
       : null;
 
-    // Freeze — omit absent optional fields so the object stays clean. Step 8 adds
-    // secret onto this same object later.
+    // 10. Secret — a RARE (flat, a few percent) GM/discovery-only darkness, rolled
+    //     LAST so it never perturbs any earlier stream position. The gate is drawn
+    //     UNCONDITIONALLY (one rng() either way) for stream stability; only a
+    //     passing gate then draws the secret table. When a secret fired AND the
+    //     house keeps a relic, one further draw decides whether the secret IS that
+    //     relic (§2.9). This field is NEVER player-facing — publicMonasteryFields
+    //     strips it before the panel ever sees the object.
+    let secret = null, secretGuardsRelic = false;
+    if (rng() < SECRET_CHANCE) {                              // unconditional gate for stream stability
+      secret = rollTable(tables.get("monastery-secret"), rng).value;
+      if (relic) secretGuardsRelic = rng() < SECRET_GUARDS_RELIC_CHANCE;
+    }
+
+    // Freeze — omit absent optional fields so the object stays clean. The hidden
+    // secret / secretGuardsRelic are stored on the SAME object (they are GM-only:
+    // the panel builds from publicMonasteryFields, which strips them).
     h.settlement.monastery = {
       name,
       dedication,
@@ -250,7 +277,28 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       ...(trait ? { trait } : {}),
       ...(relic ? { relic } : {}),
       ...(catacombs ? { catacombs } : {}),
+      ...(secret ? { secret } : {}),
+      ...(secret && secretGuardsRelic ? { secretGuardsRelic: true } : {}),
     };
   }
   return placedHexes;
+}
+
+// The player-facing subset of a baked monastery — the wholesome facts only. The
+// hidden `secret` (and its relic linkage) are GM/discovery-only and are stripped
+// here so the panel physically cannot render them (§2.7). Test-enforced.
+export function publicMonasteryFields(m) {
+  if (!m) return m;
+  const { secret, secretGuardsRelic, ...pub } = m;
+  return pub;
+}
+
+// The GM/discovery reveal string for a house. When there is no secret it returns a
+// wholesome all-clear (so a universal reveal control never leaks which houses are
+// tainted). When present, ties in the relic if the secret guards it (§2.9).
+export function monasterySecretReveal(m) {
+  if (!m || !m.secret) return "This house is exactly what it seems — no hidden darkness.";
+  let s = `The truth of this house: ${m.secret}.`;
+  if (m.secretGuardsRelic && m.relic) s += ` The ${m.relic} it keeps is the very thing that should have stayed sealed.`;
+  return s;
 }

@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mulberry32 } from "../js/core/rng.js";
 import { RACE_DEITIES, RACE_NAME_POOLS } from "../js/gen/culture-data.js";
-import { stampMonasteries, pickDistinctWeighted, monasteryName } from "../js/gen/monastery.js";
+import { stampMonasteries, pickDistinctWeighted, monasteryName, publicMonasteryFields, monasterySecretReveal } from "../js/gen/monastery.js";
 
 // --- table shim -------------------------------------------------------------
 // The pure generator takes a preloaded Map of tables (same contract app.js gives
 // it via loadTables). Load the shipped JSON straight off disk into a Map.get shim.
-const TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name", "monastery-relic"];
+const TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name", "monastery-relic", "monastery-secret"];
 const tables = new Map(TABLE_IDS.map((id) => [id, JSON.parse(readFileSync(`./data/${id}.json`, "utf8"))]));
 
 const PRODUCTS = new Set(tables.get("monastery-product").entries.map((e) => e.value));
@@ -16,6 +16,7 @@ const PROVISIONING = new Set(tables.get("monastery-provisioning").entries.map((e
 const TRAITS = new Set(tables.get("monastery-trait").entries.map((e) => e.value));
 const SHRINE_DEDICATIONS = new Set(tables.get("shrine-dedication").entries.map((e) => e.value));
 const RELICS = new Set(tables.get("monastery-relic").entries.map((e) => e.value));
+const SECRETS = new Set(tables.get("monastery-secret").entries.map((e) => e.value));
 
 // Class-partitioned name elements (Step 3) — for asserting a proper name is
 // composed from the shipped monastery-name table.
@@ -466,4 +467,112 @@ test("stampMonasteries stores a non-empty proper name, deterministic and idempot
   const first = h.settlement.monastery.name;
   stampMonasteries("nm2", [h], tables);
   assert.equal(h.settlement.monastery.name, first, "name changed on re-run");
+});
+
+// ---------------------------------------------------------------------------
+// The secret house (Step 8) — a RARE GM/discovery-only darkness that must NEVER
+// reach the player-facing panel. publicMonasteryFields is the load-bearing guard.
+// ---------------------------------------------------------------------------
+
+// The single most important assertion in the phase: the player-facing subset must
+// NOT carry the hidden secret (nor its relic linkage), but must keep every
+// wholesome field — structurally and in its serialised form.
+test("publicMonasteryFields STRIPS secret + secretGuardsRelic, keeps every wholesome field", () => {
+  const secretText = "the abbot is not what he seems";
+  const m = {
+    name: "Saint Morwenna's Priory",
+    dedication: "to the Silent Watcher",
+    selfSufficient: true,
+    industries: ["wine", "candles"],
+    library: "a renowned library",
+    trait: "renowned",
+    relic: "the Ashen Chalice",
+    catacombs: { size: "Sprawling" },
+    secret: secretText,
+    secretGuardsRelic: true,
+  };
+  const pub = publicMonasteryFields(m);
+  // The two GM-only keys are physically absent (not merely undefined-valued).
+  assert.equal("secret" in pub, false, "publicMonasteryFields must not carry `secret`");
+  assert.equal("secretGuardsRelic" in pub, false, "publicMonasteryFields must not carry `secretGuardsRelic`");
+  // Every wholesome key survives, unchanged.
+  for (const k of ["name", "dedication", "selfSufficient", "industries", "library", "trait", "relic", "catacombs"]) {
+    assert.deepEqual(pub[k], m[k], `wholesome field "${k}" must survive sanitisation`);
+  }
+  // The serialised player subset must not contain the secret text anywhere.
+  assert.ok(!JSON.stringify(pub).includes(secretText), "the secret text must not appear in the serialised player subset");
+  // Purity: the source object is untouched (the secret is still on the raw bake).
+  assert.equal(m.secret, secretText, "publicMonasteryFields must not mutate its input");
+  // Null/undefined passthrough (the panel gate is on the RAW presence check).
+  assert.equal(publicMonasteryFields(null), null);
+  assert.equal(publicMonasteryFields(undefined), undefined);
+});
+
+test("secret is RARE (a few percent), and every present secret is a table value", () => {
+  // Sweep a large set of DISTINCT coords (each its own sub-stream). A secret is flat
+  // and rare, so the fraction is > 0 but clearly small.
+  const N = 3000;
+  let withSecret = 0;
+  for (let i = 0; i < N; i++) {
+    const m = bake("secretrate", i, 40000 - i, "Village");
+    if ("secret" in m) {
+      assert.ok(SECRETS.has(m.secret), `secret "${m.secret}" not in the monastery-secret table`);
+      withSecret++;
+    }
+  }
+  const rate = withSecret / N;
+  assert.ok(rate > 0, "a large sweep should surface at least some secret houses");
+  assert.ok(rate <= 0.12, `secret rate ${rate.toFixed(3)} should be a few percent (<= 0.12)`);
+});
+
+test("secret is deterministic and idempotent like the other baked fields", () => {
+  const a = bake("secretdet", 3, 7, "City", "dwarf");
+  const b = bake("secretdet", 3, 7, "City", "dwarf");
+  assert.equal("secret" in a, "secret" in b, "secret presence not reproducible");
+  assert.equal(a.secret, b.secret, "secret not reproducible");
+  assert.equal(a.secretGuardsRelic, b.secretGuardsRelic, "secretGuardsRelic not reproducible");
+  // Idempotent — a re-run must not change the stored secret (or its absence).
+  const h = monHex(4, 4, "City", "elf");
+  stampMonasteries("secretidem", [h], tables);
+  const first = JSON.parse(JSON.stringify(h.settlement.monastery));
+  stampMonasteries("secretidem", [h], tables);
+  assert.deepEqual(h.settlement.monastery, first, "secret changed on re-run");
+});
+
+test("secretGuardsRelic is present only when BOTH a secret and a relic exist", () => {
+  // Sweep many houses across sizes; whenever secretGuardsRelic is set, the house
+  // MUST also carry both a secret and a relic. It must never appear on its own.
+  for (const size of ["Hamlet", "Village", "Town", "City"]) {
+    for (let i = 0; i < 1500; i++) {
+      const m = bake("guards", i, 60000 - i, size);
+      if ("secretGuardsRelic" in m) {
+        assert.equal(m.secretGuardsRelic, true, "secretGuardsRelic, when present, is always true");
+        assert.ok("secret" in m, `secretGuardsRelic set without a secret (${size} #${i})`);
+        assert.ok("relic" in m, `secretGuardsRelic set without a relic (${size} #${i})`);
+      }
+    }
+  }
+});
+
+test("monasterySecretReveal: speaks the secret, ties in a guarded relic, else an all-clear", () => {
+  const secretText = "a thing lies sealed in the deepest crypt";
+  // A tainted house: the reveal must contain the secret text.
+  const tainted = { dedication: "x", secret: secretText };
+  assert.ok(monasterySecretReveal(tainted).includes(secretText), "reveal must speak the secret text");
+
+  // Secret + guarded relic: the reveal must also mention the relic.
+  const relicText = "the Ashen Chalice";
+  const guarded = { secret: secretText, secretGuardsRelic: true, relic: relicText };
+  const revealed = monasterySecretReveal(guarded);
+  assert.ok(revealed.includes(secretText), "guarded reveal must still speak the secret");
+  assert.ok(revealed.includes(relicText), "guarded reveal must mention the relic it guards");
+
+  // A wholesome house: an all-clear that contains NO secret-table text.
+  const clean = { dedication: "x", relic: relicText };
+  const allClear = monasterySecretReveal(clean);
+  for (const s of SECRETS) {
+    assert.ok(!allClear.includes(s), `the all-clear must not contain any secret-table text ("${s}")`);
+  }
+  // Null passthrough returns the wholesome all-clear (uniform control, never throws).
+  assert.equal(monasterySecretReveal(null), monasterySecretReveal({ dedication: "y" }));
 });

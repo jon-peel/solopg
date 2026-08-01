@@ -33,7 +33,7 @@ import {
 import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { stampSettlements, stampPois } from "../gen/culture.js";
-import { stampMonasteries } from "../gen/monastery.js";
+import { stampMonasteries, monasterySecretReveal } from "../gen/monastery.js";
 import { RACE_SET } from "../gen/culture-data.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
@@ -157,7 +157,7 @@ const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposi
 
 // Tables the monastery bake rolls on (Phase 15, loaded on demand when a monastery
 // settlement needs its `settlement.monastery` filled — see syncMonasteries).
-const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name", "monastery-relic"];
+const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name", "monastery-relic", "monastery-secret"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -1059,6 +1059,11 @@ function renderSelection() {
     // an explorable underground. The handler lazily creates a "Catacombs" dungeon
     // POI on this hex and opens it, reusing the existing dungeon interior system.
     onExploreCatacombs: hex && hex.settlement && hex.settlement.monastery && hex.settlement.monastery.catacombs ? () => onExploreCatacombs(q, r) : undefined,
+    // Monastery secret (Phase 15, Step 8): a UNIFORM GM-only reveal, present for
+    // EVERY monastery (never gated on a secret existing — its presence must not
+    // signal which houses are tainted, §2.7). monasterySecretReveal returns a
+    // wholesome all-clear for a house with no secret.
+    onRevealSecret: hex && hex.settlement && hex.settlement.monastery ? () => onRevealSecret(q, r) : undefined,
     onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
     onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
@@ -2075,6 +2080,22 @@ async function onExploreCatacombs(q, r) {
     await persistAndRefresh();
   }
   await onSelectPoi(poi.id); // reuses the lazy build + openDungeonView
+  // Discovery reveal (Phase 15, Step 8): descending into the crypts uncovers the
+  // house's hidden secret when it has one. Present only for the rare tainted house
+  // — a wholesome house surfaces nothing here (the secret is discovery-only).
+  if (mon.secret) logLine(`🕯️ Descending into the crypts, you uncover: ${mon.secret}`);
+}
+
+// GM-only "Reveal the truth" (Phase 15, Step 8) — the uniform reveal control wired
+// to EVERY monastery. monasterySecretReveal returns the hidden secret for a tainted
+// house or a wholesome all-clear otherwise, so invoking it never leaks (before the
+// fact) which houses hide something. This is the only surface, besides catacomb
+// descent, on which a secret is ever spoken — it is never in the player panel.
+function onRevealSecret(q, r) {
+  const hex = current && getHex(current, q, r);
+  const mon = hex && hex.settlement && hex.settlement.monastery;
+  if (!mon) return;
+  logLine(`🕯️ ${monasterySecretReveal(mon)}`);
 }
 
 // Add one more tavern (a fresh roll on a monotonic per-settlement counter, so
