@@ -84,6 +84,16 @@
       { "weight": 2, "value": "Trolls", "tier": 4 },
       { "weight": 1, "value": "Ettins", "tier": 4 },
       { "weight": 1, "value": "Hill giants", "tier": 4 }
+    ] } },
+    { "value": { "family": "Fallen Order", "elite": "The Fallen Abbot", "members": [
+      { "weight": 3, "value": "Apostate monks", "tier": 1 },
+      { "weight": 2, "value": "Mad flagellants", "tier": 1 },
+      { "weight": 2, "value": "Cloister ghouls", "tier": 2 },
+      { "weight": 2, "value": "Heretic acolytes", "tier": 2 },
+      { "weight": 1, "value": "Skeletal choir", "tier": 3 },
+      { "weight": 1, "value": "Plague-friar revenant", "tier": 3 },
+      { "weight": 1, "value": "The abbot's shade", "tier": 4 },
+      { "weight": 1, "value": "Bell-tolling wraith", "tier": 4 }
     ] } }
   ]
 }

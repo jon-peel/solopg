@@ -387,6 +387,18 @@
       "A single vast chair faces the door, flanked by a heap of skulls, all cracked open at the top.",
       "A club the size of a tree-trunk leans by the wall, worn smooth with long use.",
       "A booming, one-noted mutter carries from ahead, and something huge turns toward the light."
+    ] } },
+    { "value": { "monster": "The Fallen Abbot", "telegraphs": [
+      "A mitre and crozier rest on the high seat, and the seat is not empty."
+    ] } },
+    { "value": { "monster": "Apostate monks", "telegraphs": [
+      "Cowled figures kneel at a defaced altar, lips moving in a prayer run backwards."
+    ] } },
+    { "value": { "monster": "Skeletal choir", "telegraphs": [
+      "A hymn drifts from the nave, sung by voices with no breath to carry it."
+    ] } },
+    { "value": { "monster": "Bell-tolling wraith", "telegraphs": [
+      "The cracked bell tolls once, though no rope was pulled."
     ] } }
   ]
 }

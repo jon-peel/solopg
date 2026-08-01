@@ -35,6 +35,29 @@ test("every family referenced by a theme exists in monster-families", () => {
   }
 });
 
+test("Ruined abbey (Phase 15, Step 9) is a rollable theme with a glyph, a family mapping, and a valid Fallen Order family", () => {
+  // The fully ruined/abandoned monastery: DISTINCT from the living-monastery
+  // settlement feature and from the monastery-only Catacombs theme. Unlike
+  // Catacombs it IS a rollable wilderness dungeon theme.
+  const wildernessThemes = new Set(read("dungeon-theme").entries.map((e) => e.value));
+  assert.ok(wildernessThemes.has("Ruined abbey"), "Ruined abbey is in the rollable manifest");
+  assert.ok(THEME_GLYPHS["Ruined abbey"], "Ruined abbey has a THEME_GLYPHS entry");
+  const mapped = new Set(read("dungeon-family").entries.map((e) => e.value.theme));
+  assert.ok(mapped.has("Ruined abbey"), "Ruined abbey has a dungeon-family mapping");
+
+  // The new Fallen Order family: string elite, a decent roster, and full tier coverage.
+  const fallen = read("monster-families").entries
+    .map((e) => e.value)
+    .find((f) => f.family === "Fallen Order");
+  assert.ok(fallen, "the Fallen Order family exists");
+  assert.equal(typeof fallen.elite, "string", "Fallen Order elite is a string");
+  assert.ok(fallen.members.length >= 4, "Fallen Order has a decent roster");
+  const tiers = new Set(fallen.members.map((m) => m.tier));
+  for (const t of [1, 2, 3, 4]) {
+    assert.ok(tiers.has(t), `Fallen Order covers tier ${t}`);
+  }
+});
+
 test("Catacombs is a glyphed, family-mapped theme but NOT a rollable wilderness theme", () => {
   // Step 7: a monastery's underground reuses the dungeon interior with theme
   // "Catacombs". It needs a glyph and a family spread, but must NOT be added to

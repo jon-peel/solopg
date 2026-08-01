@@ -38,6 +38,11 @@ export const THEME_GLYPHS = {
   // rollable wilderness theme (absent from data/dungeon-theme.json on purpose);
   // this glyph serves the catacombs POI a monastery creates on first explore.
   Catacombs: "🪦",
+  // Ruined abbey (Phase 15, Step 9) — a rollable WILDERNESS dungeon theme for a
+  // fully ruined/abandoned monastery. Distinct from the living-monastery map
+  // marker (✝) and the monastery-only Catacombs theme (🪦); this is the panel
+  // glyph for the ruined-abbey dungeon POI.
+  "Ruined abbey": "⛪",
 };
 
 export const SETTLEMENT_GLYPH = "🏠";

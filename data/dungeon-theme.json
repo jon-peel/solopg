@@ -20,6 +20,7 @@
     { "weight": 1, "value": "Spider nest" },
     { "weight": 1, "value": "Ghoul warren" },
     { "weight": 1, "value": "Troglodyte caves" },
-    { "weight": 1, "value": "Ogre lair" }
+    { "weight": 1, "value": "Ogre lair" },
+    { "weight": 1, "value": "Ruined abbey" }
   ]
 }

@@ -46,6 +46,9 @@
       { "weight": 4, "value": "Giants" }, { "weight": 1, "value": "Goblinoids" } ] } },
     { "value": { "theme": "Catacombs", "families": [
       { "weight": 5, "value": "Undead" }, { "weight": 2, "value": "Vermin" },
-      { "weight": 1, "value": "Cultists" }, { "weight": 1, "value": "Aberrations" } ] } }
+      { "weight": 1, "value": "Cultists" }, { "weight": 1, "value": "Aberrations" } ] } },
+    { "value": { "theme": "Ruined abbey", "families": [
+      { "weight": 4, "value": "Fallen Order" }, { "weight": 2, "value": "Undead" },
+      { "weight": 1, "value": "Cultists" }, { "weight": 1, "value": "Vermin" } ] } }
   ]
 }
