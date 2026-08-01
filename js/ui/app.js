@@ -157,7 +157,7 @@ const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposi
 
 // Tables the monastery bake rolls on (Phase 15, loaded on demand when a monastery
 // settlement needs its `settlement.monastery` filled — see syncMonasteries).
-const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name"];
+const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name", "monastery-relic"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell

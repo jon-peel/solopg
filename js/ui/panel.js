@@ -838,6 +838,9 @@ export function renderSelectionPanel(model) {
           mon.appendChild(line);
         };
         monLine(`Dedicated ${m.dedication}`);
+        // Relic (Step 6) — a headline feature; show it prominently right under the
+        // dedication and emphasised. Never surfaces the hidden `secret`.
+        if (m.relic) monLine(`Keeps: ${m.relic}`, true);
         monLine(m.selfSufficient ? "Self-sufficient" : `Dependent — ${m.provisioning}`);
         monLine(`Produces: ${m.industries.join(", ")}`);
         monLine(`Library: ${m.library}`);

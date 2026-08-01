@@ -16,7 +16,8 @@
 // how many trade INDUSTRIES it runs. A demihuman house honours its people's gods
 // (RACE_DEITIES) and leans its output toward its people's crafts
 // (RACE_MONASTERY_PRODUCTS); a Human house (no `settlement.race`) rolls the plain
-// shrine-dedication / product tables. Later steps (6/8) fill library/relic/secret/
+// shrine-dedication / product tables. A big/old house is more often KNOWN FOR a
+// notable relic (size-scaled RELIC_CHANCE). A later step (8) fills secret/
 // catacombs onto the same object — this bake deliberately leaves those absent.
 
 import { subRng, pick, randInt } from "../core/rng.js";
@@ -51,6 +52,14 @@ const LIBRARY_LABEL = {
   Town: "a fine library",
   City: "a renowned library",
 };
+
+// Size -> chance the house is KNOWN FOR a notable relic (Phase 15, Step 6). A
+// bigger/older house is far likelier to hold a famous treasure or pilgrimage
+// draw, so rarity scales off the effective SIZE alone (no separate "age" field).
+// The gate is rolled UNCONDITIONALLY in the stamp stream (see below) so the
+// sub-stream stays position-stable regardless of size; only a passing gate then
+// draws the relic table. Unknown size falls back to Village.
+const RELIC_CHANCE = { Hamlet: 0.05, Village: 0.12, Town: 0.30, City: 0.55 };
 
 /**
  * Sample `count` DISTINCT entries from a weighted list WITHOUT replacement,
@@ -134,13 +143,14 @@ export function monasteryName(rng, nameTable, { race } = {}) {
  * flag, so a later re-derive with the same inputs never re-rolls it. Idempotent and
  * cheap when nothing is pending. Each hex rolls from its own
  * `subRng(seed,"monastery-stamp",q,r,gen)` sub-stream in a FIXED order (count →
- * dedication → industries → provisioning → trait → name), so the batch is order-
- * independent and byte-deterministic in (seed,q,r,gen,size,race)+tables.
+ * dedication → industries → provisioning → trait → name → relic), so the batch is
+ * order-independent and byte-deterministic in (seed,q,r,gen,size,race)+tables.
  *
  * @param {number|string} seed
  * @param {{coords?:{q:number,r:number}, gen?:number, settlement?:object}[]} placedHexes
  * @param {Map<string,object>} tables must include monastery-product,
- *   monastery-provisioning, monastery-trait, shrine-dedication, monastery-name.
+ *   monastery-provisioning, monastery-trait, shrine-dedication, monastery-name,
+ *   monastery-relic.
  * @param {object} [opts] reserved for later steps; unused here.
  * @returns {object[]} the same array (mutated)
  */
@@ -190,12 +200,21 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       ? rollTable(tables.get("monastery-trait"), rng).value
       : null;
 
-    // 7. Name — the house's proper name, rolled LAST so it never perturbs the
-    //    earlier draws. Culture-aware via `race` (see monasteryName).
+    // 7. Name — the house's proper name, rolled before the relic so it keeps its
+    //    fixed position. Culture-aware via `race` (see monasteryName).
     const name = monasteryName(rng, tables.get("monastery-name"), { race });
 
-    // Freeze — omit absent optional fields so the object stays clean. Steps 6/8
-    // add library/relic/secret/catacombs onto this same object later.
+    // 8. Relic — a notable treasure the house is KNOWN FOR, rolled LAST at a
+    //    documented, fixed position so a later step's `secret` can reference an
+    //    already-rolled relic. Gate is size-scaled but drawn UNCONDITIONALLY (one
+    //    rng() either way) so the stream position is stable across sizes; the
+    //    relic table is drawn only when the gate passes.
+    const relic = rng() < (RELIC_CHANCE[size] ?? RELIC_CHANCE.Village)
+      ? rollTable(tables.get("monastery-relic"), rng).value
+      : null;
+
+    // Freeze — omit absent optional fields so the object stays clean. Step 8 adds
+    // secret/catacombs onto this same object later.
     h.settlement.monastery = {
       name,
       dedication,
@@ -204,6 +223,7 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       library: LIBRARY_LABEL[size] ?? LIBRARY_LABEL.Village,
       ...(provisioning ? { provisioning } : {}),
       ...(trait ? { trait } : {}),
+      ...(relic ? { relic } : {}),
     };
   }
   return placedHexes;
