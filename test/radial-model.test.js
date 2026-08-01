@@ -47,6 +47,21 @@ test("placed cell: build actions enabled; Generate stays enabled (Random child g
   assert.equal(byId(m, "generate").enabled, true);
 });
 
+test("Settlement submenu offers a Monastery placement (Random + each allowed size)", () => {
+  const sizes = ["Hamlet", "Village", "Town", "City"];
+  const settle = byId(buildRadialModel(base({ placed: true, terrain: "Plains", allowedSizes: sizes })), "settlement");
+  const mon = settle.children.find((c) => c.id === "addMonasteryMenu");
+  assert.ok(mon && mon.kind === "submenu", "a Monastery submenu is present");
+  assert.deepEqual(
+    mon.children.map((c) => c.id),
+    ["addRandomMonastery", "addMonastery", "addMonastery", "addMonastery", "addMonastery"],
+  );
+  assert.deepEqual(mon.children.slice(1).map((c) => c.value), sizes); // one leaf per allowed size
+  // Offered even when a settlement already exists (convert it to a monastery).
+  const settle2 = byId(buildRadialModel(base({ placed: true, terrain: "Plains", allowedSizes: sizes, hasSettlement: true })), "settlement");
+  assert.ok(settle2.children.some((c) => c.id === "addMonasteryMenu"), "Monastery offered even when a settlement exists");
+});
+
 test("Draw slot: offers River + Road; Remove entries only where a manual one runs", () => {
   const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "draw");
   assert.equal(plain.kind, "submenu");

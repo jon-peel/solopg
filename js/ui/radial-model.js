@@ -58,11 +58,18 @@ function poiChildren(poiTypes, pois, dungeonSizes = []) {
 }
 
 // Settlement submenu: when one exists, offer Remove + size changes; otherwise
-// Random (anchored) + the sizes this terrain allows.
+// Random (anchored) + the sizes this terrain allows. Either way, a nested
+// "Monastery" submenu drops a religious house (kind:"monastery") of a chosen
+// size — rolled rarely in normal generation, but the GM can place one on demand
+// (parity with placing a plain settlement; reuses the settlement machinery).
 function settlementChildren(allowedSizes, hasSettlement) {
   const sizes = allowedSizes.map((s) => leaf("addSettlement", "🏠", s, { value: s }));
-  if (hasSettlement) return [leaf("removeSettlement", "❌", "Remove"), ...sizes];
-  return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes];
+  const monastery = submenu("addMonasteryMenu", "✝", "Monastery", {}, [
+    leaf("addRandomMonastery", "🎲", "Random", { anchor: true }),
+    ...allowedSizes.map((s) => leaf("addMonastery", "✝", s, { value: s })),
+  ]);
+  if (hasSettlement) return [leaf("removeSettlement", "❌", "Remove"), ...sizes, monastery];
+  return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes, monastery];
 }
 
 // Draw submenu: trace a manual River or Road; plus a Remove entry for whichever

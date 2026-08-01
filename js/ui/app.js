@@ -1332,6 +1332,21 @@ function onAddRandomSettlement() {
   setSettlement({ present: true, size });
 }
 
+// Place a MONASTERY on demand (kind:"monastery"), of a chosen or random size.
+// setSettlement replaces the hex's settlement wholesale, so the monastery bake
+// (syncMonasteries, via persistAndRefresh) fills settlement.monastery fresh.
+const onAddMonastery = (size) => setSettlement({ present: true, size, kind: "monastery" });
+
+function onAddRandomMonastery() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const sizes = allowedSizes(hex.terrain);
+  if (!sizes.length) return;
+  const size = sizes[Math.floor(Math.random() * sizes.length)];
+  setSettlement({ present: true, size, kind: "monastery" });
+}
+
 // Next free "poi:<n>" id within a hex (max existing + 1).
 function nextPoiId(hex) {
   let max = -1;
@@ -3132,6 +3147,8 @@ function radialDispatch(id, value) {
     case "removePoi": return onRemovePoi(value);
     case "addRandomSettlement": return onAddRandomSettlement();
     case "addSettlement": return onAddSettlement(value);
+    case "addRandomMonastery": return onAddRandomMonastery();
+    case "addMonastery": return onAddMonastery(value);
     case "removeSettlement": return onRemoveSettlement();
     case "genArea": return onGenerateArea(value);
     case "toggleLock": return onToggleLock();
