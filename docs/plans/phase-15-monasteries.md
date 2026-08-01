@@ -1,6 +1,14 @@
 # Phase 15 — Monasteries (a religious settlement variant)
 
-**Status:** planned — spec for the next agent. Not yet implemented.
+**Status:** ✅ **Complete** — implemented in Steps 1–9 on branch
+`claude/phase-15-breakdown-muv6e9` (commits `fc278c2`…`8fb0124`). Delivered: the monastery
+settlement variant (rare, terrain-biased, mutually exclusive with `keep`), culture-aware name +
+dedication (reusing `RACE_DEITIES`), size→self-sufficiency + race-leaned industries, a library +
+Phase-9 **research** odds-ladder oracle, **relics**, **catacombs** (a lazily-built "Catacombs"
+dungeon reusing the interior generator), and the rare **GM/discovery-only secret** (never in the
+player panel — a test-enforced `publicMonasteryFields` sanitizer). Plus the optional bonus: a
+rollable **"Ruined abbey"** wilderness dungeon theme + a new **Fallen Order** monster family.
+Additive throughout — no back-compat, no migration. +65 tests (619 → 684, 0 fail).
 
 **Owner's decision (authoritative):** A monastery is a **settlement variant**, like the
 existing martial `keep` overlay — not a mere POI. **Even small ones exist.** Every
