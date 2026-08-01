@@ -354,7 +354,7 @@ export function render() {
     if (detail && hh && hh.placed) {
       const primary = hh.name
         || (hh.settlement && hh.settlement.present
-          ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain, race: hh.settlement.race })
+          ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain, race: hh.settlement.race, name: hh.settlement.monastery?.name })
           : null);
       const region = regionNameAt(hovered.q, hovered.r);
       const fac = factionAt(hovered.q, hovered.r);

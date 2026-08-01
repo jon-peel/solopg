@@ -21,7 +21,7 @@
 
 import { subRng, pick, randInt } from "../core/rng.js";
 import { rollTable } from "../core/table.js";
-import { RACE_DEITIES, RACE_MONASTERY_PRODUCTS } from "./culture-data.js";
+import { RACE_DEITIES, RACE_MONASTERY_PRODUCTS, RACE_NAME_POOLS } from "./culture-data.js";
 
 // Size -> house economics. `selfSufficient` big houses (Town/City) work their own
 // lands and need no provisioning; small houses (Hamlet/Village) are dependent and
@@ -75,19 +75,59 @@ export function pickDistinctWeighted(rng, entries, count) {
 }
 
 /**
+ * A monastic PROPER NAME for a house — "Saint Morwenna's Priory", "the Abbey of
+ * Silent Mercy", "Whitethorn Hermitage", or (for a demihuman house) its own
+ * people's stem "Duromar Abbey". Pure: a deterministic function of the passed
+ * `rng` stream and the class-tagged `monastery-name` table, so the caller can
+ * reproduce it byte-for-byte.
+ *
+ * The table's entries are `{ class, text }` values (class ∈ house | saint |
+ * virtue | colour). We partition them into weighted per-class sub-tables: `house`
+ * is the settlement-word (Abbey/Priory/…); saint/virtue/colour supply the
+ * epithet. A demihuman house (~half the time) instead prefixes its people's own
+ * name-stem (RACE_NAME_POOLS[race].prefixes); a Human house always composes from
+ * a saint/virtue/colour epithet (weighted 2/2/1).
+ *
+ * @param {() => number} rng
+ * @param {{ entries: { weight?: number, value: { class: string, text: string } }[] }} nameTable
+ * @param {{ race?: string }} [opts]
+ * @returns {string}
+ */
+export function monasteryName(rng, nameTable, { race } = {}) {
+  // Partition the {class,text} entries into weighted sub-tables by class.
+  const byClass = (cls) => ({ id: `monastery-name:${cls}`, entries:
+    nameTable.entries.filter((e) => e.value.class === cls)
+      .map((e) => ({ weight: e.weight ?? 1, value: e.value.text })) });
+  const houses = byClass("house");
+  const house = rollTable(houses, rng).value;
+
+  // Culture-aware: a demihuman house ~half the time takes its own people's name-stem.
+  const stems = race && RACE_NAME_POOLS[race] && RACE_NAME_POOLS[race].prefixes;
+  if (stems && stems.length && rng() < 0.5) {
+    return `${pick(rng, stems)} ${house}`;            // "Duromar Abbey"
+  }
+  // else compose from a saint / virtue / colour epithet (weighted 2/2/1).
+  const cls = pick(rng, ["saint", "saint", "virtue", "virtue", "colour"]);
+  const epithet = rollTable(byClass(cls), rng).value;
+  if (cls === "saint")  return `${epithet}'s ${house}`;          // "Saint Morwenna's Priory"
+  if (cls === "virtue") return `the ${house} of ${epithet}`;      // "the Abbey of Silent Mercy"
+  return `${epithet} ${house}`;                                   // "Whitethorn Hermitage"
+}
+
+/**
  * Bake `settlement.monastery` onto every not-yet-resolved monastery hex in
  * `placedHexes`, in ONE pass. Mutates the hexes (like stampSettlements): a stamped
  * hex gets a `settlement.monastery` object; the object's presence is the freeze
  * flag, so a later re-derive with the same inputs never re-rolls it. Idempotent and
  * cheap when nothing is pending. Each hex rolls from its own
  * `subRng(seed,"monastery-stamp",q,r,gen)` sub-stream in a FIXED order (count →
- * dedication → industries → provisioning → trait), so the batch is order-
+ * dedication → industries → provisioning → trait → name), so the batch is order-
  * independent and byte-deterministic in (seed,q,r,gen,size,race)+tables.
  *
  * @param {number|string} seed
  * @param {{coords?:{q:number,r:number}, gen?:number, settlement?:object}[]} placedHexes
  * @param {Map<string,object>} tables must include monastery-product,
- *   monastery-provisioning, monastery-trait, shrine-dedication.
+ *   monastery-provisioning, monastery-trait, shrine-dedication, monastery-name.
  * @param {object} [opts] reserved for later steps; unused here.
  * @returns {object[]} the same array (mutated)
  */
@@ -137,9 +177,14 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
       ? rollTable(tables.get("monastery-trait"), rng).value
       : null;
 
+    // 7. Name — the house's proper name, rolled LAST so it never perturbs the
+    //    earlier draws. Culture-aware via `race` (see monasteryName).
+    const name = monasteryName(rng, tables.get("monastery-name"), { race });
+
     // Freeze — omit absent optional fields so the object stays clean. Steps 6/8
     // add library/relic/secret/catacombs onto this same object later.
     h.settlement.monastery = {
+      name,
       dedication,
       selfSufficient: rule.selfSufficient,
       industries,

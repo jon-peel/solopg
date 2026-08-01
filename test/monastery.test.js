@@ -2,19 +2,30 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mulberry32 } from "../js/core/rng.js";
-import { RACE_DEITIES } from "../js/gen/culture-data.js";
-import { stampMonasteries, pickDistinctWeighted } from "../js/gen/monastery.js";
+import { RACE_DEITIES, RACE_NAME_POOLS } from "../js/gen/culture-data.js";
+import { stampMonasteries, pickDistinctWeighted, monasteryName } from "../js/gen/monastery.js";
 
 // --- table shim -------------------------------------------------------------
 // The pure generator takes a preloaded Map of tables (same contract app.js gives
 // it via loadTables). Load the shipped JSON straight off disk into a Map.get shim.
-const TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication"];
+const TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name"];
 const tables = new Map(TABLE_IDS.map((id) => [id, JSON.parse(readFileSync(`./data/${id}.json`, "utf8"))]));
 
 const PRODUCTS = new Set(tables.get("monastery-product").entries.map((e) => e.value));
 const PROVISIONING = new Set(tables.get("monastery-provisioning").entries.map((e) => e.value));
 const TRAITS = new Set(tables.get("monastery-trait").entries.map((e) => e.value));
 const SHRINE_DEDICATIONS = new Set(tables.get("shrine-dedication").entries.map((e) => e.value));
+
+// Class-partitioned name elements (Step 3) — for asserting a proper name is
+// composed from the shipped monastery-name table.
+const nameByClass = (cls) => tables.get("monastery-name").entries.filter((e) => e.value.class === cls).map((e) => e.value.text);
+const HOUSES = nameByClass("house");
+const SAINTS = new Set(nameByClass("saint"));
+const VIRTUES = new Set(nameByClass("virtue"));
+const COLOURS = new Set(nameByClass("colour"));
+// A name always contains a house word as a whole token, whichever form it takes
+// ("Saint X's Priory", "the Abbey of Y", "Whitethorn Hermitage", "Dur Grange").
+const HOUSE_RE = new RegExp(`\\b(${HOUSES.join("|")})\\b`);
 
 // --- helpers ----------------------------------------------------------------
 
@@ -199,4 +210,102 @@ test("pickDistinctWeighted: distinct without replacement, count clamped to list 
     assert.equal(new Set(over).size, 3);
   }
   assert.deepEqual(entries, snapshot, "the caller's entry list must never be mutated");
+});
+
+// ---------------------------------------------------------------------------
+// monasteryName (Step 3) — proper monastic names, composed from monastery-name.
+// ---------------------------------------------------------------------------
+
+const nameTable = tables.get("monastery-name");
+
+/**
+ * Decompose a proper name back into its class + epithet, validating that every
+ * piece comes from the shipped table. Returns null if it fits no known form.
+ *   saint : "<saint>'s <house>"      virtue: "the <house> of <virtue>"
+ *   colour: "<colour> <house>"       prefix: "<race-stem> <house>"
+ */
+function decompose(name) {
+  for (const house of HOUSES) {
+    if (name.endsWith(`'s ${house}`)) {
+      const s = name.slice(0, -(`'s ${house}`).length);
+      if (SAINTS.has(s)) return { form: "saint", house, epithet: s };
+    }
+    if (name.startsWith(`the ${house} of `)) {
+      const v = name.slice(`the ${house} of `.length);
+      if (VIRTUES.has(v)) return { form: "virtue", house, epithet: v };
+    }
+    if (name.endsWith(` ${house}`)) {
+      const p = name.slice(0, -(` ${house}`).length);
+      if (COLOURS.has(p)) return { form: "colour", house, epithet: p };
+      return { form: "prefix", house, epithet: p }; // race-stem (or unknown single-token)
+    }
+  }
+  return null;
+}
+
+test("monasteryName: deterministic — same rng seed yields the same string", () => {
+  for (const s of [1, 7, 42, 1000]) {
+    const a = monasteryName(mulberry32(s), nameTable);
+    const b = monasteryName(mulberry32(s), nameTable);
+    assert.equal(a, b, `seed ${s} not reproducible`);
+    const d = monasteryName(mulberry32(s), nameTable, { race: "dwarf" });
+    const e = monasteryName(mulberry32(s), nameTable, { race: "dwarf" });
+    assert.equal(d, e, `seed ${s} (dwarf) not reproducible`);
+  }
+});
+
+test("monasteryName: a non-empty name always built around a real house word", () => {
+  for (let i = 0; i < 300; i++) {
+    const n = monasteryName(mulberry32(i), nameTable);
+    assert.ok(typeof n === "string" && n.length > 0, `empty name at seed ${i}`);
+    assert.ok(HOUSE_RE.test(n), `name "${n}" carries no house word`);
+  }
+});
+
+test("monasteryName: a Human (no-race) name is composed from saint/virtue/colour table entries", () => {
+  for (let i = 0; i < 300; i++) {
+    const n = monasteryName(mulberry32(i), nameTable);
+    const d = decompose(n);
+    assert.ok(d, `"${n}" fits no known monastic name form`);
+    assert.ok(["saint", "virtue", "colour"].includes(d.form), `Human name "${n}" used form ${d.form}`);
+  }
+});
+
+test("monasteryName: a demihuman (dwarf) house can take its own people's name-stem", () => {
+  const dwarfStems = new Set(RACE_NAME_POOLS.dwarf.prefixes);
+  let stemNames = 0;
+  let epithetNames = 0;
+  for (let i = 0; i < 300; i++) {
+    const n = monasteryName(mulberry32(i), nameTable, { race: "dwarf" });
+    const d = decompose(n);
+    assert.ok(d, `"${n}" fits no known monastic name form`);
+    if (d.form === "prefix") {
+      assert.ok(dwarfStems.has(d.epithet), `stem "${d.epithet}" in "${n}" is not a dwarf prefix`);
+      stemNames++;
+    } else {
+      epithetNames++;
+    }
+  }
+  assert.ok(stemNames > 0, "no dwarf-stem names appeared across the sweep");
+  assert.ok(epithetNames > 0, "a dwarf house should still sometimes use an epithet name");
+});
+
+// ---------------------------------------------------------------------------
+// stampMonasteries now stores a proper `name` (Step 3).
+// ---------------------------------------------------------------------------
+
+test("stampMonasteries stores a non-empty proper name, deterministic and idempotent", () => {
+  for (const size of ["Hamlet", "Village", "Town", "City"]) {
+    const a = bake("nm", 4, 9, size, "dwarf");
+    assert.ok(typeof a.name === "string" && a.name.length > 0, `${size} baked no name`);
+    assert.ok(HOUSE_RE.test(a.name), `${size} name "${a.name}" carries no house word`);
+    const b = bake("nm", 4, 9, size, "dwarf");
+    assert.equal(b.name, a.name, `${size} name not reproducible`);
+  }
+  // Idempotent: a re-run must not change the stored name.
+  const h = monHex(6, 1, "Town", "elf");
+  stampMonasteries("nm2", [h], tables);
+  const first = h.settlement.monastery.name;
+  stampMonasteries("nm2", [h], tables);
+  assert.equal(h.settlement.monastery.name, first, "name changed on re-run");
 });

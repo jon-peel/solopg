@@ -157,7 +157,7 @@ const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposi
 
 // Tables the monastery bake rolls on (Phase 15, loaded on demand when a monastery
 // settlement needs its `settlement.monastery` filled — see syncMonasteries).
-const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication"];
+const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name"];
 
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
@@ -1199,7 +1199,7 @@ function travelHeadline(result, aimLabel, aimKind) {
 function destinationLabel(hex, q, r) {
   if (hex && hex.name) return hex.name;
   if (hex && hex.settlement && hex.settlement.present) {
-    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
+    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race, name: hex.settlement.monastery?.name });
   }
   return `(${q}, ${r})`;
 }
@@ -1967,7 +1967,7 @@ function selectedSettlementContext() {
   const { q, r } = selected;
   const hex = getHex(current, q, r);
   if (!(hex && hex.placed && hex.settlement && hex.settlement.present)) return null;
-  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
+  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race, name: hex.settlement.monastery?.name });
   return { label: `${name} · ${hex.settlement.size}`, factionName: factionNameAt(q, r) };
 }
 
