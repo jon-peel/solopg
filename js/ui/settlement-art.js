@@ -3,9 +3,10 @@
 // when zoomed out (level-of-detail). Render-time only; size already lives on the
 // hex.
 //
-// A settlement can also carry a martial `kind: "keep"` (3R.6) — a fortified
-// site, independent of size. When present it overrides the size art/mark with a
-// keep sketch/glyph, so a Keep reads as a Keep at any size.
+// A settlement can also carry a `kind` overlay, independent of size, that wins
+// over the size art/mark so the site reads as itself at any size: `kind: "keep"`
+// (3R.6) — a martial fortified tower; `kind: "monastery"` (Phase 15) — a
+// religious house drawn as a chapel/steeple with a cross.
 
 const DIR = "assets/settlement";
 
@@ -29,12 +30,19 @@ export const SETTLEMENT_MARK = {
 export const KEEP_ART = `${DIR}/keep.svg`;
 export const KEEP_MARK = "♜";
 
+// Religious "monastery" overlay (any size). A chapel/steeple sketch and a cross
+// glyph (reads as a religious house, distinct from the keep's martial tower).
+export const MONASTERY_ART = `${DIR}/monastery.svg`;
+export const MONASTERY_MARK = "✝";
+
 export function settlementArt(size, kind) {
   if (kind === "keep") return KEEP_ART;
+  if (kind === "monastery") return MONASTERY_ART;
   return SETTLEMENT_ART[size] || null;
 }
 
 export function settlementMark(size, kind) {
   if (kind === "keep") return KEEP_MARK;
+  if (kind === "monastery") return MONASTERY_MARK;
   return SETTLEMENT_MARK[size] || "•";
 }

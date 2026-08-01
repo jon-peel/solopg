@@ -6,6 +6,8 @@ import {
   SETTLEMENT_MARK,
   KEEP_ART,
   KEEP_MARK,
+  MONASTERY_ART,
+  MONASTERY_MARK,
   settlementArt,
   settlementMark,
 } from "../js/ui/settlement-art.js";
@@ -44,4 +46,20 @@ test("a Keep overrides the size art/mark with the martial sketch/glyph", () => {
   assert.equal(settlementMark("City", "keep"), KEEP_MARK);
   assert.equal(settlementArt("Town"), SETTLEMENT_ART.Town);
   assert.equal(settlementMark("Town"), SETTLEMENT_MARK.Town);
+});
+
+test("a Monastery overrides the size art/mark with the religious sketch/glyph", () => {
+  assert.ok(existsSync(MONASTERY_ART), `missing ${MONASTERY_ART}`);
+  assert.ok(
+    readFileSync(MONASTERY_ART, "utf8").trimStart().startsWith("<svg"),
+    MONASTERY_ART,
+  );
+  assert.ok(typeof MONASTERY_MARK === "string" && MONASTERY_MARK.length > 0);
+  // kind "monastery" wins at any size; no kind falls back to the size art
+  assert.equal(settlementArt("City", "monastery"), MONASTERY_ART);
+  assert.equal(settlementArt("Hamlet", "monastery"), MONASTERY_ART);
+  assert.equal(settlementMark("Town", "monastery"), MONASTERY_MARK);
+  // a plain size call is unaffected by the overlay
+  assert.equal(settlementArt("Village"), SETTLEMENT_ART.Village);
+  assert.equal(settlementMark("Village"), SETTLEMENT_MARK.Village);
 });

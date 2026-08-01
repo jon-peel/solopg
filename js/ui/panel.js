@@ -798,7 +798,11 @@ export function renderSelectionPanel(model) {
         race: hex.settlement.race,
         name: hex.settlement.monastery?.name,
       });
-      const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
+      const kindLabel = hex.settlement.kind === "keep"
+        ? `${hex.settlement.size} — Keep (fortified)`
+        : hex.settlement.kind === "monastery"
+        ? `${hex.settlement.size} — Monastery`
+        : hex.settlement.size;
       const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];
       // A demihuman town carries a stamped race (Phase 14.3); a Human town has
       // none (the null case) and reads plainly.
@@ -819,6 +823,25 @@ export function renderSelectionPanel(model) {
         look.className = "sel-settle-look";
         look.textContent = hex.settlement.appearance;
         box.appendChild(look);
+      }
+      // Monastery detail (Phase 15) — the wholesome, player-facing facts of a
+      // religious house (baked by syncCultures). A sequence of appended lines so
+      // later steps can extend it; it must NEVER read any hidden `secret` field.
+      if (hex.settlement.monastery) {
+        const m = hex.settlement.monastery;
+        const mon = document.createElement("div");
+        mon.className = "sel-monastery";
+        const monLine = (text, emphasis) => {
+          const line = document.createElement("span");
+          line.className = "sel-mon-line" + (emphasis ? " sel-mon-em" : "");
+          line.textContent = text;
+          mon.appendChild(line);
+        };
+        monLine(`Dedicated ${m.dedication}`);
+        monLine(m.selfSufficient ? "Self-sufficient" : `Dependent — ${m.provisioning}`);
+        monLine(`Produces: ${m.industries.join(", ")}`);
+        if (m.trait) monLine(m.trait, true);
+        box.appendChild(mon);
       }
       sel.appendChild(box);
 
