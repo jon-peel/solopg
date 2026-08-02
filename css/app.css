@@ -866,6 +866,7 @@ button:hover {
 .sel-monastery { display: block; width: 100%; margin-top: 0.15rem; }
 .sel-mon-line { display: block; font-size: 0.78rem; color: var(--muted); }
 .sel-mon-em { font-style: italic; }
+.sel-mon-secret { color: #8a3324; font-style: italic; margin-top: 0.15rem; }
 /* Monastery library research (Phase 15): a button-only GM roll under the house's
    facts. Its result renders as a gold callout — a prompt the GM answers (the app
    reports only the tier, never the book). Mirrors .sel-situation. */

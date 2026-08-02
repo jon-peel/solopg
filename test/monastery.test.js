@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mulberry32 } from "../js/core/rng.js";
 import { RACE_DEITIES, RACE_NAME_POOLS } from "../js/gen/culture-data.js";
-import { stampMonasteries, pickDistinctWeighted, monasteryName, publicMonasteryFields, monasterySecretReveal } from "../js/gen/monastery.js";
+import { stampMonasteries, pickDistinctWeighted, monasteryName, monasterySecretReveal } from "../js/gen/monastery.js";
 
 // --- table shim -------------------------------------------------------------
 // The pure generator takes a preloaded Map of tables (same contract app.js gives
@@ -470,43 +470,9 @@ test("stampMonasteries stores a non-empty proper name, deterministic and idempot
 });
 
 // ---------------------------------------------------------------------------
-// The secret house (Step 8) — a RARE GM/discovery-only darkness that must NEVER
-// reach the player-facing panel. publicMonasteryFields is the load-bearing guard.
+// The secret house (Step 8) — a RARE dark truth, shown INLINE in the panel (this
+// is a solo-GM tool; the secret is baked and displayed with the other facts).
 // ---------------------------------------------------------------------------
-
-// The single most important assertion in the phase: the player-facing subset must
-// NOT carry the hidden secret (nor its relic linkage), but must keep every
-// wholesome field — structurally and in its serialised form.
-test("publicMonasteryFields STRIPS secret + secretGuardsRelic, keeps every wholesome field", () => {
-  const secretText = "the abbot is not what he seems";
-  const m = {
-    name: "Saint Morwenna's Priory",
-    dedication: "to the Silent Watcher",
-    selfSufficient: true,
-    industries: ["wine", "candles"],
-    library: "a renowned library",
-    trait: "renowned",
-    relic: "the Ashen Chalice",
-    catacombs: { size: "Sprawling" },
-    secret: secretText,
-    secretGuardsRelic: true,
-  };
-  const pub = publicMonasteryFields(m);
-  // The two GM-only keys are physically absent (not merely undefined-valued).
-  assert.equal("secret" in pub, false, "publicMonasteryFields must not carry `secret`");
-  assert.equal("secretGuardsRelic" in pub, false, "publicMonasteryFields must not carry `secretGuardsRelic`");
-  // Every wholesome key survives, unchanged.
-  for (const k of ["name", "dedication", "selfSufficient", "industries", "library", "trait", "relic", "catacombs"]) {
-    assert.deepEqual(pub[k], m[k], `wholesome field "${k}" must survive sanitisation`);
-  }
-  // The serialised player subset must not contain the secret text anywhere.
-  assert.ok(!JSON.stringify(pub).includes(secretText), "the secret text must not appear in the serialised player subset");
-  // Purity: the source object is untouched (the secret is still on the raw bake).
-  assert.equal(m.secret, secretText, "publicMonasteryFields must not mutate its input");
-  // Null/undefined passthrough (the panel gate is on the RAW presence check).
-  assert.equal(publicMonasteryFields(null), null);
-  assert.equal(publicMonasteryFields(undefined), undefined);
-});
 
 test("secret is RARE (a few percent), and every present secret is a table value", () => {
   // Sweep a large set of DISTINCT coords (each its own sub-stream). A secret is flat

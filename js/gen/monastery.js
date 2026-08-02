@@ -20,11 +20,11 @@
 // notable relic (size-scaled RELIC_CHANCE) and more often sits over an explorable
 // CATACOMBS (size-scaled CATACOMBS_CHANCE) — the underground REUSES the existing
 // dungeon interior system (no new generator; built lazily on first explore). A RARE
-// few houses (a few percent) also hide a `secret` — a GM/discovery-only darkness
-// (Phase 15, Step 8) rolled LAST. The secret (and its `secretGuardsRelic` linkage)
-// is NEVER in the player-facing panel: publicMonasteryFields strips it, so the
-// surface (and even the EXISTENCE of a secret, §2.7) stays invisible; it surfaces
-// only on catacomb descent or a uniform GM reveal (monasterySecretReveal).
+// few houses (a few percent) also hide a `secret` — a dark truth (Phase 15, Step 8)
+// rolled LAST, with an optional `secretGuardsRelic` linkage when the secret is the
+// relic the house keeps (§2.9). This is a solo-GM tool, so the panel shows the
+// secret INLINE with the other facts (monasterySecretReveal composes the line);
+// it stays RARE, but is no longer concealed from the GM.
 
 import { subRng, pick, randInt } from "../core/rng.js";
 import { rollTable } from "../core/table.js";
@@ -81,7 +81,7 @@ const CATACOMBS_DUNGEON_SIZE = { Hamlet: "Cramped", Village: "Modest", Town: "Si
 // Chance a house hides a GM/discovery-only `secret` (Phase 15, Step 8). Flat and
 // RARE — a few percent — so most houses are exactly what they seem; the secret is
 // NOT size-scaled (a humble priory can hide the worst of all). Rolled LAST in the
-// stamp order. The secret is NEVER player-facing (publicMonasteryFields strips it).
+// stamp order. Shown inline in the panel for the GM (this is a solo-GM tool).
 const SECRET_CHANCE = 0.06;              // a few percent — most houses are wholesome
 // When a house has BOTH a secret and a relic, the secret often IS the relic — the
 // treasure they venerate is the very thing that should have stayed sealed (§2.9).
@@ -256,17 +256,15 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
     //     UNCONDITIONALLY (one rng() either way) for stream stability; only a
     //     passing gate then draws the secret table. When a secret fired AND the
     //     house keeps a relic, one further draw decides whether the secret IS that
-    //     relic (§2.9). This field is NEVER player-facing — publicMonasteryFields
-    //     strips it before the panel ever sees the object.
+    //     relic (§2.9). Shown inline in the panel (monasterySecretReveal).
     let secret = null, secretGuardsRelic = false;
     if (rng() < SECRET_CHANCE) {                              // unconditional gate for stream stability
       secret = rollTable(tables.get("monastery-secret"), rng).value;
       if (relic) secretGuardsRelic = rng() < SECRET_GUARDS_RELIC_CHANCE;
     }
 
-    // Freeze — omit absent optional fields so the object stays clean. The hidden
-    // secret / secretGuardsRelic are stored on the SAME object (they are GM-only:
-    // the panel builds from publicMonasteryFields, which strips them).
+    // Freeze — omit absent optional fields so the object stays clean. The rare
+    // secret / secretGuardsRelic ride on the same object and render inline.
     h.settlement.monastery = {
       name,
       dedication,
@@ -284,18 +282,9 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
   return placedHexes;
 }
 
-// The player-facing subset of a baked monastery — the wholesome facts only. The
-// hidden `secret` (and its relic linkage) are GM/discovery-only and are stripped
-// here so the panel physically cannot render them (§2.7). Test-enforced.
-export function publicMonasteryFields(m) {
-  if (!m) return m;
-  const { secret, secretGuardsRelic, ...pub } = m;
-  return pub;
-}
-
-// The GM/discovery reveal string for a house. When there is no secret it returns a
-// wholesome all-clear (so a universal reveal control never leaks which houses are
-// tainted). When present, ties in the relic if the secret guards it (§2.9).
+// Composes a house's secret into a readable line for the panel. When there is no
+// secret it returns a wholesome all-clear; the panel only calls it for a house
+// that has one. Ties in the relic when the secret is what the house guards (§2.9).
 export function monasterySecretReveal(m) {
   if (!m || !m.secret) return "This house is exactly what it seems — no hidden darkness.";
   let s = `The truth of this house: ${m.secret}.`;
