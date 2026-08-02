@@ -58,7 +58,7 @@ import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlo
 import { settlementName } from "../gen/settlement-name.js";
 import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, rollResearch, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { rollWanderingEncounter } from "../gen/wandering.js";
-import { buildBestiary, telegraphFor } from "../gen/bestiary.js";
+import { buildBestiary, telegraphFor, buildTierIndex, rankBestiary, levelApex } from "../gen/bestiary.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -218,6 +218,14 @@ let dungeonFrameBB = null; // shared bounding box for the open dungeon's levels
 // deterministic). Dungeon-wide, so it's left untouched across level/room
 // switches — only openDungeonView (re)computes it, closeDungeonView clears it.
 let dungeonBestiary = [];
+let dungeonApex = {}; // { [depth]: { name, tier } } — the most dangerous monster per level
+let monsterTierIndex = null; // name -> danger tier, built once from monster-families (static)
+
+// Build the static monster danger-tier index once, from a loaded tables Map.
+function ensureTierIndex(tables) {
+  const fam = tables && tables.get("monster-families");
+  if (fam && !monsterTierIndex) monsterTierIndex = buildTierIndex(fam);
+}
 
 // Wandering encounter roll (referee aid, mirrors the Oracle's transience): the
 // latest draw for the level currently shown in the panel, held only in memory
@@ -1514,6 +1522,7 @@ async function onSelectPoi(id) {
       try {
         const tables = await loadTables(HEX_TABLE_IDS);
         teleTable = tables.get("monster-telegraph");
+        ensureTierIndex(tables); // static monster danger-tier index (for the bestiary ranking)
         const m = /^poi:(\d+)$/.exec(poi.id || "");
         const n = m ? Number(m[1]) : 0;
         poi.detail = poi.detail || {};
@@ -1546,12 +1555,13 @@ async function onSelectPoi(id) {
       }
     } else {
       // Revisiting an already-built dungeon normally opens with no table load at
-      // all — but the bestiary's inline telegraphs still need this one table. A
-      // cheap cache hit once anything has loaded it; on a fetch failure degrade
-      // to "no telegraphs" rather than block the open.
+      // all — but the bestiary's inline telegraphs + danger ranking still need
+      // these two tables. A cheap cache hit once anything has loaded them; on a
+      // fetch failure degrade to "no telegraphs / no ranking" rather than block.
       try {
-        const tables = await loadTables(["monster-telegraph"]);
+        const tables = await loadTables(["monster-telegraph", "monster-families"]);
         teleTable = tables.get("monster-telegraph");
+        ensureTierIndex(tables);
       } catch {
         teleTable = null;
       }
@@ -1606,10 +1616,14 @@ function openDungeonView(poi, teleTable) {
   dungeonFrameBB = dungeonFrame(dungeon);
   // The bestiary is dungeon-wide + deterministic (seeded per monster name), so
   // it's computed once here rather than per level/room render.
-  dungeonBestiary = buildBestiary(dungeon).map((m) => ({
+  const withTelegraph = buildBestiary(dungeon).map((m) => ({
     ...m,
     telegraph: teleTable ? telegraphFor(m.name, teleTable, subRng(current.seed, "telegraph", selected.q, selected.r, m.name)) : null,
   }));
+  // Rank by danger (deadliest flagged) and find each level's apex — so the panel
+  // can point out the dungeon's deadliest + what to foreshadow on each floor.
+  dungeonBestiary = rankBestiary(withTelegraph, monsterTierIndex);
+  dungeonApex = levelApex(dungeon, monsterTierIndex);
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
   // the user looking at an unchanged map ("nothing happened").
   $("dungeon-view").hidden = false;
@@ -1623,6 +1637,7 @@ function closeDungeonView() {
   dungeonPoi = null;
   dungeonRoomN = null;
   dungeonBestiary = []; // clear the dungeon-wide bestiary when leaving
+  dungeonApex = {}; // ...and the per-level apex cues
   $("dungeon-view").hidden = true;
   $("dungeon-legend").hidden = true; // collapse the legend when leaving
   setLevel(null);
@@ -1735,7 +1750,7 @@ function showDungeonLevel(i) {
   const level = dungeon.levels[i];
   renderLevelSwitcher();
   setLevel(level, marksFor(dungeon, i), dungeonFrameBB);
-  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
+  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary, levelApex: dungeonApex });
 }
 
 // Render the side panel for one room (detail + stair nav + exploration tracking).
@@ -1757,6 +1772,7 @@ function renderRoomPanel(n) {
     onRollWandering,
     wanderingResult,
     bestiary: dungeonBestiary,
+    levelApex: dungeonApex,
     onRevealTreasure: () => onRevealTreasure(n),
     onRevealHook: () => onRevealHook(n),
   });
@@ -1784,7 +1800,7 @@ function refreshDungeonPanel() {
   }
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[dungeonLevelIndex];
-  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
+  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary, levelApex: dungeonApex });
 }
 
 // Roll a wandering encounter for the current level (referee aid, Phase 12): a

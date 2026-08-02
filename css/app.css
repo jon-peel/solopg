@@ -1505,6 +1505,8 @@ button:hover {
 .room-contents li { margin-top: 0.2rem; }
 /* Bestiary's inline foreshadowing hint (authored monsters only), under a name+floors li. */
 .bestiary-telegraph { margin-top: 0.15rem; font-style: italic; color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
+.bestiary-deadliest { font-weight: 700; color: #8a3324; }
+.bestiary-apex { margin: 0.1rem 0 0.25rem; font-style: italic; color: #8a3324; font-size: 0.82rem; line-height: 1.35; }
 
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 

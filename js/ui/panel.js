@@ -997,6 +997,7 @@ export function renderDungeonPanel({
   onRollWandering,
   wanderingResult,
   bestiary = [],
+  levelApex = {},
   onRevealTreasure,
   onRevealHook,
 }) {
@@ -1020,7 +1021,9 @@ export function renderDungeonPanel({
     bul.className = "room-contents";
     for (const m of bestiary) {
       const li = document.createElement("li");
-      li.textContent = `${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}`;
+      // Ranked deadliest-first; the single apex of the whole dungeon is flagged.
+      li.textContent = `${m.deadliest ? "☠ " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}${m.deadliest ? " · the deadliest" : ""}`;
+      if (m.deadliest) li.className = "bestiary-deadliest";
       if (m.telegraph) {
         const tel = document.createElement("div");
         tel.className = "bestiary-telegraph";
@@ -1040,6 +1043,17 @@ export function renderDungeonPanel({
   sel.appendChild(
     sectionLabel(level.family ? `${floorWord} ${level.depth} — ${level.family}` : `${floorWord} ${level.depth}`),
   );
+  // Per-level danger cue: the most dangerous monster stocked on THIS floor — the
+  // one to foreshadow here (its authored telegraph, if any). Not every monster
+  // gets telegraphed (that would be too much); just this floor's apex.
+  const apex = levelApex[level.depth];
+  if (apex) {
+    const cue = document.createElement("div");
+    cue.className = "bestiary-apex";
+    const telegraph = (bestiary.find((b) => b.name === apex.name) || {}).telegraph;
+    cue.textContent = telegraph ? `⚠ ${apex.name} — ${telegraph}` : `⚠ ${apex.name} (deadliest on this floor)`;
+    sel.appendChild(cue);
+  }
   if (dungeon.occupation && dungeon.occupation.level === level.depth - 1) {
     const occ = document.createElement("div");
     occ.className = "log-line";
