@@ -14,6 +14,7 @@ import { MONASTERY_RANK } from "../gen/monastery.js"; // monastic rank labels fo
 export const ACTION_GLYPH = {
   terrain: "🗺️", poi: "⭐", settlement: "🏠", hook: "🎣",
   draw: "✏️", river: "🏞️", road: "🛣️", regenerate: "🔄", deleteHex: "🗑️", generate: "🎲",
+  culture: "👥", modify: "🔧", world: "🌍",
 };
 export const TERRAIN_GLYPH = {
   Forest: "🌲", Plains: "🌾", Hills: "⛰️", Mountains: "🏔️",
@@ -74,6 +75,38 @@ function settlementChildren(allowedSizes, hasSettlement) {
   ]);
   if (hasSettlement) return [leaf("removeSettlement", "❌", "Remove"), ...sizes, monastery];
   return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes, monastery];
+}
+
+// Culture submenu (moved off the side panel): a GM culture override for this hex
+// — a leaf per race (the active one marked ✓), plus Clear (only enabled when an
+// anchor is painted here). Applies to any placed hex, cultured or not.
+function cultureChildren(cultureRaces, paintedRace) {
+  const kids = cultureRaces.map(({ value, label }) =>
+    leaf("paintCulture", ACTION_GLYPH.culture, (value === paintedRace ? "✓ " : "") + label, { value }));
+  kids.push(leaf("clearCulture", "❌", "Clear", paintedRace ? { danger: true } : { enabled: false, reason: "No culture painted here" }));
+  return kids;
+}
+
+// Modify submenu: the "edit this hex" actions grouped — Lock/Unlock, re-roll this
+// hex / a disc around it (regenChildren), and Delete (folded in here off its own
+// slot; a locked hex can't be deleted). The parent gates on a placed hex, so the
+// Delete leaf only needs the locked case.
+function modifyChildren(locked) {
+  return [
+    ...regenChildren(locked),
+    leaf("deleteHex", ACTION_GLYPH.deleteHex, "Delete",
+      locked ? { enabled: false, reason: "Hex is locked", danger: true } : { danger: true }),
+  ];
+}
+
+// World submenu: the living-world / play actions grouped off the top ring — a
+// Hook, the Party, and Faction submenus (each keeps its own children + gating).
+function worldChildren({ canGossip, placed, partyHere, factions, ownerId, canReseat, promotable }) {
+  return [
+    submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
+    submenu("party", "🚩", "Party", {}, partyChildren(placed, partyHere)),
+    submenu("faction", "⚑", "Faction", {}, factionChildren({ placed, factions, ownerId, canReseat, promotable })),
+  ];
 }
 
 // Draw submenu: trace a manual River or Road; plus a Remove entry for whichever
@@ -205,6 +238,7 @@ export function buildRadialModel(state) {
     poiTypes = [], terrains = [], pois = [], dungeonSizes = [],
     manualRiverHere = null, manualRoadHere = null, locked = false,
     partyHere = false, factions = [], ownerId = null, canReseat = null, promotable = [],
+    cultureRaces = [], paintedRace = null,
   } = state || {};
 
   const needHex = { enabled: false, reason: "Place terrain on this hex first" };
@@ -221,26 +255,21 @@ export function buildRadialModel(state) {
     submenu("terrain", ACTION_GLYPH.terrain, placed ? "Terrain" : "Place", {}, terrainChildren(terrains)),
     submenu("poi", ACTION_GLYPH.poi, "POI", placed ? {} : needHex, poiChildren(poiTypes, pois, dungeonSizes)),
     submenu("settlement", ACTION_GLYPH.settlement, "Settlement", settlementState, settlementChildren(allowedSizes, hasSettlement)),
-    submenu("hook", ACTION_GLYPH.hook, "Hook", {}, hookChildren(canGossip)),
-    // Generate: Random (single hex, gated like before) + Small/Medium/Large
-    // (3R.1 "Area" fill-empty, folded in here). The submenu itself is always
-    // enabled — Area sizes work regardless of whether the center is placed.
-    // Placed at the bottom slot (nearest the cursor for a typical downward
-    // right-click) since it's the most-used action.
+    // Culture (moved off the panel): GM-paint an ancestry anchor on this hex.
+    submenu("culture", ACTION_GLYPH.culture, "Culture", placed ? {} : needHex, cultureChildren(cultureRaces, paintedRace)),
+    // Generate: Random (single hex, gated like before) + Small/Medium/Large/Huge
+    // (3R.1 "Area" fill-empty, folded in here). Always enabled — Area sizes work
+    // regardless of whether the center is placed. The most-used action.
     submenu("generate", ACTION_GLYPH.generate, "Generate", {}, generateChildren(placed)),
-    // Regenerate: Lock/Unlock this hex, then re-roll it or a disc around it
-    // (existing hexes only; locked hexes and manual rivers/roads are kept).
-    submenu("regenerate", ACTION_GLYPH.regenerate, "Regenerate", placed ? {} : needHex, regenChildren(locked)),
-    leaf("deleteHex", ACTION_GLYPH.deleteHex, locked ? "Locked" : "Delete", !placed ? { enabled: false, reason: "Nothing here to delete", danger: true } : locked ? { enabled: false, reason: "Hex is locked" } : { danger: true }),
-    // Draw: trace a manual river (open ends auto-complete to a source / the sea)
-    // or a manual road (kept verbatim, joins the auto network) from this hex, and
-    // Remove one that already passes through this hex.
+    // Draw: trace a manual river / road from this hex, and Remove one that already
+    // passes through it.
     submenu("draw", ACTION_GLYPH.draw, "Draw", {}, drawChildren(manualRiverHere, manualRoadHere)),
-    // Party + Faction (Phase 11.5): the last panel actions, folded onto the ring
-    // so it's the single action surface. Both submenus are always enabled; their
-    // children carry the gating.
-    submenu("party", "🚩", "Party", {}, partyChildren(placed, partyHere)),
-    submenu("faction", "⚑", "Faction", {}, factionChildren({ placed, factions, ownerId, canReseat, promotable })),
+    // Modify: the "edit this hex" group — Lock/Unlock, Regenerate this hex / an
+    // area, and Delete (folded in off its own slot).
+    submenu("modify", ACTION_GLYPH.modify, "Modify", placed ? {} : needHex, modifyChildren(locked)),
+    // World: the living-world / play group — Hook, Party, Faction, folded off the
+    // top ring so it stays manageable (each keeps its own children + gating).
+    submenu("world", ACTION_GLYPH.world, "World", {}, worldChildren({ canGossip, placed, partyHere, factions, ownerId, canReseat, promotable })),
   ];
 }
 

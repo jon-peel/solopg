@@ -7,7 +7,7 @@ import { factionLabel, factionDescription, factionHome } from "../gen/factions.j
 import { settlementName } from "../gen/settlement-name.js";
 import { monasterySecretReveal, MONASTERY_RANK } from "../gen/monastery.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
-import { RACES, RACE_LABELS } from "../gen/culture-data.js";
+import { RACE_LABELS } from "../gen/culture-data.js";
 import { cultureBand } from "./culture-style.js";
 
 const panel = () => document.getElementById("panel");
@@ -770,25 +770,8 @@ export function renderSelectionPanel(model) {
       box.append(nm, meta);
       sel.appendChild(box);
     }
-    // GM paint / remove (Phase 14.6): a manual culture override for this hex,
-    // mechanically identical to a settlement's stamped anchor (§1.2) — it both
-    // renders immediately and pins future stamps nearby. "Clear" removes the
-    // anchor (reverting to whatever the derived field says); it does NOT force
-    // the hex to Human. Available for any placed hex, cultured or not.
-    if (model.onPaintCulture) {
-      sel.appendChild(sectionLabel("Paint culture"));
-      const row = document.createElement("div");
-      row.className = "tile-actions";
-      for (const race of RACES) {
-        const b = actionButton(RACE_LABELS[race], () => model.onPaintCulture(race));
-        b.className = "tile-action toggle" + (model.paintedRace === race ? " on" : "");
-        row.appendChild(b);
-      }
-      const clearBtn = actionButton("Clear", () => model.onClearCulture());
-      clearBtn.disabled = !model.paintedRace;
-      row.appendChild(clearBtn);
-      sel.appendChild(row);
-    }
+    // GM culture paint/clear moved to the radial "Culture" slot (Phase 15 radial
+    // reorg); the panel keeps only the read-only culture readout above.
     // Settlement as a small accent callout (controls are on the radial menu). The
     // name is derived from the seed + coords (settlement-name.js), so it needs no
     // stored field; a GM hex `name` annotation, if set, still labels the map.

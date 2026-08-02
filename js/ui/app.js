@@ -34,7 +34,7 @@ import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanc
 import { generateHex } from "../gen/hex.js";
 import { stampSettlements, stampPois } from "../gen/culture.js";
 import { stampMonasteries } from "../gen/monastery.js";
-import { RACE_SET } from "../gen/culture-data.js";
+import { RACE_SET, RACES, RACE_LABELS } from "../gen/culture-data.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
@@ -1006,13 +1006,7 @@ function renderSelection() {
     // never shown). Read from the map's memoised render field so the panel agrees
     // with the tint. Settlement race + POI heritage come off the stored hex/poi.
     culture: hex && hex.placed ? cultureInfoAt(q, r) : null,
-    // GM paint override (Phase 14.6): the manually-anchored race at this hex, if
-    // any — drives the "Paint culture" picker's active state.
-    paintedRace: hex && hex.placed
-      ? (getCultureAnchors(current).find((a) => a.q === q && a.r === r) || {}).race || null
-      : null,
-    onPaintCulture: hex && hex.placed ? onPaintCulture : undefined,
-    onClearCulture: hex && hex.placed ? onClearCulture : undefined,
+    // GM culture paint/clear now lives on the radial "Culture" slot (not the panel).
     onOpenActions, // "⋯ Actions" → open the radial on this hex (11.5b)
     seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
@@ -3109,6 +3103,9 @@ function openHexRadial(q, r, clientX, clientY) {
     ownerId: owner ? owner.id : null,
     canReseat,
     promotable,
+    // Culture (moved off the panel): the race choices + this hex's painted anchor.
+    cultureRaces: RACES.map((r) => ({ value: r, label: RACE_LABELS[r] || r })),
+    paintedRace: placed ? ((getCultureAnchors(current).find((a) => a.q === q && a.r === r) || {}).race || null) : null,
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -3129,6 +3126,8 @@ function radialDispatch(id, value) {
     case "addRandomMonastery": return onAddRandomMonastery();
     case "addMonastery": return onAddMonastery(value);
     case "removeSettlement": return onRemoveSettlement();
+    case "paintCulture": return onPaintCulture(value);
+    case "clearCulture": return onClearCulture();
     case "genArea": return onGenerateArea(value);
     case "toggleLock": return onToggleLock();
     case "regenHex": return onRegenerate();
