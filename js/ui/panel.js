@@ -5,7 +5,7 @@ import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { monasterySecretReveal } from "../gen/monastery.js";
+import { monasterySecretReveal, MONASTERY_RANK } from "../gen/monastery.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
 import { RACES, RACE_LABELS } from "../gen/culture-data.js";
 import { cultureBand } from "./culture-style.js";
@@ -802,7 +802,7 @@ export function renderSelectionPanel(model) {
       const kindLabel = hex.settlement.kind === "keep"
         ? `${hex.settlement.size} — Keep (fortified)`
         : hex.settlement.kind === "monastery"
-        ? `${hex.settlement.size} — Monastery`
+        ? (MONASTERY_RANK[hex.settlement.size] || "Monastery") // monastic rank, not the settlement tier
         : hex.settlement.size;
       const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];
       // A demihuman town carries a stamped race (Phase 14.3); a Human town has

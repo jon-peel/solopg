@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mulberry32 } from "../js/core/rng.js";
 import { RACE_DEITIES, RACE_NAME_POOLS } from "../js/gen/culture-data.js";
-import { stampMonasteries, pickDistinctWeighted, monasteryName, monasterySecretReveal } from "../js/gen/monastery.js";
+import { stampMonasteries, pickDistinctWeighted, monasteryName, monasterySecretReveal, MONASTERY_RANK, SIZE_HOUSE_WORDS } from "../js/gen/monastery.js";
 
 // --- table shim -------------------------------------------------------------
 // The pure generator takes a preloaded Map of tables (same contract app.js gives
@@ -384,6 +384,28 @@ test("monasteryName: a non-empty name always built around a real house word", ()
     const n = monasteryName(mulberry32(i), nameTable);
     assert.ok(typeof n === "string" && n.length > 0, `empty name at seed ${i}`);
     assert.ok(HOUSE_RE.test(n), `name "${n}" carries no house word`);
+  }
+});
+
+test("monasteryName: the house-word suits the SIZE (Hamlet→hermitage/grange … City→abbey/charterhouse)", () => {
+  const ALL_HOUSE = ["Abbey", "Priory", "Cloister", "Hermitage", "Friary", "Charterhouse", "Grange"];
+  const housesIn = (n) => ALL_HOUSE.filter((h) => new RegExp(`\\b${h}\\b`).test(n));
+  for (const [size, allowed] of Object.entries(SIZE_HOUSE_WORDS)) {
+    for (let i = 0; i < 200; i++) {
+      const n = monasteryName(mulberry32(i * 7 + 1), nameTable, { size });
+      const found = housesIn(n);
+      assert.ok(found.length > 0, `no house word in "${n}" (${size})`);
+      assert.ok(found.every((h) => allowed.includes(h)), `${size} name "${n}" used an off-size house word ${found}`);
+    }
+  }
+});
+
+test("MONASTERY_RANK / SIZE_HOUSE_WORDS cover every size and reference real house words", () => {
+  assert.deepEqual(MONASTERY_RANK, { Hamlet: "Hermitage", Village: "Priory", Town: "Abbey", City: "Great Abbey" });
+  const tableHouses = new Set(nameTable.entries.filter((e) => e.value.class === "house").map((e) => e.value.text));
+  for (const [size, words] of Object.entries(SIZE_HOUSE_WORDS)) {
+    assert.ok(words.length > 0, `${size} has house words`);
+    assert.ok(words.every((w) => tableHouses.has(w)), `${size} house-words all exist in monastery-name.json`);
   }
 });
 

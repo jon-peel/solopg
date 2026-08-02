@@ -7,6 +7,8 @@
 // (e.g. "Neighbours" on a fully-surrounded hex). No DOM, no app state: this is
 // node-tested; radial-menu.js renders it and app.js dispatches the picks.
 
+import { MONASTERY_RANK } from "../gen/monastery.js"; // monastic rank labels for the Settlement→Monastery menu
+
 // Glyphs are emoji stand-ins (match the approved prototype); the canvas uses
 // its own terrain/POI art — these only label the menu.
 export const ACTION_GLYPH = {
@@ -66,7 +68,9 @@ function settlementChildren(allowedSizes, hasSettlement) {
   const sizes = allowedSizes.map((s) => leaf("addSettlement", "🏠", s, { value: s }));
   const monastery = submenu("addMonasteryMenu", "✝", "Monastery", {}, [
     leaf("addRandomMonastery", "🎲", "Random", { anchor: true }),
-    ...allowedSizes.map((s) => leaf("addMonastery", "✝", s, { value: s })),
+    // Label by monastic RANK (Hermitage/Priory/Abbey/Great Abbey), not the plain
+    // settlement tier; the underlying size still rides in `value`.
+    ...allowedSizes.map((s) => leaf("addMonastery", "✝", MONASTERY_RANK[s] || s, { value: s })),
   ]);
   if (hasSettlement) return [leaf("removeSettlement", "❌", "Remove"), ...sizes, monastery];
   return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes, monastery];

@@ -41,6 +41,27 @@ const MONASTERY_SIZE_RULES = {
   City:    { selfSufficient: true,  min: 3, max: 4 },
 };
 
+// A monastery's size reads MONASTICALLY, not as a plain settlement tier. The
+// underlying size (Hamlet…City — still what drives industries/library/catacombs)
+// maps to a rank shown in the panel meta + the radial placement menu, so a GM
+// never sees "Hamlet/Village/Town/City" on a religious house.
+export const MONASTERY_RANK = {
+  Hamlet: "Hermitage",
+  Village: "Priory",
+  Town: "Abbey",
+  City: "Great Abbey",
+};
+
+// House-words (from data/monastery-name.json) that suit each size — a humble
+// hermitage/grange up to a grand abbey/charterhouse — so the NAME itself signals
+// scale (no more a one-hex "…Abbey" next to a city "…Hermitage").
+export const SIZE_HOUSE_WORDS = {
+  Hamlet: ["Hermitage", "Grange"],
+  Village: ["Priory", "Friary"],
+  Town: ["Abbey", "Cloister"],
+  City: ["Abbey", "Charterhouse"],
+};
+
 // Per-house chance of carrying an optional descriptive TRAIT (renowned, fortified,
 // reclusive…). Rolled UNCONDITIONALLY (one draw either way) so the sub-stream stays
 // uniform whether or not a trait lands.
@@ -141,12 +162,19 @@ export function pickDistinctWeighted(rng, entries, count) {
  * @param {{ race?: string }} [opts]
  * @returns {string}
  */
-export function monasteryName(rng, nameTable, { race } = {}) {
+export function monasteryName(rng, nameTable, { race, size } = {}) {
   // Partition the {class,text} entries into weighted sub-tables by class.
   const byClass = (cls) => ({ id: `monastery-name:${cls}`, entries:
     nameTable.entries.filter((e) => e.value.class === cls)
       .map((e) => ({ weight: e.weight ?? 1, value: e.value.text })) });
-  const houses = byClass("house");
+  // The house-word suits the SIZE (a Hamlet is a Hermitage/Grange, a City an
+  // Abbey/Charterhouse), so the name itself signals scale. One rollTable draw
+  // regardless of pool size, so the rng stream is unchanged. Unknown size (or a
+  // subset that matches nothing) falls back to any house.
+  const allHouses = byClass("house");
+  const allow = SIZE_HOUSE_WORDS[size];
+  const subset = allow ? allHouses.entries.filter((e) => allow.includes(e.value)) : [];
+  const houses = subset.length ? { id: allHouses.id, entries: subset } : allHouses;
   const house = rollTable(houses, rng).value;
 
   // Culture-aware: a demihuman house ~half the time takes its own people's name-stem.
@@ -229,7 +257,7 @@ export function stampMonasteries(seed, placedHexes, tables, opts = {}) {
 
     // 7. Name — the house's proper name, rolled before the relic so it keeps its
     //    fixed position. Culture-aware via `race` (see monasteryName).
-    const name = monasteryName(rng, tables.get("monastery-name"), { race });
+    const name = monasteryName(rng, tables.get("monastery-name"), { race, size });
 
     // 8. Relic — a notable treasure the house is KNOWN FOR, rolled LAST at a
     //    documented, fixed position so a later step's `secret` can reference an

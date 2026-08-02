@@ -56,7 +56,9 @@ test("Settlement submenu offers a Monastery placement (Random + each allowed siz
     mon.children.map((c) => c.id),
     ["addRandomMonastery", "addMonastery", "addMonastery", "addMonastery", "addMonastery"],
   );
-  assert.deepEqual(mon.children.slice(1).map((c) => c.value), sizes); // one leaf per allowed size
+  assert.deepEqual(mon.children.slice(1).map((c) => c.value), sizes); // underlying size rides in value
+  // …but the labels read as monastic RANKS, not the plain settlement tiers.
+  assert.deepEqual(mon.children.slice(1).map((c) => c.label), ["Hermitage", "Priory", "Abbey", "Great Abbey"]);
   // Offered even when a settlement already exists (convert it to a monastery).
   const settle2 = byId(buildRadialModel(base({ placed: true, terrain: "Plains", allowedSizes: sizes, hasSettlement: true })), "settlement");
   assert.ok(settle2.children.some((c) => c.id === "addMonasteryMenu"), "Monastery offered even when a settlement exists");
