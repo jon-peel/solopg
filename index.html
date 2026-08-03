@@ -140,11 +140,9 @@
             <div class="legend-row"><span class="lg-line lg-ancient"></span>Ancient road</div>
             <div class="legend-row"><span class="lg-line lg-river"></span>River</div>
           </div>
-          <div class="legend-section">
-            <div class="legend-sub">Settlements</div>
-            <div class="legend-row">Icon grows Hamlet → City</div>
-            <div class="legend-row">♜ &nbsp;Keep / fort</div>
-          </div>
+          <!-- Settlement key: built from the same mark table the map draws, so
+               the rows can never drift from the glyphs on the tiles. -->
+          <div class="legend-section" id="legend-settlements"></div>
         </div>
         <!-- Bottom-right map controls: zoom (＋ / slider / −), recenter, help. -->
         <div id="map-controls">

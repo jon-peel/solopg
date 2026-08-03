@@ -87,6 +87,7 @@ import {
   cultureInfoAt,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
+import { SETTLEMENT_MARK, KEEP_MARK, MONASTERY_MARK } from "./settlement-art.js";
 import { POI_GLYPHS, POI_DOT_COLORS, glyphForDungeon, factionColor, factionHatchDeg } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
@@ -853,6 +854,7 @@ function buildLegendTerrain() {
     host.appendChild(row);
   }
   buildLegendPoi();
+  buildLegendSettlements();
   legendBuilt = true;
 }
 
@@ -873,6 +875,31 @@ function buildLegendPoi() {
     host.appendChild(row);
   }
 }
+
+// Zoomed-out settlement marks — the per-size dots plus the kind overlays, read
+// from settlement-art.js so the key matches what the renderer stamps.
+function buildLegendSettlements() {
+  const host = $("legend-settlements");
+  if (!host) return;
+  host.innerHTML = `<div class="legend-sub">Settlements</div>`;
+  const row = (glyph, label) => {
+    const r = document.createElement("div");
+    r.className = "legend-row";
+    const g = document.createElement("span");
+    g.className = "lg-glyph";
+    g.textContent = glyph;
+    r.append(g, document.createTextNode(label));
+    host.appendChild(r);
+  };
+  for (const size of SIZE_ORDER) row(SETTLEMENT_MARK[size], size);
+  row(KEEP_MARK, "Keep / fort");
+  row(MONASTERY_MARK, "Monastery");
+  const note = document.createElement("div");
+  note.className = "legend-note";
+  note.textContent = "Marks shown when zoomed out; sketches when zoomed in.";
+  host.appendChild(note);
+}
+
 function toggleLegend(force) {
   const el = $("legend");
   if (!el) return;
