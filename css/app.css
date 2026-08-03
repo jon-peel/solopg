@@ -694,8 +694,26 @@ button:hover {
   border-bottom: 1px solid var(--border);
 }
 
+/* The overlay title is a HEADER, so it takes the display face like every other
+   title in the app (.brand, #panel h2, #selection h3). Inheriting the body face
+   left it 0.6px larger than the buttons flanking it — bold body text, not a
+   title. */
 #dungeon-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem; /* clearly above the 0.9rem toolbar controls */
+  font-weight: 600; /* softer than <strong>'s 700, matching .brand */
+  letter-spacing: 0.02em;
   color: var(--accent);
+  white-space: nowrap;
+}
+
+/* Emoji carry a taller em box than the serif faces, so a bare "glyph + space +
+   text" title sits large and low. Own box, own metrics. */
+.title-glyph {
+  font-size: 1.1em;
+  line-height: 1;
+  margin-right: 0.35rem;
+  vertical-align: -0.05em;
 }
 
 #dungeon-levels {

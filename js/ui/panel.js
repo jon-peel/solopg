@@ -1021,7 +1021,12 @@ export function renderDungeonPanel({
   sel.innerHTML = "";
 
   const h = document.createElement("h3");
-  h.textContent = `${glyphForDungeon(dungeon.theme)} ${dungeon.theme || "Dungeon"}`;
+  // Glyph in its own span (see .title-glyph) so it shares the baseline treatment
+  // with the Dungeon View overlay's title.
+  const hg = document.createElement("span");
+  hg.className = "title-glyph";
+  hg.textContent = glyphForDungeon(dungeon.theme);
+  h.append(hg, document.createTextNode(dungeon.theme || "Dungeon"));
   const skulls = difficultySkulls(dungeon.difficulty);
   if (skulls) h.appendChild(skulls); // inline with the title
   sel.appendChild(h);

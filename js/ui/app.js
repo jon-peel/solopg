@@ -1672,7 +1672,14 @@ function openDungeonView(poi, teleTable) {
   // Lead with the theme's own map glyph so the overlay title matches the marker
   // the user just clicked.
   const theme = poi.detail.theme || dungeon.theme || "Dungeon";
-  $("dungeon-title").textContent = `${glyphForDungeon(theme)} ${theme} — ${dungeon.size}`;
+  // The glyph gets its own span so the colour-emoji metrics don't fight the
+  // serif baseline (see .title-glyph).
+  const title = $("dungeon-title");
+  title.textContent = "";
+  const tg = document.createElement("span");
+  tg.className = "title-glyph";
+  tg.textContent = glyphForDungeon(theme);
+  title.append(tg, document.createTextNode(`${theme} — ${dungeon.size}`));
   showDungeonLevel(0);
   fitView(); // frame the whole level on open
 }
