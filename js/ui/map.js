@@ -344,10 +344,14 @@ export function render() {
     }
   }
 
-  // Hover outline (under the selection ring; skipped on the selected cell).
-  if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
+  // Hover readout. The OUTLINE is skipped on the selected cell (its ring already
+  // marks it), but the LABEL is not — a hex you just selected is exactly the one
+  // you want named under the cursor. Folding the label into the outline's guard
+  // hid the readout on every selected hex.
+  if (hovered) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
-    strokeHex(c.x, c.y, MAP.hoverStroke, 2);
+    const isSelected = selected && selected.q === hovered.q && selected.r === hovered.r;
+    if (!isSelected) strokeHex(c.x, c.y, MAP.hoverStroke, 2);
     // Reveal names on hover (hidden by default): the GM's own hex name (or a
     // settlement's name) on top, then the region, then — coloured to match its
     // territory — the faction that runs the hex. Multi-line when several apply.
