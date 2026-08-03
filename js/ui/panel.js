@@ -1041,7 +1041,9 @@ export function renderDungeonPanel({
       // The rest carry their tier as pips, so the ordering reads as a danger
       // scale rather than an unexplained list order.
       const pips = m.deadliest ? "☠" : tierPips(m.tier);
-      li.textContent = `${pips ? pips + " " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}${m.deadliest ? " · the deadliest" : ""}`;
+      // The ☠ pip already marks the apex (and .bestiary-deadliest bolds the row),
+      // so a trailing " · the deadliest" was saying it a third time.
+      li.textContent = `${pips ? pips + " " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}`;
       if (m.deadliest) li.className = "bestiary-deadliest";
       if (m.telegraph) {
         const tel = document.createElement("div");
