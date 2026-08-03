@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <g stroke="#4a3520" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- cross atop the steeple (the religious tell) -->
+    <line x1="39" y1="26" x2="39" y2="12"/>
+    <line x1="34" y1="17" x2="44" y2="17"/>
+    <!-- nave body + gabled roof (right) -->
+    <rect x="49" y="56" width="31" height="26" fill="#b7ae9c"/>
+    <polygon points="47,56 64.5,40 82,56" fill="#b7ae9c"/>
+    <!-- steeple tower + peaked spire (left) -->
+    <rect x="30" y="48" width="18" height="34" fill="#b7ae9c"/>
+    <polygon points="28,48 39,26 50,48" fill="#b7ae9c"/>
+    <!-- arched chapel door on the tower -->
+    <path d="M34,82 L34,70 Q34,64 39,64 Q44,64 44,70 L44,82 Z" fill="#5a3a22" stroke="none"/>
+    <path d="M34,82 L34,70 Q34,64 39,64 Q44,64 44,70 L44,82"/>
+    <!-- round window on the nave gable -->
+    <circle cx="64.5" cy="63" r="4" fill="#5a3a22"/>
+  </g>
+</svg>

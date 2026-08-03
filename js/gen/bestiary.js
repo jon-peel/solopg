@@ -28,6 +28,70 @@ export function buildBestiary(dungeon) {
 }
 
 /**
+ * A name -> danger-tier index from the monster-families table. A member keeps its
+ * own tier (1-4); a family's ELITE ranks above every member as 5 (the apex boss),
+ * so a level's/dungeon's most dangerous reads correctly. A name in two families
+ * takes its highest tier.
+ * @param {{ entries?: { value: { members?: {value:string,tier?:number}[], elite?: string } }[] }} familiesTable
+ * @returns {Map<string, number>}
+ */
+export function buildTierIndex(familiesTable) {
+  const idx = new Map();
+  for (const e of (familiesTable && familiesTable.entries) || []) {
+    const fam = e.value || {};
+    for (const m of fam.members || []) {
+      const t = m.tier || 1;
+      if (!idx.has(m.value) || idx.get(m.value) < t) idx.set(m.value, t);
+    }
+    if (fam.elite) idx.set(fam.elite, 5); // the boss outranks every rank-and-file member
+  }
+  return idx;
+}
+
+/**
+ * Rank a bestiary by danger: annotate each entry with its `tier` (from the tier
+ * index; 0 when unknown), sort deadliest-first (tier, then deepest floor, then
+ * name), and flag the single apex with `deadliest: true`. Returns a NEW array;
+ * any existing fields (e.g. `telegraph`) are preserved.
+ * @param {{name:string,floors:number[]}[]} bestiary
+ * @param {Map<string,number>} tierIndex
+ */
+export function rankBestiary(bestiary, tierIndex) {
+  const tierOf = (name) => (tierIndex && tierIndex.get(name)) || 0;
+  const ranked = (bestiary || []).map((m) => ({ ...m, tier: tierOf(m.name) }));
+  ranked.sort((a, b) =>
+    b.tier - a.tier ||
+    Math.max(0, ...b.floors) - Math.max(0, ...a.floors) ||
+    a.name.localeCompare(b.name));
+  if (ranked.length) ranked[0].deadliest = true;
+  return ranked;
+}
+
+/**
+ * The most dangerous monster stocked on each level (for a per-level "foreshadow
+ * this" cue). Returns { [depth]: { name, tier } } — the highest-tier room monster
+ * on that floor (ties broken by name for determinism).
+ * @param {{ levels?: { depth:number, rooms?: { monster?: { name:string } }[] }[] }} dungeon
+ * @param {Map<string,number>} tierIndex
+ */
+export function levelApex(dungeon, tierIndex) {
+  const tierOf = (name) => (tierIndex && tierIndex.get(name)) || 0;
+  const apex = {};
+  for (const level of dungeon.levels || []) {
+    let best = null;
+    for (const room of level.rooms || []) {
+      if (!room.monster) continue;
+      const t = tierOf(room.monster.name);
+      if (!best || t > best.tier || (t === best.tier && room.monster.name < best.name)) {
+        best = { name: room.monster.name, tier: t };
+      }
+    }
+    if (best) apex[level.depth] = best;
+  }
+  return apex;
+}
+
+/**
  * The authored telegraph for a monster (a seeded pick among its phrases), or
  * null when there's no SPECIFIC entry for it. Does NOT fall back to a generic
  * bucket — only authored monsters get an inline hint.

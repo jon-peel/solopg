@@ -33,7 +33,8 @@ import {
 import { generateFaction, promoteFaction, addHolding, advanceFactionTurn, advanceFactionDays, eligibleLords, isValidSeat, reseatFaction, rollEmergences, factionHome } from "../gen/factions.js";
 import { generateHex } from "../gen/hex.js";
 import { stampSettlements, stampPois } from "../gen/culture.js";
-import { RACE_SET } from "../gen/culture-data.js";
+import { stampMonasteries } from "../gen/monastery.js";
+import { RACE_SET, RACES, RACE_LABELS } from "../gen/culture-data.js";
 import { computeRivers, buildManualRiver } from "../gen/rivers.js";
 import { computeRoads, buildManualRoad } from "../gen/roads.js";
 import { travelDayToward, travelDayBearing, roadHexKeySet, sightHexes, TRAVEL_COST, ENCUMBRANCE_FACTOR, daysToCross } from "../gen/travel.js";
@@ -55,9 +56,9 @@ import {
 } from "../data/db.js";
 import { logLine, showWorld, renderSelectionPanel, renderDungeonPanel, renderGlobalHooks, factionCard, renderOraclePanel, setPanelTab } from "./panel.js";
 import { settlementName } from "../gen/settlement-name.js";
-import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
+import { askYesNo, rollMeaning, rollComplication, rollSettlement, rollTavern, tavernCountForSize, rollEncounterCheck, rollResearch, oracleLine, ORACLE_TABLE_IDS } from "../gen/oracle.js";
 import { rollWanderingEncounter } from "../gen/wandering.js";
-import { buildBestiary, telegraphFor } from "../gen/bestiary.js";
+import { buildBestiary, telegraphFor, buildTierIndex, rankBestiary, levelApex } from "../gen/bestiary.js";
 import { attachDungeon, setLevel, setMarks, setSelectedRoom, fitView, centerOnRoom } from "./dungeon-map.js";
 import {
   attachMap,
@@ -154,6 +155,10 @@ const HOOK_TABLE_IDS = [
 // Tables the faction generator rolls on (Phase 8.7; + monster kind 8.16), loaded on demand.
 const FACTION_TABLE_IDS = ["faction-archetype", "faction-goal", "faction-disposition", "faction-monster-kind"];
 
+// Tables the monastery bake rolls on (Phase 15, loaded on demand when a monastery
+// settlement needs its `settlement.monastery` filled — see syncMonasteries).
+const MONASTERY_STAMP_TABLE_IDS = ["monastery-product", "monastery-provisioning", "monastery-trait", "shrine-dedication", "monastery-name", "monastery-relic", "monastery-secret"];
+
 let current = null; // the in-memory current world
 let selected = null; // { q, r } | null — selected map cell
 let selectedPoiId = null; // drill-in POI within the selected hex
@@ -192,6 +197,10 @@ let oracleSeq = 0;
 // memory keyed by "q,r", shown inline on each card, never persisted. A town card
 // auto-rolls one the first time it opens; re-opens keep the last (↻ re-rolls).
 let settlementSituations = {}; // { [`${q},${r}`]: { line, note } }
+// Monastery library-research results (Phase 15): a transient, in-memory GM aid
+// like the situations — keyed by "q,r", shown inline on the monastery card,
+// never persisted or exported. Button-only (no auto-roll); ↻ re-rolls.
+let researchResults = {}; // { [`${q},${r}`]: { line } }
 
 // Faction detail popup (Phase 12.1) — the id of the faction whose floating card
 // is open over the map (via a legend "Powers" row), or null when closed. Replaces
@@ -209,6 +218,14 @@ let dungeonFrameBB = null; // shared bounding box for the open dungeon's levels
 // deterministic). Dungeon-wide, so it's left untouched across level/room
 // switches — only openDungeonView (re)computes it, closeDungeonView clears it.
 let dungeonBestiary = [];
+let dungeonApex = {}; // { [depth]: { name, tier } } — the most dangerous monster per level
+let monsterTierIndex = null; // name -> danger tier, built once from monster-families (static)
+
+// Build the static monster danger-tier index once, from a loaded tables Map.
+function ensureTierIndex(tables) {
+  const fam = tables && tables.get("monster-families");
+  if (fam && !monsterTierIndex) monsterTierIndex = buildTierIndex(fam);
+}
 
 // Wandering encounter roll (referee aid, mirrors the Oracle's transience): the
 // latest draw for the level currently shown in the panel, held only in memory
@@ -273,6 +290,7 @@ async function setCurrent(world) {
   oracleResults = {}; // the oracle results are a transient per-session aid
   oracleSeq = 0;
   settlementSituations = {}; // ...as are the town "What's stirring?" situations
+  researchResults = {}; // ...as are the monastery library-research results
   wanderingResult = null; // ...as is the wandering-encounter roll
   wanderingSeq = 0;
   if (world) { delete world.oracleLog; delete world.oracleSeq; } // drop 9.1-era persisted oracle data — never saved/exported now
@@ -281,6 +299,7 @@ async function setCurrent(world) {
   if (world) syncRivers(world); // rebuild the river overlay for the loaded world
   if (world) syncRoads(world);  // ...then the road overlay (needs final settlements + rivers)
   if (world) syncCultures(world); // ...then stamp culture races on any unstamped towns (loaded/imported worlds)
+  if (world) await syncMonasteries(world); // ...then bake monastery houses (needs the final race+size from syncCultures)
   if (world) setLastWorldId(world.id);
   showWorld(world, { onRename: onRenameWorld });
   setWorld(world);
@@ -322,6 +341,7 @@ async function onNewWorld(fillRadius = null) {
     syncRivers(current);
     syncRoads(current); // persist the derived overlays with the world
     syncCultures(current); // stamp settlement races once all towns (incl. water) exist
+    await syncMonasteries(current); // ...then bake monastery houses (needs the final race+size from syncCultures)
   }
   const saved = await saveWorld(world);
   await setCurrent(saved);
@@ -994,13 +1014,7 @@ function renderSelection() {
     // never shown). Read from the map's memoised render field so the panel agrees
     // with the tint. Settlement race + POI heritage come off the stored hex/poi.
     culture: hex && hex.placed ? cultureInfoAt(q, r) : null,
-    // GM paint override (Phase 14.6): the manually-anchored race at this hex, if
-    // any — drives the "Paint culture" picker's active state.
-    paintedRace: hex && hex.placed
-      ? (getCultureAnchors(current).find((a) => a.q === q && a.r === r) || {}).race || null
-      : null,
-    onPaintCulture: hex && hex.placed ? onPaintCulture : undefined,
-    onClearCulture: hex && hex.placed ? onClearCulture : undefined,
+    // GM culture paint/clear now lives on the radial "Culture" slot (not the panel).
     onOpenActions, // "⋯ Actions" → open the radial on this hex (11.5b)
     seed: current.seed, // lets the panel derive the settlement name
     annotation: { name: (hex && hex.name) || "", note: (hex && hex.note) || "" },
@@ -1039,6 +1053,14 @@ function renderSelection() {
     // The situation only belongs to the currently-selected hex.
     situation: settlementSituations[`${q},${r}`] || null,
     onRollSituation: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onRollSituation(q, r) : undefined,
+    // Monastery library research (Phase 15): the last result for this hex (or null)
+    // and the button-only roller, offered only when this hex is a monastery.
+    research: researchResults[`${q},${r}`] || null,
+    onResearch: hex && hex.settlement && hex.settlement.monastery ? () => onResearch(q, r) : undefined,
+    // Monastery catacombs (Phase 15, Step 7): offered only when the house sits over
+    // an explorable underground. The handler lazily creates a "Catacombs" dungeon
+    // POI on this hex and opens it, reusing the existing dungeon interior system.
+    onExploreCatacombs: hex && hex.settlement && hex.settlement.monastery && hex.settlement.monastery.catacombs ? () => onExploreCatacombs(q, r) : undefined,
     onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
     onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
@@ -1192,7 +1214,7 @@ function travelHeadline(result, aimLabel, aimKind) {
 function destinationLabel(hex, q, r) {
   if (hex && hex.name) return hex.name;
   if (hex && hex.settlement && hex.settlement.present) {
-    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
+    return settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race, name: hex.settlement.monastery?.name });
   }
   return `(${q}, ${r})`;
 }
@@ -1305,6 +1327,21 @@ function onAddRandomSettlement() {
   if (!sizes.length) return;
   const size = sizes[Math.floor(Math.random() * sizes.length)];
   setSettlement({ present: true, size });
+}
+
+// Place a MONASTERY on demand (kind:"monastery"), of a chosen or random size.
+// setSettlement replaces the hex's settlement wholesale, so the monastery bake
+// (syncMonasteries, via persistAndRefresh) fills settlement.monastery fresh.
+const onAddMonastery = (size) => setSettlement({ present: true, size, kind: "monastery" });
+
+function onAddRandomMonastery() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const sizes = allowedSizes(hex.terrain);
+  if (!sizes.length) return;
+  const size = sizes[Math.floor(Math.random() * sizes.length)];
+  setSettlement({ present: true, size, kind: "monastery" });
 }
 
 // Next free "poi:<n>" id within a hex (max existing + 1).
@@ -1485,6 +1522,7 @@ async function onSelectPoi(id) {
       try {
         const tables = await loadTables(HEX_TABLE_IDS);
         teleTable = tables.get("monster-telegraph");
+        ensureTierIndex(tables); // static monster danger-tier index (for the bestiary ranking)
         const m = /^poi:(\d+)$/.exec(poi.id || "");
         const n = m ? Number(m[1]) : 0;
         poi.detail = poi.detail || {};
@@ -1517,12 +1555,13 @@ async function onSelectPoi(id) {
       }
     } else {
       // Revisiting an already-built dungeon normally opens with no table load at
-      // all — but the bestiary's inline telegraphs still need this one table. A
-      // cheap cache hit once anything has loaded it; on a fetch failure degrade
-      // to "no telegraphs" rather than block the open.
+      // all — but the bestiary's inline telegraphs + danger ranking still need
+      // these two tables. A cheap cache hit once anything has loaded them; on a
+      // fetch failure degrade to "no telegraphs / no ranking" rather than block.
       try {
-        const tables = await loadTables(["monster-telegraph"]);
+        const tables = await loadTables(["monster-telegraph", "monster-families"]);
         teleTable = tables.get("monster-telegraph");
+        ensureTierIndex(tables);
       } catch {
         teleTable = null;
       }
@@ -1577,10 +1616,14 @@ function openDungeonView(poi, teleTable) {
   dungeonFrameBB = dungeonFrame(dungeon);
   // The bestiary is dungeon-wide + deterministic (seeded per monster name), so
   // it's computed once here rather than per level/room render.
-  dungeonBestiary = buildBestiary(dungeon).map((m) => ({
+  const withTelegraph = buildBestiary(dungeon).map((m) => ({
     ...m,
     telegraph: teleTable ? telegraphFor(m.name, teleTable, subRng(current.seed, "telegraph", selected.q, selected.r, m.name)) : null,
   }));
+  // Rank by danger (deadliest flagged) and find each level's apex — so the panel
+  // can point out the dungeon's deadliest + what to foreshadow on each floor.
+  dungeonBestiary = rankBestiary(withTelegraph, monsterTierIndex);
+  dungeonApex = levelApex(dungeon, monsterTierIndex);
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
   // the user looking at an unchanged map ("nothing happened").
   $("dungeon-view").hidden = false;
@@ -1594,6 +1637,7 @@ function closeDungeonView() {
   dungeonPoi = null;
   dungeonRoomN = null;
   dungeonBestiary = []; // clear the dungeon-wide bestiary when leaving
+  dungeonApex = {}; // ...and the per-level apex cues
   $("dungeon-view").hidden = true;
   $("dungeon-legend").hidden = true; // collapse the legend when leaving
   setLevel(null);
@@ -1706,7 +1750,7 @@ function showDungeonLevel(i) {
   const level = dungeon.levels[i];
   renderLevelSwitcher();
   setLevel(level, marksFor(dungeon, i), dungeonFrameBB);
-  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
+  renderDungeonPanel({ dungeon, level, levelIndex: i, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary, levelApex: dungeonApex });
 }
 
 // Render the side panel for one room (detail + stair nav + exploration tracking).
@@ -1728,6 +1772,7 @@ function renderRoomPanel(n) {
     onRollWandering,
     wanderingResult,
     bestiary: dungeonBestiary,
+    levelApex: dungeonApex,
     onRevealTreasure: () => onRevealTreasure(n),
     onRevealHook: () => onRevealHook(n),
   });
@@ -1755,7 +1800,7 @@ function refreshDungeonPanel() {
   }
   const dungeon = dungeonPoi.detail.dungeon;
   const level = dungeon.levels[dungeonLevelIndex];
-  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary });
+  renderDungeonPanel({ dungeon, level, levelIndex: dungeonLevelIndex, room: null, connections: [], surface: [], onGoTo, onRollWandering, wanderingResult, bestiary: dungeonBestiary, levelApex: dungeonApex });
 }
 
 // Roll a wandering encounter for the current level (referee aid, Phase 12): a
@@ -1960,7 +2005,7 @@ function selectedSettlementContext() {
   const { q, r } = selected;
   const hex = getHex(current, q, r);
   if (!(hex && hex.placed && hex.settlement && hex.settlement.present)) return null;
-  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race });
+  const name = settlementName(current.seed, q, r, hex.gen, { kind: hex.settlement.kind, terrain: hex.terrain, race: hex.settlement.race, name: hex.settlement.monastery?.name });
   return { label: `${name} · ${hex.settlement.size}`, factionName: factionNameAt(q, r) };
 }
 
@@ -2014,6 +2059,47 @@ async function onRollSituation(q, r) {
   settlementSituations[`${q},${r}`] = situation;
   logLine(`🎲 What's stirring: ${situation.line}${situation.note ? " · " + situation.note : ""}`);
   renderSelection();
+}
+
+// "Research the library" — roll the monastery's library odds by its size and show
+// only the RESULT TIER as a GM prompt (the GM names the actual book/answer). A
+// transient, in-memory aid keyed to the hex (never saved). Button-only — no
+// auto-roll — and each press re-rolls. No table load: research is const-based.
+async function onResearch(q, r) {
+  const hex = getHex(current, q, r);
+  if (!hex || !hex.settlement || !hex.settlement.monastery) return;
+  const pick = rollResearch(subRng(current.seed, "oracle", "research", oracleSeq++), hex.settlement.size);
+  const line = oracleLine(pick);
+  researchResults[`${q},${r}`] = { line };
+  logLine(`📚 Research (${hex.settlement.monastery.library}): ${line}`);
+  renderSelection();
+}
+
+// "Explore the catacombs" — a monastery with an underground opens into the
+// Dungeon View, REUSING the existing dungeon interior system (no new generator).
+// On first explore we materialise a persistent "Catacombs" dungeon POI on the
+// hex (its size taken from the baked catacombs decision); thereafter the same POI
+// is reopened. onSelectPoi does the lazy interior build + openDungeonView. The
+// POI also shows in the hex's normal POI list — that's fine.
+async function onExploreCatacombs(q, r) {
+  const hex = current && getHex(current, q, r);
+  const mon = hex && hex.settlement && hex.settlement.monastery;
+  if (!mon || !mon.catacombs) return;
+  hex.pois = hex.pois || [];
+  let poi = hex.pois.find((p) => p.detail && p.detail.catacombs);
+  if (!poi) {
+    const n = nextPoiId(hex);
+    poi = {
+      id: `poi:${n}`,
+      type: "dungeon",
+      name: "Catacombs",
+      occupant: { kind: "none" },
+      detail: { theme: "Catacombs", sizeHint: mon.catacombs.size, catacombs: true },
+    };
+    hex.pois.push(poi);
+    await persistAndRefresh();
+  }
+  await onSelectPoi(poi.id); // reuses the lazy build + openDungeonView
 }
 
 // Add one more tavern (a fresh roll on a monotonic per-settlement counter, so
@@ -2417,6 +2503,22 @@ function syncCultures(world) {
   stampPois(world.seed, hexes, { extraAnchors }); // ...then heritage-field POI builder races + clusters
 }
 
+// Bake `settlement.monastery` (Phase 15) onto any monastery-kind settlement that
+// hasn't been resolved yet. MUST run AFTER syncCultures: the bake reads each town's
+// FINAL race + size (a demihuman house honours its gods / leans its crafts, and
+// size drives self-sufficiency). Idempotent and cheap when nothing is pending — no
+// tables are loaded unless a monastery actually needs filling. Async (loads the
+// flavour tables on demand); every call site already awaits inside an async fn.
+async function syncMonasteries(world) {
+  if (!world) return;
+  const hexes = placedHexes(world);
+  const pending = hexes.some(h => h.settlement && h.settlement.present
+    && h.settlement.kind === "monastery" && !h.settlement.monastery);
+  if (!pending) return;
+  const tables = await loadTables(MONASTERY_STAMP_TABLE_IDS);
+  stampMonasteries(world.seed, hexes, tables);
+}
+
 // Build the lazily-generated target tile for a Distant hook: a normal placed hex
 // (random terrain; generated in isolation, so the route to it stays blank) that
 // carries a forced dungeon POI as the hook's subject. Marked unexplored.
@@ -2800,6 +2902,7 @@ async function persistAndRefresh() {
   syncRivers(current); // recompute the river overlay from the revealed terrain before persisting
   syncRoads(current);  // ...then the road overlay (needs final settlements + rivers)
   syncCultures(current); // ...then stamp culture races onto any newly-revealed towns
+  await syncMonasteries(current); // ...then bake monastery houses (needs the final race+size from syncCultures)
   current = await saveWorld(current);
   setWorld(current);
   refreshHookMarks();
@@ -3016,6 +3119,9 @@ function openHexRadial(q, r, clientX, clientY) {
     ownerId: owner ? owner.id : null,
     canReseat,
     promotable,
+    // Culture (moved off the panel): the race choices + this hex's painted anchor.
+    cultureRaces: RACES.map((r) => ({ value: r, label: RACE_LABELS[r] || r })),
+    paintedRace: placed ? ((getCultureAnchors(current).find((a) => a.q === q && a.r === r) || {}).race || null) : null,
   });
   openRadial({ clientX, clientY, model, dispatch: radialDispatch });
 }
@@ -3033,7 +3139,11 @@ function radialDispatch(id, value) {
     case "removePoi": return onRemovePoi(value);
     case "addRandomSettlement": return onAddRandomSettlement();
     case "addSettlement": return onAddSettlement(value);
+    case "addRandomMonastery": return onAddRandomMonastery();
+    case "addMonastery": return onAddMonastery(value);
     case "removeSettlement": return onRemoveSettlement();
+    case "paintCulture": return onPaintCulture(value);
+    case "clearCulture": return onClearCulture();
     case "genArea": return onGenerateArea(value);
     case "toggleLock": return onToggleLock();
     case "regenHex": return onRegenerate();

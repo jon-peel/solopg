@@ -17,7 +17,8 @@ const base = (over = {}) => ({
 });
 
 const byId = (model, id) => model.find((s) => s.id === id);
-const SLOTS = ["terrain", "poi", "settlement", "hook", "generate", "regenerate", "deleteHex", "draw", "party", "faction"];
+const child = (slot, id) => (slot.children || []).find((c) => c.id === id); // a submenu's child by id
+const SLOTS = ["terrain", "poi", "settlement", "culture", "generate", "draw", "modify", "world"];
 
 test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   const empty = buildRadialModel(base()).map((s) => s.id);
@@ -26,12 +27,13 @@ test("slots are a fixed set in a fixed order, regardless of cell state", () => {
   assert.deepEqual(placed, SLOTS);
 });
 
-test("empty cell: Generate + Terrain + Hook enabled; build actions disabled with reasons", () => {
+test("empty cell: Generate + Terrain + World(Hook) enabled; build actions disabled with reasons", () => {
   const m = buildRadialModel(base());
   assert.equal(byId(m, "generate").enabled, true);
   assert.equal(byId(m, "terrain").enabled, true);
-  assert.equal(byId(m, "hook").enabled, true);
-  for (const id of ["poi", "settlement", "regenerate", "deleteHex"]) {
+  assert.equal(byId(m, "world").enabled, true);
+  assert.equal(child(byId(m, "world"), "hook").enabled, true); // Hook works anywhere (read map / trail)
+  for (const id of ["poi", "settlement", "culture", "modify"]) {
     assert.equal(byId(m, id).enabled, false, `${id} should be disabled on an empty cell`);
     assert.ok(byId(m, id).reason, `${id} should carry a reason`);
   }
@@ -39,12 +41,46 @@ test("empty cell: Generate + Terrain + Hook enabled; build actions disabled with
 
 test("placed cell: build actions enabled; Generate stays enabled (Random child gates instead)", () => {
   const m = buildRadialModel(base({ placed: true, terrain: "Forest", allowedSizes: ["Thorp"] }));
-  for (const id of ["poi", "settlement", "regenerate", "deleteHex"]) {
+  for (const id of ["poi", "settlement", "culture", "modify"]) {
     assert.equal(byId(m, id).enabled, true, `${id} should be enabled on a placed cell`);
   }
   // The Generate submenu itself is always open (Area sizes work regardless of
   // whether the center is placed); only its Random (single-hex) child gates.
   assert.equal(byId(m, "generate").enabled, true);
+});
+
+test("Settlement submenu offers a Monastery placement (Random + each allowed size)", () => {
+  const sizes = ["Hamlet", "Village", "Town", "City"];
+  const settle = byId(buildRadialModel(base({ placed: true, terrain: "Plains", allowedSizes: sizes })), "settlement");
+  const mon = settle.children.find((c) => c.id === "addMonasteryMenu");
+  assert.ok(mon && mon.kind === "submenu", "a Monastery submenu is present");
+  assert.deepEqual(
+    mon.children.map((c) => c.id),
+    ["addRandomMonastery", "addMonastery", "addMonastery", "addMonastery", "addMonastery"],
+  );
+  assert.deepEqual(mon.children.slice(1).map((c) => c.value), sizes); // underlying size rides in value
+  // …but the labels read as monastic RANKS, not the plain settlement tiers.
+  assert.deepEqual(mon.children.slice(1).map((c) => c.label), ["Hermitage", "Priory", "Abbey", "Great Abbey"]);
+  // Offered even when a settlement already exists (convert it to a monastery).
+  const settle2 = byId(buildRadialModel(base({ placed: true, terrain: "Plains", allowedSizes: sizes, hasSettlement: true })), "settlement");
+  assert.ok(settle2.children.some((c) => c.id === "addMonasteryMenu"), "Monastery offered even when a settlement exists");
+});
+
+test("Culture slot: a race leaf each + Clear; the painted race is ticked, Clear gates on an anchor", () => {
+  const cultureRaces = [{ value: "elf", label: "Elf" }, { value: "dwarf", label: "Dwarf" }];
+  // No anchor here: races offered, none ticked, Clear disabled with a reason.
+  const none = byId(buildRadialModel(base({ placed: true, terrain: "Forest", cultureRaces })), "culture");
+  assert.equal(none.kind, "submenu");
+  assert.deepEqual(none.children.map((c) => c.id), ["paintCulture", "paintCulture", "clearCulture"]);
+  assert.deepEqual(none.children.slice(0, 2).map((c) => c.label), ["Elf", "Dwarf"]);
+  assert.equal(child(none, "clearCulture").enabled, false);
+  // A painted anchor: that race is ticked and Clear is enabled.
+  const painted = byId(buildRadialModel(base({ placed: true, terrain: "Forest", cultureRaces, paintedRace: "dwarf" })), "culture");
+  assert.equal(painted.children.find((c) => c.value === "dwarf").label, "✓ Dwarf");
+  assert.equal(painted.children.find((c) => c.value === "elf").label, "Elf");
+  assert.equal(child(painted, "clearCulture").enabled, true);
+  // Disabled on an unplaced hex.
+  assert.equal(byId(buildRadialModel(base({ cultureRaces })), "culture").enabled, false);
 });
 
 test("Draw slot: offers River + Road; Remove entries only where a manual one runs", () => {
@@ -57,19 +93,19 @@ test("Draw slot: offers River + Road; Remove entries only where a manual one run
   assert.equal(withBoth.children.find((c) => c.id === "removeRoad").value, "manual:1");
 });
 
-test("Regenerate slot: Lock/Unlock + This hex + area sizes; lock protects re-roll & delete", () => {
-  const reg = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "regenerate");
-  assert.equal(reg.kind, "submenu");
-  assert.deepEqual(reg.children.map((c) => c.id), ["toggleLock", "regenHex", "regenArea", "regenArea", "regenArea"]);
-  assert.equal(reg.children[0].label, "Lock");
-  assert.equal(reg.children[2].value, 1); // Small
-  assert.equal(byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "deleteHex").enabled, true);
+test("Modify slot: Lock/Unlock + This hex + area sizes + Delete; lock protects re-roll & delete", () => {
+  const mod = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "modify");
+  assert.equal(mod.kind, "submenu");
+  assert.deepEqual(mod.children.map((c) => c.id), ["toggleLock", "regenHex", "regenArea", "regenArea", "regenArea", "deleteHex"]);
+  assert.equal(mod.children[0].label, "Lock");
+  assert.equal(mod.children[2].value, 1); // Small
+  assert.equal(child(mod, "deleteHex").enabled, true);
+  assert.equal(child(mod, "deleteHex").danger, true);
   // Locked: the toggle reads Unlock, This-hex regen is off, Delete is off.
-  const locked = buildRadialModel(base({ placed: true, terrain: "Plains", locked: true }));
-  const lreg = byId(locked, "regenerate");
-  assert.equal(lreg.children[0].label, "Unlock");
-  assert.equal(lreg.children.find((c) => c.id === "regenHex").enabled, false);
-  assert.equal(byId(locked, "deleteHex").enabled, false, "a locked hex can't be deleted");
+  const lmod = byId(buildRadialModel(base({ placed: true, terrain: "Plains", locked: true })), "modify");
+  assert.equal(lmod.children[0].label, "Unlock");
+  assert.equal(child(lmod, "regenHex").enabled, false);
+  assert.equal(child(lmod, "deleteHex").enabled, false, "a locked hex can't be deleted");
 });
 
 test("Generate submenu: Random (anchored) gates on placed; Small/Medium/Large/Huge always fill-empty", () => {
@@ -111,11 +147,11 @@ test("Settlement submenu offers Remove when one exists, Random otherwise", () =>
   assert.equal(present.children[0].id, "removeSettlement");
 });
 
-test("Hook submenu always present; gossip gates on a settlement", () => {
-  const dry = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "hook");
+test("World › Hook submenu always present; gossip gates on a settlement", () => {
+  const dry = child(byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "world"), "hook");
   assert.equal(dry.enabled, true);
   assert.equal(dry.children.find((c) => c.id === "genHook").enabled, false);
-  const town = byId(buildRadialModel(base({ placed: true, terrain: "Plains", canGossip: true })), "hook");
+  const town = child(byId(buildRadialModel(base({ placed: true, terrain: "Plains", canGossip: true })), "world"), "hook");
   assert.equal(town.children.find((c) => c.id === "genHook").enabled, true);
 });
 
@@ -157,24 +193,24 @@ test("POI's dungeon stays a leaf (random size) when no sizes are supplied", () =
   assert.equal(dungeon.value, "dungeon");
 });
 
-test("Party submenu: Travel/Place need a placed hex; disabled once the party is here", () => {
-  const empty = byId(buildRadialModel(base()), "party");
+test("World › Party submenu: Travel/Place need a placed hex; disabled once the party is here", () => {
+  const empty = child(byId(buildRadialModel(base()), "world"), "party");
   assert.deepEqual(empty.children.map((c) => c.id), ["travelToward", "placeParty"]);
   assert.ok(empty.children.every((c) => c.enabled === false)); // no placed hex yet
-  const placed = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "party");
+  const placed = child(byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "world"), "party");
   assert.ok(placed.children.every((c) => c.enabled === true));
-  const here = byId(buildRadialModel(base({ placed: true, terrain: "Plains", partyHere: true })), "party");
+  const here = child(byId(buildRadialModel(base({ placed: true, terrain: "Plains", partyHere: true })), "world"), "party");
   assert.deepEqual(here.children.map((c) => c.id), ["partyHere"]);
   assert.equal(here.children[0].enabled, false);
 });
 
-test("Faction submenu: Generate always present; Run by lists None + factions with a ✓ on the owner", () => {
-  const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "faction");
+test("World › Faction submenu: Generate always present; Run by lists None + factions with a ✓ on the owner", () => {
+  const plain = child(byId(buildRadialModel(base({ placed: true, terrain: "Plains" })), "world"), "faction");
   assert.equal(plain.children[0].id, "genFaction");
   assert.ok(!plain.children.some((c) => c.id === "runBy"), "no Run by without factions");
 
   const factions = [{ id: "faction:0", name: "The Grey Blade", color: "#2a6693" }, { id: "faction:1", name: "Ashen Covenant", color: "#b3641c" }];
-  const owned = byId(buildRadialModel(base({ placed: true, terrain: "Plains", factions, ownerId: "faction:1" })), "faction");
+  const owned = child(byId(buildRadialModel(base({ placed: true, terrain: "Plains", factions, ownerId: "faction:1" })), "world"), "faction");
   const runBy = owned.children.find((c) => c.id === "runBy");
   assert.equal(runBy.kind, "submenu");
   assert.deepEqual(runBy.children.map((c) => c.id), ["setOwner", "setOwner", "setOwner"]);
@@ -185,10 +221,10 @@ test("Faction submenu: Generate always present; Run by lists None + factions wit
   assert.equal(runBy.children[0].swatch, undefined); // None has no colour
 });
 
-test("Faction submenu: reseat + promote (with lord options nesting a sub-ring)", () => {
+test("World › Faction submenu: reseat + promote (with lord options nesting a sub-ring)", () => {
   const canReseat = { id: "faction:0", name: "The Grey Blade" };
   const promotable = [{ poiId: "poi:2", name: "Old Keep", lords: [{ archetype: "lich", label: "Raise a lich" }] }];
-  const fac = byId(buildRadialModel(base({ placed: true, terrain: "Hills", canReseat, promotable })), "faction");
+  const fac = child(byId(buildRadialModel(base({ placed: true, terrain: "Hills", canReseat, promotable })), "world"), "faction");
   const reseat = fac.children.find((c) => c.id === "reseat");
   assert.equal(reseat.value, "faction:0");
   const promo = fac.children.find((c) => c.id === "promoteMenu");
@@ -196,7 +232,7 @@ test("Faction submenu: reseat + promote (with lord options nesting a sub-ring)",
   assert.equal(promo.children[0].value.poiId, "poi:2"); // Ordinary faction
   assert.deepEqual(promo.children[1].value, { poiId: "poi:2", archetype: "lich" }); // lord variant
   // A promotable POI with no lord options is a plain Promote leaf.
-  const plain = byId(buildRadialModel(base({ placed: true, terrain: "Plains", promotable: [{ poiId: "poi:3", name: "Camp", lords: [] }] })), "faction");
+  const plain = child(byId(buildRadialModel(base({ placed: true, terrain: "Plains", promotable: [{ poiId: "poi:3", name: "Camp", lords: [] }] })), "world"), "faction");
   const leafPromo = plain.children.find((c) => c.id === "promote");
   assert.equal(leafPromo.kind, "leaf");
   assert.deepEqual(leafPromo.value, { poiId: "poi:3" });

@@ -1,0 +1,33 @@
+{
+  "id": "monastery-relic",
+  "title": "Monastery relics",
+  "_note": "The notable relic a house may be known for (phase-15 §2.9), shown as 'Keeps: <relic>'. A headline treasure or pilgrimage draw; on a rare secret house the relic may itself be the guarded thing.",
+  "entries": [
+    { "value": "the incorrupt body of the founder" },
+    { "value": "a saint's hand in a gilded reliquary" },
+    { "value": "a wonder-working icon" },
+    { "value": "a holy blade" },
+    { "value": "a fragment of the first temple" },
+    { "value": "a codex no living tongue can read" },
+    { "value": "a vial of a martyr's blood" },
+    { "value": "a bell said to ward off plague" },
+    { "value": "an ever-burning lamp" },
+    { "value": "a shard of a fallen star" },
+    { "value": "the skull of the order's first abbot" },
+    { "value": "a splinter of the faith's holiest tree" },
+    { "value": "a chalice that never runs dry" },
+    { "value": "the chained gospel of the founding saint" },
+    { "value": "a thorn from the crown of the martyr-king" },
+    { "value": "a weeping statue of the Mother" },
+    { "value": "a nail from the gallows of a holy man" },
+    { "value": "the veil of a saint, unstained by centuries" },
+    { "value": "a censer whose smoke heals the sick" },
+    { "value": "the mummified heart of a desert hermit" },
+    { "value": "a stone that bled when the abbey was founded" },
+    { "value": "the crozier of the first bishop" },
+    { "value": "a phial of oil that will not be spent" },
+    { "value": "the tongue of a saint, preserved and speaking" },
+    { "value": "a girdle woven by a virgin martyr" },
+    { "value": "a book of hours illuminated by angels" }
+  ]
+}

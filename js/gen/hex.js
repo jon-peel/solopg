@@ -78,6 +78,14 @@ export function generateHex(tables, rng, opts = {}) {
         if (keepChance > 0 && subRng(opts.seed ?? 0, "keep", coords.q, coords.r, opts.gen ?? 0)() < keepChance) {
           settlement.kind = "keep";
         }
+        // Monastic overlay (rarer than a keep, remote-terrain-biased). Rolled ONLY if no
+        // keep fired — a hex has at most one kind (mutually exclusive). Own sub-stream, so
+        // it never shifts the main rng / downstream POI rolls, exactly like the keep roll.
+        const monasteryChance = profile.settlement.monasteryChance ?? 0;
+        if (!settlement.kind && monasteryChance > 0 &&
+            subRng(opts.seed ?? 0, "monastery", coords.q, coords.r, opts.gen ?? 0)() < monasteryChance) {
+          settlement.kind = "monastery";
+        }
       }
     }
   }

@@ -1,0 +1,48 @@
+{
+  "id": "monastery-name",
+  "title": "Monastery name elements",
+  "_note": "Class-tagged name elements consumed by the Step-3 monastic naming mode. Each value is an object { class, text } where class is one of house | saint | virtue | colour. 'house' is the settlement-type word (Abbey, Priory, …); 'saint' / 'virtue' / 'colour' supply the epithet the house is named for. 'text' is unique within each class.",
+  "entries": [
+    { "weight": 3, "value": { "class": "house", "text": "Abbey" } },
+    { "weight": 3, "value": { "class": "house", "text": "Priory" } },
+    { "weight": 2, "value": { "class": "house", "text": "Cloister" } },
+    { "weight": 2, "value": { "class": "house", "text": "Hermitage" } },
+    { "weight": 1, "value": { "class": "house", "text": "Friary" } },
+    { "weight": 1, "value": { "class": "house", "text": "Charterhouse" } },
+    { "weight": 1, "value": { "class": "house", "text": "Grange" } },
+
+    { "value": { "class": "saint", "text": "Saint Aldric" } },
+    { "value": { "class": "saint", "text": "Saint Morwenna" } },
+    { "value": { "class": "saint", "text": "Saint Cuthwin" } },
+    { "value": { "class": "saint", "text": "Saint Brigantia" } },
+    { "value": { "class": "saint", "text": "Saint Oswin" } },
+    { "value": { "class": "saint", "text": "Saint Elgiva" } },
+    { "value": { "class": "saint", "text": "Saint Wystan" } },
+    { "value": { "class": "saint", "text": "Saint Emeric" } },
+    { "value": { "class": "saint", "text": "Saint Radegund" } },
+    { "value": { "class": "saint", "text": "Saint Cyneburh" } },
+    { "value": { "class": "saint", "text": "Saint Fenwick" } },
+    { "value": { "class": "saint", "text": "Saint Ambrose the Lesser" } },
+    { "value": { "class": "saint", "text": "Saint Hilda of the Marsh" } },
+
+    { "value": { "class": "virtue", "text": "Silent Mercy" } },
+    { "value": { "class": "virtue", "text": "the Sacred Vigil" } },
+    { "value": { "class": "virtue", "text": "Perpetual Light" } },
+    { "value": { "class": "virtue", "text": "Holy Patience" } },
+    { "value": { "class": "virtue", "text": "Blessed Solitude" } },
+    { "value": { "class": "virtue", "text": "the Quiet Hours" } },
+    { "value": { "class": "virtue", "text": "Divine Providence" } },
+    { "value": { "class": "virtue", "text": "the Pilgrim's Rest" } },
+    { "value": { "class": "virtue", "text": "Everlasting Hope" } },
+    { "value": { "class": "virtue", "text": "the Contrite Heart" } },
+    { "value": { "class": "virtue", "text": "Sacred Silence" } },
+
+    { "value": { "class": "colour", "text": "Greywater" } },
+    { "value": { "class": "colour", "text": "Whitethorn" } },
+    { "value": { "class": "colour", "text": "Blackmoor" } },
+    { "value": { "class": "colour", "text": "Redcliff" } },
+    { "value": { "class": "colour", "text": "Greenhollow" } },
+    { "value": { "class": "colour", "text": "Ashford" } },
+    { "value": { "class": "colour", "text": "Wyndemere" } }
+  ]
+}

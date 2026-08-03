@@ -61,13 +61,19 @@ export const MARTIAL_SUFFIX = ["hold", "watch", "guard", "gard", "wall", "gate",
  * @param {number} q
  * @param {number} r
  * @param {number} [gen] the hex's regenerate counter (reshuffles on regen)
- * @param {{ kind?: string, terrain?: string, race?: string }} [opts] kind "keep"
- *   -> martial name; terrain flavors the ending; race (Phase 14.1 — "elf" |
- *   "dwarf" | "halfling" | "gnome") swaps in that race's name pools instead of
- *   the Human ones below. Omitted/unknown race = Human, byte-for-byte as before.
+ * @param {{ kind?: string, terrain?: string, race?: string, name?: string }} [opts]
+ *   kind "keep" -> martial name; kind "monastery" with a `name` -> that baked
+ *   proper name verbatim (Phase 15.3); terrain flavors the ending; race (Phase
+ *   14.1 — "elf" | "dwarf" | "halfling" | "gnome") swaps in that race's name
+ *   pools instead of the Human ones below. Omitted/unknown race = Human,
+ *   byte-for-byte as before.
  * @returns {string}
  */
 export function settlementName(seed, q, r, gen = 0, opts = {}) {
+  // A monastery carries its own baked proper name (js/gen/monastery.js) — use it
+  // verbatim. Returns BEFORE the rng is drawn, so no other path is perturbed.
+  if (opts.kind === "monastery" && opts.name) return opts.name;
+
   const rng = subRng(seed, "sname", q, r, gen);
 
   // Phase 14.1: race-flavored path, entered only when a known race is passed —

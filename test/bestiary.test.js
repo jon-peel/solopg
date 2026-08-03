@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBestiary, telegraphFor } from "../js/gen/bestiary.js";
+import { buildBestiary, telegraphFor, buildTierIndex, rankBestiary, levelApex } from "../js/gen/bestiary.js";
 import { mulberry32 } from "../js/core/rng.js";
 
 // A small dungeon-shaped fixture: two levels, room.monster present on some
@@ -67,6 +67,46 @@ test("buildBestiary: empty dungeon (no levels) returns []", () => {
 test("buildBestiary: levels with no stocked monsters return []", () => {
   const dungeon = { levels: [{ depth: 1, rooms: [{ n: 1, monster: null }, { n: 2 }] }] };
   assert.deepEqual(buildBestiary(dungeon), []);
+});
+
+// Danger ranking (per-level apex + dungeon-wide deadliest) -----------------
+const families = {
+  id: "monster-families",
+  entries: [
+    { value: { family: "Undead", elite: "Vampire", members: [
+      { value: "Skeletons", tier: 1 }, { value: "Zombies", tier: 1 }, { value: "Wights", tier: 3 },
+    ] } },
+  ],
+};
+
+test("buildTierIndex: members keep their tier; the elite ranks above all (5)", () => {
+  const idx = buildTierIndex(families);
+  assert.equal(idx.get("Skeletons"), 1);
+  assert.equal(idx.get("Wights"), 3);
+  assert.equal(idx.get("Vampire"), 5); // the boss outranks every member
+  assert.equal(idx.get("Owlbear"), undefined); // unknown name has no tier
+});
+
+test("rankBestiary: deadliest-first (tier, then deepest floor, then name); apex flagged", () => {
+  const ranked = rankBestiary(buildBestiary(dungeonFixture()), buildTierIndex(families));
+  // Fixture: Wights t3 (L1); Skeletons t1 (L1-2); Zombies t1 (L2).
+  assert.deepEqual(ranked.map((m) => m.name), ["Wights", "Skeletons", "Zombies"]);
+  assert.equal(ranked[0].deadliest, true);
+  assert.ok(!ranked[1].deadliest && !ranked[2].deadliest, "only one apex is flagged");
+  assert.equal(ranked[0].tier, 3);
+});
+
+test("rankBestiary: no tier index → tier 0, no crash, still flags a (floor-ranked) apex", () => {
+  const ranked = rankBestiary(buildBestiary(dungeonFixture()), null);
+  assert.ok(ranked.every((m) => m.tier === 0));
+  assert.equal(ranked.filter((m) => m.deadliest).length, 1);
+});
+
+test("levelApex: the highest-tier monster on each floor (ties by name)", () => {
+  const apex = levelApex(dungeonFixture(), buildTierIndex(families));
+  assert.equal(apex[1].name, "Wights"); // L1: Wights t3 beats Skeletons t1
+  assert.equal(apex[1].tier, 3);
+  assert.equal(apex[2].name, "Skeletons"); // L2: Skeletons/Zombies both t1 → name tie-break
 });
 
 test("telegraphFor: an authored monster returns one of its phrases", () => {

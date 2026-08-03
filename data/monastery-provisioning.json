@@ -1,0 +1,23 @@
+{
+  "id": "monastery-provisioning",
+  "title": "Monastery provisioning (dependent houses)",
+  "_note": "Full clauses describing how a dependent (small) house gets by when it is not self-sufficient (see phase-15 §2.2). Each value is a complete predicate that reads after the house name ('The priory is <clause>').",
+  "entries": [
+    { "value": "sustained by pilgrim donations" },
+    { "value": "supplied by the nearest market town" },
+    { "value": "fed by tithes from the surrounding farms" },
+    { "value": "trades its wine for grain" },
+    { "value": "kept by a wealthy patron's endowment" },
+    { "value": "begs its bread from passing travellers" },
+    { "value": "supported by a lay brotherhood in the village" },
+    { "value": "lives hand-to-mouth on what its garden yields" },
+    { "value": "relies on a yearly caravan of staples" },
+    { "value": "bartered for with its cheese and honey" },
+    { "value": "provisioned by a charter from the local lord" },
+    { "value": "fed by alms gathered on the mendicant road" },
+    { "value": "sustained by rents from a distant grange" },
+    { "value": "kept afloat by the sale of its copied books" },
+    { "value": "dependent on a merchant guild's standing contract" },
+    { "value": "carried through winter by the abbey's dwindling stores" }
+  ]
+}

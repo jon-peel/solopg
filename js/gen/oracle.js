@@ -219,6 +219,42 @@ export function rollEncounterCheck(terrain, rng) {
   return { kind: "encounter", terrain, encounter: rng() < chance, chance };
 }
 
+// --- Monastery library research (Phase 15) --------------------------------
+// TRIGGER-AND-PROMPT: the app rolls the library's ODDS by monastery size and
+// reports only the RESULT TIER; the GM supplies the actual book/answer (never
+// invents a title). Bigger libraries skew toward "exact". TUNING, not content.
+export const RESEARCH_ODDS = {
+  Hamlet:  [["exact",0.05],["related",0.15],["topical",0.35],["nothing",0.45]],
+  Village: [["exact",0.12],["related",0.23],["topical",0.35],["nothing",0.30]],
+  Town:    [["exact",0.25],["related",0.30],["topical",0.30],["nothing",0.15]],
+  City:    [["exact",0.45],["related",0.30],["topical",0.20],["nothing",0.05]],
+};
+
+/**
+ * Library research CHECK (Phase 15) — pure. Rolls the library's odds by monastery
+ * size and reports only the RESULT TIER; the GM supplies the actual book/answer.
+ * @param {() => number} rng float in [0,1)
+ * @param {string} size the monastery's size (Hamlet|Village|Town|City)
+ * @returns {{ kind:"research", size:string, result:"exact"|"related"|"topical"|"nothing" }}
+ */
+export function rollResearch(rng, size) {
+  const ladder = RESEARCH_ODDS[size] || RESEARCH_ODDS.Village;
+  const r = rng();
+  let acc = 0, result = ladder[ladder.length - 1][0];
+  for (const [res, p] of ladder) { acc += p; if (r < acc) { result = res; break; } }
+  return { kind: "research", size, result };
+}
+
+// GM prompts per research result tier — a trigger-and-prompt cue, never the book
+// itself (the GM names the source/answer). Bigger libraries just land higher on
+// this ladder more often.
+const RESEARCH_PROMPT = {
+  exact: "The stacks hold the exact source — name the book or answer the party turns up.",
+  related: "A closely related source — a partial or adjacent answer; decide what it gives.",
+  topical: "Something on the topic — a hint or general lore; supply it.",
+  nothing: "Nothing useful in the library on this.",
+};
+
 /**
  * Compose the one-line display string for an oracle pick (compose-at-render).
  * Each oracle kind knows how to phrase its own pick; unknown kinds fall back to
@@ -239,6 +275,7 @@ export function oracleLine(pick) {
       ? `Encounter! Roll a ${pick.terrain} wilderness encounter on your table.`
       : `No encounter (${pick.terrain}).`;
   }
+  if (pick.kind === "research") return RESEARCH_PROMPT[pick.result] ?? RESEARCH_PROMPT.nothing;
   return String(pick.answer ?? "");
 }
 
@@ -250,6 +287,7 @@ export const ORACLE_LABELS = {
   settlement: "Settlement",
   tavern: "Tavern / shop",
   encounter: "Wilderness encounter",
+  research: "Library research",
 };
 
 /** Table ids the table-backed oracles (Meaning, Complication, Settlement, Tavern) need. */

@@ -56,6 +56,44 @@ test("Desert caps at Town; Mountains/Swamp at Hamlet", () => {
   assert.equal(TERRAIN_PROFILE.Swamp.settlement.maxSize, "Hamlet");
 });
 
+// --- Monastery generation chance (Phase 15, Step 2) -------------------------
+// The land profiles (and the DEFAULT fallback, reached via profileFor(unknown))
+// each carry a `monasteryChance` beside `keepChance`. It gates the monastic-house
+// overlay (js/gen/hex.js), rolled only when no keep fired — so it is deliberately
+// RARER than the same terrain's keepChance on every terrain, and rarest of all on
+// the settled Plains.
+
+// Every land settlement block, plus the DEFAULT profile (via an unknown terrain).
+const landSettlementProfiles = () => {
+  const out = Object.entries(TERRAIN_PROFILE)
+    .filter(([, p]) => p.settlement) // Water has settlement: null
+    .map(([terrain, p]) => [terrain, p.settlement]);
+  out.push(["DEFAULT", profileFor("NoSuchTerrain").settlement]); // DEFAULT_PROFILE fallback
+  return out;
+};
+
+test("every land profile + DEFAULT has a numeric monasteryChance in (0,1)", () => {
+  for (const [terrain, s] of landSettlementProfiles()) {
+    assert.equal(typeof s.monasteryChance, "number", `${terrain} monasteryChance not numeric`);
+    assert.ok(s.monasteryChance > 0 && s.monasteryChance < 1, `${terrain} monasteryChance ${s.monasteryChance} outside (0,1)`);
+  }
+});
+
+test("monasteryChance is strictly less than keepChance for every profile (monasteries rarer than keeps)", () => {
+  for (const [terrain, s] of landSettlementProfiles()) {
+    assert.ok(s.monasteryChance < s.keepChance, `${terrain}: monasteryChance ${s.monasteryChance} not < keepChance ${s.keepChance}`);
+  }
+});
+
+test("Plains has the strict minimum monasteryChance among land terrains (most-settled country)", () => {
+  const land = Object.entries(TERRAIN_PROFILE).filter(([, p]) => p.settlement);
+  const plains = TERRAIN_PROFILE.Plains.settlement.monasteryChance;
+  for (const [terrain, p] of land) {
+    if (terrain === "Plains") continue;
+    assert.ok(plains < p.settlement.monasteryChance, `Plains ${plains} not strictly below ${terrain} ${p.settlement.monasteryChance}`);
+  }
+});
+
 test("isLargeSize: Town/City are large; Village and smaller are not", () => {
   assert.ok(isLargeSize("Town") && isLargeSize("City"));
   for (const s of ["Hamlet", "Village"]) assert.ok(!isLargeSize(s), `${s} is not large`);

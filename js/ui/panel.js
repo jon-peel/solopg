@@ -5,8 +5,9 @@ import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
+import { monasterySecretReveal, MONASTERY_RANK } from "../gen/monastery.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
-import { RACES, RACE_LABELS } from "../gen/culture-data.js";
+import { RACE_LABELS } from "../gen/culture-data.js";
 import { cultureBand } from "./culture-style.js";
 
 const panel = () => document.getElementById("panel");
@@ -769,25 +770,8 @@ export function renderSelectionPanel(model) {
       box.append(nm, meta);
       sel.appendChild(box);
     }
-    // GM paint / remove (Phase 14.6): a manual culture override for this hex,
-    // mechanically identical to a settlement's stamped anchor (§1.2) — it both
-    // renders immediately and pins future stamps nearby. "Clear" removes the
-    // anchor (reverting to whatever the derived field says); it does NOT force
-    // the hex to Human. Available for any placed hex, cultured or not.
-    if (model.onPaintCulture) {
-      sel.appendChild(sectionLabel("Paint culture"));
-      const row = document.createElement("div");
-      row.className = "tile-actions";
-      for (const race of RACES) {
-        const b = actionButton(RACE_LABELS[race], () => model.onPaintCulture(race));
-        b.className = "tile-action toggle" + (model.paintedRace === race ? " on" : "");
-        row.appendChild(b);
-      }
-      const clearBtn = actionButton("Clear", () => model.onClearCulture());
-      clearBtn.disabled = !model.paintedRace;
-      row.appendChild(clearBtn);
-      sel.appendChild(row);
-    }
+    // GM culture paint/clear moved to the radial "Culture" slot (Phase 15 radial
+    // reorg); the panel keeps only the read-only culture readout above.
     // Settlement as a small accent callout (controls are on the radial menu). The
     // name is derived from the seed + coords (settlement-name.js), so it needs no
     // stored field; a GM hex `name` annotation, if set, still labels the map.
@@ -796,8 +780,13 @@ export function renderSelectionPanel(model) {
         kind: hex.settlement.kind,
         terrain: hex.terrain,
         race: hex.settlement.race,
+        name: hex.settlement.monastery?.name,
       });
-      const kindLabel = hex.settlement.kind === "keep" ? `${hex.settlement.size} — Keep (fortified)` : hex.settlement.size;
+      const kindLabel = hex.settlement.kind === "keep"
+        ? `${hex.settlement.size} — Keep (fortified)`
+        : hex.settlement.kind === "monastery"
+        ? (MONASTERY_RANK[hex.settlement.size] || "Monastery") // monastic rank, not the settlement tier
+        : hex.settlement.size;
       const water = { estuary: "river-mouth port", river: "on a river", coast: "coastal" }[hex.settlement.waterBoost];
       // A demihuman town carries a stamped race (Phase 14.3); a Human town has
       // none (the null case) and reads plainly.
@@ -818,6 +807,76 @@ export function renderSelectionPanel(model) {
         look.className = "sel-settle-look";
         look.textContent = hex.settlement.appearance;
         box.appendChild(look);
+      }
+      // Monastery detail (Phase 15) — the facts of a religious house (baked by
+      // syncCultures). A sequence of appended lines. This is a solo-GM tool, so
+      // the house's hidden `secret` (Step 8) is shown INLINE with the rest (the
+      // owner's call) rather than behind a reveal control. It stays RARE — most
+      // houses are wholesome — it's simply no longer concealed from the GM.
+      if (hex.settlement.monastery) {
+        const m = hex.settlement.monastery;
+        const mon = document.createElement("div");
+        mon.className = "sel-monastery";
+        const monLine = (text, emphasis, extraClass) => {
+          const line = document.createElement("span");
+          line.className = "sel-mon-line" + (emphasis ? " sel-mon-em" : "") + (extraClass ? ` ${extraClass}` : "");
+          line.textContent = text;
+          mon.appendChild(line);
+        };
+        monLine(`Dedicated ${m.dedication}`);
+        // Relic (Step 6) — a headline feature; show it prominently right under the
+        // dedication and emphasised. Never surfaces the hidden `secret`.
+        if (m.relic) monLine(`Keeps: ${m.relic}`, true);
+        monLine(m.selfSufficient ? "Self-sufficient" : `Dependent — ${m.provisioning}`);
+        monLine(`Produces: ${m.industries.join(", ")}`);
+        monLine(`Library: ${m.library}`);
+        if (m.trait) monLine(m.trait, true);
+        // Catacombs (Step 7) — signal an explorable underground beneath the house.
+        // Emphasised like the relic/trait headline. Never surfaces `secret`.
+        if (m.catacombs) monLine("Has catacombs beneath", true);
+        // Hidden truth (Step 8) — shown INLINE for the GM (rare; most houses have
+        // none), in a distinct ominous style. monasterySecretReveal composes the
+        // secret and ties in the relic when the secret is what the house guards.
+        if (m.secret) monLine(`🕯️ ${monasterySecretReveal(m)}`, false, "sel-mon-secret");
+        box.appendChild(mon);
+        // Library research (Phase 15) — a button-only GM roll under the house's
+        // facts: the app reports only the RESULT TIER, the GM names the actual
+        // book/answer (it never invents a title). The last result renders below
+        // as a gold callout, styled like the town situation. A monastery's hidden
+        // `secret` is never surfaced here (kept the discipline).
+        if (model.onResearch) {
+          const row = document.createElement("div");
+          row.className = "sel-research";
+          const label = document.createElement("span");
+          label.className = "sel-mon-line";
+          label.textContent = "Consult the stacks:";
+          row.appendChild(label);
+          row.appendChild(actionButton("Research the library", () => model.onResearch()));
+          box.appendChild(row);
+          if (model.research) {
+            const res = document.createElement("div");
+            res.className = "research-result";
+            const line = document.createElement("div");
+            line.className = "research-line";
+            line.textContent = model.research.line;
+            res.appendChild(line);
+            box.appendChild(res);
+          }
+        }
+        // Explore the catacombs (Step 7) — a button-only affordance that opens the
+        // house's underground in the Dungeon View (reusing the dungeon interior
+        // system). Offered only when the house has catacombs. Mirrors the research
+        // row; never reads `secret`. The created POI also lists below normally.
+        if (m.catacombs && model.onExploreCatacombs) {
+          const row = document.createElement("div");
+          row.className = "sel-research";
+          const label = document.createElement("span");
+          label.className = "sel-mon-line";
+          label.textContent = "Descend below:";
+          row.appendChild(label);
+          row.appendChild(actionButton("Explore the catacombs", () => model.onExploreCatacombs()));
+          box.appendChild(row);
+        }
       }
       sel.appendChild(box);
 
@@ -938,6 +997,7 @@ export function renderDungeonPanel({
   onRollWandering,
   wanderingResult,
   bestiary = [],
+  levelApex = {},
   onRevealTreasure,
   onRevealHook,
 }) {
@@ -961,7 +1021,9 @@ export function renderDungeonPanel({
     bul.className = "room-contents";
     for (const m of bestiary) {
       const li = document.createElement("li");
-      li.textContent = `${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}`;
+      // Ranked deadliest-first; the single apex of the whole dungeon is flagged.
+      li.textContent = `${m.deadliest ? "☠ " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}${m.deadliest ? " · the deadliest" : ""}`;
+      if (m.deadliest) li.className = "bestiary-deadliest";
       if (m.telegraph) {
         const tel = document.createElement("div");
         tel.className = "bestiary-telegraph";
@@ -981,6 +1043,17 @@ export function renderDungeonPanel({
   sel.appendChild(
     sectionLabel(level.family ? `${floorWord} ${level.depth} — ${level.family}` : `${floorWord} ${level.depth}`),
   );
+  // Per-level danger cue: the most dangerous monster stocked on THIS floor — the
+  // one to foreshadow here (its authored telegraph, if any). Not every monster
+  // gets telegraphed (that would be too much); just this floor's apex.
+  const apex = levelApex[level.depth];
+  if (apex) {
+    const cue = document.createElement("div");
+    cue.className = "bestiary-apex";
+    const telegraph = (bestiary.find((b) => b.name === apex.name) || {}).telegraph;
+    cue.textContent = telegraph ? `⚠ ${apex.name} — ${telegraph}` : `⚠ ${apex.name} (deadliest on this floor)`;
+    sel.appendChild(cue);
+  }
   if (dungeon.occupation && dungeon.occupation.level === level.depth - 1) {
     const occ = document.createElement("div");
     occ.className = "log-line";
