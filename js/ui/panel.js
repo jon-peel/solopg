@@ -1,6 +1,6 @@
 // Side-panel rendering helpers.
 
-import { glyphForPoi } from "./poi-style.js";
+import { glyphForPoi, glyphForDungeon } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
@@ -1006,7 +1006,7 @@ export function renderDungeonPanel({
   sel.innerHTML = "";
 
   const h = document.createElement("h3");
-  h.textContent = dungeon.theme || "Dungeon";
+  h.textContent = `${glyphForDungeon(dungeon.theme)} ${dungeon.theme || "Dungeon"}`;
   const skulls = difficultySkulls(dungeon.difficulty);
   if (skulls) h.appendChild(skulls); // inline with the title
   sel.appendChild(h);

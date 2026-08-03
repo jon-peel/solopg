@@ -87,7 +87,7 @@ import {
   cultureInfoAt,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
-import { POI_GLYPHS, POI_DOT_COLORS, factionColor, factionHatchDeg } from "./poi-style.js";
+import { POI_GLYPHS, POI_DOT_COLORS, glyphForDungeon, factionColor, factionHatchDeg } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
 import { openRadial, openTravelRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
@@ -1627,7 +1627,10 @@ function openDungeonView(poi, teleTable) {
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
   // the user looking at an unchanged map ("nothing happened").
   $("dungeon-view").hidden = false;
-  $("dungeon-title").textContent = `${poi.detail.theme || dungeon.theme || "Dungeon"} — ${dungeon.size}`;
+  // Lead with the theme's own map glyph so the overlay title matches the marker
+  // the user just clicked.
+  const theme = poi.detail.theme || dungeon.theme || "Dungeon";
+  $("dungeon-title").textContent = `${glyphForDungeon(theme)} ${theme} — ${dungeon.size}`;
   showDungeonLevel(0);
   fitView(); // frame the whole level on open
 }
