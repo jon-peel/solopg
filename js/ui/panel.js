@@ -7,6 +7,7 @@ import { tierPips } from "../gen/bestiary.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { monasterySecretReveal, MONASTERY_RANK } from "../gen/monastery.js";
+import { KEEP_RANK, KEEP_GARRISON } from "../gen/keep.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
 import { RACE_LABELS } from "../gen/culture-data.js";
 import { cultureBand } from "./culture-style.js";
@@ -784,7 +785,7 @@ export function renderSelectionPanel(model) {
         name: hex.settlement.monastery?.name,
       });
       const kindLabel = hex.settlement.kind === "keep"
-        ? `${hex.settlement.size} — Keep (fortified)`
+        ? (KEEP_RANK[hex.settlement.size] || "Keep") // martial rank, not the settlement tier
         : hex.settlement.kind === "monastery"
         ? (MONASTERY_RANK[hex.settlement.size] || "Monastery") // monastic rank, not the settlement tier
         : hex.settlement.size;
@@ -812,15 +813,9 @@ export function renderSelectionPanel(model) {
       // Keep detail (3R.6) — a keep bakes no data object of its own, so the
       // garrison's weight is DERIVED from the settlement size. No stored field.
       if (hex.settlement.kind === "keep") {
-        const GARRISON = {
-          Hamlet: "a small watch",
-          Village: "a standing garrison",
-          Town: "a full garrison",
-          City: "a war-garrison",
-        };
         const g = document.createElement("span");
         g.className = "sel-garrison";
-        g.textContent = `Garrison: ${GARRISON[hex.settlement.size] || "a garrison"}`;
+        g.textContent = `Garrison: ${KEEP_GARRISON[hex.settlement.size] || "a garrison"}`;
         box.appendChild(g);
       }
       // Monastery detail (Phase 15) — the facts of a religious house (baked by

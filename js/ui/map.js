@@ -28,6 +28,7 @@ import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions, regionName } from "../gen/regions.js";
 import { LORD_ARCHETYPES } from "../gen/factions.js";
 import { MONASTERY_RANK } from "../gen/monastery.js";
+import { KEEP_RANK } from "../gen/keep.js";
 import { buildLivingField, worldCultureAnchors, listCultures } from "../gen/culture.js";
 import { CULTURE_COLORS, RACE_LABELS, RACES } from "../gen/culture-data.js";
 import { washOpacity, contestedEdge } from "./culture-style.js";
@@ -375,7 +376,7 @@ export function render() {
       if (hh.settlement && hh.settlement.present) {
         const s = hh.settlement;
         const rank = s.kind === "monastery" ? MONASTERY_RANK[s.size] || "Monastery"
-          : s.kind === "keep" ? `${s.size} keep`
+          : s.kind === "keep" ? KEEP_RANK[s.size] || "Keep"
           : s.size;
         if (rank) lines.push(rank);
       }
