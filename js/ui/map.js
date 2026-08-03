@@ -27,6 +27,7 @@ import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settl
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions, regionName } from "../gen/regions.js";
 import { LORD_ARCHETYPES } from "../gen/factions.js";
+import { MONASTERY_RANK } from "../gen/monastery.js";
 import { buildLivingField, worldCultureAnchors, listCultures } from "../gen/culture.js";
 import { CULTURE_COLORS, RACE_LABELS, RACES } from "../gen/culture-data.js";
 import { washOpacity, contestedEdge } from "./culture-style.js";
@@ -361,9 +362,22 @@ export function render() {
       const lines = [];
       if (primary) lines.push(primary);
       if (region && region !== primary) lines.push(region);
+      // Settlement rank, so hovering answers "how big is this?" without a click.
+      // A monastery reads monastically (Hermitage…Great Abbey), a keep martially.
+      if (hh.settlement && hh.settlement.present) {
+        const s = hh.settlement;
+        const rank = s.kind === "monastery" ? MONASTERY_RANK[s.size] || "Monastery"
+          : s.kind === "keep" ? `${s.size} keep`
+          : s.size;
+        if (rank) lines.push(rank);
+      }
       if (fac) lines.push({ text: `⚑ ${fac.name}`, color: darkenRgba(fac.color, 0.25, 1) });
       const enc = encounterMarks && encounterMarks.find((m) => m.q === hovered.q && m.r === hovered.r);
       if (enc) lines.push({ text: `⚔ ${enc.terrain} encounter — roll on your table`, color: "#8a3324" });
+      // Just the count — the POI types are a click away, and the label pill
+      // truncates at 20 chars per line.
+      const poiCount = (hh.pois || []).length;
+      if (poiCount) lines.push(`${poiCount} POI${poiCount > 1 ? "s" : ""}`);
       if (lines.length) drawHexLabel(c.x, c.y, lines);
     }
   }
