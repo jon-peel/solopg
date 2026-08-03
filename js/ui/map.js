@@ -356,7 +356,11 @@ export function render() {
     // settlement's name) on top, then the region, then — coloured to match its
     // territory — the faction that runs the hex. Multi-line when several apply.
     const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
-    if (detail && hh && hh.placed) {
+    // Zoom-gated only (not `detail`): the hover pill is a single on-demand label
+    // under the cursor, so it can't clutter the way the ambient name labels do —
+    // and it should survive the icons toggle. Below MARK_MIN_PX nothing is drawn
+    // at all, so there is nothing to annotate.
+    if (onScreen >= MARK_MIN_PX && hh && hh.placed) {
       const primary = hh.name
         || (hh.settlement && hh.settlement.present
           ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain, race: hh.settlement.race, name: hh.settlement.monastery?.name })
@@ -1243,7 +1247,10 @@ function drawHexLabel(cx, cy, label) {
     .map((l) => (typeof l === "string" ? { text: l, color: MAP.labelInk } : l))
     .map((l) => ({ color: l.color || MAP.labelInk, text: l.text.length > 24 ? l.text.slice(0, 23) + "…" : l.text }));
   if (!lines.length) return;
-  const fs = Math.max(8, HEX_SIZE * 0.34);
+  // Visually constant floor (cf. strokeHex): world px shrink with the camera, so
+  // without this the pill is unreadable the moment you zoom out past the detail
+  // tier. At scale >= 1 the expression is unchanged.
+  const fs = Math.max(HEX_SIZE * 0.34, 9.5 / camera.scale);
   ctx.font = `${fs}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
