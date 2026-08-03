@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <g stroke="#4a3520" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- A cathedral house: cloister wall, two nave wings and a spired crossing
+         tower. Drawn back-to-front so the tower reads in front. -->
+    <rect x="10" y="72" width="80" height="10" fill="#b8b2a4"/>
+    <!-- nave wings -->
+    <rect x="14" y="58" width="26" height="24" fill="#b7ae9c"/>
+    <polygon points="12,58 27,46 42,58" fill="#b7ae9c"/>
+    <rect x="60" y="58" width="26" height="24" fill="#b7ae9c"/>
+    <polygon points="58,58 73,46 88,58" fill="#b7ae9c"/>
+    <!-- cross atop the spire (the religious tell) -->
+    <line x1="50" y1="22" x2="50" y2="10"/>
+    <line x1="44" y1="15" x2="56" y2="15"/>
+    <!-- crossing tower + spire -->
+    <rect x="40" y="46" width="20" height="36" fill="#b7ae9c"/>
+    <polygon points="38,46 50,22 62,46" fill="#b7ae9c"/>
+    <!-- rose window -->
+    <circle cx="50" cy="56" r="4.5" fill="#5a3a22"/>
+    <!-- great door -->
+    <path d="M45,82 L45,72 Q45,67 50,67 Q55,67 55,72 L55,82 Z" fill="#5a3a22" stroke="none"/>
+    <path d="M45,82 L45,72 Q45,67 50,67 Q55,67 55,72 L55,82"/>
+  </g>
+</svg>

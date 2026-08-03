@@ -23,7 +23,7 @@ import {
 import { glyphForPoi, poiDotColor, factionColor, factionHatchDeg } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
 import { MAP, parseHex, watchTheme } from "./theme.js";
-import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
+import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART, MONASTERY_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions, regionName } from "../gen/regions.js";
 import { LORD_ARCHETYPES } from "../gen/factions.js";
@@ -1159,7 +1159,8 @@ export function preloadTileArt() {
   const urls = new Set();
   for (const variants of Object.values(TERRAIN_ART)) for (const u of variants) urls.add(u);
   for (const u of Object.values(SETTLEMENT_ART)) urls.add(u);
-  urls.add(KEEP_ART);
+  for (const u of Object.values(KEEP_ART)) urls.add(u);
+  for (const u of Object.values(MONASTERY_ART)) urls.add(u);
   for (const url of urls) tileImage(url);
 }
 
