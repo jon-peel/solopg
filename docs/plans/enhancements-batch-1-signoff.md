@@ -38,7 +38,8 @@ Branch: `claude/enhancements-batch-1-qhjpab` · 9 commits · `npm test` 699 pass
   - [ ] `★` City
   - [ ] `♜` Keep / fort
   - [ ] `✝` Monastery
-- [ ] Below them: *"Marks shown when zoomed out; sketches when zoomed in."*
+- [ ] **No** explanatory note under the rows — just the six marks
+- [ ] Under **Marks**, the encounter row reads plainly `★ Wilderness encounter` (no "— roll on your table")
 - [ ] **The old section is gone** — you should no longer see the row "Icon grows Hamlet → City"
 - [ ] ✝ Monastery is present (the old legend omitted it entirely — this was the actual gap)
 - [ ] Zoom the map out until glyphs appear on tiles — the marks on the map match the legend rows

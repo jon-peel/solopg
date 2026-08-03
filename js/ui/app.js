@@ -895,10 +895,6 @@ function buildLegendSettlements() {
   for (const size of SIZE_ORDER) row(SETTLEMENT_MARK[size], size);
   row(KEEP_MARK, "Keep / fort");
   row(MONASTERY_MARK, "Monastery");
-  const note = document.createElement("div");
-  note.className = "legend-note";
-  note.textContent = "Marks shown when zoomed out; sketches when zoomed in.";
-  host.appendChild(note);
 }
 
 function toggleLegend(force) {
