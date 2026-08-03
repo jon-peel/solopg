@@ -873,9 +873,10 @@ export function renderSelectionPanel(model) {
           row.className = "sel-research";
           const label = document.createElement("span");
           label.className = "sel-mon-line";
-          label.textContent = "Descend below:";
+          const built = model.catacombsBuilt;
+          label.textContent = built ? "Return below:" : "Descend below:";
           row.appendChild(label);
-          row.appendChild(actionButton("Explore the catacombs", () => model.onExploreCatacombs()));
+          row.appendChild(actionButton(built ? "Enter the catacombs" : "Explore the catacombs", () => model.onExploreCatacombs()));
           box.appendChild(row);
         }
       }

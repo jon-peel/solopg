@@ -1088,6 +1088,9 @@ function renderSelection() {
     // an explorable underground. The handler lazily creates a "Catacombs" dungeon
     // POI on this hex and opens it, reusing the existing dungeon interior system.
     onExploreCatacombs: hex && hex.settlement && hex.settlement.monastery && hex.settlement.monastery.catacombs ? () => onExploreCatacombs(q, r) : undefined,
+    // True once the descent has been made — the POI exists, so the offer reads as
+    // a return rather than a first exploration.
+    catacombsBuilt: !!(hex && hex.pois && hex.pois.some((p) => p.detail && p.detail.catacombs)),
     onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
     onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
