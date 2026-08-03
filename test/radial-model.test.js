@@ -66,6 +66,23 @@ test("Settlement submenu offers a Monastery placement (Random + each allowed siz
   assert.ok(settle2.children.some((c) => c.id === "addMonasteryMenu"), "Monastery offered even when a settlement exists");
 });
 
+test("Settlement submenu offers a Keep placement (Random + each allowed size)", () => {
+  const sizes = ["Hamlet", "Village", "Town", "City"];
+  const settle = byId(buildRadialModel(base({ placed: true, terrain: "Plains", allowedSizes: sizes })), "settlement");
+  const keep = settle.children.find((c) => c.id === "addKeepMenu");
+  assert.ok(keep && keep.kind === "submenu", "a Keep submenu is present");
+  assert.deepEqual(
+    keep.children.map((c) => c.id),
+    ["addRandomKeep", "addKeep", "addKeep", "addKeep", "addKeep"],
+  );
+  assert.deepEqual(keep.children.slice(1).map((c) => c.value), sizes); // underlying size rides in value
+  // …but the labels read as martial RANKS, not the plain settlement tiers.
+  assert.deepEqual(keep.children.slice(1).map((c) => c.label), ["Watchtower", "Fort", "Keep", "Citadel"]);
+  // Offered even when a settlement already exists (convert it to a keep).
+  const settle2 = byId(buildRadialModel(base({ placed: true, terrain: "Plains", allowedSizes: sizes, hasSettlement: true })), "settlement");
+  assert.ok(settle2.children.some((c) => c.id === "addKeepMenu"), "Keep offered even when a settlement exists");
+});
+
 test("Culture slot: a race leaf each + Clear; the painted race is ticked, Clear gates on an anchor", () => {
   const cultureRaces = [{ value: "elf", label: "Elf" }, { value: "dwarf", label: "Dwarf" }];
   // No anchor here: races offered, none ticked, Clear disabled with a reason.

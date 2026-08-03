@@ -1371,6 +1371,21 @@ function onAddRandomMonastery() {
   setSettlement({ present: true, size, kind: "monastery" });
 }
 
+// Place a KEEP on demand (kind:"keep"), of a chosen or random size. A keep bakes
+// no data object of its own, so replacing the settlement is the whole job (cf.
+// the monastery pair above, whose bake runs later in persistAndRefresh).
+const onAddKeep = (size) => setSettlement({ present: true, size, kind: "keep" });
+
+function onAddRandomKeep() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const sizes = allowedSizes(hex.terrain);
+  if (!sizes.length) return;
+  const size = sizes[Math.floor(Math.random() * sizes.length)];
+  setSettlement({ present: true, size, kind: "keep" });
+}
+
 // Next free "poi:<n>" id within a hex (max existing + 1).
 function nextPoiId(hex) {
   let max = -1;
@@ -3176,6 +3191,8 @@ function radialDispatch(id, value) {
     case "addSettlement": return onAddSettlement(value);
     case "addRandomMonastery": return onAddRandomMonastery();
     case "addMonastery": return onAddMonastery(value);
+    case "addRandomKeep": return onAddRandomKeep();
+    case "addKeep": return onAddKeep(value);
     case "removeSettlement": return onRemoveSettlement();
     case "paintCulture": return onPaintCulture(value);
     case "clearCulture": return onClearCulture();

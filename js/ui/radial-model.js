@@ -8,6 +8,7 @@
 // node-tested; radial-menu.js renders it and app.js dispatches the picks.
 
 import { MONASTERY_RANK } from "../gen/monastery.js"; // monastic rank labels for the Settlement→Monastery menu
+import { KEEP_RANK } from "../gen/keep.js"; // martial rank labels for the Settlement→Keep menu
 
 // Glyphs are emoji stand-ins (match the approved prototype); the canvas uses
 // its own terrain/POI art — these only label the menu.
@@ -61,10 +62,11 @@ function poiChildren(poiTypes, pois, dungeonSizes = []) {
 }
 
 // Settlement submenu: when one exists, offer Remove + size changes; otherwise
-// Random (anchored) + the sizes this terrain allows. Either way, a nested
-// "Monastery" submenu drops a religious house (kind:"monastery") of a chosen
-// size — rolled rarely in normal generation, but the GM can place one on demand
-// (parity with placing a plain settlement; reuses the settlement machinery).
+// Random (anchored) + the sizes this terrain allows. Either way, nested
+// "Keep" and "Monastery" submenus drop a martial site (kind:"keep") or a
+// religious house (kind:"monastery") of a chosen size — both rolled rarely in
+// normal generation, but the GM can place one on demand (parity with placing a
+// plain settlement; reuses the settlement machinery).
 function settlementChildren(allowedSizes, hasSettlement) {
   const sizes = allowedSizes.map((s) => leaf("addSettlement", "🏠", s, { value: s }));
   const monastery = submenu("addMonasteryMenu", "✝", "Monastery", {}, [
@@ -73,8 +75,17 @@ function settlementChildren(allowedSizes, hasSettlement) {
     // settlement tier; the underlying size still rides in `value`.
     ...allowedSizes.map((s) => leaf("addMonastery", "✝", MONASTERY_RANK[s] || s, { value: s })),
   ]);
-  if (hasSettlement) return [leaf("removeSettlement", "❌", "Remove"), ...sizes, monastery];
-  return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes, monastery];
+  // The martial parallel: a keep is rarer still in generation (roughly 0-2 on a
+  // Huge fill, essentially never on a small one), so it needs the same
+  // place-on-demand affordance. "♜" is settlement-art.js's KEEP_MARK, hardcoded
+  // here rather than imported because this module is pure — exactly as "✝" is.
+  const keep = submenu("addKeepMenu", "♜", "Keep", {}, [
+    leaf("addRandomKeep", "🎲", "Random", { anchor: true }),
+    // Label by martial RANK (Watchtower/Fort/Keep/Citadel); the size rides in `value`.
+    ...allowedSizes.map((s) => leaf("addKeep", "♜", KEEP_RANK[s] || s, { value: s })),
+  ]);
+  if (hasSettlement) return [leaf("removeSettlement", "❌", "Remove"), ...sizes, keep, monastery];
+  return [leaf("addRandomSettlement", "🎲", "Random", { anchor: true }), ...sizes, keep, monastery];
 }
 
 // Culture submenu (moved off the side panel): a GM culture override for this hex
