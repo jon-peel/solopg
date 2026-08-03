@@ -6,13 +6,17 @@ Branch: `claude/enhancements-batch-1-qhjpab` · 9 commits · `npm test` 699 pass
 
 ## 0. Setup
 
-> ⚠️ **Do not use `./run-local.sh`.** It still has `BRANCH="claude/phase-15-breakdown-muv6e9"`
-> hardcoded and does a `git reset --hard` to it — it would wipe this branch's work and
-> serve the wrong code. Use the manual steps below instead.
+`./run-local.sh` is now pointed at this branch, so it fetches, tests and serves in one go.
+It does `git reset --hard` to the remote tip, so commit anything local first.
+
+- [ ] `./run-local.sh` → tests run, then it serves `http://localhost:8000`
+- [ ] Confirm it reports **699 tests, 699 pass, 0 fail** (baseline was 691; +8 new)
+
+Or manually, if you'd rather not have the working tree reset:
 
 - [ ] `git fetch origin claude/enhancements-batch-1-qhjpab`
 - [ ] `git checkout claude/enhancements-batch-1-qhjpab && git pull`
-- [ ] `npm test` → **699 tests, 699 pass, 0 fail** (baseline was 691; +8 new)
+- [ ] `npm test` → **699 pass / 0 fail**
 - [ ] `python3 -m http.server 8000` then open `http://localhost:8000` — **never** open via `file://`
 - [ ] Open DevTools → Console. Leave it open for the whole pass. It should stay **empty**.
 - [ ] Generate a world (any seed/size). A **Large** world gives the best odds of finding a keep and a monastery.
@@ -170,11 +174,9 @@ Real generated example from the end-to-end check:
 1. **The spec's §2 was wrong.** It said the legend didn't document settlements — it already had a
    static Settlements section. Implemented as a *replace*; following the spec literally would have
    produced two "Settlements" headings. This is the check most worth your eyes.
-2. **`run-local.sh` is stale** — still pinned to `claude/phase-15-breakdown-muv6e9` and it hard-resets.
-   Not touched (out of scope), but it will actively mislead the next person. Worth a one-line fix.
-3. **Two owner decisions were defaulted, not confirmed** — §5 scope and §8 faction holder (both marked
+2. **Two owner decisions were defaulted, not confirmed** — §5 scope and §8 faction holder (both marked
    above). Both are cheap to change.
-4. **What was *not* verified end-to-end:** the §5 in-browser click path through `onGenerateHook`, and
+3. **What was *not* verified end-to-end:** the §5 in-browser click path through `onGenerateHook`, and
    §4's `catacombsBuilt` derivation, were verified by unit test + source reading, not by driving the
    real UI headlessly. The §5 logic *was* proven end-to-end against real generated worlds in Node.
    Those two are why the manual steps above matter.
