@@ -349,6 +349,9 @@ export function render() {
   // marks it), but the LABEL is not — a hex you just selected is exactly the one
   // you want named under the cursor. Folding the label into the outline's guard
   // hid the readout on every selected hex.
+  // The pill itself is DEFERRED to step 4d: the rings below share the hovered
+  // cell and would paint over it (cf. the hook endpoints at step 4).
+  let hoverLabel = null;
   if (hovered) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
     const isSelected = selected && selected.q === hovered.q && selected.r === hovered.r;
@@ -389,7 +392,7 @@ export function render() {
       // truncates at 24 chars per line.
       const poiCount = (hh.pois || []).length;
       if (poiCount) lines.push(`${poiCount} POI${poiCount > 1 ? "s" : ""}`);
-      if (lines.length) drawHexLabel(c.x, c.y, lines);
+      if (lines.length) hoverLabel = { x: c.x, y: c.y, lines };
     }
   }
 
@@ -411,6 +414,12 @@ export function render() {
   // 4c. The last move's trail (Phase 11) — under the party marker.
   drawTravelPath();
   drawEncounterMarks(); // stars on the route's encounter hexes (9.7), over the trail
+
+  // 4d. The hover pill, over every ring and mark that shares the hovered cell —
+  //     it is a transient readout, so being clipped by the selection ring (or by
+  //     a neighbour's encounter star) just looked like a rendering fault. Only
+  //     the party marker still beats it.
+  if (hoverLabel) drawHexLabel(hoverLabel.x, hoverLabel.y, hoverLabel.lines);
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
   //    TOP of everything else and visible at every zoom, regardless of whether
@@ -1260,7 +1269,10 @@ function drawHexLabel(cx, cy, label) {
   const padX = fs * 0.45, padY = fs * 0.3, lineH = fs * 1.25;
   const bw = maxW + padX * 2;
   const bh = lineH * lines.length + padY * 2 - (lineH - fs);
-  const bx = cx - bw / 2, by = cy + HEX_SIZE * 0.6;
+  // Clear of the hex's bottom vertex (HEX_SIZE is centre-to-corner), so no ring
+  // drawn ON the cell — selection, party, hook focus — can cross the pill. At
+  // 0.6 the top third of the pill sat inside the outline and got carved up.
+  const bx = cx - bw / 2, by = cy + HEX_SIZE * 1.08;
   ctx.fillStyle = MAP.labelBg;
   ctx.fillRect(bx, by, bw, bh);
   ctx.lineWidth = 1 / camera.scale;
