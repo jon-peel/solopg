@@ -838,13 +838,17 @@ export function renderSelectionPanel(model) {
           line.textContent = text;
           mon.appendChild(line);
         };
+        // The library fact doubles as the research row's label below (so the
+        // collection sits next to the button that consults it); it only needs its
+        // own fact line when there is no research handler.
+        const hasResearch = !!model.onResearch;
         monLine(`Dedicated ${m.dedication}`);
         // Relic (Step 6) — a headline feature; show it prominently right under the
         // dedication and emphasised. Never surfaces the hidden `secret`.
         if (m.relic) monLine(`Keeps: ${m.relic}`, true);
         monLine(m.selfSufficient ? "Self-sufficient" : `Dependent — ${m.provisioning}`);
         monLine(`Produces: ${m.industries.join(", ")}`);
-        monLine(`Library: ${m.library}`);
+        if (!hasResearch) monLine(`Library: ${m.library}`);
         if (m.trait) monLine(m.trait, true);
         // Catacombs (Step 7) — signal an explorable underground beneath the house.
         // Emphasised like the relic/trait headline. Never surfaces `secret`.
@@ -859,12 +863,12 @@ export function renderSelectionPanel(model) {
         // book/answer (it never invents a title). The last result renders below
         // as a gold callout, styled like the town situation. A monastery's hidden
         // `secret` is never surfaced here (kept the discipline).
-        if (model.onResearch) {
+        if (hasResearch) {
           const row = document.createElement("div");
           row.className = "sel-research";
           const label = document.createElement("span");
-          label.className = "sel-mon-line";
-          label.textContent = "Consult the stacks:";
+          label.className = "sel-mon-line sel-mon-lib";
+          label.textContent = `Library: ${m.library}`;
           row.appendChild(label);
           row.appendChild(actionButton("Research the library", () => model.onResearch()));
           box.appendChild(row);
