@@ -373,9 +373,11 @@ export function render() {
       }
       if (fac) lines.push({ text: `⚑ ${fac.name}`, color: darkenRgba(fac.color, 0.25, 1) });
       const enc = encounterMarks && encounterMarks.find((m) => m.q === hovered.q && m.r === hovered.r);
-      if (enc) lines.push({ text: `⚔ ${enc.terrain} encounter — roll on your table`, color: "#8a3324" });
+      // Just the fact — the pill truncates, so any trailing GM instruction was
+      // never visible anyway.
+      if (enc) lines.push({ text: `⚔ ${enc.terrain} encounter`, color: "#8a3324" });
       // Just the count — the POI types are a click away, and the label pill
-      // truncates at 20 chars per line.
+      // truncates at 24 chars per line.
       const poiCount = (hh.pois || []).length;
       if (poiCount) lines.push(`${poiCount} POI${poiCount > 1 ? "s" : ""}`);
       if (lines.length) drawHexLabel(c.x, c.y, lines);
@@ -1235,7 +1237,7 @@ function factionAt(q, r) {
 function drawHexLabel(cx, cy, label) {
   const lines = (Array.isArray(label) ? label : [label])
     .map((l) => (typeof l === "string" ? { text: l, color: MAP.labelInk } : l))
-    .map((l) => ({ color: l.color || MAP.labelInk, text: l.text.length > 20 ? l.text.slice(0, 19) + "…" : l.text }));
+    .map((l) => ({ color: l.color || MAP.labelInk, text: l.text.length > 24 ? l.text.slice(0, 23) + "…" : l.text }));
   if (!lines.length) return;
   const fs = Math.max(8, HEX_SIZE * 0.34);
   ctx.font = `${fs}px sans-serif`;
