@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BRANCH="claude/phase-15-breakdown-muv6e9"
+BRANCH="claude/enhancements-batch-1-qhjpab"
 PORT="${1:-8000}"
 
 # Always operate on the repo this script lives in (so it serves index.html at root).
