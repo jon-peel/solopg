@@ -852,7 +852,7 @@ export function renderSelectionPanel(model) {
         // Hidden truth (Step 8) — shown INLINE for the GM (rare; most houses have
         // none), in a distinct ominous style. monasterySecretReveal composes the
         // secret and ties in the relic when the secret is what the house guards.
-        if (m.secret) monLine(`🕯️ ${monasterySecretReveal(m)}`, false, "sel-mon-secret");
+        if (m.secret) monLine(`🕯️ ${monasterySecretReveal(m)}`, false, "gm-note is-danger sel-mon-secret");
         box.appendChild(mon);
         // Library research (Phase 15) — a button-only GM roll under the house's
         // facts: the app reports only the RESULT TIER, the GM names the actual
@@ -870,9 +870,9 @@ export function renderSelectionPanel(model) {
           box.appendChild(row);
           if (model.research) {
             const res = document.createElement("div");
-            res.className = "research-result";
+            res.className = "gm-note research-result";
             const line = document.createElement("div");
-            line.className = "research-line";
+            line.className = "gm-note-text research-line";
             line.textContent = model.research.line;
             res.appendChild(line);
             box.appendChild(res);
@@ -901,7 +901,7 @@ export function renderSelectionPanel(model) {
       // follow — each removable, and "+" on the Taverns header adds one. (12.7)
       if (model.situation) {
         const s = document.createElement("div");
-        s.className = "sel-situation";
+        s.className = "gm-note sel-situation";
         if (model.onRollSituation) {
           const rf = document.createElement("button");
           rf.className = "situation-refresh";
@@ -911,7 +911,7 @@ export function renderSelectionPanel(model) {
           s.appendChild(rf);
         }
         const line = document.createElement("div");
-        line.className = "situation-line";
+        line.className = "gm-note-text situation-line";
         line.textContent = model.situation.line;
         s.appendChild(line);
         if (model.situation.note) {
@@ -1068,7 +1068,7 @@ export function renderDungeonPanel({
   const apex = levelApex[level.depth];
   if (apex) {
     const cue = document.createElement("div");
-    cue.className = "bestiary-apex";
+    cue.className = "gm-note is-danger bestiary-apex";
     const telegraph = (bestiary.find((b) => b.name === apex.name) || {}).telegraph;
     cue.textContent = telegraph ? `⚠ ${apex.name} — ${telegraph}` : `⚠ ${apex.name} (deadliest on this floor)`;
     sel.appendChild(cue);

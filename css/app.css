@@ -849,6 +849,17 @@ button:hover {
   background: #7a2c1f;
 }
 
+/* Shared GM-note callout: one shape for every "the app tells the GM something"
+   line, so the research result, the town situation, a monastery's secret and a
+   floor's apex warning can't drift apart. Gold-wash box by default; `.is-danger`
+   is the inline red warning variant (no box). Per-site rules below add only what
+   differs (the situation's ↻ gutter, the apex's tighter type). */
+.gm-note { margin-top: 0.4rem; padding: 0.4rem 0.55rem; background: var(--gold-wash);
+  border-left: 3px solid var(--gold); border-radius: 3px; }
+.gm-note-text { font-size: 0.85rem; font-style: italic; color: var(--ink); line-height: 1.35; }
+.gm-note.is-danger { margin-top: 0.15rem; padding: 0; background: transparent; border-left: 0;
+  font-style: italic; color: var(--accent); }
+
 /* Selection-card hierarchy (Phase 12.6): terrain header, muted coord subline,
    and the settlement as a small accent callout. */
 .sel-terrain { font-family: var(--font-display); font-size: 0.98rem; color: var(--ink); margin-top: 0.15rem; }
@@ -869,15 +880,11 @@ button:hover {
 .sel-monastery { display: block; width: 100%; margin-top: 0.15rem; }
 .sel-mon-line { display: block; font-size: 0.78rem; color: var(--muted); }
 .sel-mon-em { font-style: italic; }
-.sel-mon-secret { color: #8a3324; font-style: italic; margin-top: 0.15rem; }
 /* Monastery library research (Phase 15): a button-only GM roll under the house's
    facts. Its result renders as a gold callout — a prompt the GM answers (the app
-   reports only the tier, never the book). Mirrors .sel-situation. */
+   reports only the tier, never the book). Box and text are both .gm-note. */
 .sel-research { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.45rem; }
 .sel-research .sel-mon-line { flex: 0 0 auto; }
-.research-result { margin-top: 0.4rem; padding: 0.4rem 0.55rem; background: var(--gold-wash);
-  border-left: 3px solid var(--gold); border-radius: 3px; }
-.research-line { font-size: 0.85rem; font-style: italic; color: var(--ink); line-height: 1.35; }
 /* Living-culture callout (Phase 14.5): the demihuman people whose land this hex
    is, with a heartland/frontier band. Only shown for cultured (non-Human) hexes. */
 .sel-culture { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin-top: 0.4rem; }
@@ -899,9 +906,9 @@ button:hover {
 .tavern-close { flex: 0 0 auto; padding: 0 0.35rem; font-size: 0.75rem; line-height: 1.4;
   color: var(--muted); background: transparent; border: 1px solid var(--edge); border-radius: 3px; }
 .tavern-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
-.sel-situation { position: relative; margin-top: 0.5rem; padding: 0.4rem 1.9rem 0.4rem 0.55rem;
-  background: var(--gold-wash); border-left: 3px solid var(--gold); border-radius: 3px; }
-.situation-line { font-size: 0.85rem; font-style: italic; color: var(--ink); line-height: 1.35; }
+/* On top of .gm-note: a positioning context and a right gutter for the absolutely
+   positioned ↻ re-roll button. */
+.sel-situation { position: relative; margin-top: 0.5rem; padding-right: 1.9rem; }
 .situation-note { margin-top: 0.25rem; font-size: 0.8rem; font-weight: 600; color: var(--accent); }
 .situation-refresh { position: absolute; top: 0.3rem; right: 0.35rem; padding: 0 0.3rem;
   font-size: 0.85rem; line-height: 1.4; color: var(--muted); background: transparent;
@@ -1508,8 +1515,9 @@ button:hover {
 .room-contents li { margin-top: 0.2rem; }
 /* Bestiary's inline foreshadowing hint (authored monsters only), under a name+floors li. */
 .bestiary-telegraph { margin-top: 0.15rem; font-style: italic; color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
-.bestiary-deadliest { font-weight: 700; color: #8a3324; }
-.bestiary-apex { margin: 0.1rem 0 0.25rem; font-style: italic; color: #8a3324; font-size: 0.82rem; line-height: 1.35; }
+.bestiary-deadliest { font-weight: 700; color: var(--accent); }
+/* On top of .gm-note.is-danger: tighter type and its own margins. */
+.gm-note.bestiary-apex { margin: 0.1rem 0 0.25rem; font-size: 0.82rem; line-height: 1.35; }
 
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 
