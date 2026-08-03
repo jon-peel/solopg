@@ -860,6 +860,9 @@ button:hover {
 .sel-settle-name { font-weight: 700; color: var(--ink); }
 .sel-settle-meta { font-size: 0.78rem; color: var(--muted); }
 .sel-settle-look { display: block; font-size: 0.78rem; color: var(--muted); font-style: italic; }
+/* Keep garrison line (3R.6): its own row inside the flex callout, so it reads
+   under the name/meta rather than trailing them. */
+.sel-garrison { display: block; width: 100%; font-size: 0.78rem; color: var(--muted); }
 /* Monastery detail block (Phase 15): the wholesome facts of a religious house,
    one muted line each, indented under the name/meta. Only player-facing fields —
    never a hidden secret. */

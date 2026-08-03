@@ -809,6 +809,20 @@ export function renderSelectionPanel(model) {
         look.textContent = hex.settlement.appearance;
         box.appendChild(look);
       }
+      // Keep detail (3R.6) — a keep bakes no data object of its own, so the
+      // garrison's weight is DERIVED from the settlement size. No stored field.
+      if (hex.settlement.kind === "keep") {
+        const GARRISON = {
+          Hamlet: "a small watch",
+          Village: "a standing garrison",
+          Town: "a full garrison",
+          City: "a war-garrison",
+        };
+        const g = document.createElement("span");
+        g.className = "sel-garrison";
+        g.textContent = `Garrison: ${GARRISON[hex.settlement.size] || "a garrison"}`;
+        box.appendChild(g);
+      }
       // Monastery detail (Phase 15) — the facts of a religious house (baked by
       // syncCultures). A sequence of appended lines. This is a solo-GM tool, so
       // the house's hidden `secret` (Step 8) is shown INLINE with the rest (the
