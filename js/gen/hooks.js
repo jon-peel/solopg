@@ -10,6 +10,7 @@
 // the target's name, distance in miles, and the tile's terrain.
 
 import { rollTable } from "../core/table.js";
+import { subRng, pick } from "../core/rng.js";
 import { axialToPixel, axialDistance, NEIGHBOR_DIRS } from "../core/hexgeo.js";
 
 // Hook-shape version, stamped on every generated hook. Lets a later shape change
@@ -188,7 +189,10 @@ function rollReward(tables, rng) {
  * Build a LOCAL hook — one that happens at the origin itself, with no separate
  * target tile: an `opportunity` (a buyer in town wants goods) or an `event` (a
  * festival/market here). target = origin, so → Target and ↩ Origin both land in town.
- * @param {{ kind:"opportunity"|"event", origin:{q,r}, index?:number, source?:string }} ctx
+ * `commodity` overrides the rolled goods (a monastery's real export, §5); the
+ * optional `commoditySource` names the house the offer points at.
+ * @param {{ kind:"opportunity"|"event", origin:{q,r}, index?:number, source?:string,
+ *          commodity?:string, commoditySource?:string }} ctx
  */
 export function buildLocalHook(tables, rng, ctx) {
   const origin = { q: ctx.origin.q, r: ctx.origin.r };
@@ -199,7 +203,11 @@ export function buildLocalHook(tables, rng, ctx) {
   let claim;
   if (ctx.kind === "opportunity") {
     claim = rollTable(tables.get("hook-opportunity"), rng).value;
-    subjectName = rollTable(tables.get("hook-commodity"), rng).value;
+    // The `||` is INLINE on purpose: a supplied commodity must SHORT-CIRCUIT the
+    // roll so the stream is never drawn from. Hoisting the rollTable call into a
+    // temp would consume a draw even when the value is thrown away — and nothing
+    // downstream reads this stream today, so nothing would catch the regression.
+    subjectName = ctx.commodity || rollTable(tables.get("hook-commodity"), rng).value;
   } else {
     claim = rollTable(tables.get("hook-event"), rng).value;
     subjectName = claim;
@@ -218,6 +226,27 @@ export function buildLocalHook(tables, rng, ctx) {
     claim,
     source,
     status: "open",
+    // The house whose export the buyer wants — absent unless one was seeded.
+    ...(ctx.commoditySource ? { commoditySource: ctx.commoditySource } : {}),
+  };
+}
+
+/**
+ * Trade seed for an opportunity hook raised AT a monastery: one of the house's
+ * baked industries, from a dedicated sub-stream so the hook's own rng is
+ * unperturbed. Returns {} when there is nothing to seed, so it spreads cleanly
+ * into a buildLocalHook ctx.
+ * @param {number|string} worldSeed
+ * @param {?{ name:string, industries:string[] }} monastery
+ * @param {{q:number,r:number}} origin
+ * @param {number} index the hook's id number
+ */
+export function monasteryTradeSeed(worldSeed, monastery, origin, index) {
+  const goods = monastery && monastery.industries;
+  if (!goods || !goods.length) return {};
+  return {
+    commodity: pick(subRng(worldSeed, "hook-trade", origin.q, origin.r, index), goods),
+    commoditySource: monastery.name,
   };
 }
 
@@ -347,7 +376,10 @@ export function hookDescription(hook, opts = {}) {
     prizeLine = `Prize: ${prize || "GM's choice"}.`;
     progress = `Clue ${step} of ${total}${final ? " — you've reached it" : ""}.`;
   } else if (hook.pattern === "opportunity") {
-    line0 = `A buyer here ${hook.claim} ${hook.subject.name}.`;
+    // A seeded offer names the house it comes from; the plain offer is unchanged.
+    line0 = hook.commoditySource
+      ? `A buyer here ${hook.claim} ${hook.subject.name} from ${hook.commoditySource}.`
+      : `A buyer here ${hook.claim} ${hook.subject.name}.`;
   } else if (hook.pattern === "event") {
     line0 = `${cap(hook.claim)} here.`;
   } else if (hook.pattern === "escort") {

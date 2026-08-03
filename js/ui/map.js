@@ -23,10 +23,12 @@ import {
 import { glyphForPoi, poiDotColor, factionColor, factionHatchDeg } from "./poi-style.js";
 import { artFor, TERRAIN_ART } from "./terrain-art.js";
 import { MAP, parseHex, watchTheme } from "./theme.js";
-import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART } from "./settlement-art.js";
+import { settlementArt, settlementMark, SETTLEMENT_ART, KEEP_ART, MONASTERY_ART } from "./settlement-art.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { computeRegions, regionName } from "../gen/regions.js";
 import { LORD_ARCHETYPES } from "../gen/factions.js";
+import { MONASTERY_RANK } from "../gen/monastery.js";
+import { KEEP_RANK } from "../gen/keep.js";
 import { buildLivingField, worldCultureAnchors, listCultures } from "../gen/culture.js";
 import { CULTURE_COLORS, RACE_LABELS, RACES } from "../gen/culture-data.js";
 import { washOpacity, contestedEdge } from "./culture-style.js";
@@ -343,15 +345,26 @@ export function render() {
     }
   }
 
-  // Hover outline (under the selection ring; skipped on the selected cell).
-  if (hovered && !(selected && selected.q === hovered.q && selected.r === hovered.r)) {
+  // Hover readout. The OUTLINE is skipped on the selected cell (its ring already
+  // marks it), but the LABEL is not — a hex you just selected is exactly the one
+  // you want named under the cursor. Folding the label into the outline's guard
+  // hid the readout on every selected hex.
+  // The pill itself is DEFERRED to step 4d: the rings below share the hovered
+  // cell and would paint over it (cf. the hook endpoints at step 4).
+  let hoverLabel = null;
+  if (hovered) {
     const c = axialToPixel(hovered.q, hovered.r, HEX_SIZE);
-    strokeHex(c.x, c.y, MAP.hoverStroke, 2);
+    const isSelected = selected && selected.q === hovered.q && selected.r === hovered.r;
+    if (!isSelected) strokeHex(c.x, c.y, MAP.hoverStroke, 2);
     // Reveal names on hover (hidden by default): the GM's own hex name (or a
     // settlement's name) on top, then the region, then — coloured to match its
     // territory — the faction that runs the hex. Multi-line when several apply.
     const hh = world && world.hexes[axialKey(hovered.q, hovered.r)];
-    if (detail && hh && hh.placed) {
+    // Zoom-gated only (not `detail`): the hover pill is a single on-demand label
+    // under the cursor, so it can't clutter the way the ambient name labels do —
+    // and it should survive the icons toggle. Below MARK_MIN_PX nothing is drawn
+    // at all, so there is nothing to annotate.
+    if (onScreen >= MARK_MIN_PX && hh && hh.placed) {
       const primary = hh.name
         || (hh.settlement && hh.settlement.present
           ? settlementName(world.seed, hovered.q, hovered.r, hh.gen, { kind: hh.settlement.kind, terrain: hh.terrain, race: hh.settlement.race, name: hh.settlement.monastery?.name })
@@ -361,10 +374,25 @@ export function render() {
       const lines = [];
       if (primary) lines.push(primary);
       if (region && region !== primary) lines.push(region);
+      // Settlement rank, so hovering answers "how big is this?" without a click.
+      // A monastery reads monastically (Hermitage…Great Abbey), a keep martially.
+      if (hh.settlement && hh.settlement.present) {
+        const s = hh.settlement;
+        const rank = s.kind === "monastery" ? MONASTERY_RANK[s.size] || "Monastery"
+          : s.kind === "keep" ? KEEP_RANK[s.size] || "Keep"
+          : s.size;
+        if (rank) lines.push(rank);
+      }
       if (fac) lines.push({ text: `⚑ ${fac.name}`, color: darkenRgba(fac.color, 0.25, 1) });
       const enc = encounterMarks && encounterMarks.find((m) => m.q === hovered.q && m.r === hovered.r);
-      if (enc) lines.push({ text: `⚔ ${enc.terrain} encounter — roll on your table`, color: "#8a3324" });
-      if (lines.length) drawHexLabel(c.x, c.y, lines);
+      // Just the fact — the pill truncates, so any trailing GM instruction was
+      // never visible anyway.
+      if (enc) lines.push({ text: `⚔ ${enc.terrain} encounter`, color: "#8a3324" });
+      // Just the count — the POI types are a click away, and the label pill
+      // truncates at 24 chars per line.
+      const poiCount = (hh.pois || []).length;
+      if (poiCount) lines.push(`${poiCount} POI${poiCount > 1 ? "s" : ""}`);
+      if (lines.length) hoverLabel = { x: c.x, y: c.y, lines };
     }
   }
 
@@ -386,6 +414,12 @@ export function render() {
   // 4c. The last move's trail (Phase 11) — under the party marker.
   drawTravelPath();
   drawEncounterMarks(); // stars on the route's encounter hexes (9.7), over the trail
+
+  // 4d. The hover pill, over every ring and mark that shares the hovered cell —
+  //     it is a transient readout, so being clipped by the selection ring (or by
+  //     a neighbour's encounter star) just looked like a rendering fault. Only
+  //     the party marker still beats it.
+  if (hoverLabel) drawHexLabel(hoverLabel.x, hoverLabel.y, hoverLabel.lines);
 
   // 5. Party marker (Phase 8.1) — the single most important marker, always ON
   //    TOP of everything else and visible at every zoom, regardless of whether
@@ -1125,7 +1159,8 @@ export function preloadTileArt() {
   const urls = new Set();
   for (const variants of Object.values(TERRAIN_ART)) for (const u of variants) urls.add(u);
   for (const u of Object.values(SETTLEMENT_ART)) urls.add(u);
-  urls.add(KEEP_ART);
+  for (const u of Object.values(KEEP_ART)) urls.add(u);
+  for (const u of Object.values(MONASTERY_ART)) urls.add(u);
   for (const url of urls) tileImage(url);
 }
 
@@ -1221,9 +1256,12 @@ function factionAt(q, r) {
 function drawHexLabel(cx, cy, label) {
   const lines = (Array.isArray(label) ? label : [label])
     .map((l) => (typeof l === "string" ? { text: l, color: MAP.labelInk } : l))
-    .map((l) => ({ color: l.color || MAP.labelInk, text: l.text.length > 20 ? l.text.slice(0, 19) + "…" : l.text }));
+    .map((l) => ({ color: l.color || MAP.labelInk, text: l.text.length > 24 ? l.text.slice(0, 23) + "…" : l.text }));
   if (!lines.length) return;
-  const fs = Math.max(8, HEX_SIZE * 0.34);
+  // Visually constant floor (cf. strokeHex): world px shrink with the camera, so
+  // without this the pill is unreadable the moment you zoom out past the detail
+  // tier. At scale >= 1 the expression is unchanged.
+  const fs = Math.max(HEX_SIZE * 0.34, 9.5 / camera.scale);
   ctx.font = `${fs}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -1232,7 +1270,10 @@ function drawHexLabel(cx, cy, label) {
   const padX = fs * 0.45, padY = fs * 0.3, lineH = fs * 1.25;
   const bw = maxW + padX * 2;
   const bh = lineH * lines.length + padY * 2 - (lineH - fs);
-  const bx = cx - bw / 2, by = cy + HEX_SIZE * 0.6;
+  // Clear of the hex's bottom vertex (HEX_SIZE is centre-to-corner), so no ring
+  // drawn ON the cell — selection, party, hook focus — can cross the pill. At
+  // 0.6 the top third of the pill sat inside the outline and got carved up.
+  const bx = cx - bw / 2, by = cy + HEX_SIZE * 1.08;
   ctx.fillStyle = MAP.labelBg;
   ctx.fillRect(bx, by, bw, bh);
   ctx.lineWidth = 1 / camera.scale;

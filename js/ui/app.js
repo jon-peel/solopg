@@ -13,6 +13,7 @@ import {
   buildChainStep,
   buildLocalHook,
   buildEscortHook,
+  monasteryTradeSeed,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -87,7 +88,8 @@ import {
   cultureInfoAt,
 } from "./map.js";
 import { TERRAIN_COLORS, TERRAIN_ICONS } from "./terrain-style.js";
-import { POI_GLYPHS, POI_DOT_COLORS, factionColor, factionHatchDeg } from "./poi-style.js";
+import { SETTLEMENT_MARK, KEEP_MARK, MONASTERY_MARK } from "./settlement-art.js";
+import { POI_GLYPHS, POI_DOT_COLORS, glyphForDungeon, factionColor, factionHatchDeg } from "./poi-style.js";
 import { buildRadialModel } from "./radial-model.js";
 import { buildRoomRadialModel } from "./radial-room-model.js";
 import { openRadial, openTravelRadial, closeRadial, isRadialOpen } from "./radial-menu.js";
@@ -853,6 +855,7 @@ function buildLegendTerrain() {
     host.appendChild(row);
   }
   buildLegendPoi();
+  buildLegendSettlements();
   legendBuilt = true;
 }
 
@@ -873,6 +876,27 @@ function buildLegendPoi() {
     host.appendChild(row);
   }
 }
+
+// Zoomed-out settlement marks — the per-size dots plus the kind overlays, read
+// from settlement-art.js so the key matches what the renderer stamps.
+function buildLegendSettlements() {
+  const host = $("legend-settlements");
+  if (!host) return;
+  host.innerHTML = `<div class="legend-sub">Settlements</div>`;
+  const row = (glyph, label) => {
+    const r = document.createElement("div");
+    r.className = "legend-row";
+    const g = document.createElement("span");
+    g.className = "lg-glyph";
+    g.textContent = glyph;
+    r.append(g, document.createTextNode(label));
+    host.appendChild(r);
+  };
+  for (const size of SIZE_ORDER) row(SETTLEMENT_MARK[size], size);
+  row(KEEP_MARK, "Keep / fort");
+  row(MONASTERY_MARK, "Monastery");
+}
+
 function toggleLegend(force) {
   const el = $("legend");
   if (!el) return;
@@ -1061,6 +1085,9 @@ function renderSelection() {
     // an explorable underground. The handler lazily creates a "Catacombs" dungeon
     // POI on this hex and opens it, reusing the existing dungeon interior system.
     onExploreCatacombs: hex && hex.settlement && hex.settlement.monastery && hex.settlement.monastery.catacombs ? () => onExploreCatacombs(q, r) : undefined,
+    // True once the descent has been made — the POI exists, so the offer reads as
+    // a return rather than a first exploration.
+    catacombsBuilt: !!(hex && hex.pois && hex.pois.some((p) => p.detail && p.detail.catacombs)),
     onAddTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? () => onAddTavern(q, r) : undefined,
     onCloseTavern: hex && hex.placed && hex.settlement && hex.settlement.present ? (i) => onCloseTavern(q, r, i) : undefined,
   });
@@ -1342,6 +1369,21 @@ function onAddRandomMonastery() {
   if (!sizes.length) return;
   const size = sizes[Math.floor(Math.random() * sizes.length)];
   setSettlement({ present: true, size, kind: "monastery" });
+}
+
+// Place a KEEP on demand (kind:"keep"), of a chosen or random size. A keep bakes
+// no data object of its own, so replacing the settlement is the whole job (cf.
+// the monastery pair above, whose bake runs later in persistAndRefresh).
+const onAddKeep = (size) => setSettlement({ present: true, size, kind: "keep" });
+
+function onAddRandomKeep() {
+  if (!current || !selected) return;
+  const hex = getHex(current, selected.q, selected.r);
+  if (!hex || !hex.placed) return;
+  const sizes = allowedSizes(hex.terrain);
+  if (!sizes.length) return;
+  const size = sizes[Math.floor(Math.random() * sizes.length)];
+  setSettlement({ present: true, size, kind: "keep" });
 }
 
 // Next free "poi:<n>" id within a hex (max existing + 1).
@@ -1627,7 +1669,17 @@ function openDungeonView(poi, teleTable) {
   // Reveal the overlay BEFORE any rendering so a render hiccup can never leave
   // the user looking at an unchanged map ("nothing happened").
   $("dungeon-view").hidden = false;
-  $("dungeon-title").textContent = `${poi.detail.theme || dungeon.theme || "Dungeon"} — ${dungeon.size}`;
+  // Lead with the theme's own map glyph so the overlay title matches the marker
+  // the user just clicked.
+  const theme = poi.detail.theme || dungeon.theme || "Dungeon";
+  // The glyph gets its own span so the colour-emoji metrics don't fight the
+  // serif baseline (see .title-glyph).
+  const title = $("dungeon-title");
+  title.textContent = "";
+  const tg = document.createElement("span");
+  tg.className = "title-glyph";
+  tg.textContent = glyphForDungeon(theme);
+  title.append(tg, document.createTextNode(`${theme} — ${dungeon.size}`));
   showDungeonLevel(0);
   fitView(); // frame the whole level on open
 }
@@ -2606,8 +2658,13 @@ async function onGenerateHook(opts = {}) {
 
     let hook;
     if (pattern === "opportunity" || pattern === "event") {
-      // Local hooks happen in town — no target tile, no pattern geometry.
-      hook = buildLocalHook(tables, rng, { kind: pattern, origin, index: n, source: opts.source });
+      // Local hooks happen in town — no target tile, no pattern geometry. When the
+      // ORIGIN hex is a monastery, an opportunity is seeded with one of the house's
+      // baked industries so the offer names its real export.
+      const originHex = getHex(current, origin.q, origin.r);
+      const mon = originHex && originHex.settlement && originHex.settlement.monastery;
+      const trade = pattern === "opportunity" ? monasteryTradeSeed(current.seed, mon, origin, n) : {};
+      hook = buildLocalHook(tables, rng, { kind: pattern, origin, index: n, source: opts.source, ...trade });
     } else if (pattern === "escort") {
       // A delivery to a generated destination (a place to deliver to, left blank
       // of any forced contents — the recipient is the flavour).
@@ -3141,6 +3198,8 @@ function radialDispatch(id, value) {
     case "addSettlement": return onAddSettlement(value);
     case "addRandomMonastery": return onAddRandomMonastery();
     case "addMonastery": return onAddMonastery(value);
+    case "addRandomKeep": return onAddRandomKeep();
+    case "addKeep": return onAddKeep(value);
     case "removeSettlement": return onRemoveSettlement();
     case "paintCulture": return onPaintCulture(value);
     case "clearCulture": return onClearCulture();

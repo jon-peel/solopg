@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <g stroke="#4a3520" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- A war-garrison: curtain wall, two flanking towers and a great keep.
+         Drawn back-to-front so the keep reads in front of the wall. -->
+    <rect x="14" y="64" width="72" height="18" fill="#b8b2a4"/>
+    <!-- flanking towers -->
+    <rect x="16" y="50" width="14" height="32" fill="#b7ae9c"/>
+    <rect x="16" y="44" width="4" height="8" fill="#b7ae9c"/>
+    <rect x="21" y="44" width="4" height="8" fill="#b7ae9c"/>
+    <rect x="26" y="44" width="4" height="8" fill="#b7ae9c"/>
+    <rect x="70" y="50" width="14" height="32" fill="#b7ae9c"/>
+    <rect x="70" y="44" width="4" height="8" fill="#b7ae9c"/>
+    <rect x="75" y="44" width="4" height="8" fill="#b7ae9c"/>
+    <rect x="80" y="44" width="4" height="8" fill="#b7ae9c"/>
+    <!-- pennant over the keep -->
+    <line x1="50" y1="29" x2="50" y2="14"/>
+    <polygon points="50,14 64,19 50,24" fill="#9c2f2f"/>
+    <!-- great keep -->
+    <rect x="40" y="36" width="20" height="46" fill="#b7ae9c"/>
+    <rect x="40" y="29" width="5" height="9" fill="#b7ae9c"/>
+    <rect x="47.5" y="29" width="5" height="9" fill="#b7ae9c"/>
+    <rect x="55" y="29" width="5" height="9" fill="#b7ae9c"/>
+    <!-- arrow slits -->
+    <rect x="44" y="46" width="3" height="8" fill="#4a3520" stroke="none"/>
+    <rect x="53" y="46" width="3" height="8" fill="#4a3520" stroke="none"/>
+    <!-- gate -->
+    <rect x="45" y="70" width="10" height="12" fill="#5a3a22" stroke="none"/>
+  </g>
+</svg>

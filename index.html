@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>World Oracle</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23e8dabb'/%3E%3Cpath d='M16 4l3 9 9 3-9 3-3 9-3-9-9-3 9-3z' fill='%238a3324'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./css/app.css" />
   </head>
   <body>
@@ -128,7 +129,7 @@
           <div class="legend-section" id="legend-cultures" hidden></div>
           <div class="legend-section">
             <div class="legend-sub">Marks</div>
-            <div class="legend-row"><span class="lg-glyph" style="color:var(--accent)">★</span>Wilderness encounter — roll on your table</div>
+            <div class="legend-row"><span class="lg-glyph" style="color:var(--accent)">★</span>Wilderness encounter</div>
             <div class="legend-row"><span class="lg-glyph" style="color:var(--accent)">♚</span>Lord's seat</div>
           </div>
           <div class="legend-section">
@@ -139,11 +140,9 @@
             <div class="legend-row"><span class="lg-line lg-ancient"></span>Ancient road</div>
             <div class="legend-row"><span class="lg-line lg-river"></span>River</div>
           </div>
-          <div class="legend-section">
-            <div class="legend-sub">Settlements</div>
-            <div class="legend-row">Icon grows Hamlet → City</div>
-            <div class="legend-row">♜ &nbsp;Keep / fort</div>
-          </div>
+          <!-- Settlement key: built from the same mark table the map draws, so
+               the rows can never drift from the glyphs on the tiles. -->
+          <div class="legend-section" id="legend-settlements"></div>
         </div>
         <!-- Bottom-right map controls: zoom (＋ / slider / −), recenter, help. -->
         <div id="map-controls">

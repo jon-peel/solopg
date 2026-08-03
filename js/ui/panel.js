@@ -1,11 +1,13 @@
 // Side-panel rendering helpers.
 
-import { glyphForPoi } from "./poi-style.js";
+import { glyphForPoi, glyphForDungeon } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
+import { tierPips } from "../gen/bestiary.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { monasterySecretReveal, MONASTERY_RANK } from "../gen/monastery.js";
+import { KEEP_RANK, KEEP_GARRISON } from "../gen/keep.js";
 import { ORACLE_LABELS, ORACLE_ODDS } from "../gen/oracle.js";
 import { RACE_LABELS } from "../gen/culture-data.js";
 import { cultureBand } from "./culture-style.js";
@@ -783,7 +785,7 @@ export function renderSelectionPanel(model) {
         name: hex.settlement.monastery?.name,
       });
       const kindLabel = hex.settlement.kind === "keep"
-        ? `${hex.settlement.size} — Keep (fortified)`
+        ? (KEEP_RANK[hex.settlement.size] || "Keep") // martial rank, not the settlement tier
         : hex.settlement.kind === "monastery"
         ? (MONASTERY_RANK[hex.settlement.size] || "Monastery") // monastic rank, not the settlement tier
         : hex.settlement.size;
@@ -808,6 +810,14 @@ export function renderSelectionPanel(model) {
         look.textContent = hex.settlement.appearance;
         box.appendChild(look);
       }
+      // Keep detail (3R.6) — a keep bakes no data object of its own, so the
+      // garrison's weight is DERIVED from the settlement size. No stored field.
+      if (hex.settlement.kind === "keep") {
+        const g = document.createElement("span");
+        g.className = "sel-garrison";
+        g.textContent = `Garrison: ${KEEP_GARRISON[hex.settlement.size] || "a garrison"}`;
+        box.appendChild(g);
+      }
       // Monastery detail (Phase 15) — the facts of a religious house (baked by
       // syncCultures). A sequence of appended lines. This is a solo-GM tool, so
       // the house's hidden `secret` (Step 8) is shown INLINE with the rest (the
@@ -823,13 +833,17 @@ export function renderSelectionPanel(model) {
           line.textContent = text;
           mon.appendChild(line);
         };
+        // The library fact doubles as the research row's label below (so the
+        // collection sits next to the button that consults it); it only needs its
+        // own fact line when there is no research handler.
+        const hasResearch = !!model.onResearch;
         monLine(`Dedicated ${m.dedication}`);
         // Relic (Step 6) — a headline feature; show it prominently right under the
         // dedication and emphasised. Never surfaces the hidden `secret`.
         if (m.relic) monLine(`Keeps: ${m.relic}`, true);
         monLine(m.selfSufficient ? "Self-sufficient" : `Dependent — ${m.provisioning}`);
         monLine(`Produces: ${m.industries.join(", ")}`);
-        monLine(`Library: ${m.library}`);
+        if (!hasResearch) monLine(`Library: ${m.library}`);
         if (m.trait) monLine(m.trait, true);
         // Catacombs (Step 7) — signal an explorable underground beneath the house.
         // Emphasised like the relic/trait headline. Never surfaces `secret`.
@@ -837,27 +851,27 @@ export function renderSelectionPanel(model) {
         // Hidden truth (Step 8) — shown INLINE for the GM (rare; most houses have
         // none), in a distinct ominous style. monasterySecretReveal composes the
         // secret and ties in the relic when the secret is what the house guards.
-        if (m.secret) monLine(`🕯️ ${monasterySecretReveal(m)}`, false, "sel-mon-secret");
+        if (m.secret) monLine(`🕯️ ${monasterySecretReveal(m)}`, false, "gm-note is-danger sel-mon-secret");
         box.appendChild(mon);
         // Library research (Phase 15) — a button-only GM roll under the house's
         // facts: the app reports only the RESULT TIER, the GM names the actual
         // book/answer (it never invents a title). The last result renders below
         // as a gold callout, styled like the town situation. A monastery's hidden
         // `secret` is never surfaced here (kept the discipline).
-        if (model.onResearch) {
+        if (hasResearch) {
           const row = document.createElement("div");
           row.className = "sel-research";
           const label = document.createElement("span");
-          label.className = "sel-mon-line";
-          label.textContent = "Consult the stacks:";
+          label.className = "sel-mon-line sel-mon-lib";
+          label.textContent = `Library: ${m.library}`;
           row.appendChild(label);
           row.appendChild(actionButton("Research the library", () => model.onResearch()));
           box.appendChild(row);
           if (model.research) {
             const res = document.createElement("div");
-            res.className = "research-result";
+            res.className = "gm-note research-result";
             const line = document.createElement("div");
-            line.className = "research-line";
+            line.className = "gm-note-text research-line";
             line.textContent = model.research.line;
             res.appendChild(line);
             box.appendChild(res);
@@ -872,9 +886,10 @@ export function renderSelectionPanel(model) {
           row.className = "sel-research";
           const label = document.createElement("span");
           label.className = "sel-mon-line";
-          label.textContent = "Descend below:";
+          const built = model.catacombsBuilt;
+          label.textContent = built ? "Return below:" : "Descend below:";
           row.appendChild(label);
-          row.appendChild(actionButton("Explore the catacombs", () => model.onExploreCatacombs()));
+          row.appendChild(actionButton(built ? "Enter the catacombs" : "Explore the catacombs", () => model.onExploreCatacombs()));
           box.appendChild(row);
         }
       }
@@ -885,7 +900,7 @@ export function renderSelectionPanel(model) {
       // follow — each removable, and "+" on the Taverns header adds one. (12.7)
       if (model.situation) {
         const s = document.createElement("div");
-        s.className = "sel-situation";
+        s.className = "gm-note sel-situation";
         if (model.onRollSituation) {
           const rf = document.createElement("button");
           rf.className = "situation-refresh";
@@ -895,7 +910,7 @@ export function renderSelectionPanel(model) {
           s.appendChild(rf);
         }
         const line = document.createElement("div");
-        line.className = "situation-line";
+        line.className = "gm-note-text situation-line";
         line.textContent = model.situation.line;
         s.appendChild(line);
         if (model.situation.note) {
@@ -1006,7 +1021,12 @@ export function renderDungeonPanel({
   sel.innerHTML = "";
 
   const h = document.createElement("h3");
-  h.textContent = dungeon.theme || "Dungeon";
+  // Glyph in its own span (see .title-glyph) so it shares the baseline treatment
+  // with the Dungeon View overlay's title.
+  const hg = document.createElement("span");
+  hg.className = "title-glyph";
+  hg.textContent = glyphForDungeon(dungeon.theme);
+  h.append(hg, document.createTextNode(dungeon.theme || "Dungeon"));
   const skulls = difficultySkulls(dungeon.difficulty);
   if (skulls) h.appendChild(skulls); // inline with the title
   sel.appendChild(h);
@@ -1022,7 +1042,12 @@ export function renderDungeonPanel({
     for (const m of bestiary) {
       const li = document.createElement("li");
       // Ranked deadliest-first; the single apex of the whole dungeon is flagged.
-      li.textContent = `${m.deadliest ? "☠ " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}${m.deadliest ? " · the deadliest" : ""}`;
+      // The rest carry their tier as pips, so the ordering reads as a danger
+      // scale rather than an unexplained list order.
+      const pips = m.deadliest ? "☠" : tierPips(m.tier);
+      // The ☠ pip already marks the apex (and .bestiary-deadliest bolds the row),
+      // so a trailing " · the deadliest" was saying it a third time.
+      li.textContent = `${pips ? pips + " " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}`;
       if (m.deadliest) li.className = "bestiary-deadliest";
       if (m.telegraph) {
         const tel = document.createElement("div");
@@ -1049,7 +1074,7 @@ export function renderDungeonPanel({
   const apex = levelApex[level.depth];
   if (apex) {
     const cue = document.createElement("div");
-    cue.className = "bestiary-apex";
+    cue.className = "gm-note is-danger bestiary-apex";
     const telegraph = (bestiary.find((b) => b.name === apex.name) || {}).telegraph;
     cue.textContent = telegraph ? `⚠ ${apex.name} — ${telegraph}` : `⚠ ${apex.name} (deadliest on this floor)`;
     sel.appendChild(cue);

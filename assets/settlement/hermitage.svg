@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <g stroke="#4a3520" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- A single cell under a cross — the humblest religious house, one hermit's
+         hut rather than a church. -->
+    <line x1="50" y1="50" x2="50" y2="37"/>
+    <line x1="45" y1="42" x2="55" y2="42"/>
+    <!-- cell body + gabled roof -->
+    <rect x="38" y="62" width="24" height="20" fill="#b7ae9c"/>
+    <polygon points="34,62 50,50 66,62" fill="#b7ae9c"/>
+    <!-- arched door -->
+    <path d="M46,82 L46,72 Q46,68 50,68 Q54,68 54,72 L54,82 Z" fill="#5a3a22" stroke="none"/>
+    <path d="M46,82 L46,72 Q46,68 50,68 Q54,68 54,72 L54,82"/>
+  </g>
+</svg>

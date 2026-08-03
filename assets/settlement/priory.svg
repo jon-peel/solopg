@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <g stroke="#4a3520" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- A chapel with a bell-cote: a real church, but one hall and no steeple —
+         the step between the hermit's cell and the abbey. -->
+    <line x1="51" y1="44" x2="51" y2="31"/>
+    <line x1="46" y1="36" x2="56" y2="36"/>
+    <!-- nave body + gabled roof -->
+    <rect x="34" y="58" width="34" height="24" fill="#b7ae9c"/>
+    <polygon points="31,58 51,44 71,58" fill="#b7ae9c"/>
+    <!-- round window on the gable -->
+    <circle cx="51" cy="55" r="3.5" fill="#5a3a22"/>
+    <!-- arched door -->
+    <path d="M46,82 L46,71 Q46,66 51,66 Q56,66 56,71 L56,82 Z" fill="#5a3a22" stroke="none"/>
+    <path d="M46,82 L46,71 Q46,66 51,66 Q56,66 56,71 L56,82"/>
+  </g>
+</svg>

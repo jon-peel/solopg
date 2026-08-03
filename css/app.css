@@ -694,8 +694,26 @@ button:hover {
   border-bottom: 1px solid var(--border);
 }
 
+/* The overlay title is a HEADER, so it takes the display face like every other
+   title in the app (.brand, #panel h2, #selection h3). Inheriting the body face
+   left it 0.6px larger than the buttons flanking it — bold body text, not a
+   title. */
 #dungeon-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem; /* clearly above the 0.9rem toolbar controls */
+  font-weight: 600; /* softer than <strong>'s 700, matching .brand */
+  letter-spacing: 0.02em;
   color: var(--accent);
+  white-space: nowrap;
+}
+
+/* Emoji carry a taller em box than the serif faces, so a bare "glyph + space +
+   text" title sits large and low. Own box, own metrics. */
+.title-glyph {
+  font-size: 1.1em;
+  line-height: 1;
+  margin-right: 0.35rem;
+  vertical-align: -0.05em;
 }
 
 #dungeon-levels {
@@ -849,6 +867,17 @@ button:hover {
   background: #7a2c1f;
 }
 
+/* Shared GM-note callout: one shape for every "the app tells the GM something"
+   line, so the research result, the town situation, a monastery's secret and a
+   floor's apex warning can't drift apart. Gold-wash box by default; `.is-danger`
+   is the inline red warning variant (no box). Per-site rules below add only what
+   differs (the situation's ↻ gutter, the apex's tighter type). */
+.gm-note { margin-top: 0.4rem; padding: 0.4rem 0.55rem; background: var(--gold-wash);
+  border-left: 3px solid var(--gold); border-radius: 3px; }
+.gm-note-text { font-size: 0.85rem; font-style: italic; color: var(--ink); line-height: 1.35; }
+.gm-note.is-danger { margin-top: 0.15rem; padding: 0; background: transparent; border-left: 0;
+  font-style: italic; color: var(--accent); }
+
 /* Selection-card hierarchy (Phase 12.6): terrain header, muted coord subline,
    and the settlement as a small accent callout. */
 .sel-terrain { font-family: var(--font-display); font-size: 0.98rem; color: var(--ink); margin-top: 0.15rem; }
@@ -860,21 +889,20 @@ button:hover {
 .sel-settle-name { font-weight: 700; color: var(--ink); }
 .sel-settle-meta { font-size: 0.78rem; color: var(--muted); }
 .sel-settle-look { display: block; font-size: 0.78rem; color: var(--muted); font-style: italic; }
+/* Keep garrison line (3R.6): its own row inside the flex callout, so it reads
+   under the name/meta rather than trailing them. */
+.sel-garrison { display: block; width: 100%; font-size: 0.78rem; color: var(--muted); }
 /* Monastery detail block (Phase 15): the wholesome facts of a religious house,
    one muted line each, indented under the name/meta. Only player-facing fields —
    never a hidden secret. */
 .sel-monastery { display: block; width: 100%; margin-top: 0.15rem; }
 .sel-mon-line { display: block; font-size: 0.78rem; color: var(--muted); }
 .sel-mon-em { font-style: italic; }
-.sel-mon-secret { color: #8a3324; font-style: italic; margin-top: 0.15rem; }
 /* Monastery library research (Phase 15): a button-only GM roll under the house's
    facts. Its result renders as a gold callout — a prompt the GM answers (the app
-   reports only the tier, never the book). Mirrors .sel-situation. */
+   reports only the tier, never the book). Box and text are both .gm-note. */
 .sel-research { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.45rem; }
 .sel-research .sel-mon-line { flex: 0 0 auto; }
-.research-result { margin-top: 0.4rem; padding: 0.4rem 0.55rem; background: var(--gold-wash);
-  border-left: 3px solid var(--gold); border-radius: 3px; }
-.research-line { font-size: 0.85rem; font-style: italic; color: var(--ink); line-height: 1.35; }
 /* Living-culture callout (Phase 14.5): the demihuman people whose land this hex
    is, with a heartland/frontier band. Only shown for cultured (non-Human) hexes. */
 .sel-culture { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin-top: 0.4rem; }
@@ -896,9 +924,9 @@ button:hover {
 .tavern-close { flex: 0 0 auto; padding: 0 0.35rem; font-size: 0.75rem; line-height: 1.4;
   color: var(--muted); background: transparent; border: 1px solid var(--edge); border-radius: 3px; }
 .tavern-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
-.sel-situation { position: relative; margin-top: 0.5rem; padding: 0.4rem 1.9rem 0.4rem 0.55rem;
-  background: var(--gold-wash); border-left: 3px solid var(--gold); border-radius: 3px; }
-.situation-line { font-size: 0.85rem; font-style: italic; color: var(--ink); line-height: 1.35; }
+/* On top of .gm-note: a positioning context and a right gutter for the absolutely
+   positioned ↻ re-roll button. */
+.sel-situation { position: relative; margin-top: 0.5rem; padding-right: 1.9rem; }
 .situation-note { margin-top: 0.25rem; font-size: 0.8rem; font-weight: 600; color: var(--accent); }
 .situation-refresh { position: absolute; top: 0.3rem; right: 0.35rem; padding: 0 0.3rem;
   font-size: 0.85rem; line-height: 1.4; color: var(--muted); background: transparent;
@@ -1505,8 +1533,9 @@ button:hover {
 .room-contents li { margin-top: 0.2rem; }
 /* Bestiary's inline foreshadowing hint (authored monsters only), under a name+floors li. */
 .bestiary-telegraph { margin-top: 0.15rem; font-style: italic; color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
-.bestiary-deadliest { font-weight: 700; color: #8a3324; }
-.bestiary-apex { margin: 0.1rem 0 0.25rem; font-style: italic; color: #8a3324; font-size: 0.82rem; line-height: 1.35; }
+.bestiary-deadliest { font-weight: 700; color: var(--accent); }
+/* On top of .gm-note.is-danger: tighter type and its own margins. */
+.gm-note.bestiary-apex { margin: 0.1rem 0 0.25rem; font-size: 0.82rem; line-height: 1.35; }
 
 /* Tab regions are shown/hidden via the `hidden` attribute (set in panel.js). */
 
@@ -1794,14 +1823,16 @@ button:hover {
 .ring-node .label {
   font-size: 0.62rem;
   letter-spacing: 0.02em;
-  /* Fit the label inside the ~50–56px node circle: 4.6rem was wider than the
-     node, so a two-word label ("Household guard") stayed near one line and
-     spilled past the ring; overflow-wrap breaks a long single word rather than
-     letting it poke out the sides. */
-  max-width: 2.9rem;
+  /* Sized as a SHARE of the node rather than a fixed rem box, so the base ring
+     and the smaller submenu ring each get the widest line their own circle can
+     hold. A fixed 2.9rem was ~2px shy of "Settlement" and "Monastery", which
+     left them breaking a single trailing letter onto line two on any machine
+     whose fonts ran a hair wide. overflow-wrap stays as the last resort, but
+     fitLabel() in radial-menu.js shrinks the text first so it rarely fires. */
+  max-width: 88%;
   line-height: 1.1;
   overflow-wrap: anywhere;
-  hyphens: auto;
+  hyphens: manual;
 }
 /* Travel-compass nodes are smaller (3 concentric rings) — trim glyph + label. */
 .ring-node.travel .glyph {
