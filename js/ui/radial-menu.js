@@ -15,8 +15,12 @@ import { ringCenter } from "./radial-model.js";
 
 const BASE_R = 88; // base-ring radius (px) — shrunk from 104 to cut mouse travel to any slot
 const OUTER_R = 150; // submenu-ring radius — shrunk from 178, same reason
-const BASE_NODE = 56;
-const SUB_NODE = 50;
+const BASE_NODE = 60;
+const SUB_NODE = 54;
+// Share of the node a label line may occupy (mirrors `.ring-node .label`'s
+// max-width) and the floor fitLabel() will shrink to before giving up.
+const LABEL_BOX = 0.88;
+const MIN_LABEL_PX = 7.5;
 const EDGE_PAD = OUTER_R + SUB_NODE; // keep the outer ring on-screen
 
 let ringEl = null;
@@ -208,6 +212,27 @@ function nodeEl(item, x, y, size, cls) {
   return n;
 }
 
+// Shrink a label whose longest WORD cannot fit the node on one line. Breaking
+// mid-word ("Settlemen/t", "Watchtowe/r") reads as a typo, and which labels
+// overflow depends on the fonts the viewer happens to have — so this measures
+// the real computed font rather than trusting a box tuned on one machine. Only
+// the labels that need it shrink; everything else keeps the base size.
+const fitCtx = document.createElement("canvas").getContext("2d");
+function fitLabel(el, boxW) {
+  if (!el || !boxW) return;
+  const cs = getComputedStyle(el);
+  const fs = parseFloat(cs.fontSize);
+  if (!fs) return;
+  fitCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
+  const track = parseFloat(cs.letterSpacing) || 0; // measureText ignores tracking
+  let widest = 0;
+  for (const word of el.textContent.split(/\s+/)) {
+    widest = Math.max(widest, fitCtx.measureText(word).width + track * word.length);
+  }
+  if (widest <= boxW) return;
+  el.style.fontSize = Math.max(fs * (boxW / widest), MIN_LABEL_PX) + "px";
+}
+
 // Render one ring of items at `radius`. `active` rings are clickable; inactive
 // (parent-context) rings dim, with the chosen parent lit. `anchorAngle` places
 // an `anchor` child (e.g. "Random") nearest the cursor.
@@ -229,6 +254,11 @@ function drawRing(items, radius, nodeSize, { active, parentIndex, anchorAngle })
       activeNodes[i] = n; // for keyboard navigation
     }
     ringEl.appendChild(n);
+    // After append: getComputedStyle only resolves the font once it is in the
+    // DOM, and clientWidth gives the CONTENT box the CSS max-width resolves
+    // against — measuring off `nodeSize` instead would be a border-width too
+    // generous and let the tightest labels through.
+    fitLabel(n.querySelector(".label"), n.clientWidth * LABEL_BOX);
   });
 }
 

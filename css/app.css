@@ -1823,14 +1823,16 @@ button:hover {
 .ring-node .label {
   font-size: 0.62rem;
   letter-spacing: 0.02em;
-  /* Fit the label inside the ~50–56px node circle: 4.6rem was wider than the
-     node, so a two-word label ("Household guard") stayed near one line and
-     spilled past the ring; overflow-wrap breaks a long single word rather than
-     letting it poke out the sides. */
-  max-width: 2.9rem;
+  /* Sized as a SHARE of the node rather than a fixed rem box, so the base ring
+     and the smaller submenu ring each get the widest line their own circle can
+     hold. A fixed 2.9rem was ~2px shy of "Settlement" and "Monastery", which
+     left them breaking a single trailing letter onto line two on any machine
+     whose fonts ran a hair wide. overflow-wrap stays as the last resort, but
+     fitLabel() in radial-menu.js shrinks the text first so it rarely fires. */
+  max-width: 88%;
   line-height: 1.1;
   overflow-wrap: anywhere;
-  hyphens: auto;
+  hyphens: manual;
 }
 /* Travel-compass nodes are smaller (3 concentric rings) — trim glyph + label. */
 .ring-node.travel .glyph {
