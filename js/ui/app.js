@@ -13,6 +13,7 @@ import {
   buildChainStep,
   buildLocalHook,
   buildEscortHook,
+  monasteryTradeSeed,
 } from "../gen/hooks.js";
 import {
   createWorld,
@@ -2639,8 +2640,13 @@ async function onGenerateHook(opts = {}) {
 
     let hook;
     if (pattern === "opportunity" || pattern === "event") {
-      // Local hooks happen in town — no target tile, no pattern geometry.
-      hook = buildLocalHook(tables, rng, { kind: pattern, origin, index: n, source: opts.source });
+      // Local hooks happen in town — no target tile, no pattern geometry. When the
+      // ORIGIN hex is a monastery, an opportunity is seeded with one of the house's
+      // baked industries so the offer names its real export.
+      const originHex = getHex(current, origin.q, origin.r);
+      const mon = originHex && originHex.settlement && originHex.settlement.monastery;
+      const trade = pattern === "opportunity" ? monasteryTradeSeed(current.seed, mon, origin, n) : {};
+      hook = buildLocalHook(tables, rng, { kind: pattern, origin, index: n, source: opts.source, ...trade });
     } else if (pattern === "escort") {
       // A delivery to a generated destination (a place to deliver to, left blank
       // of any forced contents — the recipient is the flavour).

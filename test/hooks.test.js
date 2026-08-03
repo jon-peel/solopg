@@ -12,6 +12,7 @@ import {
   buildChainStep,
   buildLocalHook,
   buildEscortHook,
+  monasteryTradeSeed,
   HOOK_BUILD,
 } from "../js/gen/hooks.js";
 import { validateTable } from "../js/core/table.js";
@@ -441,6 +442,54 @@ test("buildLocalHook(opportunity) names a commodity at the origin", () => {
     const lines = hookDescription(h);
     assert.deepEqual(lines, [`A buyer here ${h.claim} ${h.subject.name}.`]); // single line, no GM line
   }
+});
+
+test("buildLocalHook(opportunity): ctx.commodity replaces the rolled goods", () => {
+  const t = tables();
+  const goods = valuesOf(t.get("hook-commodity"));
+  const offers = valuesOf(t.get("hook-opportunity"));
+  for (let s = 0; s < 50; s++) {
+    const h = buildLocalHook(t, mulberry32(s), { kind: "opportunity", origin: ORIGIN, index: 0, commodity: "ale" });
+    assert.equal(h.subject.name, "ale");
+    assert.ok(!goods.has(h.subject.name)); // the seeded good is not one of the table's
+    assert.ok(offers.has(h.claim));
+  }
+});
+
+test("buildLocalHook(opportunity): a supplied commodity SKIPS the hook-commodity roll", () => {
+  const withGoods = buildLocalHook(tables(), mulberry32(7), { kind: "opportunity", origin: ORIGIN, index: 0, commodity: "ale" });
+  const rolled = buildLocalHook(tables(), mulberry32(7), { kind: "opportunity", origin: ORIGIN, index: 0 });
+  assert.equal(withGoods.claim, rolled.claim);
+  assert.notEqual(withGoods.subject.name, rolled.subject.name);
+});
+
+test("buildLocalHook without a commodity is unchanged (regression)", () => {
+  const a = buildLocalHook(tables(), mulberry32(3), { kind: "opportunity", origin: ORIGIN, index: 0 });
+  assert.equal("commoditySource" in a, false); // absent, not null
+  assert.deepEqual(hookDescription(a), [`A buyer here ${a.claim} ${a.subject.name}.`]);
+});
+
+test("hookDescription names the house when commoditySource is set", () => {
+  const h = buildLocalHook(tables(), mulberry32(3), {
+    kind: "opportunity", origin: ORIGIN, index: 0, commodity: "ale", commoditySource: "Whitethorn Abbey",
+  });
+  assert.deepEqual(hookDescription(h), [`A buyer here ${h.claim} ale from Whitethorn Abbey.`]);
+});
+
+test("monasteryTradeSeed picks a stable industry for a fixed seed + coords", () => {
+  const mon = { name: "Whitethorn Abbey", industries: ["ale", "cheese", "beeswax candles"] };
+  const a = monasteryTradeSeed("world-1", mon, { q: 2, r: -1 }, 3);
+  const b = monasteryTradeSeed("world-1", mon, { q: 2, r: -1 }, 3);
+  assert.deepEqual(a, b);
+  assert.ok(mon.industries.includes(a.commodity));
+  assert.equal(a.commoditySource, "Whitethorn Abbey");
+  assert.notDeepEqual(a, monasteryTradeSeed("world-2", mon, { q: 2, r: -1 }, 3));
+});
+
+test("monasteryTradeSeed returns {} when there is nothing to seed", () => {
+  assert.deepEqual(monasteryTradeSeed("w", null, ORIGIN, 0), {});
+  assert.deepEqual(monasteryTradeSeed("w", { name: "X", industries: [] }, ORIGIN, 0), {});
+  assert.deepEqual(monasteryTradeSeed("w", { name: "X" }, ORIGIN, 0), {});
 });
 
 test("buildLocalHook(event) reads as a happening here", () => {
