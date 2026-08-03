@@ -3,6 +3,7 @@
 import { glyphForPoi, glyphForDungeon } from "./poi-style.js";
 import { featureDescription } from "../gen/feature-detail.js";
 import { hookName, hookDescription } from "../gen/hooks.js";
+import { tierPips } from "../gen/bestiary.js";
 import { factionLabel, factionDescription, factionHome } from "../gen/factions.js";
 import { settlementName } from "../gen/settlement-name.js";
 import { monasterySecretReveal, MONASTERY_RANK } from "../gen/monastery.js";
@@ -1022,7 +1023,10 @@ export function renderDungeonPanel({
     for (const m of bestiary) {
       const li = document.createElement("li");
       // Ranked deadliest-first; the single apex of the whole dungeon is flagged.
-      li.textContent = `${m.deadliest ? "☠ " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}${m.deadliest ? " · the deadliest" : ""}`;
+      // The rest carry their tier as pips, so the ordering reads as a danger
+      // scale rather than an unexplained list order.
+      const pips = m.deadliest ? "☠" : tierPips(m.tier);
+      li.textContent = `${pips ? pips + " " : ""}${m.name} — ${m.floors.map((f) => "L" + f).join(", ")}${m.deadliest ? " · the deadliest" : ""}`;
       if (m.deadliest) li.className = "bestiary-deadliest";
       if (m.telegraph) {
         const tel = document.createElement("div");

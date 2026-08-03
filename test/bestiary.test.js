@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBestiary, telegraphFor, buildTierIndex, rankBestiary, levelApex } from "../js/gen/bestiary.js";
+import { buildBestiary, telegraphFor, buildTierIndex, rankBestiary, levelApex, tierPips } from "../js/gen/bestiary.js";
 import { mulberry32 } from "../js/core/rng.js";
 
 // A small dungeon-shaped fixture: two levels, room.monster present on some
@@ -100,6 +100,19 @@ test("rankBestiary: no tier index → tier 0, no crash, still flags a (floor-ran
   const ranked = rankBestiary(buildBestiary(dungeonFixture()), null);
   assert.ok(ranked.every((m) => m.tier === 0));
   assert.equal(ranked.filter((m) => m.deadliest).length, 1);
+});
+
+test("tierPips: 1-4 render as dots, the elite as a skull, unknown as nothing", () => {
+  assert.equal(tierPips(0), ""); // no family entry → no misleading mark
+  assert.equal(tierPips(1), "•");
+  assert.equal(tierPips(3), "•••");
+  assert.equal(tierPips(4), "••••");
+  assert.equal(tierPips(5), "☠");
+});
+
+test("tierPips: ranked tiers map to a descending pip count", () => {
+  const ranked = rankBestiary(buildBestiary(dungeonFixture()), buildTierIndex(families));
+  assert.deepEqual(ranked.map((m) => tierPips(m.tier)), ["•••", "•", "•"]);
 });
 
 test("levelApex: the highest-tier monster on each floor (ties by name)", () => {

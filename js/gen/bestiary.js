@@ -68,6 +68,16 @@ export function rankBestiary(bestiary, tierIndex) {
 }
 
 /**
+ * A tier's at-a-glance danger mark for the bestiary list: one dot per tier, or
+ * a skull for the elite (5). Tier 0 (a monster with no family entry) gets no
+ * mark rather than a misleading one.
+ * @param {number} tier 0-5 from rankBestiary
+ */
+export function tierPips(tier) {
+  return tier >= 5 ? "☠" : tier >= 1 ? "•".repeat(tier) : "";
+}
+
+/**
  * The most dangerous monster stocked on each level (for a per-level "foreshadow
  * this" cue). Returns { [depth]: { name, tier } } — the highest-tier room monster
  * on that floor (ties broken by name for determinism).
